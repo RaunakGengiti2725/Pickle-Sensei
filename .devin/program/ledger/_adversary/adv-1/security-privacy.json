@@ -1,0 +1,159 @@
+{
+  "area": "security-privacy",
+  "breaks": [
+    {
+      "expected": ".gitleaks.toml header: entries are 'scoped as narrowly as possible (a specific key name, fixture string, or path) so a real credential landing next to a fixture still fails the gate'. Per gitleaks 8.30.1 semantics a global [[allowlists]] entry with `paths` skips the matched file entirely (regexes never consulted) — the fixture regexes should live in rule-level allowlists or be regex-only with targetRules.",
+      "observed": "The real gate (`scripts/security-scan.sh --tree`, pinned gitleaks 8.30.1, the repo's .gitleaks.toml) exits 0 = 'PASS: no secrets detected' for a throwaway repo containing ONE synthetic credential with no fixture string at: apps/mobile/src/config/runtimeConfig.ts (RevenueCat sk_ secret AND AWS AKIA key), docs/DISTRIBUTION.md (sb_secret_ Supabase key AND AWS key), apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts (AWS key), supabase/functions/api/__wf__/*.test.ts (Stripe sk_live_ — the stripe/revenuecat targetRules), services/api/test/*.test.ts (generic-api-key high-entropy api_key). Controls: the same 5 credential shapes at unlisted paths, and at unlisted SIBLING files in the same directories (docs/OTHER.md, apps/mobile/src/config/other.ts, supabase/functions/api/other.ts), all FAIL the gate (10 passing controls).",
+      "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/securityScanAllowlist.attack.test.ts  (exit 1; 17 executed, 10 passed, 7 failed, 0 skipped). Direct confirmation: gitleaks 8.30.1 --log-level trace prints `skipping file: global allowlist path=docs/DISTRIBUTION.md`; adding matchCondition=\"AND\" to that entry does not change the skip.",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/securityScanAllowlist.attack.test.ts",
+      "title": "Secret-scanning gate: every path+regex allowlist in .gitleaks.toml skips the WHOLE file, so a real credential at those paths passes scripts/security-scan.sh"
+    },
+    {
+      "expected": "Error bodies never echo client-controlled input (AGENTS.md/REVIEW.md: bodies are generic; the router already has the redacted route template it logs).",
+      "observed": "POST /functions/v1/api/v1/ADVSECMARKER/11111111-1111-4111-8111-111111111111/advsecmarker@example.com → 404 body {\"error\":{\"message\":\"Unknown endpoint: POST /v1/ADVSECMARKER/11111111-1111-4111-8111-111111111111/advsecmarker@example.com.\"}}. The access log correctly records only the template `/functions/v1/api/v1/:id/:id/:id`; headers/query/body/bearer did not leak anywhere (rest of A1 passes).",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts  (exit 1; 12 executed, 8 passed, 4 failed, 0 skipped) — test A1",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+      "title": "Edge 404 body reflects the raw client path (emails/tokens/UUIDs placed in the URL) — `Unknown endpoint: POST /v1/<raw path>.`"
+    },
+    {
+      "expected": "http.ts contract: 'Never echoes arbitrary client input' and AGENTS.md: logs never contain tokens. A client-supplied id should be constrained (e.g. UUID / short trace-id grammar) or hashed before logging.",
+      "observed": "A3: POST /v1/auth/refresh with x-request-id = the body's refresh token (`rt_` + 45 chars) → access log `requestId` = rt_QQQQQQQQQ… and the refresh token string appears in console output. B5: resolveRequestId(...) returns bearer.slice(0,64) ('eyJhbGciOiJIUzI1…'), bearer.slice(-64) ('xMzMtNGM0ZS1hMDM…') and the trimmed 40-char bearer prefix instead of minting a UUID; only the exact-bearer and 43-char-base64url special cases are refused.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts — tests A3 and B5 (same run as above: 12 executed, 8 passed, 4 failed)",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+      "title": "resolveRequestId honours credential-shaped opaque x-request-id values (refresh-token-shaped 48-char string, 64-char prefix/suffix of the bearer JWT) and writes them to the access log and the x-request-id response header"
+    },
+    {
+      "expected": "http.ts doc: strips 'zero-width/bidi characters that enable spoofing'; U+061C is in Unicode's Bidi_Control set and U+2060/U+00AD/tag characters are zero-width spoofing vectors. Minor: React Native <Text> rendering, no HTML surface.",
+      "observed": "Survivors of sanitizeUserText('Al'+ch+'Al', 40): U+061C arabic letter mark (Bidi_Control), U+2060 word joiner, U+2061–U+2064 invisible operators, U+206A/U+206E/U+206F, U+00AD soft hyphen, U+034F combining grapheme joiner, U+180E, U+FFF9/U+FFFB interlinear annotation, U+E0001/U+E0061/U+E007F tag characters. C1/C3 pass: C0/C1 controls, U+200B–200F, U+202A–202E, U+2066–2069, U+FEFF, lone surrogates are stripped and length is bounded in code points.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts — test C2 (same run: 12 executed, 8 passed, 4 failed)",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+      "title": "sanitizeUserText leaves 17 invisible/bidi format code points in persisted free text (incl. Unicode Bidi_Control U+061C and tag characters)"
+    },
+    {
+      "expected": "URI_SCHEME = /\\b(?:file|content|assets-library|ph|s3|blob|data):\\/?\\//i lists blob and data, but real blob:/data: URIs have no slash after the colon, so the listed rule can never fire. Scope: package consumers are legacy services/api and services/media-worker; apps/mobile/src and the Edge Function do not import it (rg '@pickle/analytics').",
+      "observed": "findPrivacyViolations(event({failureKind:'blob:https://app/ADV_ANALYTICS_MARKER'})) and (...'data:image/jpeg;base64,/9j/4AAQ') return [] (expected >0). All other documented denials (ph/file/content/assets-library/s3 URIs, /var|/private paths, emails, 120+ base64, forbidden camelCase keys, string/array bounds) hold — 33 passing cases.",
+      "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts  (exit 1; 64 executed, 35 passed, 29 failed, 0 skipped) — 'documented denials' block, 2 failures",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+      "title": "@pickle/analytics: blob: and data: URIs — named in the module's own URI_SCHEME denylist — are NOT refused (regex requires a slash after the scheme)"
+    },
+    {
+      "expected": "Redaction guard recurses without cycle/depth guards or try/catch around Object.entries; module comment promises analytics never crashes the caller. Legacy-consumer scope as above.",
+      "observed": "sink.track(event with self-reference) throws RangeError; a 20k-deep nested object throws RangeError; an enumerable getter that throws propagates out of track().",
+      "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'hostile structure' block (3 failures) in the same run",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+      "title": "@pickle/analytics: BufferedAnalytics.track/findPrivacyViolations crash (RangeError: Maximum call stack size exceeded) on cyclic or deeply nested payloads and let throwing getters escape — contradicting 'analytics must never crash the app'"
+    },
+    {
+      "expected": "Comment in flush(): 'Failed delivery re-buffers (bounded)'. Legacy-consumer scope as above.",
+      "observed": "BufferedAnalytics(transport that rejects, maxBuffer=5): 1000 track() calls while every flush is in flight and failing → pendingCount()=1000 (expected ≤ 10). Each in-flight batch re-buffers `batch.slice(-maxBuffer)` PLUS whatever accumulated, so memory grows with events emitted during the failure window.",
+      "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'retention stays bounded' block (1 failure) in the same run",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+      "title": "@pickle/analytics: 'bounded' re-buffering is unbounded under concurrent failed flushes (1000 pending with maxBuffer=5)"
+    },
+    {
+      "expected": "These are gaps versus the module's stated intent, not broken listed rules; recorded separately so the coordinator can decide scope (legacy consumers only).",
+      "observed": "Not refused: snake_case keys (device_id, file_path, email_address), identifierForVendor, mediaUri, videoUri, ipAddress keys; media filenames without scheme, relative container/Library cache paths, absolute paths after ':' or ',' or in non-listed roots, https presigned object URLs, rn-fs/asset URIs, phone numbers, Bearer tokens, JWTs, sb_secret_ prefixes, IPv4 addresses, fullwidth-@ emails, base64 image chunks shorter than 120 chars.",
+      "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'coverage gap' block (23 failures) in the same run",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+      "title": "@pickle/analytics coverage gaps: 23 sensitive shapes the header promise ('never raw video / sensitive data / blobs') covers but no rule catches"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-security-privacy-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f2c9b64-8dde-459e-a6a4-14efe53e3889/jest-diagnosticsTransportLeak.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee825dd7-8910-4b1f-848e-6437cddc4e10/jest-analyticsRedactionGuard.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c57de6e-7b4c-41cd-96f5-ad20afa4f61c/jest-securityScanAllowlist.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/880b6049-983f-4024-adc4-efbab89e458e/deno-adv_security_privacy_logs.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c924aa54-bc9e-40c4-ae7e-ab53801770bc/deno-edge-suite-with-adv.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d2866d5b-950e-4938-ad4f-0d81b29eab2f/deno-frozen-check.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a94f31c-0d26-4edb-98b9-096d4e0982d8/security-scan-head.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f639fa6b-a377-4903-9429-9dbcff58bb06/rls-matrix-head.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46d93fbe-14c2-499b-83fe-616e29aa6129/mobile-tsc.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/379c7ea5-4390-4dcc-90cc-be3974bcee26/eslint-adv.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bca46b84-a7be-4919-b38f-250052085880/npm-ci.log"
+    ],
+    "attack_branch": "devin/pp/adv/security-privacy-30a40650",
+    "attack_branch_sha": "6b7b5efa0c68f9afc8d4963143693f3b19d81b62",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 23,
+    "breaks": [
+      {
+        "expected": ".gitleaks.toml header: entries are 'scoped as narrowly as possible (a specific key name, fixture string, or path) so a real credential landing next to a fixture still fails the gate'. Per gitleaks 8.30.1 semantics a global [[allowlists]] entry with `paths` skips the matched file entirely (regexes never consulted) — the fixture regexes should live in rule-level allowlists or be regex-only with targetRules.",
+        "observed": "The real gate (`scripts/security-scan.sh --tree`, pinned gitleaks 8.30.1, the repo's .gitleaks.toml) exits 0 = 'PASS: no secrets detected' for a throwaway repo containing ONE synthetic credential with no fixture string at: apps/mobile/src/config/runtimeConfig.ts (RevenueCat sk_ secret AND AWS AKIA key), docs/DISTRIBUTION.md (sb_secret_ Supabase key AND AWS key), apps/mobile/__tests__/wf/be-mobile-security-secrets.test.ts (AWS key), supabase/functions/api/__wf__/*.test.ts (Stripe sk_live_ — the stripe/revenuecat targetRules), services/api/test/*.test.ts (generic-api-key high-entropy api_key). Controls: the same 5 credential shapes at unlisted paths, and at unlisted SIBLING files in the same directories (docs/OTHER.md, apps/mobile/src/config/other.ts, supabase/functions/api/other.ts), all FAIL the gate (10 passing controls).",
+        "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/securityScanAllowlist.attack.test.ts  (exit 1; 17 executed, 10 passed, 7 failed, 0 skipped). Direct confirmation: gitleaks 8.30.1 --log-level trace prints `skipping file: global allowlist path=docs/DISTRIBUTION.md`; adding matchCondition=\"AND\" to that entry does not change the skip.",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/securityScanAllowlist.attack.test.ts",
+        "title": "Secret-scanning gate: every path+regex allowlist in .gitleaks.toml skips the WHOLE file, so a real credential at those paths passes scripts/security-scan.sh"
+      },
+      {
+        "expected": "Error bodies never echo client-controlled input (AGENTS.md/REVIEW.md: bodies are generic; the router already has the redacted route template it logs).",
+        "observed": "POST /functions/v1/api/v1/ADVSECMARKER/11111111-1111-4111-8111-111111111111/advsecmarker@example.com → 404 body {\"error\":{\"message\":\"Unknown endpoint: POST /v1/ADVSECMARKER/11111111-1111-4111-8111-111111111111/advsecmarker@example.com.\"}}. The access log correctly records only the template `/functions/v1/api/v1/:id/:id/:id`; headers/query/body/bearer did not leak anywhere (rest of A1 passes).",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts  (exit 1; 12 executed, 8 passed, 4 failed, 0 skipped) — test A1",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+        "title": "Edge 404 body reflects the raw client path (emails/tokens/UUIDs placed in the URL) — `Unknown endpoint: POST /v1/<raw path>.`"
+      },
+      {
+        "expected": "http.ts contract: 'Never echoes arbitrary client input' and AGENTS.md: logs never contain tokens. A client-supplied id should be constrained (e.g. UUID / short trace-id grammar) or hashed before logging.",
+        "observed": "A3: POST /v1/auth/refresh with x-request-id = the body's refresh token (`rt_` + 45 chars) → access log `requestId` = rt_QQQQQQQQQ… and the refresh token string appears in console output. B5: resolveRequestId(...) returns bearer.slice(0,64) ('eyJhbGciOiJIUzI1…'), bearer.slice(-64) ('xMzMtNGM0ZS1hMDM…') and the trimmed 40-char bearer prefix instead of minting a UUID; only the exact-bearer and 43-char-base64url special cases are refused.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts — tests A3 and B5 (same run as above: 12 executed, 8 passed, 4 failed)",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+        "title": "resolveRequestId honours credential-shaped opaque x-request-id values (refresh-token-shaped 48-char string, 64-char prefix/suffix of the bearer JWT) and writes them to the access log and the x-request-id response header"
+      },
+      {
+        "expected": "http.ts doc: strips 'zero-width/bidi characters that enable spoofing'; U+061C is in Unicode's Bidi_Control set and U+2060/U+00AD/tag characters are zero-width spoofing vectors. Minor: React Native <Text> rendering, no HTML surface.",
+        "observed": "Survivors of sanitizeUserText('Al'+ch+'Al', 40): U+061C arabic letter mark (Bidi_Control), U+2060 word joiner, U+2061–U+2064 invisible operators, U+206A/U+206E/U+206F, U+00AD soft hyphen, U+034F combining grapheme joiner, U+180E, U+FFF9/U+FFFB interlinear annotation, U+E0001/U+E0061/U+E007F tag characters. C1/C3 pass: C0/C1 controls, U+200B–200F, U+202A–202E, U+2066–2069, U+FEFF, lone surrogates are stripped and length is bounded in code points.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts — test C2 (same run: 12 executed, 8 passed, 4 failed)",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_security_privacy_logs.test.ts",
+        "title": "sanitizeUserText leaves 17 invisible/bidi format code points in persisted free text (incl. Unicode Bidi_Control U+061C and tag characters)"
+      },
+      {
+        "expected": "URI_SCHEME = /\\b(?:file|content|assets-library|ph|s3|blob|data):\\/?\\//i lists blob and data, but real blob:/data: URIs have no slash after the colon, so the listed rule can never fire. Scope: package consumers are legacy services/api and services/media-worker; apps/mobile/src and the Edge Function do not import it (rg '@pickle/analytics').",
+        "observed": "findPrivacyViolations(event({failureKind:'blob:https://app/ADV_ANALYTICS_MARKER'})) and (...'data:image/jpeg;base64,/9j/4AAQ') return [] (expected >0). All other documented denials (ph/file/content/assets-library/s3 URIs, /var|/private paths, emails, 120+ base64, forbidden camelCase keys, string/array bounds) hold — 33 passing cases.",
+        "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts  (exit 1; 64 executed, 35 passed, 29 failed, 0 skipped) — 'documented denials' block, 2 failures",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+        "title": "@pickle/analytics: blob: and data: URIs — named in the module's own URI_SCHEME denylist — are NOT refused (regex requires a slash after the scheme)"
+      },
+      {
+        "expected": "Redaction guard recurses without cycle/depth guards or try/catch around Object.entries; module comment promises analytics never crashes the caller. Legacy-consumer scope as above.",
+        "observed": "sink.track(event with self-reference) throws RangeError; a 20k-deep nested object throws RangeError; an enumerable getter that throws propagates out of track().",
+        "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'hostile structure' block (3 failures) in the same run",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+        "title": "@pickle/analytics: BufferedAnalytics.track/findPrivacyViolations crash (RangeError: Maximum call stack size exceeded) on cyclic or deeply nested payloads and let throwing getters escape — contradicting 'analytics must never crash the app'"
+      },
+      {
+        "expected": "Comment in flush(): 'Failed delivery re-buffers (bounded)'. Legacy-consumer scope as above.",
+        "observed": "BufferedAnalytics(transport that rejects, maxBuffer=5): 1000 track() calls while every flush is in flight and failing → pendingCount()=1000 (expected ≤ 10). Each in-flight batch re-buffers `batch.slice(-maxBuffer)` PLUS whatever accumulated, so memory grows with events emitted during the failure window.",
+        "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'retention stays bounded' block (1 failure) in the same run",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+        "title": "@pickle/analytics: 'bounded' re-buffering is unbounded under concurrent failed flushes (1000 pending with maxBuffer=5)"
+      },
+      {
+        "expected": "These are gaps versus the module's stated intent, not broken listed rules; recorded separately so the coordinator can decide scope (legacy consumers only).",
+        "observed": "Not refused: snake_case keys (device_id, file_path, email_address), identifierForVendor, mediaUri, videoUri, ipAddress keys; media filenames without scheme, relative container/Library cache paths, absolute paths after ':' or ',' or in non-listed roots, https presigned object URLs, rn-fs/asset URIs, phone numbers, Bearer tokens, JWTs, sb_secret_ prefixes, IPv4 addresses, fullwidth-@ emails, base64 image chunks shorter than 120 chars.",
+        "repro": "cd apps/mobile && npx jest --ci --runInBand __tests__/adv/analyticsRedactionGuard.attack.test.ts — 'coverage gap' block (23 failures) in the same run",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/analyticsRedactionGuard.attack.test.ts",
+        "title": "@pickle/analytics coverage gaps: 23 sensitive shapes the header promise ('never raw video / sensitive data / blobs') covers but no rule catches"
+      }
+    ],
+    "package_id": "INT-security-privacy",
+    "summary": "INT-security-privacy adversarial pass against 30a4065036a917514fb4984fde73f87867f38619 (git rev-parse HEAD verified). Attack branch devin/pp/adv/security-privacy-30a40650 pushed at 6b7b5efa0c68f9afc8d4963143693f3b19d81b62 (one commit on top of HEAD_SHA: 4 new test files only; no production code, config, or existing test modified; no PR opened; nothing deployed). All statements below are VERIFIED unless marked.\n\nPASSING ATTACKS (no break):\n- Diagnostics transport gate & scrubbing: `cd apps/mobile && npx jest --ci --runInBand __tests__/adv/diagnosticsTransportLeak.attack.test.ts` → exit 0, 47 passed / 0 failed / 0 skipped. Covered: DIAGNOSTICS_TRANSPORT_ENABLED=false start-up sends nothing; truthy-string/object coercion of the gate, missing provider/disclosure/native-privacy approvals and 11 invalid DSN shapes all keep transport disabled; buildDiagnosticsOptions disables native collection, replay, logs, metrics, tracing, screenshots, persistent queue, sendDefaultPii; hostile envelopes (extra headers, attachments, session/replay/client_report items, user/request/breadcrumbs/contexts/extra, PII in tags/release/dist/sdk) are reduced to the fixed field set with infer_ip:'never'; frames capped ≤50 and paths/media URIs/emails/tokens/IPs/UUIDs/base64 scrubbed; cyclic graphs, throwing getters, 10k-frame arrays never throw or leak; sink failure/duplicate suppression bounded; native status pinned to blocked_unverified_native_filtering.\n- Edge (Deno) passing cases in `cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_security_privacy_logs.test.ts`: A2 malformed JSON / invalid UTF-8 / JSON array / erroring body stream → 400, nothing persisted, no PII/bearer/IP/query/cookie/UA in console; B1 PostgREST message/details/hint with PII → generic 5xx body, categorical bounded log; B2 thrown upstream error with PII in message/name/code/stack → generic 5xx; B3 GoTrue rejections with PII → generic 401/5xx; B4 failureDetail refuses getters/proxies/unlisted names/non-integer status; C1 onboarding persists sanitized bounded text (RTL override, NUL, ZWSP, lone surrogate stripped; email kept only in the field the contract allows) and logs none of it; C3 code-point bounding under hostile lengths/whitespace; D1 token in query string or cookie never authorises, never forwarded to Auth/DB, never logged.\n- Full Edge suite with the attack file present: `cd supabase/functions/api/__wf__ && deno task test` → exit 1: 775 passed (31 steps) / 4 failed / 50 ignored (pre-existing ignores) — the only 4 failures are the new A1/A3/B5/C2 reproducers; no interference with existing tests.\n- Frozen Edge typecheck: `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` → exit 0.\n- Repo secret scan on HEAD + working tree incl. the new tests: `scripts/security-scan.sh` → exit 0, tree: no leaks found, history: 623 commits scanned, no leaks found, 'PASS: no secrets detected'.\n- SQL/RLS security matrix: `./supabase/tests/run_rls_tests.sh` → exit 0 (SECURITY REGRESSION MATRIX / W07 / W08 / analysis release policy: ALL CASES PASSED).\n- Gitleaks controls (in the allowlist attack file): clean repo → PASS; 5 credential shapes at unlisted paths → FAIL as required; 3 sibling-file plants → FAIL as required (10 passing controls).\n- New-test hygiene: `cd apps/mobile && npx tsc --noEmit` exit 0; `pnpm exec eslint apps/mobile/__tests__/adv/` exit 0; `npx prettier --check __tests__/adv/` clean; `deno fmt --check` / `deno lint` / `deno check` on the Deno attack file exit 0. No any/ts-ignore/eslint-disable/.only/.skip/|| true/inflated timeouts.\n\nCONFIRMED BREAKS: 8 (see breaks): 1×P1 (gitleaks path allowlists skip whole files — a real credential at 5 allowlisted paths passes the gate), 6×P2 (Edge 404 body reflects raw path; request-id honours token-shaped values into logs/headers; sanitizeUserText misses 17 invisible/bidi code points; @pickle/analytics blob:/data: denylist entries dead, guard crashes on cyclic/deep/throwing payloads, re-buffering unbounded under concurrent failures), 1×P3 (analytics rule coverage gaps). @pickle/analytics findings are scoped: consumers are legacy services/api and services/media-worker only — apps/mobile/src and the Edge Function do not import it.\n\nNOT_YET_VERIFIABLE (needs the M4 runner / device; never guessed): whether the native Sentry SDK actually honours the disabled transport / native filtering on iOS (status blocked_unverified_native_filtering) — a coordinator-run `scripts/mac-full-verify.sh` on the Mac runner (Xcode build + XCTest + simulator launch, then inspect device network/Console for any diagnostics egress) is required; also production Supabase edge-log contents for a real 404/refresh request (requires the ucqnaiwqwjtgvlduiuib dashboard, not touched).\n\nEnvironment notes (INFERRED impact only): local Node v24.19.0 (repo expects 20 root / 22 mobile), local Deno 2.9.6 for the __wf__ suite (frozen check used npx deno@2.5.6 as prescribed); `cd apps/mobile && npm ci --no-audit --no-fund` was required for @sentry/react-native. Evidence logs (artifacts/ is gitignored) uploaded as attachment_urls."
+  },
+  "status": "DONE"
+}

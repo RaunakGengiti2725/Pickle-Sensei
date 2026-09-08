@@ -1,0 +1,138 @@
+{
+  "area": "deletion-managed-media",
+  "breaks": [
+    {
+      "expected": "After a lost/slow confirmation the app resolves the operation through the durable status capability (or completes local cleanup once a completed receipt is observed) instead of telling a user whose Auth user may already be gone to sign in again (which would mint a brand-new account).",
+      "observed": "VERIFIED. Real wire client against a fake server: attempt 1 never resolves (client times out -> 'Deletion status unknown'), attempt 2 answers 202 in_progress, attempt 3 answers 401 because Auth already deleted the user. The screen renders 'Your sign-in has expired. This response does not confirm whether your account was deleted. Sign in again before retrying.' No GET status / capability request and no local cleanup (props.onDeleted) is ever issued (statusQueries.length === 0, cleanup.mock.calls.length === 0). ManageAccountScreen.tsx does not import deletionOperation/deletionOperationTransport; the status capability minted by delete-request is unused.",
+      "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M04'  (exit 1; suite as a whole: 3 failed / 8 passed / 11 total, log: mobile-adv.log)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+      "title": "ManageAccount: a confirm whose response is lost (timeout/202) ends in a 'Sign in again before retrying' dead end; the shipping path never queries deletion status or finishes local cleanup (W08-01 not integrated at HEAD)"
+    },
+    {
+      "expected": "Confirm is bound to the operationId returned by /v1/me/delete-request (W08-01 objective).",
+      "observed": "VERIFIED. POST /v1/me/delete-confirm body is {challenge} only; confirmAccountDeletion(session, challenge) has no operationId parameter although the Edge RPC accepts p_operation_id and the operation contract (deletionOperationContracts.ts) exists in the tree. The Edge legacy challenge path still leases/receipts correctly (ADV-E07 passes), so this is a contract gap, not data loss.",
+      "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M05'  (exit 1)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+      "title": "ManageAccount confirm omits operationId: the shipping client uses the legacy challenge-only contract rather than the operation minted by delete-request"
+    },
+    {
+      "expected": "iOS user-facing copy never mentions Google Play/Android (hard rule; dossier is the authority).",
+      "observed": "VERIFIED. Rendered notice: 'Account deleted. The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.'",
+      "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M06'  (exit 1)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+      "title": "iOS deletion-success notice contains 'Google Play' (APP_STORE_SUBMISSION.md forbidden phrase on a supported path)"
+    },
+    {
+      "expected": "On confirmed account deletion the owner's managed media files are removed (owner-only), or the coordinator explicitly re-scopes W08-04 and keeps the disclosure copy.",
+      "observed": "VERIFIED. completeAccountDeletion(OWNER_A) removes every owner-scoped row/kv (ADV-M01 passes) but the recorded native/file-removal calls are [] for all of A's video, poster and pose-sidecar URIs. grep of apps/mobile/src finds no ManagedMedia/unlink/deleteFile call; native/managed-media exists but is not wired into ClipMediaStore or the deletion path; apps/mobile/src/media does not exist. Note: the HEAD confirmation copy discloses 'Clips saved on this phone stay on this phone until you delete the app', so the app is honest about this today, but it contradicts the program invariant 'deletion of that account's referenced media on confirmed account deletion' (docs/prompts/codex-production-readiness.md L441) and W08-04.",
+      "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/deletionLocalPurgeAdversary.adv.test.ts -t 'ADV-M02'  (exit 1; suite: 1 failed / 2 passed / 3 total)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/deletionLocalPurgeAdversary.adv.test.ts",
+      "title": "Local account deletion purges SQLite rows but hands no capture/poster/pose-sidecar file of the deleted owner to any native removal path (W08-04 'native inventory purge for the owner' not integrated at HEAD)"
+    },
+    {
+      "expected": "Every eligible deleted row is attempted within a bounded number of sweeps (round-robin / attempt tracking as processDeletionTasks does); a poisoned prefix must not retain other users' deleted media indefinitely.",
+      "observed": "VERIFIED. With 50 rows whose object delete always fails plus one fresh deleted row, 3 sweeps never touch the fresh row (store.keys.has(freshKey) === true, object_key still set). worker.ts:320 selects 'LIMIT 50' with no ordering/round-robin, unlike processDeletionTasks which explicitly round-robins on last_attempt_at.",
+      "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W02'  (exit 1; file: 3 failed / 1 passed / 4 total)",
+      "severity": "P1",
+      "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+      "title": "media-worker sweepDeletedMedia: 50 permanently failing rows starve every newer deleted asset forever (LIMIT 50, no ORDER BY, no attempt tracking)"
+    },
+    {
+      "expected": "Either the referenced/licensed original survives the uploader's deletion or the catalog row is deactivated in the same step; an active catalog entry must not point at a purged asset. Product decision for the coordinator.",
+      "observed": "VERIFIED. After media_purge the object is gone, media_asset.object_key is NULL, and drill_instructional_media (rights_status='approved', active=true) still references the asset. HEAD neither preserves the licensed original nor deactivates the catalog row.",
+      "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W03a'  (exit 1)",
+      "severity": "P2",
+      "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+      "title": "media-worker media_purge destroys an original still referenced by an active drill_instructional_media catalog row, leaving an active catalog entry pointing at a purged asset"
+    },
+    {
+      "expected": "Account deletion terminates (referencing rows detached/nulled or deletion blocked with an explicit, actionable state) instead of a permanently failed task.",
+      "observed": "VERIFIED. deletion_task row {kind:'final_hard_delete', status:'failed', attempts:5, detail:'update or delete on table \"media_asset\" violates foreign key constraint \"pro_reference_media_asset_id_fkey\"'}; app_user row still exists after 7 cycles. packages/database/migrations/0003_media_goals_sessions.sql:31 declares media_asset_id uuid REFERENCES media_asset(id) with no ON DELETE. Caveat (UNKNOWN): whether the media-worker/packages-database plane is part of the shipping iOS deletion path — the Edge function deletes via Auth admin; the coordinator should weight severity accordingly.",
+      "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W03b'  (exit 1)",
+      "severity": "P1",
+      "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+      "title": "media-worker final_hard_delete can never complete when pro_reference (or drill via fk_drill_media) references the user's media_asset: FK has no ON DELETE action, task hits the 5-attempt cap and stays 'failed'"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-deletion-managed-media-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f676b52-3626-4830-a5de-4addb4156ff0/mobile-adv.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a8132b4-a795-45d9-a15c-db47c7cc8b79/mobile-adv-verbose.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c4b85a38-a1b9-4ea8-9b55-0b9067bf1c5c/mobile-baseline-deletion.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d67053d7-eb91-4c50-9b98-a15d0a995070/edge-adv.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/82144266-098e-4bf8-834e-97d6f6f7a203/media-worker-adv.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a10657b9-3751-42f2-b187-2ae8b8310148/sql-adv.log"
+    ],
+    "attack_branch": "devin/pp/adv/deletion-managed-media-30a40650",
+    "attack_branch_sha": "a659aa827376627225a22ca47fbbdeddeaab7c99",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 26,
+    "breaks": [
+      {
+        "expected": "After a lost/slow confirmation the app resolves the operation through the durable status capability (or completes local cleanup once a completed receipt is observed) instead of telling a user whose Auth user may already be gone to sign in again (which would mint a brand-new account).",
+        "observed": "VERIFIED. Real wire client against a fake server: attempt 1 never resolves (client times out -> 'Deletion status unknown'), attempt 2 answers 202 in_progress, attempt 3 answers 401 because Auth already deleted the user. The screen renders 'Your sign-in has expired. This response does not confirm whether your account was deleted. Sign in again before retrying.' No GET status / capability request and no local cleanup (props.onDeleted) is ever issued (statusQueries.length === 0, cleanup.mock.calls.length === 0). ManageAccountScreen.tsx does not import deletionOperation/deletionOperationTransport; the status capability minted by delete-request is unused.",
+        "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M04'  (exit 1; suite as a whole: 3 failed / 8 passed / 11 total, log: mobile-adv.log)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+        "title": "ManageAccount: a confirm whose response is lost (timeout/202) ends in a 'Sign in again before retrying' dead end; the shipping path never queries deletion status or finishes local cleanup (W08-01 not integrated at HEAD)"
+      },
+      {
+        "expected": "Confirm is bound to the operationId returned by /v1/me/delete-request (W08-01 objective).",
+        "observed": "VERIFIED. POST /v1/me/delete-confirm body is {challenge} only; confirmAccountDeletion(session, challenge) has no operationId parameter although the Edge RPC accepts p_operation_id and the operation contract (deletionOperationContracts.ts) exists in the tree. The Edge legacy challenge path still leases/receipts correctly (ADV-E07 passes), so this is a contract gap, not data loss.",
+        "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M05'  (exit 1)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+        "title": "ManageAccount confirm omits operationId: the shipping client uses the legacy challenge-only contract rather than the operation minted by delete-request"
+      },
+      {
+        "expected": "iOS user-facing copy never mentions Google Play/Android (hard rule; dossier is the authority).",
+        "observed": "VERIFIED. Rendered notice: 'Account deleted. The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.'",
+        "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/manageAccountDeletionAdversary.adv.test.tsx -t 'ADV-M06'  (exit 1)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionAdversary.adv.test.tsx",
+        "title": "iOS deletion-success notice contains 'Google Play' (APP_STORE_SUBMISSION.md forbidden phrase on a supported path)"
+      },
+      {
+        "expected": "On confirmed account deletion the owner's managed media files are removed (owner-only), or the coordinator explicitly re-scopes W08-04 and keeps the disclosure copy.",
+        "observed": "VERIFIED. completeAccountDeletion(OWNER_A) removes every owner-scoped row/kv (ADV-M01 passes) but the recorded native/file-removal calls are [] for all of A's video, poster and pose-sidecar URIs. grep of apps/mobile/src finds no ManagedMedia/unlink/deleteFile call; native/managed-media exists but is not wired into ClipMediaStore or the deletion path; apps/mobile/src/media does not exist. Note: the HEAD confirmation copy discloses 'Clips saved on this phone stay on this phone until you delete the app', so the app is honest about this today, but it contradicts the program invariant 'deletion of that account's referenced media on confirmed account deletion' (docs/prompts/codex-production-readiness.md L441) and W08-04.",
+        "repro": "cd apps/mobile && npx jest --ci --verbose __tests__/adv/deletionLocalPurgeAdversary.adv.test.ts -t 'ADV-M02'  (exit 1; suite: 1 failed / 2 passed / 3 total)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/deletionLocalPurgeAdversary.adv.test.ts",
+        "title": "Local account deletion purges SQLite rows but hands no capture/poster/pose-sidecar file of the deleted owner to any native removal path (W08-04 'native inventory purge for the owner' not integrated at HEAD)"
+      },
+      {
+        "expected": "Every eligible deleted row is attempted within a bounded number of sweeps (round-robin / attempt tracking as processDeletionTasks does); a poisoned prefix must not retain other users' deleted media indefinitely.",
+        "observed": "VERIFIED. With 50 rows whose object delete always fails plus one fresh deleted row, 3 sweeps never touch the fresh row (store.keys.has(freshKey) === true, object_key still set). worker.ts:320 selects 'LIMIT 50' with no ordering/round-robin, unlike processDeletionTasks which explicitly round-robins on last_attempt_at.",
+        "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W02'  (exit 1; file: 3 failed / 1 passed / 4 total)",
+        "severity": "P1",
+        "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+        "title": "media-worker sweepDeletedMedia: 50 permanently failing rows starve every newer deleted asset forever (LIMIT 50, no ORDER BY, no attempt tracking)"
+      },
+      {
+        "expected": "Either the referenced/licensed original survives the uploader's deletion or the catalog row is deactivated in the same step; an active catalog entry must not point at a purged asset. Product decision for the coordinator.",
+        "observed": "VERIFIED. After media_purge the object is gone, media_asset.object_key is NULL, and drill_instructional_media (rights_status='approved', active=true) still references the asset. HEAD neither preserves the licensed original nor deactivates the catalog row.",
+        "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W03a'  (exit 1)",
+        "severity": "P2",
+        "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+        "title": "media-worker media_purge destroys an original still referenced by an active drill_instructional_media catalog row, leaving an active catalog entry pointing at a purged asset"
+      },
+      {
+        "expected": "Account deletion terminates (referencing rows detached/nulled or deletion blocked with an explicit, actionable state) instead of a permanently failed task.",
+        "observed": "VERIFIED. deletion_task row {kind:'final_hard_delete', status:'failed', attempts:5, detail:'update or delete on table \"media_asset\" violates foreign key constraint \"pro_reference_media_asset_id_fkey\"'}; app_user row still exists after 7 cycles. packages/database/migrations/0003_media_goals_sessions.sql:31 declares media_asset_id uuid REFERENCES media_asset(id) with no ON DELETE. Caveat (UNKNOWN): whether the media-worker/packages-database plane is part of the shipping iOS deletion path — the Edge function deletes via Auth admin; the coordinator should weight severity accordingly.",
+        "repro": "cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/deletionManagedMediaAdversary.adv.test.ts -t 'ADV-W03b'  (exit 1)",
+        "severity": "P1",
+        "test_file": "services/media-worker/test/adv/deletionManagedMediaAdversary.adv.test.ts",
+        "title": "media-worker final_hard_delete can never complete when pro_reference (or drill via fk_drill_media) references the user's media_asset: FK has no ON DELETE action, task hits the 5-attempt cap and stays 'failed'"
+      }
+    ],
+    "package_id": "INT-deletion-managed-media",
+    "summary": "INDEPENDENT ADVERSARY — area deletion-managed-media, attacked 30a4065036a917514fb4984fde73f87867f38619 (git rev-parse HEAD before branching). Attack branch devin/pp/adv/deletion-managed-media-30a40650 @ a659aa827376627225a22ca47fbbdeddeaab7c99 adds ONLY new test files (git status showed no production or existing-test changes; commit touches 6 new files). Baseline at HEAD (VERIFIED): `cd apps/mobile && npx jest --ci --silent __tests__/accountDeletion.test.ts __tests__/deletionOperationIsolation.test.ts __tests__/deletionOperationRecovery.test.ts __tests__/deletionOperationTransport.test.ts __tests__/deletionCapabilityJournal.test.ts` exit 0, 5 suites / 160 passed / 0 failed (mobile-baseline-deletion.log); `cd apps/mobile && npx tsc --noEmit` exit 0 after `npm ci` (first tsc run failed only because @sentry/react-native was missing from node_modules — environment, not code); `npx eslint apps/mobile/__tests__/adv/` exit 0; `npx prettier --check apps/mobile/__tests__/adv/ services/media-worker/test/adv/` exit 0; `cd services/media-worker && npm run typecheck` exit 0; `deno fmt --check` + `deno lint` + `deno check` on the new Deno file exit 0.\n\nCONFIRMED BREAKS (7, in `breaks`): M04 lost-response dead end (P1), M05 operationId unbound (P2), M06 'Google Play' copy (P2), M02 no native media purge on local deletion (P1), W02 sweep starvation past LIMIT 50 (P1), W03a referenced original destroyed with active catalog row left dangling (P2), W03b final_hard_delete permanently failed on pro_reference FK (P1, plane caveat). Root observation for M02/M04/M05: at HEAD `ManageAccountScreen.tsx` does not import deletionOperation*, `__tests__/w08ManageAccountDeletion.test.tsx` and `__tests__/w08OwnerCleanup.test.ts` do not exist, and `apps/mobile/src/media` does not exist — W08-01/W08-04 objectives are not integrated into the shipping path yet.\n\nATTACKS THAT DID NOT BREAK (VERIFIED, exact commands):\n[mobile] `cd apps/mobile && npx jest --ci --verbose __tests__/adv/` exit 1, 14 total / 10 passed / 4 failed (mobile-adv-verbose.log). Passing: ADV-M01 completeAccountDeletion(A) removes every owner-scoped row and kv of A while owner B, a look-alike UUID owner (…be39) and device-level kv survive; ADV-M03 a real SQLite trigger RAISE(ABORT,'disk I/O error') on DELETE FROM outbox leaves A fully intact (no half purge), reports failed, and a retry completes without touching B; ADV-M07 two taps on 'Permanently delete' send exactly one confirm and one cleanup; ADV-M08 (7 cases) 202 in_progress, deleted:'true', deleted:1, nested deleted, array body, deleted:true on 500, deleted:true on 409 blocked are never reported as completed deletion (fail closed, unknown state surfaced).\n[edge] `cd supabase/functions/api/__wf__ && deno test -A --config deno.json adv_deletion_managed_media.test.ts` exit 0, 8 passed / 0 failed (edge-adv.log): ADV-E01 a provider call returning after lease loss cannot proceed into RevenueCat/Auth; ADV-E02 malformed/stale/contradictory/missing completion receipts never become 'completed'; ADV-E03 self-contradictory leases refused before provider/checkpoint calls; ADV-E04 Apple invalid_grant + rejected apple_unrevocable checkpoint stops before RevenueCat/Auth; ADV-E05 Apple invalid_grant completes via apple_unrevocable and reports manual_action_required (never 'revoked'); ADV-E06 transient Apple/RevenueCat/Auth failures release the lease with stage-specific codes and never skip a stage (external_complete only checkpointed when the failing stage is Auth); ADV-E07 repeated confirm + internal resume of completed work return the durable receipt with zero provider/Auth calls, malformed completed status rejected; ADV-E08 wrong Apple encryption key -> permanent invalid_response, wrong-size key -> configuration (not permanent).\n[sql] `cd supabase && docker cp tests/adv/account_deletion_adversary.sql adv-pg:/tests/adv/ && docker exec adv-pg psql -U postgres -d pickle_adv -v ON_ERROR_STOP=1 -f /tests/adv/account_deletion_adversary.sql` exit 0, 'ADV SQL assertions passed: 35' (sql-adv.log; pickle_adv = disposable postgres:16 with tests/shim_auth.sql + every supabase/migrations/*.sql applied in order): ADV-S01 permanent Apple failure -> manual_action_required receipt; ADV-S02 stale lease rejected, restart after the Apple checkpoint resumes without re-running Apple; ADV-S03 out-of-band Auth deletion blocked without durable intent; ADV-S04 superseded/unknown state never yields a completed receipt.\n[media-worker] `cd services/media-worker && DATABASE_URL_TEST=postgres://postgres:pg@localhost:55432/mediaworker_test npx vitest run test/adv/ --reporter=verbose` exit 1, 2 files / 6 tests / 3 passed / 3 failed (media-worker-adv.log). Passing: ADV-W01 media_purge with inventory > DELETION_TASK_WINDOW erases every object + normalized.mp4 + thumb.jpg of the victim and none of a neighbour, including a neighbour key that is a string-prefix look-alike of a victim key; all tasks 'done'. ADV-W04 (objectStorePaginationAdversary.adv.test.ts) S3 derived-artifact listing follows continuation tokens undefined -> tok-1 -> tok-2 across 2005 keys with correct bucket/prefix, and a later-page listing failure rejects instead of returning a partial inventory.\n\nNOTE for the coordinator: the new files are picked up by default `npx jest --silent` (apps/mobile) and `npm test` (services/media-worker) globs, so those suites will be red on the attack branch by design; run_rls_tests.sh does not pick up supabase/tests/adv/. The Edge deletion has no paged storage fan-out (media is on-device; Auth admin delete cascades), so 'pagination past a page cap' was attacked on the media-worker plane only.\n\nNOT_YET_VERIFIABLE (no verdict guessed): (1) native managed-media namespaces/backup-exclusion/inventory and ClipMediaStore behaviour — `scripts/mac-full-verify.sh` on the M4 runner (from the coordinator's Mac; `--remote` is forbidden for this role) or `cd native/managed-media && swift test`; (2) locked files / missing filesystem permissions / app relaunch during a native purge — Xcode + iOS Simulator run of the PickleNative XCTests plus a device run of the Release build (`cd apps/mobile/ios && bundle exec pod install && xcodebuild -workspace PickleSensei.xcworkspace -scheme PickleSensei -configuration Release -destination 'platform=iOS Simulator,name=iPhone 16' test`); (3) real Sign in with Apple token revocation and real RevenueCat customer deletion — require APPLE_SIGN_IN_* / REVENUECAT_SECRET_API_KEY against a non-production Supabase project (`supabase functions serve api` + `curl -X POST .../v1/me/delete-confirm`), not run; (4) StoreKit sandbox interaction with deletion — device/simulator with a Sandbox Apple Account; (5) behaviour against production Supabase ucqnaiwqwjtgvlduiuib — never touched. Everything above labelled VERIFIED was executed on Linux against the frozen SHA; INFERRED statements are limited to the code-reading notes inside each break's 'observed'."
+  },
+  "status": "DONE"
+}
