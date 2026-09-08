@@ -195,6 +195,63 @@ function twoWristSpeedProfile(
   };
 }
 
+/**
+ * A skeleton standing still except for the right wrist, which TRAVELS: its
+ * position integrates the requested velocity (image heights per second along
+ * x and y, square video), so both the speed profile and the direction of
+ * travel are exactly as requested. Used for wind-up / recovery evidence,
+ * where the direction of motion matters.
+ */
+function wristTravelProfile(
+  durationMs: number,
+  fps: number,
+  velocityAt: (tMs: number) => readonly [number, number],
+): PoseSequence {
+  const { sequence } = singleSwing();
+  const body = sequence.frames[0];
+  if (!body) throw new Error('synthetic swing produced no frames');
+  const dtMs = 1000 / fps;
+  const frames: PoseSequence['frames'] = [];
+  let index = 0;
+  let x = 0.45;
+  let y = 0.55;
+  for (let tMs = 0; tMs <= durationMs; tMs += dtMs) {
+    const [vx, vy] = velocityAt(tMs);
+    x += (vx * dtMs) / 1000;
+    y += (vy * dtMs) / 1000;
+    frames.push({
+      frameIndex: index,
+      timestampMs: Math.round(tMs),
+      confidence: body.confidence,
+      landmarks: body.landmarks.map(mark =>
+        mark.name === 'right_wrist' ? { ...mark, x, y } : mark,
+      ),
+    });
+    index += 1;
+  }
+  return { ...sequence, video: { ...sequence.video, fps }, frames };
+}
+
+/** Velocity along ±x whose magnitude follows `speedAt`; `sign` is the direction. */
+function along(sign: 1 | -1, speedAt: (tMs: number) => number) {
+  return (tMs: number): readonly [number, number] => [sign * speedAt(tMs), 0];
+}
+
+function sumVelocities(
+  ...profiles: ReadonlyArray<(tMs: number) => readonly [number, number]>
+) {
+  return (tMs: number): readonly [number, number] => {
+    let vx = 0;
+    let vy = 0;
+    for (const profile of profiles) {
+      const [px, py] = profile(tMs);
+      vx += px;
+      vy += py;
+    }
+    return [vx, vy];
+  };
+}
+
 function expectMultipleStrokes(sequence: PoseSequence, atLeast = 2): void {
   const decision = admitImportedStrokeEvents(sequence);
   expect(decision.admitted).toBe(false);
@@ -331,6 +388,281 @@ describe('W03-01 regression — a complete stroke is never demoted by a later, h
   });
 });
 
+/**
+ * Round 6 — the adversary broke candidate b391819a three ways, all of them
+ * relative judgements: (1) a whole-wrist "distinct peak" filter compared the
+ * peak with the wrist's MEDIAN speed, so constant paddle-hand motion hid a
+ * whole rally and the lone off-hand gesture became THE stroke; (2) events
+ * were "comparable" relative to the loudest one, so what counted depended on
+ * the loudest motion; (3) a `continuous` valley rule fused any peaks whose
+ * valley stayed above half the lesser peak, so four volleys with 60 % valleys
+ * were one admitted "stroke". Every stroke judgement is now ABSOLUTE in body
+ * scale (torso lengths per second) and per event: a stroke-sized event is a
+ * stroke wherever it sits, a comparable event counts whatever else moves,
+ * and only a slower wind-up or recovery that is continuous with a stroke
+ * AND travels against it is folded into that stroke.
+ */
+describe('W03-01 regression — round 6: absolute, per-event stroke judgement', () => {
+  // Two right-hand strokes 1.2 s apart plus one off-hand gesture between them:
+  // three comparable events, refused.
+  const rightStrokes = sumOf(hump(1000, 150, 1.0), hump(2200, 150, 1.0));
+  const leftGesture = hump(1600, 200, 0.8);
+
+  it('control: two paddle-hand strokes and an off-hand gesture are three events', () => {
+    const decision = admitImportedStrokeEvents(
+      twoWristSpeedProfile(3200, 60, rightStrokes, leftGesture),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(3);
+  });
+
+  it('is monotonic under constant paddle-hand motion: the rally is never hidden and the off-hand gesture never becomes THE stroke', () => {
+    for (const floor of [0.3, 0.6, 0.7, 1.0]) {
+      const decision = admitImportedStrokeEvents(
+        twoWristSpeedProfile(
+          3200,
+          60,
+          tMs => rightStrokes(tMs) + floor,
+          leftGesture,
+        ),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBeGreaterThanOrEqual(3);
+      expect(
+        decision.candidates.filter(
+          c => c.comparable && c.wrist === 'right_wrist',
+        ).length,
+      ).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it('refuses a continuous six-stroke rally that never rests, with or without an off-hand gesture', () => {
+    // 1.5–5 torso lengths/s throughout: the wrist never stops, so a
+    // median-relative peak filter sees no "distinct" peak at all.
+    const rally = (tMs: number) => {
+      if (tMs < 500 || tMs > 3500) return 0;
+      const phase = ((tMs - 500) % 500) / 500;
+      return 0.35 + 0.85 * Math.max(0, 1 - Math.abs(phase - 0.5) * 2);
+    };
+    expectMultipleStrokes(wristSpeedProfile(4000, 60, rally), 6);
+    // The off-hand gesture overlaps one volley in time and may cluster with
+    // it; it can never REDUCE the count.
+    expectMultipleStrokes(
+      twoWristSpeedProfile(4000, 60, rally, hump(2000, 200, 0.8)),
+      6,
+    );
+  });
+
+  it('refuses two complete strokes 340 ms apart with a dead stop between them', () => {
+    for (const spacingMs of [320, 340, 360]) {
+      const decision = admitImportedStrokeEvents(
+        wristSpeedProfile(
+          3000,
+          60,
+          sumOf(hump(1200, 100, 1.4), hump(1200 + spacingMs, 100, 1.4)),
+        ),
+      );
+      expect(decision.admitted).toBe(false);
+      if (decision.admitted) return;
+      expect(decision.reason).toBe('multiple_stroke_events');
+      expect(decision.comparableEventCount).toBe(2);
+    }
+  });
+
+  it('refuses four volleys in 1.85 s whose valleys stay at 60 % of the peaks', () => {
+    const volleys = (tMs: number) => {
+      if (tMs < 1000 || tMs > 2800) return 0;
+      const phase = ((tMs - 1000) % 450) / 450;
+      return 0.6 + 0.4 * Math.max(0, 1 - Math.abs(phase - 0.5) * 2);
+    };
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(5000, 60, volleys),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it('refuses two soft strokes followed 900 ms later by a hard drive — the drive never demotes them', () => {
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(
+        4500,
+        60,
+        sumOf(hump(800, 150, 0.6), hump(1700, 150, 0.6), hump(2900, 150, 3.0)),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(3);
+  });
+
+  it('refuses a dink-speed second movement after a stroke: comparable is an absolute floor, not a share of the loudest', () => {
+    const swing = singleSwing();
+    const dink = wristSpeedProfile(2000, 60, hump(1000, 400, 0.7));
+    const decision = admitImportedStrokeEvents(
+      concatSequences(swing.sequence, dink, 600),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+
+  it('refuses a half stroke that emerges from a tracking gap at full speed', () => {
+    const swing = wristSpeedProfile(3000, 60, tMs =>
+      tMs >= 1500 && tMs <= 1800 ? 1.0 * (1 - (tMs - 1500) / 300) : 0,
+    );
+    const gapped: PoseSequence = {
+      ...swing,
+      frames: swing.frames.map(frame =>
+        frame.timestampMs >= 1000 && frame.timestampMs < 1500
+          ? {
+              ...frame,
+              landmarks: frame.landmarks.map(mark =>
+                mark.name === 'right_wrist' ? { ...mark, visibility: 0 } : mark,
+              ),
+            }
+          : frame,
+      ),
+    };
+    const decision = admitImportedStrokeEvents(gapped);
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('stroke_truncated_at_clip_edge');
+  });
+
+  it('publishes absolute floors only: no whole-wrist or loudest-relative ratio remains', () => {
+    expect('distinctPeakRatio' in IMPORT_ADMISSION_LIMITS).toBe(false);
+    expect('comparablePeakRatio' in IMPORT_ADMISSION_LIMITS).toBe(false);
+    expect(
+      IMPORT_ADMISSION_LIMITS.minComparablePeakTorsoPerSecond,
+    ).toBeLessThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond / 2,
+    );
+    expect(IMPORT_ADMISSION_LIMITS.maxWindUpPeakRatio).toBeLessThanOrEqual(0.5);
+    expect(IMPORT_ADMISSION_LIMITS.maxWindUpPauseMs).toBeLessThanOrEqual(400);
+  });
+});
+
+/**
+ * Round 6 — wind-up and recovery. A real swing has a slower backswing before
+ * contact and a slower recovery after it, each travelling AGAINST the
+ * forward swing and continuous with it. Only such motion is folded into the
+ * stroke; a burst that travels the same way, that pauses for long, or that
+ * has no net travel at all is a separate event.
+ */
+describe('W03-01 regression — round 6: wind-up and recovery are direction-aware', () => {
+  const STROKE = 1.6;
+  const forward = along(1, hump(1700, 150, STROKE));
+
+  it('admits a forward swing with a slower backward wind-up and a backward recovery as ONE stroke', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3200,
+        60,
+        sumVelocities(
+          along(-1, hump(1300, 150, 0.6)),
+          forward,
+          along(-1, hump(2150, 200, 0.5)),
+        ),
+      ),
+    );
+    expect(decision.admitted).toBe(true);
+    if (!decision.admitted) return;
+    expect(decision.comparableEventCount).toBe(1);
+    expect(Math.abs(decision.event.peakMs - 1700)).toBeLessThanOrEqual(60);
+    expect(decision.event.startMs).toBeLessThan(1300);
+    expect(decision.event.endMs).toBeGreaterThan(2150);
+    expect(decision.candidates).toHaveLength(3);
+    expect(decision.candidates.filter(c => c.comparable)).toHaveLength(1);
+  });
+
+  it('a wind-up of the same shape is a second stroke when it travels FORWARD (a soft stroke, then a hard one)', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3200,
+        60,
+        sumVelocities(along(1, hump(1300, 150, 0.6)), forward),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+
+  it('a backward burst is a second stroke when the pause before the swing exceeds the wind-up budget', () => {
+    const pauseMs = IMPORT_ADMISSION_LIMITS.maxWindUpPauseMs + 200;
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3600,
+        60,
+        sumVelocities(
+          along(-1, hump(1700 - 150 - pauseMs - 150, 150, 0.6)),
+          forward,
+        ),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+
+  it('a backward burst faster than half the swing is a second stroke, not a wind-up', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3200,
+        60,
+        sumVelocities(along(-1, hump(1300, 150, STROKE * 0.6)), forward),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+
+  it('folds at most one wind-up and one recovery: a second backward burst before the swing is a stroke', () => {
+    const decision = admitImportedStrokeEvents(
+      wristTravelProfile(
+        3600,
+        60,
+        sumVelocities(
+          along(-1, hump(900, 150, 0.6)),
+          along(-1, hump(1300, 150, 0.6)),
+          forward,
+        ),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+  });
+
+  it('a swing that is itself a stroke-sized burst with no net travel gets no wind-up allowance', () => {
+    // Oscillating fixtures have no direction of travel; a slower burst next
+    // to them is never a wind-up, so soft-then-hard stays two events.
+    const decision = admitImportedStrokeEvents(
+      wristSpeedProfile(
+        3000,
+        60,
+        sumOf(hump(1300, 150, 0.6), hump(1700, 150, STROKE)),
+      ),
+    );
+    expect(decision.admitted).toBe(false);
+    if (decision.admitted) return;
+    expect(decision.reason).toBe('multiple_stroke_events');
+    expect(decision.comparableEventCount).toBe(2);
+  });
+});
+
 describe('W03-01 import admission — container envelope', () => {
   it('admits a supported single-track import inside the published envelope', () => {
     const { sequence } = singleSwing();
@@ -460,9 +792,11 @@ describe('W03-01 import admission — container envelope', () => {
     expect(IMPORT_ADMISSION_LIMITS.maxFramePixels).toBe(4096 * 2160);
     expect('minFps' in IMPORT_ADMISSION_LIMITS).toBe(false);
     expect(IMPORT_ADMISSION_LIMITS.minDurationMs).toBeGreaterThan(0);
-    // Conservative: a second event at well under half the peak still counts.
-    expect(IMPORT_ADMISSION_LIMITS.comparablePeakRatio).toBeLessThanOrEqual(
-      0.4,
+    // Conservative: a second event at half the stroke floor still counts.
+    expect(
+      IMPORT_ADMISSION_LIMITS.minComparablePeakTorsoPerSecond,
+    ).toBeLessThanOrEqual(
+      IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond / 2,
     );
     // One swing's continuous motion fits; two complete swings cannot.
     expect(IMPORT_ADMISSION_LIMITS.maxStrokeMotionMs).toBeLessThanOrEqual(2000);
@@ -606,9 +940,7 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     const driveDecision = admitImportedStrokeEvents(drive.sequence);
     expect(driveDecision.admitted).toBe(true);
     if (!driveDecision.admitted) return;
-    const softPeak =
-      driveDecision.event.peakSpeed *
-      (IMPORT_ADMISSION_LIMITS.comparablePeakRatio + 0.05);
+    const softPeak = driveDecision.event.peakSpeed * 0.45;
     const soft = wristSpeedProfile(2000, 60, hump(1000, 400, softPeak));
     const rally = concatSequences(drive.sequence, soft, 800);
     const decision = admitImportedStrokeEvents(rally);
@@ -620,8 +952,8 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
 
   it('admits one stroke beside clearly weaker incidental motion, exposing both', () => {
     const swing = singleSwing();
-    // ~0.3× the swing's peak wrist speed: measurable motion, not a stroke.
-    const idleFidget = wristSpeedProfile(2000, 60, hump(1000, 400, 0.7));
+    // ~1.75 torso lengths/s: measurable motion, below the comparable floor.
+    const idleFidget = wristSpeedProfile(2000, 60, hump(1000, 400, 0.35));
     const clip = concatSequences(swing.sequence, idleFidget, 600);
     const decision = admitImportedStrokeEvents(clip);
     expect(decision.admitted).toBe(true);
@@ -656,10 +988,11 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     const swingDecision = admitImportedStrokeEvents(swing.sequence);
     expect(swingDecision.admitted).toBe(true);
     if (!swingDecision.admitted) return;
-    // The drive peaks more than 2.5× the swing: below comparablePeakRatio.
+    // The drive peaks more than 2.5× the swing: a loudest-relative rule
+    // would demote the swings.
     expect(
       swingDecision.event.peakSpeed / driveDecision.event.peakSpeed,
-    ).toBeLessThan(IMPORT_ADMISSION_LIMITS.comparablePeakRatio);
+    ).toBeLessThan(0.4);
 
     for (const gapMs of [400, 800, 1500]) {
       const decision = admitImportedStrokeEvents(
@@ -709,7 +1042,7 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     if (!dinkDecision.admitted || !driveDecision.admitted) return;
     expect(
       dinkDecision.event.peakSpeed / driveDecision.event.peakSpeed,
-    ).toBeLessThan(IMPORT_ADMISSION_LIMITS.comparablePeakRatio);
+    ).toBeLessThan(0.4);
 
     const dinks = concatSequences(dink.sequence, dink.sequence, 900);
     const dinksDecision = admitImportedStrokeEvents(dinks);
@@ -772,17 +1105,24 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
   it('keeps a sub-stroke wind-up shortly before a much harder forward swing as ONE stroke', () => {
     // Wind-up peaks 500 ms before contact at ~12% of the forward speed and
     // below the absolute stroke floor: alone it is not a stroke, so it
-    // cannot be a second one here.
-    const windUp = wristSpeedProfile(3000, 60, hump(1200, 150, 0.6));
+    // cannot be a second one here. It travels backward, the swing forward.
+    const windUp = wristTravelProfile(
+      3000,
+      60,
+      along(-1, hump(1200, 150, 0.6)),
+    );
     const alone = admitImportedStrokeEvents(windUp);
     expect(alone.admitted).toBe(false);
     if (alone.admitted) return;
     expect(alone.reason).toBe('motion_not_stroke_like');
 
-    const stroke = wristSpeedProfile(
+    const stroke = wristTravelProfile(
       3000,
       60,
-      sumOf(hump(1200, 150, 0.6), hump(1700, 150, 5)),
+      sumVelocities(
+        along(-1, hump(1200, 150, 0.6)),
+        along(1, hump(1700, 150, 1.6)),
+      ),
     );
     const decision = admitImportedStrokeEvents(stroke);
     expect(decision.admitted).toBe(true);
@@ -792,11 +1132,12 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     expect(decision.candidates.filter(c => !c.comparable)).toHaveLength(1);
   });
 
-  it('never demotes a stroke-sized wind-up: a burst admitted alone stays a stroke however hard the next one is', () => {
-    // The same wind-up at 1.2 image heights/s clears the absolute stroke
-    // floor on its own. A stroke-sized burst 500 ms before a 4× harder one
-    // is indistinguishable from a soft stroke followed by a hard stroke, so
-    // the clip is ambiguous and refused — at 500 ms and a second apart alike.
+  it('never demotes a stroke-sized burst without net travel: admitted alone, it stays a stroke however hard the next one is', () => {
+    // The same burst at 1.2 image heights/s clears the absolute stroke floor
+    // on its own and has no direction of travel, so it can be nobody's
+    // wind-up: a stroke-sized burst 500 ms before a 4× harder one is a soft
+    // stroke followed by a hard stroke, and the clip is refused — at 500 ms
+    // and a second apart alike.
     const alone = admitImportedStrokeEvents(
       wristSpeedProfile(3000, 60, hump(1200, 150, 1.2)),
     );
@@ -869,7 +1210,11 @@ describe('W03-01 import admission — single-stroke plausibility', () => {
     const decision = admitImportedStrokeEvents(steady);
     expect(decision.admitted).toBe(false);
     if (decision.admitted) return;
-    expect(decision.reason).toBe('no_stroke_event');
+    // Four seconds of motion at one speed is one long movement, never a
+    // stroke: refused on its duration in absolute terms, not on a
+    // whole-wrist baseline that constant motion could raise.
+    expect(decision.reason).toBe('motion_not_stroke_like');
+    expect(decision.detail).toContain('ms');
   });
 
   it('rejects a sustained motion burst far longer than a stroke', () => {
