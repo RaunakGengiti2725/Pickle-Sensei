@@ -179,6 +179,21 @@ export async function clearPersistedSession(): Promise<boolean> {
   return serializeVaultMutation(resetPersistedSession);
 }
 
+/** The device Keychain, read-and-write only, for another vault's own
+ * service names; null when the native module is missing. */
+export function deviceKeychainForVault(): Pick<
+  KeychainModule,
+  'ACCESSIBLE' | 'getGenericPassword' | 'setGenericPassword'
+> | null {
+  const keychain = loadKeychain();
+  if (!keychain) return null;
+  return Object.freeze({
+    ACCESSIBLE: keychain.ACCESSIBLE,
+    getGenericPassword: keychain.getGenericPassword,
+    setGenericPassword: keychain.setGenericPassword,
+  });
+}
+
 async function resetPersistedSession(): Promise<boolean> {
   const keychain = loadKeychain();
   if (!keychain) return false;
