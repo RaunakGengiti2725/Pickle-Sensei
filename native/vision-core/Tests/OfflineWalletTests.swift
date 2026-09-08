@@ -329,6 +329,11 @@ final class OfflineWalletTests: XCTestCase {
       OfflineStoredGrant(grantId: "grant-1", compactJws: good.compactJws + ".extra"),
       OfflineStoredGrant(grantId: "grant-1", compactJws: good.compactJws.replacingOccurrences(of: "A", with: "+")),
       OfflineStoredGrant(grantId: "grant-1", compactJws: good.compactJws + "A"),
+      OfflineStoredGrant(grantId: "grant-1", compactJws: String(good.compactJws.dropLast()) + "B"),
+      OfflineStoredGrant(
+        grantId: "grant-1",
+        compactJws: [base64url("{\"alg\":\"ES256\"}"), "e3B", String(repeating: "A", count: 86)].joined(separator: ".")
+      ),
       OfflineStoredGrant(
         grantId: "grant-1",
         compactJws: [
@@ -394,6 +399,19 @@ final class OfflineWalletTests: XCTestCase {
     XCTAssertEqual(try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: atLimit).contents, atLimit)
   }
 
+  func testCanonicalBase64UrlTailsAreAccepted() throws {
+    let store = MemoryWalletStore()
+    let wallet = OfflineWallet(store: store)
+    let signature = String(repeating: "A", count: 86)
+    for claims in ["e30", "e30w", "eyJhIjoxfQ", base64url("{\"jti\":\"grant-1\"}")] {
+      let jws = [base64url("{\"alg\":\"ES256\"}"), claims, signature].joined(separator: ".")
+      let contents = OfflineWalletContents(grants: [OfflineStoredGrant(grantId: claims, compactJws: jws)], receipts: [])
+      let stored = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: contents)
+      XCTAssertEqual(stored.contents, contents)
+      try wallet.clear(ownerId: ownerA, expectedRevision: 1)
+    }
+  }
+
   // MARK: - Bridge payloads
 
   func testBridgePayloadRoundTrip() throws {
@@ -440,7 +458,8 @@ final class OfflineWalletTests: XCTestCase {
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: -1) }
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 1.5) }
     assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: Double.nan) }
-    assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 9_007_199_254_740_993) }
+    XCTAssertEqual(try OfflineWallet.revision(fromBridge: 9_007_199_254_740_991), 9_007_199_254_740_991)
+    assertFailure(.invalidRevision) { try OfflineWallet.revision(fromBridge: 9_007_199_254_740_992) }
   }
 
   // MARK: - Typed failures and integrity primitives
@@ -516,6 +535,16 @@ final class OfflineWalletTests: XCTestCase {
       )
       XCTAssertEqual(attributes[kSecAttrSynchronizable as String] as? Bool, false)
       XCTAssertEqual(attributes[kSecValueData as String] as? Data, Data([1]))
+      XCTAssertEqual(attributes[kSecAttrService as String] as? String, "com.picklesensei.offline.wallet")
+
+      let update = store.updateAttributes(data: Data([2]))
+      XCTAssertEqual(
+        update[kSecAttrAccessible as String] as? String,
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String,
+        "every replace re-asserts the protection class, not only the first add"
+      )
+      XCTAssertEqual(update[kSecValueData as String] as? Data, Data([2]))
+      XCTAssertEqual(update.count, 2, "an update never rewrites the item's identity attributes")
       XCTAssertNotEqual(OfflineWallet.keychainService, "com.picklesensei.auth.session")
     }
   #endif
