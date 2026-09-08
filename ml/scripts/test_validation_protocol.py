@@ -675,7 +675,9 @@ class AdjudicatorIndependenceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write_complete_inputs(root)
-            write_json(root / "reviewers" / "reviewer-test-0003.json", reviewer("reviewer-test-0003"))
+            write_json(
+                root / "reviewers" / "reviewer-test-0003.json", reviewer("reviewer-test-0003")
+            )
             write_json(
                 root / "reviews" / "clip-test-0002.reviewer-test-0003.json",
                 review(clip="clip-test-0002", reviewer_id="reviewer-test-0003", rating=1),
@@ -743,7 +745,9 @@ class BoundaryValueTest(unittest.TestCase):
             (root / "protocol.json").write_text(json.dumps(doc), encoding="utf-8")
             clip = footage()
             clip["capture"]["fps"] = float("nan")
-            (root / "footage" / "clip-test-0001.json").write_text(json.dumps(clip), encoding="utf-8")
+            (root / "footage" / "clip-test-0001.json").write_text(
+                json.dumps(clip), encoding="utf-8"
+            )
             report = report_for(root)
             out = io.StringIO()
             with redirect_stdout(out):
@@ -763,7 +767,9 @@ class BoundaryValueTest(unittest.TestCase):
             pred = prediction()
             pred["prediction"]["lower"] = -(10**400)
             pred["prediction"]["upper"] = 10**400
-            (root / "predictions" / "clip-test-0001.json").write_text(json.dumps(pred), encoding="utf-8")
+            (root / "predictions" / "clip-test-0001.json").write_text(
+                json.dumps(pred), encoding="utf-8"
+            )
             report = report_for(root)
         self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
 
@@ -814,7 +820,9 @@ class IndependenceAndProvenanceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             write_complete_inputs(root)
-            doc = footage(clip="clip-test-0002", athlete="athlete-test-0002", release="release-test-0002")
+            doc = footage(
+                clip="clip-test-0002", athlete="athlete-test-0002", release="release-test-0002"
+            )
             doc["media_sha256"] = footage()["media_sha256"]
             write_json(root / "footage" / "clip-test-0002.json", doc)
             report = report_for(root)
@@ -860,7 +868,9 @@ class IndependenceAndProvenanceTest(unittest.TestCase):
             write_complete_inputs(root)
             write_json(
                 root / "footage" / "clip-test-0002.json",
-                footage(clip="clip-test-0002", athlete="reviewer-test-0002", release="release-test-0002"),
+                footage(
+                    clip="clip-test-0002", athlete="reviewer-test-0002", release="release-test-0002"
+                ),
             )
             write_json(
                 root / "consent" / "release-test-0002.json",
@@ -896,8 +906,12 @@ class TemporalAndConsentTest(unittest.TestCase):
             withdrawn = consent()
             withdrawn["state"] = "withdrawn"
             write_json(root / "consent" / "release-test-0001.json", withdrawn)
-            write_json(root / "consent" / "release-test-0009.json", consent(release="release-test-0009"))
-            write_json(root / "footage" / "clip-test-0001.json", footage(release="release-test-0009"))
+            write_json(
+                root / "consent" / "release-test-0009.json", consent(release="release-test-0009")
+            )
+            write_json(
+                root / "footage" / "clip-test-0001.json", footage(release="release-test-0009")
+            )
             report = report_for(root)
         self.assertNotEqual(report["status"], "COMPUTED", report["status"])
         missing = {entry["input"]: entry for entry in report["missing_inputs"]}

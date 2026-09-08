@@ -28,11 +28,14 @@ COMPUTED) or all files valid; 1 = INVALID_INPUT / any invalid file; 2 = usage.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
+import math
 import re
 import statistics
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from validate_annotations import TECHNIQUES
@@ -40,14 +43,56 @@ from validate_annotations import TECHNIQUES
 PROTOCOL_SCHEMA_VERSION = "validation-protocol-v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_ROOT = Path("datasets/validation-protocol")
+CORPUS_REGISTRY_PATH = Path("datasets/corpus/recordings.json")
 QUALIFICATION_POLICY_VERSION = "coach-qualification-policy-v1"
 
 # Locked / retired holdouts (datasets/holdouts/ledger.json and
-# packages/evaluation/src/benchmarkRelease.ts W06_PROTECTED_SESSION_IDS). Footage
-# that references them can never enter this protocol.
-PROTECTED_HOLDOUT_IDS = frozenset(
-    {"wm-dink-01", "afn-vic-rally1", "wm-tournament-2014", "afn-vic-2025"}
+# packages/evaluation/src/benchmarkRelease.ts W06_PROTECTED_CASE_IDS /
+# W06_PROTECTED_SESSION_IDS). Footage that references them can never enter this
+# protocol.
+PROTECTED_CASE_IDS = frozenset({"wm-dink-01", "afn-vic-rally1"})
+PROTECTED_SESSION_IDS = frozenset({"wm-tournament-2014", "afn-vic-2025"})
+PROTECTED_HOLDOUT_IDS = PROTECTED_CASE_IDS | PROTECTED_SESSION_IDS
+
+# Content identity of the protected recordings and every recording derived from
+# them (re-cuts, crops, re-encodes registered in datasets/corpus/recordings.json).
+# Mirrors `protectedSourceHashes` in packages/evaluation/src/benchmarkRelease.ts;
+# the unit tests pin that this set and the corpus registry agree.
+PROTECTED_MEDIA_SHA256 = frozenset(
+    {
+        "024decaeb66e7eacd2b4d98673aa3adc02d00af591afcc5ccc851a679836a05c",
+        "274544640cc6483e3ce0a677c49054e59658d84a90c72637a753a1fdfe2f1611",
+        "72cd8795bdc2be6860a16ffa7245d4b889ea4c2482c3001812b883ed9e0486f6",
+        "7d396a6d65669fc3b7fc3c33988e257be08f830e93ca20c51f38171fca0959a7",
+        "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15",
+        "ac6c9d7b50558a0cb02dd3253841a9a3a68b3c7d8b602f6ee30142f7c07d3d8f",
+        "b6f280b2900c9f338daa7d5e6b4ac82a8ba4b8ff74d1c7762e3e0905ee946b62",
+    }
 )
+
+# Dev-fixture identities (docs/COACH_QUALIFICATION_POLICY.md §4,
+# packages/swing-lab/src/coachProvisioning.ts): rejected wherever an identity is
+# recorded.
+SYNTHETIC_IDENTITY_PATTERN = re.compile(r"synthetic", re.IGNORECASE)
+IDENTITY_FIELDS = frozenset(
+    {
+        "ratified_by",
+        "athlete_id",
+        "athlete_group_id",
+        "guardian_release_id",
+        "participant_release_id",
+        "verified_by",
+        "rights_holder_id",
+        "reviewer_id",
+        "credential_ref",
+        "assessed_by",
+        "adjudicator_id",
+    }
+)
+
+# JSON numbers are exchanged as IEEE-754 doubles; anything outside the exactly
+# representable integer range (or non-finite) is refused rather than rounded.
+MAX_SAFE_MAGNITUDE = 2**53
 
 OPAQUE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -91,8 +136,12 @@ SUBGROUP_DIMENSIONS = [
 
 _OPAQUE_ID = {"type": "string", "pattern": OPAQUE_ID_PATTERN}
 _NULLABLE_OPAQUE_ID = {"type": ["string", "null"], "pattern": OPAQUE_ID_PATTERN}
-_DATE_TIME = {"type": "string", "pattern": DATE_TIME_PATTERN}
-_NULLABLE_DATE_TIME = {"type": ["string", "null"], "pattern": DATE_TIME_PATTERN}
+_DATE_TIME = {"type": "string", "pattern": DATE_TIME_PATTERN, "format": "date-time"}
+_NULLABLE_DATE_TIME = {
+    "type": ["string", "null"],
+    "pattern": DATE_TIME_PATTERN,
+    "format": "date-time",
+}
 _NON_EMPTY = {"type": "string", "minLength": 1}
 _NULLABLE_NON_EMPTY = {"type": ["string", "null"], "minLength": 1}
 _NULLABLE_NUMBER = {"type": ["number", "null"]}
@@ -519,6 +568,114 @@ EXTERNAL_INPUT_IDS = frozenset(
 
 
 # --------------------------------------------------------------------------- #
+# Protected holdout identity (content hash + id aliases)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class ProtectedIdentity:
+    media_sha256: frozenset[str]
+    aliases: frozenset[str]
+
+
+def _registry_recordings(registry: Path) -> list[dict]:
+    if not registry.is_file():
+        return []
+    try:
+        with registry.open(encoding="utf-8") as handle:
+            loaded = json.load(handle)
+    except (OSError, ValueError, RecursionError):
+        return []
+    if not isinstance(loaded, list):
+        return []
+    return [record for record in loaded if isinstance(record, dict)]
+
+
+@functools.lru_cache(maxsize=None)
+def protected_identity(registry: Path | None = None) -> ProtectedIdentity:
+    """Content hashes and id aliases that identify protected holdout footage.
+
+    The pinned constants are the floor; the corpus registry adds every recording
+    filed under a protected session and every recording derived (re-cut, crop,
+    re-encode) from one of them, so an alias or a derivative can never be
+    registered as fresh validation footage.
+    """
+    hashes = set(PROTECTED_MEDIA_SHA256)
+    aliases = {value.lower() for value in PROTECTED_HOLDOUT_IDS}
+    if registry is None:
+        registry = REPO_ROOT / CORPUS_REGISTRY_PATH
+    by_id = {
+        record["recordingId"]: record
+        for record in _registry_recordings(registry)
+        if isinstance(record.get("recordingId"), str)
+    }
+    protected_ids: set[str] = set()
+    for recording_id, record in by_id.items():
+        session = record.get("sessionKey")
+        if isinstance(session, str) and session.lower() in PROTECTED_SESSION_IDS:
+            protected_ids.add(recording_id)
+        digest = record.get("sha256")
+        if isinstance(digest, str) and digest.lower() in hashes:
+            protected_ids.add(recording_id)
+    changed = True
+    while changed:
+        changed = False
+        for recording_id, record in by_id.items():
+            if recording_id in protected_ids:
+                continue
+            parents = record.get("derivedFrom")
+            if isinstance(parents, list) and any(
+                isinstance(parent, dict) and parent.get("parentRecordingId") in protected_ids
+                for parent in parents
+            ):
+                protected_ids.add(recording_id)
+                changed = True
+    for recording_id in protected_ids:
+        record = by_id[recording_id]
+        aliases.add(recording_id.lower())
+        digest = record.get("sha256")
+        if isinstance(digest, str) and re.fullmatch(SHA256_PATTERN, digest.lower()):
+            hashes.add(digest.lower())
+        session = record.get("sessionKey")
+        if isinstance(session, str) and session:
+            aliases.add(session.lower())
+        path = record.get("path")
+        if isinstance(path, str) and path:
+            aliases.add(Path(path).stem.lower())
+        notes = record.get("notes")
+        if isinstance(notes, str):
+            for legacy in re.findall(r"legacy id:\s*([A-Za-z0-9._:-]+)", notes):
+                aliases.add(legacy.lower())
+    return ProtectedIdentity(media_sha256=frozenset(hashes), aliases=frozenset(aliases))
+
+
+def is_protected_identifier(value: str) -> bool:
+    """True when `value` names a protected holdout, case-insensitively and
+    including prefixed/suffixed aliases such as `WM-DINK-01` or
+    `afn-vic-2025-recut-0001` (the benchmark release gate matches the same way)."""
+    lowered = value.lower()
+    return any(alias in lowered for alias in protected_identity().aliases)
+
+
+def is_protected_media(sha256: str) -> bool:
+    return sha256.lower() in protected_identity().media_sha256
+
+
+def _parse_date_time(value: str) -> datetime | None:
+    match = re.fullmatch(DATE_TIME_PATTERN, value)
+    if match is None:
+        return None
+    fraction = match.group(1) or ""
+    normalized = value[:19] + fraction[:7] + value[19 + len(fraction) :]
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+
+# --------------------------------------------------------------------------- #
 # Schema validation (JSON-Schema subset, standard library only)
 # --------------------------------------------------------------------------- #
 
@@ -563,7 +720,15 @@ def _check_schema(value: object, schema: dict, path: str, errors: list[str]) -> 
             errors.append(f"{path}: must not be empty")
         if "pattern" in schema and re.fullmatch(schema["pattern"], value) is None:
             errors.append(f"{path}: does not match {schema['pattern']}")
+        elif schema.get("format") == "date-time" and _parse_date_time(value) is None:
+            errors.append(f"{path}: is not a valid calendar date-time")
     if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float) and not math.isfinite(value):
+            errors.append(f"{path}: must be a finite number")
+            return
+        if abs(value) > MAX_SAFE_MAGNITUDE:
+            errors.append(f"{path}: magnitude exceeds 2^53 and cannot be represented exactly")
+            return
         if "minimum" in schema and value < schema["minimum"]:
             errors.append(f"{path}: must be >= {schema['minimum']}")
         if "maximum" in schema and value > schema["maximum"]:
@@ -592,10 +757,29 @@ def _check_schema(value: object, schema: dict, path: str, errors: list[str]) -> 
                 _check_schema(value[key], sub_schema, f"{path}.{key}", errors)
 
 
+def _synthetic_identity_checks(value: object, path: str, err) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}" if path else key
+            if key in IDENTITY_FIELDS:
+                candidates = child if isinstance(child, list) else [child]
+                for candidate in candidates:
+                    if isinstance(candidate, str) and SYNTHETIC_IDENTITY_PATTERN.search(candidate):
+                        err(
+                            f"{child_path} {candidate!r} is a SYNTHETIC dev-fixture identity and "
+                            "can never enter the protocol"
+                        )
+            _synthetic_identity_checks(child, child_path, err)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _synthetic_identity_checks(child, f"{path}[{index}]", err)
+
+
 def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
     def err(message: str) -> None:
         errors.append(message)
 
+    _synthetic_identity_checks(doc, "", err)
     if kind == "protocol":
         if doc.get("status") == "ratified":
             if not doc.get("ratified_by"):
@@ -625,8 +809,25 @@ def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
     elif kind == "footage":
         for key in ("clip_id", "session_id", "athlete_id", "athlete_group_id"):
             value = doc.get(key)
-            if isinstance(value, str) and value in PROTECTED_HOLDOUT_IDS:
+            if isinstance(value, str) and is_protected_identifier(value):
                 err(f"{key} {value!r} is a protected holdout and may not enter the protocol")
+        digest = doc.get("media_sha256")
+        if isinstance(digest, str) and is_protected_media(digest):
+            err(
+                f"media_sha256 {digest[:12]}… is a protected holdout recording (or a re-cut of "
+                "one) and may not enter the protocol under any clip_id"
+            )
+        capture = doc.get("capture")
+        recorded_at = (
+            _parse_date_time(capture["recorded_at"])
+            if isinstance(capture, dict) and isinstance(capture.get("recorded_at"), str)
+            else None
+        )
+        verification = doc.get("metadata_verification")
+        if isinstance(verification, dict) and isinstance(verification.get("verified_at"), str):
+            verified_at = _parse_date_time(verification["verified_at"])
+            if recorded_at is not None and verified_at is not None and verified_at < recorded_at:
+                err("metadata_verification.verified_at precedes capture.recorded_at")
         rights = doc.get("rights")
         if isinstance(rights, dict) and rights.get("state") == "cleared":
             if rights.get("verified_by") is None or rights.get("verified_at") is None:
@@ -634,6 +835,17 @@ def _cross_checks(kind: str, doc: dict, errors: list[str]) -> None:
     elif kind == "reviewer":
         qualification = doc.get("qualification")
         if isinstance(qualification, dict):
+            reviewer_id = doc.get("reviewer_id")
+            assessed_by = qualification.get("assessed_by")
+            if (
+                isinstance(reviewer_id, str)
+                and isinstance(assessed_by, str)
+                and assessed_by.lower() == reviewer_id.lower()
+            ):
+                err(
+                    "qualification.assessed_by equals reviewer_id: coaches cannot assess their "
+                    "own qualification (coach-qualification-policy-v1 requires an admin assessor)"
+                )
             evidence = qualification.get("evidence")
             criteria = qualification.get("satisfied_criteria")
             verified_for: set[str] = set()
@@ -726,13 +938,25 @@ class ProtocolInputs:
     record_counts: dict[str, int] = field(default_factory=dict)
 
 
-def _read_json(path: Path, display: str, errors: list[str]) -> object | None:
+_UNREADABLE = object()
+
+
+def _refuse_non_finite(constant: str) -> object:
+    raise ValueError(f"non-finite number {constant} is not valid JSON")
+
+
+def _read_json(path: Path, display: str, errors: list[str]) -> object:
+    """Parse one strict-JSON file; returns `_UNREADABLE` (and records the error)
+    when the file cannot be parsed. A JSON `null` document is returned as None
+    so the caller can reject it as an invalid record rather than skip it."""
     try:
         with path.open(encoding="utf-8") as handle:
-            return json.load(handle)
+            return json.load(handle, parse_constant=_refuse_non_finite)
     except (OSError, ValueError) as exc:
         errors.append(f"{display}: could not be read as JSON ({exc})")
-        return None
+    except RecursionError:
+        errors.append(f"{display}: could not be read as JSON (nesting too deep)")
+    return _UNREADABLE
 
 
 def load_inputs(root: Path) -> ProtocolInputs:
@@ -746,7 +970,7 @@ def load_inputs(root: Path) -> ProtocolInputs:
             inputs.record_counts["protocol"] = 0
             if path.is_file():
                 doc = _read_json(path, kind["path"], inputs.errors)
-                if doc is not None:
+                if doc is not _UNREADABLE:
                     inputs.record_counts["protocol"] = 1
                     record_errors = validate_record(schema, doc, kind["path"])
                     inputs.errors.extend(record_errors)
@@ -760,7 +984,7 @@ def load_inputs(root: Path) -> ProtocolInputs:
             for path in sorted(directory.glob("*.json")):
                 display = f"{directory.name}/{path.name}"
                 doc = _read_json(path, display, inputs.errors)
-                if doc is None:
+                if doc is _UNREADABLE:
                     continue
                 count += 1
                 record_errors = validate_record(schema, doc, display)
@@ -790,7 +1014,9 @@ def _check_uniqueness(inputs: ProtocolInputs) -> None:
 
     duplicates(inputs.consent, "participant_release_id", "consent")
     duplicates(inputs.footage, "clip_id", "footage")
+    duplicates(inputs.footage, "media_sha256", "footage")
     duplicates(inputs.reviewers, "reviewer_id", "reviewers")
+    duplicates(inputs.reviewers, "credential_ref", "reviewers")
     duplicates(inputs.reviews, "review_id", "reviews")
     duplicates(inputs.adjudications, "clip_id", "adjudications")
     duplicates(inputs.predictions, "clip_id", "predictions")
@@ -809,6 +1035,7 @@ class _ClipState:
     abstained_reviewers: list[str] = field(default_factory=list)
     disagreement: bool = False
     adjudicated: bool = False
+    unevaluable: bool = False
     target: int | None = None
 
 
@@ -828,9 +1055,62 @@ def _cross_record_checks(inputs: ProtocolInputs, qualified: dict[str, dict]) -> 
     """Consistency rules that need more than one record; violations are INVALID_INPUT."""
     errors: list[str] = []
     review_ids = {review["review_id"]: review for review in inputs.reviews}
+    reviews_by_clip: dict[str, list[dict]] = {}
+    for review in inputs.reviews:
+        reviews_by_clip.setdefault(review["clip_id"], []).append(review)
+    footage_by_clip = {clip["clip_id"]: clip for clip in inputs.footage}
+    consent_by_release = {record["participant_release_id"]: record for record in inputs.consent}
+
+    # Conflict of interest: nobody who verified, holds rights to or appears in
+    # the footage may review or adjudicate it.
+    reviewer_ids = {reviewer["reviewer_id"] for reviewer in inputs.reviewers}
+    for clip in inputs.footage:
+        clip_id = clip["clip_id"]
+        roles = {
+            "athlete_id": clip["athlete_id"],
+            "rights.rights_holder_id": clip["rights"]["rights_holder_id"],
+            "rights.verified_by": clip["rights"]["verified_by"],
+        }
+        verification = clip["metadata_verification"]
+        if verification is not None:
+            roles["metadata_verification.verified_by"] = verification["verified_by"]
+        for field_name, identity in roles.items():
+            if identity in reviewer_ids:
+                errors.append(
+                    f"footage/{clip_id}: {field_name} {identity!r} is also a reviewer record; "
+                    "reviewers may not verify, own or appear in footage they could review"
+                )
+    for record in inputs.consent:
+        if record["athlete_id"] in reviewer_ids:
+            errors.append(
+                f"consent/{record['participant_release_id']}: athlete_id "
+                f"{record['athlete_id']!r} is also a reviewer record"
+            )
+
     for adjudication in inputs.adjudications:
         clip_id = adjudication["clip_id"]
-        adjudicator = qualified.get(adjudication["adjudicator_id"])
+        adjudicator_id = adjudication["adjudicator_id"]
+        adjudicator = qualified.get(adjudicator_id)
+        clip_reviews = reviews_by_clip.get(clip_id, [])
+        for review in clip_reviews:
+            if review["reviewer_id"] == adjudicator_id:
+                errors.append(
+                    f"adjudications/{clip_id}: adjudicator {adjudicator_id!r} authored review "
+                    f"{review['review_id']!r} of this clip and is not independent"
+                )
+        listed = set(adjudication["review_ids"])
+        for review in clip_reviews:
+            if review["review_id"] not in listed:
+                errors.append(
+                    f"adjudications/{clip_id}: review_ids omits review {review['review_id']!r} "
+                    "of this clip; an adjudication must cover every blinded review"
+                )
+        if clip_reviews and all(review["outcome"] != "rated" for review in clip_reviews):
+            errors.append(
+                f"adjudications/{clip_id}: every blinded review of this clip abstained; a "
+                "rating cannot be resolved from the adjudicator alone"
+            )
+        adjudicated_at = _parse_date_time(adjudication["submitted_at"])
         for review_id in adjudication["review_ids"]:
             review = review_ids.get(review_id)
             if review is None:
@@ -839,11 +1119,16 @@ def _cross_record_checks(inputs: ProtocolInputs, qualified: dict[str, dict]) -> 
                 errors.append(
                     f"adjudications/{clip_id}: review {review_id!r} belongs to another clip"
                 )
-            elif review["reviewer_id"] == adjudication["adjudicator_id"]:
-                errors.append(
-                    f"adjudications/{clip_id}: adjudicator {adjudication['adjudicator_id']!r} "
-                    "authored one of the reviews being adjudicated"
-                )
+            else:
+                reviewed_at = _parse_date_time(review["submitted_at"])
+                if (
+                    adjudicated_at is not None
+                    and reviewed_at is not None
+                    and adjudicated_at < reviewed_at
+                ):
+                    errors.append(
+                        f"adjudications/{clip_id}: submitted_at precedes review {review_id!r}"
+                    )
         if adjudicator is None:
             errors.append(
                 f"adjudications/{clip_id}: adjudicator {adjudication['adjudicator_id']!r} is not a "
@@ -854,11 +1139,49 @@ def _cross_record_checks(inputs: ProtocolInputs, qualified: dict[str, dict]) -> 
                 f"adjudications/{clip_id}: {adjudication['adjudicator_id']!r} lacks the "
                 "adjudicator role"
             )
+    for review in inputs.reviews:
+        submitted_at = _parse_date_time(review["submitted_at"])
+        clip = footage_by_clip.get(review["clip_id"])
+        if submitted_at is None or clip is None:
+            continue
+        recorded_at = _parse_date_time(clip["capture"]["recorded_at"])
+        if recorded_at is not None and submitted_at < recorded_at:
+            errors.append(
+                f"reviews/{review['review_id']}: submitted_at precedes the clip's "
+                "capture.recorded_at"
+            )
+        consent = consent_by_release.get(clip["participant_release_id"])
+        if consent is not None:
+            signed_at = _parse_date_time(consent["signed_at"])
+            if signed_at is not None and submitted_at < signed_at:
+                errors.append(
+                    f"reviews/{review['review_id']}: submitted_at precedes the participant's "
+                    "consent signed_at"
+                )
+
+    subjects = sorted(
+        {json.dumps(prediction["subject"], sort_keys=True) for prediction in inputs.predictions}
+    )
+    if len(subjects) > 1:
+        errors.append(
+            f"predictions: {len(subjects)} distinct candidate subject versions supplied; one "
+            "frozen candidate per report (" + "; ".join(subjects) + ")"
+        )
+
     protocol = inputs.protocol
     if protocol is not None:
         low = protocol["rating_scale"]["minimum"]
         high = protocol["rating_scale"]["maximum"]
+        ratified_at = None
+        if protocol["ratified_at"] is not None:
+            ratified_at = _parse_date_time(protocol["ratified_at"])
         for review in inputs.reviews:
+            submitted_at = _parse_date_time(review["submitted_at"])
+            if ratified_at is not None and submitted_at is not None and submitted_at < ratified_at:
+                errors.append(
+                    f"reviews/{review['review_id']}: submitted_at precedes protocol ratified_at; "
+                    "reviews collected before the protocol was frozen are not blinded evidence"
+                )
             rating = review["quality_rating"]
             if rating is not None and not low <= rating <= high:
                 errors.append(
@@ -1049,6 +1372,7 @@ def _compute_results(inputs: ProtocolInputs, clips: list[_ClipState]) -> dict:
             "supplied": len(inputs.footage),
             "eligible": len(eligible),
             "resolved": len(resolved),
+            "unevaluable": sum(1 for clip in eligible if clip.unevaluable),
             "independent_athletes": len({clip.clip["athlete_id"] for clip in eligible}),
             "independent_sessions": len({clip.clip["session_id"] for clip in eligible}),
             "minimum_independent_athletes": protocol["minimum_independent_athletes"],
@@ -1079,7 +1403,12 @@ def build_report(inputs: ProtocolInputs) -> dict:
     excluded = set(protocol["excluded_case_ids"]) if protocol is not None else set()
 
     consent_by_release = {record["participant_release_id"]: record for record in inputs.consent}
+    withdrawn_by_athlete: dict[str, str] = {}
+    for record in inputs.consent:
+        if record["state"] == "withdrawn":
+            withdrawn_by_athlete.setdefault(record["athlete_id"], record["participant_release_id"])
     qualified = _qualified_reviewers(inputs)
+    blinded = {rid for rid, reviewer in qualified.items() if "reviewer" in reviewer["roles"]}
     errors = list(inputs.errors) + _cross_record_checks(inputs, qualified)
 
     clips: list[_ClipState] = []
@@ -1097,6 +1426,15 @@ def build_report(inputs: ProtocolInputs) -> dict:
             eligible = False
         elif consent["state"] != "active":
             _missing(missing, "consented_footage", f"{clip_id}: consent is {consent['state']}")
+            eligible = False
+        elif clip["athlete_id"] in withdrawn_by_athlete:
+            _missing(
+                missing,
+                "consented_footage",
+                f"{clip_id}: athlete withdrew consent under release "
+                f"{withdrawn_by_athlete[clip['athlete_id']]}; a second release does not "
+                "override a withdrawal",
+            )
             eligible = False
         elif not (
             consent["permissions"]["product_evaluation"]
@@ -1123,11 +1461,12 @@ def build_report(inputs: ProtocolInputs) -> dict:
     adjudicators = {
         rid for rid, reviewer in qualified.items() if "adjudicator" in reviewer["roles"]
     }
-    if len(qualified) < min_reviewers:
+    if len(blinded) < min_reviewers:
         _missing(
             missing,
             "qualified_blinded_reviewers",
-            f"{len(qualified)} qualified reviewer(s) recorded, protocol needs {min_reviewers}",
+            f"{len(blinded)} qualified reviewer(s) with the reviewer role recorded, protocol "
+            f"needs {min_reviewers}",
         )
     if not adjudicators:
         _missing(missing, "qualified_blinded_reviewers", "no qualified adjudicator recorded")
@@ -1147,11 +1486,12 @@ def build_report(inputs: ProtocolInputs) -> dict:
         clip_id = state.clip["clip_id"]
         for review in reviews_by_clip.get(clip_id, []):
             reviewer_id = review["reviewer_id"]
-            if reviewer_id not in qualified:
+            if reviewer_id not in blinded:
                 _missing(
                     missing,
                     "blinded_reviews",
-                    f"{clip_id}: review by {reviewer_id} is not from a qualified reviewer",
+                    f"{clip_id}: review by {reviewer_id} is not from a qualified reviewer with "
+                    "the reviewer role",
                 )
                 continue
             if review["outcome"] == "rated":
@@ -1168,6 +1508,9 @@ def build_report(inputs: ProtocolInputs) -> dict:
                 f"{clip_id}: {usable} qualified blinded review(s), protocol needs "
                 f"{min_reviewers}",
             )
+            continue
+        if not state.ratings:
+            state.unevaluable = True
             continue
         state.disagreement = (
             len(set(state.ratings.values())) != 1 or bool(state.abstained_reviewers)
@@ -1297,7 +1640,7 @@ def render_report(report: dict) -> str:
 def _run_report(root: Path, as_json: bool) -> int:
     report = build_report(load_inputs(root))
     if as_json:
-        print(json.dumps(report, indent=2, sort_keys=True))
+        print(json.dumps(report, indent=2, sort_keys=True, allow_nan=False))
     else:
         print(render_report(report))
     return 1 if report["status"] == "INVALID_INPUT" else 0
@@ -1309,7 +1652,7 @@ def _run_validate(kind: str, paths: list[str]) -> int:
         path = Path(raw)
         errors: list[str] = []
         doc = _read_json(path, str(path), errors)
-        if doc is not None:
+        if doc is not _UNREADABLE:
             errors.extend(validate_record(kind, doc, str(path)))
         if errors:
             failures += 1
