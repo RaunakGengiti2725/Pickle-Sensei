@@ -42,6 +42,7 @@ import {
   OriginalAnalysisExecution,
   originalAnalysisOperations,
 } from '../src/analysis/originalAnalysisOperations';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 import { runJournal } from '../src/analysis/runJournal';
 import {
   clearApiSession,
@@ -261,7 +262,7 @@ function server(store: Store) {
           });
         if (!permit.outcome) releases += 1;
         permit.outcome = String(body.outcome);
-        return response(200, { permit });
+        return response(200, finalizeAcknowledgement(url, body));
       }
       if (url.endsWith('/v1/shots:sync')) {
         const shots = body.shots as Array<{
