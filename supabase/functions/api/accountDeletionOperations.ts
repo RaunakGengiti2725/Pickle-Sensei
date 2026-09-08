@@ -31,7 +31,20 @@ export interface AccountDeletionWorkerDependencies {
   revokeAppleCredential(encryptedToken: string, ownerId: string): Promise<void>;
   deleteRevenueCatCustomer(ownerId: string): Promise<void>;
   deleteAuthUser(ownerId: string): Promise<{ error?: unknown }>;
-  onFailure?(code: DeletionFailureCode, status: number | null): void;
+  /** One service-role page of `namespace` rows still owned by `ownerId`,
+   * selecting the key columns in descending key order, `limit` rows at most,
+   * strictly before the PostgREST `or` filter `before` (null = first page). */
+  readOwnerNamespacePage(
+    namespace: OwnerNamespace,
+    ownerId: string,
+    before: string | null,
+    limit: number,
+  ): PromiseLike<InventoryPage<unknown>>;
+  onFailure?(
+    code: DeletionFailureCode,
+    status: number | null,
+    detail?: DeletionFailureDetail,
+  ): void;
 }
 export interface AccountDeletionConfirmDependencies extends AccountDeletionWorkerDependencies {
   verifyLiveSession(ownerId: string): Promise<boolean>;
@@ -43,6 +56,73 @@ export type DeletionFailureCode =
   | "checkpoint_unavailable"
   | "auth_delete_unavailable"
   | "completion_unverified";
+/** Operator diagnostics for a failure: namespace names and counts only. */
+export interface DeletionFailureDetail {
+  namespaces: ReadonlyArray<Exclude<OwnerNamespaceVerdict, { outcome: "empty" }>>;
+}
+
+/** An account-owned table in `public`: every row carries the owner's id in
+ * `ownerColumn`, and the primary key (`keyColumns`) is the keyset a complete
+ * read pages by. Completion means none of these tables holds a row for the
+ * owner any more. */
+export interface OwnerNamespace {
+  readonly table: string;
+  readonly ownerColumn: string;
+  readonly keyColumns: ReadonlyArray<string>;
+}
+
+const namespace = (table: string, ownerColumn: string, ...keyColumns: string[]): OwnerNamespace =>
+  Object.freeze({ table, ownerColumn, keyColumns: Object.freeze(keyColumns) });
+
+/** Every account-owned namespace the worker proves empty after the Supabase
+ * identity is gone. `profiles` is the cascade root (auth.users → profiles →
+ * everything below), so each entry is read on its own and the read result is
+ * evidence, not a request to delete anything. */
+export const ACCOUNT_OWNER_NAMESPACES: ReadonlyArray<OwnerNamespace> = Object.freeze([
+  namespace("profiles", "id", "id"),
+  namespace("sessions", "user_id", "id"),
+  namespace("shots", "user_id", "id"),
+  namespace("shot_phases", "user_id", "shot_id", "phase_key"),
+  namespace("shot_measurements", "user_id", "shot_id", "metric_key"),
+  namespace("shot_checkpoints", "user_id", "shot_id", "checkpoint_key"),
+  namespace("captures", "user_id", "id"),
+  namespace("analysis_permits", "user_id", "id"),
+  namespace("analysis_permit_tombstones", "user_id", "permit_id"),
+  namespace("consent_records", "user_id", "id"),
+  namespace("evaluation_trials", "user_id", "id"),
+  namespace("analysis_feedback", "user_id", "id"),
+  namespace("user_saved_drills", "user_id", "user_id", "slug"),
+  namespace("player_rank_state", "user_id", "user_id"),
+  namespace("billing_entitlements", "user_id", "user_id"),
+  namespace("account_deletion_feedback", "user_id", "id"),
+]);
+
+/** Owner-keyed `public` tables the worker deliberately does not read, with
+ * the reason each is still accounted for. */
+export const ACCOUNT_DELETION_UNREAD_TABLES: Readonly<Record<string, string>> = Object.freeze({
+  // Only the fenced deletion RPCs touch these two rows; their primary keys
+  // reference profiles(id) on delete cascade, so an empty profiles namespace
+  // proves them empty.
+  account_external_credentials: "cascade_from_profiles",
+  account_deletion_requests: "cascade_from_profiles",
+  // Identity-hash free-rating record with no account key: retained on purpose
+  // and disclosed in the privacy policy (§7/§8) and on the support page.
+  free_rating_ledger: "retained",
+  // RevenueCat audit log keyed by app_user_id text, swept after 90 days.
+  webhook_events: "retained",
+});
+
+export type OwnerNamespaceVerdict =
+  | { table: string; outcome: "empty"; pages: number }
+  | { table: string; outcome: "residue"; rows: number; pages: number }
+  | {
+      table: string;
+      outcome: "unread";
+      reason: InventoryIncompleteReason;
+      code: string | null;
+      httpStatus: number | null;
+      pages: number;
+    };
 export type DeletionConfirmationResult =
   | {
       outcome: "completed";
@@ -502,12 +582,17 @@ async function runClaimedDeletion(
   const operationId = claim.operationId.toLowerCase();
   if (claim.outcome === "busy") return { outcome: "in_progress", operationId };
   if (claim.outcome === "completed") {
-    return (
-      completionResult(operationId, claim.status) ?? {
-        outcome: "unavailable",
-        code: "completion_unverified",
-      }
-    );
+    const completed = completionResult(operationId, claim.status);
+    if (!completed) return { outcome: "unavailable", code: "completion_unverified" };
+    const verdicts = await verifyOwnerNamespacesEmpty(dependencies, ownerId);
+    const residue = ownerNamespaceResidue(verdicts);
+    if (!residue) return completed;
+    try {
+      dependencies.onFailure?.("completion_unverified", residue.httpStatus, residue.detail);
+    } catch {
+      // Diagnostics cannot change the worker's outcome.
+    }
+    return { outcome: "unavailable", code: "completion_unverified" };
   }
   const lease = claim.outcome === "claimed" ? parseLease(claim) : null;
   if (!lease) return { outcome: "unavailable", code: "checkpoint_unavailable" };
@@ -517,6 +602,7 @@ async function runClaimedDeletion(
     p_lease_token: lease.leaseToken,
   };
   let failureCode: DeletionFailureCode = "checkpoint_unavailable";
+  let failureDetail: DeletionFailureDetail | undefined;
   const checkpoint = async (step: string, appleOutcome: AppleDeletionOutcome | null = null) => {
     failureCode = "checkpoint_unavailable";
     const result = await rpcData(rpc, "checkpoint_account_deletion_operation", {
@@ -577,11 +663,14 @@ async function runClaimedDeletion(
       p_operation_id: operationId,
     });
     const result = completionResult(operationId, receipt);
-    if (result) return result;
-    throw new Error("Account deletion completion is unverified.");
+    if (!result) throw new Error("Account deletion completion is unverified.");
+    const residue = ownerNamespaceResidue(await verifyOwnerNamespacesEmpty(dependencies, ownerId));
+    if (!residue) return result;
+    failureDetail = residue.detail;
+    throw new OwnerNamespaceResidueError(residue.httpStatus);
   } catch (error) {
     try {
-      dependencies.onFailure?.(failureCode, boundedFailureStatus(error));
+      dependencies.onFailure?.(failureCode, boundedFailureStatus(error), failureDetail);
     } catch {
       // Diagnostics cannot change the worker's outcome or lease release.
     }
@@ -595,6 +684,79 @@ async function runClaimedDeletion(
     }
     return { outcome: "unavailable", code: failureCode };
   }
+}
+
+class OwnerNamespaceResidueError extends Error {
+  constructor(readonly status: number | null) {
+    super("Account deletion left owner rows behind.");
+  }
+}
+
+/** Reads every namespace in `ACCOUNT_OWNER_NAMESPACES` for `ownerId` with the
+ * complete-inventory contract (`readOwnerInventory`): an empty page after the
+ * last cursor is the only proof of an empty namespace, and a page error,
+ * clamp, repeat or exhausted budget is `unread`, never `empty`. */
+export async function verifyOwnerNamespacesEmpty(
+  reader: Pick<AccountDeletionWorkerDependencies, "readOwnerNamespacePage">,
+  ownerId: string,
+  namespaces: ReadonlyArray<OwnerNamespace> = ACCOUNT_OWNER_NAMESPACES,
+): Promise<OwnerNamespaceVerdict[]> {
+  const owner = canonicalOwner(ownerId);
+  return await Promise.all(
+    namespaces.map(async (namespace): Promise<OwnerNamespaceVerdict> => {
+      const result = await readOwnerInventory<unknown, KeysetColumn[]>({
+        readPage: (cursor, limit) =>
+          reader.readOwnerNamespacePage(
+            namespace,
+            owner,
+            cursor === null ? null : postgrestKeysetBefore(cursor),
+            limit,
+          ),
+        cursorAfter: (row) => {
+          if (!isRecord(row)) throw new Error("namespace row is not an object");
+          return postgrestKeysetAfter(row, namespace.keyColumns);
+        },
+        cursorKey: (cursor) => JSON.stringify(cursor.map((part) => part.value)),
+      });
+      if (result.status === "INCOMPLETE") {
+        return {
+          table: namespace.table,
+          outcome: "unread",
+          reason: result.reason,
+          code: result.error.code ?? null,
+          httpStatus: result.httpStatus,
+          pages: result.pages,
+        };
+      }
+      const rows = completedInventoryRows(result) ?? [];
+      if (rows.length > 0) {
+        return {
+          table: namespace.table,
+          outcome: "residue",
+          rows: rows.length,
+          pages: result.pages,
+        };
+      }
+      return { table: namespace.table, outcome: "empty", pages: result.pages };
+    }),
+  );
+}
+
+function ownerNamespaceResidue(
+  verdicts: ReadonlyArray<OwnerNamespaceVerdict>,
+): { detail: DeletionFailureDetail; httpStatus: number | null } | null {
+  const namespaces = verdicts.filter(
+    (verdict): verdict is Exclude<OwnerNamespaceVerdict, { outcome: "empty" }> =>
+      verdict.outcome !== "empty",
+  );
+  if (namespaces.length === 0) return null;
+  const unread = namespaces.find(
+    (verdict) => verdict.outcome === "unread" && verdict.httpStatus !== null,
+  );
+  return {
+    detail: { namespaces },
+    httpStatus: unread?.outcome === "unread" ? unread.httpStatus : null,
+  };
 }
 
 export async function confirmAccountDeletionOperation(

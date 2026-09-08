@@ -91,6 +91,7 @@ function fixture() {
       await providerCall("auth_delete", { ownerId });
       return { error: results.get("auth_error") };
     },
+    readOwnerNamespacePage: () => Promise.resolve({ data: [], error: null }),
   };
   const confirm = (body: unknown = { challenge: CHALLENGE, operationId: OPERATION }) =>
     confirmAccountDeletionOperation(rpc, dependencies, OWNER, body);

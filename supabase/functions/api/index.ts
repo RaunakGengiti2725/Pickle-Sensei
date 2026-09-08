@@ -4228,7 +4228,21 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
       },
       deleteRevenueCatCustomer: deleteAccountRevenueCatCustomer,
       deleteAuthUser: deleteAccountAuthUser,
-      onFailure: (code, status) => console.error("[api] Account deletion:", { code, status }),
+      readOwnerNamespacePage: (namespace, ownerId, before, limit) => {
+        const owned = adminDb
+          .from(namespace.table)
+          .select(namespace.keyColumns.join(","))
+          .eq(namespace.ownerColumn, ownerId);
+        return namespace.keyColumns
+          .reduce(
+            (page, column) => page.order(column, { ascending: false }),
+            before === null ? owned : owned.or(before),
+          )
+          .limit(limit)
+          .abortSignal(AbortSignal.timeout(10_000));
+      },
+      onFailure: (code, status, detail) =>
+        console.error("[api] Account deletion:", { code, status, ...detail }),
     },
     authed.id,
     body,
