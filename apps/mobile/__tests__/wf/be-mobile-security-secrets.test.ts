@@ -502,10 +502,15 @@ function buildProbe(source: string, args: string[] = [], timeout = 5000) {
     let __pickleProbeRecords = 0;
     const __pickleProbeMark = phase => {
       if (__pickleProbeRecords++ >= 32) return;
+      const usage = process.resourceUsage();
       __pickleProbeFs.writeSync(3, JSON.stringify({
         phase,
         elapsedMs: Number(process.hrtime.bigint() - __pickleProbeStart) / 1e6,
         cpu: process.cpuUsage(__pickleProbeCpu),
+        majorPageFault: usage.majorPageFault,
+        fsRead: usage.fsRead,
+        involuntaryContextSwitches: usage.involuntaryContextSwitches,
+        voluntaryContextSwitches: usage.voluntaryContextSwitches,
       }) + '\\n');
     };
     __pickleProbeMark('node-ready');
