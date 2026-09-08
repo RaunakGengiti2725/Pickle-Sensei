@@ -170,6 +170,47 @@ beforeEach(() => {
 
 afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
+describe('pending answers with a corrupt older profile', () => {
+  it.each([GUEST_DATA_OWNER, CANONICAL_OWNER])(
+    'adopts the newest answers for %s without trusting the old JSON',
+    async owner => {
+      setActiveDataOwner(owner);
+      if (owner === CANONICAL_OWNER) installLiveSession(owner);
+      mockKvTable.set(profileKeyFor(owner), '{broken-profile');
+      stashAnswers();
+      await useAppStore.getState().hydrate();
+      expect(useAppStore.getState().profile).toEqual(answers);
+      expect(useAppStore.getState().hydrateError).toBeNull();
+      expect(JSON.parse(mockKvTable.get(profileKeyFor(owner))!)).toEqual(
+        answers,
+      );
+      expect(pendingRaw()).toBeNull();
+      expect(mockSaveCanonical).toHaveBeenCalledTimes(
+        owner === CANONICAL_OWNER ? 1 : 0,
+      );
+    },
+  );
+
+  it('preserves both original bytes and pending answers when canonical adoption fails, then retries', async () => {
+    setActiveDataOwner(CANONICAL_OWNER);
+    installLiveSession();
+    const corrupt = '{broken-profile';
+    mockKvTable.set(profileKeyFor(CANONICAL_OWNER), corrupt);
+    stashAnswers();
+    const pending = pendingRaw();
+    mockSaveCanonical.mockRejectedValueOnce(new Error('Server unavailable'));
+    await useAppStore.getState().hydrate();
+    expect(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))).toBe(corrupt);
+    expect(pendingRaw()).toBe(pending);
+    expect(useAppStore.getState().profile).toBeNull();
+    expect(useAppStore.getState().hydrateError).toBe('Server unavailable');
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(useAppStore.getState().hydrateError).toBeNull();
+    expect(pendingRaw()).toBeNull();
+  });
+});
+
 describe('completePreAuthOnboarding', () => {
   it('stashes the answers while signed out — the stash is the only device write', async () => {
     await expect(

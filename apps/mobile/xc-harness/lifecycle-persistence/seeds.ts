@@ -168,19 +168,9 @@ export const VAULT_ACCEPTED_VARIANTS = new Set<string>([
   'displayName-array',
   'displayName-huge',
   'proto-pollution',
-  'refresh-whitespace',
   'refresh-huge',
-  'canonical-not-uuid',
-  'canonical-nil-uuid',
   'canonical-padded-uuid',
   'canonical-other-account',
-]);
-
-/** Accepted by the parser but NOT a canonical backend UUID after trim —
- * `canonicalDataOwner()` refuses these. */
-export const VAULT_ACCEPTED_NON_UUID = new Set<string>([
-  'canonical-not-uuid',
-  'canonical-nil-uuid',
 ]);
 
 function omit<T extends object, K extends keyof T>(

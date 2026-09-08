@@ -263,6 +263,69 @@ async function persistRestoreRecord(
 }
 
 let authRevision = 0;
+let activeHydration: {
+  revision: number;
+  pending: boolean;
+  completion: Promise<void>;
+  session: AuthSession | null;
+  owner: DataOwnerContext | null;
+} | null = null;
+function coalesceHydration(
+  operation: (revision: number) => Promise<void>,
+): () => Promise<void> {
+  return () => {
+    const active = activeHydration;
+    if (
+      active?.revision === authRevision &&
+      (active.pending ||
+        (active.session !== null &&
+          active.session === useAuthStore.getState().session &&
+          active.owner !== null &&
+          isDataOwnerContextCurrent(active.owner)))
+    ) {
+      // A refresh spends its credential on the server before its response is
+      // delivered. Re-entering hydration must not stop that keeper and send
+      // the same credential again, including after the launch wait expires or
+      // an unrelated legacy/local-mode read records a local-data diagnostic.
+      return active.completion;
+    }
+    if (useAuthStore.getState().busy) return Promise.resolve();
+    const revision = ++authRevision;
+    const completion = Promise.resolve().then(() => {
+      if (revision === authRevision) return operation(revision);
+    });
+    const job: NonNullable<typeof activeHydration> = {
+      revision,
+      pending: true,
+      completion,
+      session: null,
+      owner: null,
+    };
+    activeHydration = job;
+    void completion.then(
+      () => {
+        job.pending = false;
+        const state = useAuthStore.getState();
+        if (
+          revision === authRevision &&
+          state.session &&
+          !state.session.localOnly &&
+          state.restoreState.status === 'restored'
+        ) {
+          job.session = state.session;
+          job.owner = captureDataOwnerContext();
+        } else if (activeHydration === job) {
+          activeHydration = null;
+        }
+      },
+      () => {
+        if (activeHydration === job) activeHydration = null;
+      },
+    );
+    return completion;
+  };
+}
+
 let sessionPersistence: Promise<unknown> = Promise.resolve();
 let restorePersistence: Promise<unknown> = Promise.resolve();
 let persistenceGeneration = 0;
@@ -1106,9 +1169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   deletionCleanup: null,
   restoreState: { status: 'restoring' },
 
-  hydrate: async () => {
-    if (get().busy) return;
-    const revision = ++authRevision;
+  hydrate: coalesceHydration(async revision => {
     const previous = get();
     set({
       hydrated: false,
@@ -1252,7 +1313,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (restoreRecord?.status === 'signed_out') {
         set({
           hydrated: true,
-          restoreState: { status: 'signed_out', reason: restoreRecord.reason },
+          restoreState: {
+            status: 'signed_out',
+            reason: restoreRecord.reason,
+          },
         });
         await clearSignedOutVault(
           undefined,
@@ -1422,7 +1486,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         ),
       });
     }
-  },
+  }),
 
   retrySessionPersistence: async () => {
     const session = get().session;

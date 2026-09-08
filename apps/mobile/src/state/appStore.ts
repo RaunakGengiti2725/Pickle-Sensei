@@ -41,29 +41,50 @@ export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
 export const CANONICAL_PROFILE_UNAVAILABLE_MESSAGE =
   'Pickle Sensei could not reach your account to load your coaching profile. Check your connection and try again.';
 
+function profileFromValue(value: unknown): Profile | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const requiredStrings = [
+    'skillLevel',
+    'handedness',
+    'goal',
+    'biggestProblem',
+    'focusCheckpoint',
+  ] as const;
+  if (requiredStrings.some(key => typeof candidate[key] !== 'string'))
+    return null;
+  if (
+    candidate['firstName'] !== undefined &&
+    typeof candidate['firstName'] !== 'string'
+  )
+    return null;
+  if (
+    candidate['gender'] !== undefined &&
+    (typeof candidate['gender'] !== 'string' ||
+      !['female', 'male', 'nonbinary', 'prefer_not_to_say'].includes(
+        candidate['gender'],
+      ))
+  )
+    return null;
+  return value as Profile;
+}
+
+function parseStoredProfile(raw: string | null): Profile | null {
+  if (!raw) return null;
+  try {
+    return profileFromValue(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 function parsePendingProfile(raw: string | null): Profile | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
       return null;
-    }
-    const profile = (parsed as Record<string, unknown>)['profile'];
-    if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
-      return null;
-    }
-    const candidate = profile as Record<string, unknown>;
-    const requiredStrings = [
-      'skillLevel',
-      'handedness',
-      'goal',
-      'biggestProblem',
-      'focusCheckpoint',
-    ] as const;
-    for (const key of requiredStrings) {
-      if (typeof candidate[key] !== 'string') return null;
-    }
-    return profile as Profile;
+    return profileFromValue((parsed as Record<string, unknown>)['profile']);
   } catch {
     return null;
   }
@@ -206,12 +227,16 @@ export const useAppStore = create<AppState>((set, get) => ({
             raw = legacy;
           }
         }
-        if (raw) {
-          profile = JSON.parse(raw) as Profile;
+        let hydrateError: string | null = null;
+        const storedProfile = parseStoredProfile(raw);
+        if (storedProfile) {
+          profile = storedProfile;
           set({ profile, hydrated: true });
         }
+        // Corrupt local bytes are retained until an authoritative replacement
+        // is saved. They cannot mark onboarding complete or block new answers.
         const apiSession = apiSessionFor(owner);
-        if (!raw && apiSession) {
+        if (!profile && apiSession && (!pending || !raw)) {
           let canonicalProfile: Profile | null;
           try {
             canonicalProfile =
@@ -232,7 +257,6 @@ export const useAppStore = create<AppState>((set, get) => ({
             profile = canonicalProfile;
           }
         }
-        let hydrateError: string | null = null;
         // Adopt the pre-auth questionnaire into the first writable owner that
         // hydrates, REPLACING whatever profile it had (the answers just given
         // on this device are the newest intent); synced accounts save through
@@ -265,11 +289,12 @@ export const useAppStore = create<AppState>((set, get) => ({
               raw = adoptedRaw;
               profile = adopted;
               pending = null;
+              hydrateError = null;
             }
           } catch (error) {
             // Stash and existing profile both survive for the next attempt.
             assertCurrent();
-            if (!raw) {
+            if (!profile) {
               hydrateError =
                 error instanceof Error
                   ? error.message
@@ -285,7 +310,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           awaitingApiSession:
             owner !== GUEST_DATA_OWNER &&
             !apiSession &&
-            (!raw || pending !== null),
+            (!profile || pending !== null),
           hydrateError,
         });
       } catch (error) {

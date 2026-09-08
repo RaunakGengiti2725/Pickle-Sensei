@@ -8,6 +8,7 @@
  * on invalid input, so the fixture-purge statement has to guard with
  * json_valid() or the app can never open its local store again.
  */
+import type { QueryResult, Transaction } from '@op-engineering/op-sqlite';
 import type { LocalDb } from '../src/data/db';
 
 // apps/mobile types only `jest` (no @types/node) so app code cannot lean on
@@ -15,7 +16,7 @@ import type { LocalDb } from '../src/data/db';
 declare const require: (id: string) => unknown;
 
 interface SqliteStatement {
-  all(...params: (string | number | null)[]): Record<string, unknown>[];
+  all(...params: (string | number | null)[]): QueryResult['rows'];
   run(...params: (string | number | null)[]): unknown;
 }
 interface DatabaseSync {
@@ -34,7 +35,47 @@ jest.mock('@op-engineering/op-sqlite', () => ({
   open: () => {
     const db = mockState.real;
     if (!db) throw new Error('test did not seed a database');
+    let queue = Promise.resolve();
+    const run = (sql: string, params: unknown[] = []) => {
+      const rows = db
+        .prepare(sql)
+        .all(...(params as (string | number | null)[]));
+      return {
+        rows,
+        rowsAffected: Number(
+          db.prepare('SELECT changes() AS changed').all()[0]?.['changed'] ?? 0,
+        ),
+      };
+    };
     return {
+      transaction(operation: (connection: Transaction) => Promise<void>) {
+        const task = queue.then(async () => {
+          run('BEGIN IMMEDIATE');
+          let open = true;
+          const connection: Transaction = {
+            execute: async (sql, params = []) => run(sql, params),
+            async commit() {
+              const result = run('COMMIT');
+              open = false;
+              return result;
+            },
+            rollback() {
+              const result = open
+                ? run('ROLLBACK')
+                : { rows: [], rowsAffected: 0 };
+              open = false;
+              return result;
+            },
+          };
+          try {
+            await operation(connection);
+          } finally {
+            if (open) run('ROLLBACK');
+          }
+        });
+        queue = task.catch(() => {});
+        return task;
+      },
       executeSync: (sql: string) => ({ rows: db.prepare(sql).all() }),
       execute: async (sql: string, params: unknown[] = []) => ({
         rows: db.prepare(sql).all(...(params as (string | number | null)[])),

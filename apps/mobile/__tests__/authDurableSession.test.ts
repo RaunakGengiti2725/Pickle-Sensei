@@ -57,12 +57,15 @@ const { __keychainStore } = Keychain as unknown as {
 const mockKv = new Map<string, string>();
 /** When set, getDb() throws it — SQLite could not be opened or migrated. */
 let mockDbOpenError: Error | null = null;
+let mockDbReadErrorKey: string | null = null;
 function mockCurrentDb(): LocalDb {
   if (mockDbOpenError) throw mockDbOpenError;
   return {
     async execute(sql: string, params: unknown[] = []) {
       const statement = sql.trim().replace(/\s+/g, ' ');
       if (statement.startsWith('SELECT value FROM kv')) {
+        if (mockDbReadErrorKey === params[0])
+          throw new Error('SQLITE_IOERR: local flag read failed');
         const value = mockKv.get(String(params[0]));
         return { rows: value === undefined ? [] : [{ value }] };
       }
@@ -192,6 +195,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockKv.clear();
   mockDbOpenError = null;
+  mockDbReadErrorKey = null;
   __keychainStore.clear();
   stopBillingLifecycle();
   stopSessionKeeper();
@@ -375,6 +379,63 @@ describe('signing in persists a durable session', () => {
 // ─── Relaunch restores from the vault ────────────────────────────────────────
 
 describe('relaunch (hydrate) with a persisted session', () => {
+  it.each([null, 'auth.session', 'auth.local-mode'])(
+    'shares a launch restore across repeated hydration and the deadline with unreadable key %s',
+    async readErrorKey => {
+      jest.useFakeTimers({
+        doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'],
+      });
+      seedVault('refresh-initial');
+      mockDbReadErrorKey = readErrorKey;
+      let deliver!: (value: Response) => void;
+      const pending = new Promise<Response>(resolve => {
+        deliver = resolve;
+      });
+      const fetchMock = installRoutes({ '/v1/auth/refresh': () => pending });
+      try {
+        const first = useAuthStore.getState().hydrate();
+        const duplicate = useAuthStore.getState().hydrate();
+        expect(duplicate).toBe(first);
+        await jest.advanceTimersByTimeAsync(8_000);
+        await first;
+        const session = useAuthStore.getState().session;
+        const owner = getActiveDataOwner();
+        expect(session?.canonicalAppUserId).toBe(canonicalId);
+        expect(useAuthStore.getState().localDataError?.code ?? null).toBe(
+          readErrorKey ? 'local_data.unavailable' : null,
+        );
+        const afterDeadline = useAuthStore.getState().hydrate();
+        expect(afterDeadline).toBe(first);
+        await afterDeadline;
+        expect(useAuthStore.getState().session).toBe(session);
+        expect(getActiveDataOwner()).toBe(owner);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+
+        deliver(
+          response(
+            refreshBody({
+              access: 'access-successor',
+              refresh: 'refresh-successor',
+            }),
+          ),
+        );
+        await jest.advanceTimersByTimeAsync(0);
+        expect(getApiSession()?.bearerToken).toBe('access-successor');
+        expect(vaultRecord()?.refreshToken).toBe('refresh-successor');
+        expect(useAuthStore.getState().session).toBe(session);
+        expect(useAuthStore.getState().restoreState).toEqual({
+          status: 'restored',
+          connectivity: 'online',
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        stopBillingLifecycle();
+        stopSessionKeeper();
+        jest.useRealTimers();
+      }
+    },
+  );
+
   it('resumes missing profile and consent after the launch deadline, while ordinary rotation preserves their state and service configuration', async () => {
     jest.useFakeTimers({
       doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'],
@@ -629,7 +690,7 @@ describe('relaunch (hydrate) with a persisted session', () => {
     expect(mockKv.get('auth.last-provider')).toBe('');
   });
 
-  it('stays signed in when SQLite cannot be opened: the Keychain restore does not depend on the local database', async () => {
+  it('retains the credential while an unreadable restore gate is held for retry, then restores when SQLite recovers', async () => {
     seedVault('refresh-1', 'apple');
     mockDbOpenError = new Error(
       'SQLITE_CANTOPEN: unable to open database file',
@@ -643,22 +704,37 @@ describe('relaunch (hydrate) with a persisted session', () => {
 
     const state = useAuthStore.getState();
     expect(state.hydrated).toBe(true);
-    expect(state.session).not.toBeNull();
-    expect(state.session?.canonicalAppUserId).toBe(canonicalId);
-    expect(getActiveDataOwner()).toBe(canonicalId);
-    // The sign-in itself is intact and the refresh still rotated.
-    expect(state.error).toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(getApiSession()).toMatchObject({
-      bearerToken: 'access-2',
-      canonicalAppUserId: canonicalId,
+    expect(state.session).toBeNull();
+    expect(getActiveDataOwner()).toBe(SIGNED_OUT_DATA_OWNER);
+    expect(state.restoreState).toEqual({
+      status: 'unavailable',
+      reason: 'local_storage_unavailable',
     });
-    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
-    // What actually failed is reported as a local-data problem, not sign-out.
+    expect(state.error?.code).toBe('auth.storage_unavailable');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getApiSession()).toBeNull();
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-1' });
+    expect(mockGoogleSignin.hasPreviousSignIn).not.toHaveBeenCalled();
     expect(state.localDataError).toEqual({
       code: 'local_data.unavailable',
       message: expect.any(String),
     });
+
+    mockDbOpenError = null;
+    mockDbReadErrorKey = null;
+    await useAuthStore.getState().hydrate();
+    expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+      canonicalId,
+    );
+    expect(useAuthStore.getState().restoreState).toEqual({
+      status: 'restored',
+      connectivity: 'online',
+    });
+    expect(useAuthStore.getState().localDataError).toBeNull();
+    expect(getActiveDataOwner()).toBe(canonicalId);
+    expect(getApiSession()?.bearerToken).toBe('access-2');
+    expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('SQLite failing with NO vault record lands signed out with the local-data problem reported', async () => {
@@ -689,6 +765,24 @@ describe('relaunch (hydrate) with a persisted session', () => {
 // ─── Explicit sign-out ───────────────────────────────────────────────────────
 
 describe('explicit sign-out', () => {
+  it('explicit sign-out cancels a queued hydrate before it can reset the signed-out state', async () => {
+    seedVault('refresh-initial');
+    const fetchMock = installRoutes({});
+    const hydration = useAuthStore.getState().hydrate();
+    const signOut = useAuthStore.getState().signOut();
+    await Promise.all([hydration, signOut]);
+
+    expect(useAuthStore.getState()).toMatchObject({
+      hydrated: true,
+      session: null,
+      busy: false,
+      restoreState: { status: 'signed_out', reason: 'user_sign_out' },
+    });
+    expect(getApiSession()).toBeNull();
+    expect(vaultRecord()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('clears the Keychain record and revokes the session server-side, so the next launch starts signed out', async () => {
     const fetchMock = installRoutes({
       '/v1/account/bootstrap': () =>

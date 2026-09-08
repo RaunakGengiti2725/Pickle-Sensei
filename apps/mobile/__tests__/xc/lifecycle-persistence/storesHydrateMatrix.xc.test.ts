@@ -14,9 +14,9 @@
  *   appStoreReview                  review.prompt-state
  *   practiceSet                     practice.set:<owner>
  *
- * Invariants (contract: a corrupt device record must degrade to a safe
- * default, never throw out of hydrate, never destroy product rows, and never
- * lock the player out of the app):
+ * Invariants: corrupt profiles recover through canonical data or onboarding;
+ * unreadable ledgers remain unavailable with their durable bytes preserved.
+ * Hydration never throws out of the entry point or destroys product rows.
  *   noThrow             hydrate()/entry point resolves
  *   shotsPreserved      local_shot rows byte-identical, no destructive SQL
  *   ownerUnchanged      active data owner is untouched by the store
@@ -605,16 +605,6 @@ function resetStores(): void {
   mockOnboarding.saveCalls = 0;
 }
 
-// ─── Known deviations ────────────────────────────────────────────────────────
-
-const KNOWN_DEVIATIONS = {
-  'XC-LP-3':
-    'appStore.hydrate(): a stored profile:<owner> value that is not valid JSON is parsed with a bare JSON.parse in the success path; the SyntaxError lands in hydrateError and the Gate shows a permanent retry state (retry re-parses the same bytes) — the player is locked out until reinstall',
-  'XC-LP-4':
-    'appStore.hydrate(): a stored profile:<owner> value that IS valid JSON but not a Profile (number/string/array/{}/wrong field types) is installed as `profile` unchecked, so the Gate skips onboarding for an account that has no usable profile',
-} as const;
-type DeviationId = keyof typeof KNOWN_DEVIATIONS;
-
 type ProfileRawKind =
   'absent' | 'valid' | 'json-null' | 'invalid-json' | 'json-not-profile';
 
@@ -759,7 +749,6 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
   const canonicalOnline = scenario.owner === 'canonical' && scenario.apiSession;
 
   const invariants: Record<string, boolean> = {};
-  const knownDeviations: string[] = [];
 
   invariants['noThrow'] = Object.entries(threw)
     .filter(([label]) => label !== 'practice')
@@ -775,28 +764,40 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
     scenario.db === 'ok' || (scenario.db === 'writes-throw' && !legacyApplies);
   invariants['profileShapeSafe'] = isProfileShape(app.profile);
   if (
-    !invariants['profileShapeSafe'] &&
-    kind === 'json-not-profile' &&
-    readsOk
+    ['invalid-json', 'json-not-profile', 'json-null'].includes(kind) &&
+    readsOk &&
+    !(pendingValid && writable)
   ) {
-    knownDeviations.push('XC-LP-4:profileShapeSafe');
+    invariants['corruptProfileRecoverable'] =
+      canonicalOnline &&
+      (scenario.canonicalFetch === 'throws' ||
+        (scenario.canonicalFetch === 'profile' && !dbHealthy))
+        ? app.profile === null && app.hydrateError !== null
+        : app.hydrateError === null;
   }
-  if (kind === 'invalid-json' && readsOk && !(pendingValid && writable)) {
-    // Corrupt LOCAL bytes with a healthy database: retrying the same read can
-    // never help, so a sticky hydrateError is a lockout, not a retry state.
-    invariants['corruptProfileRecoverable'] = app.hydrateError === null;
-    if (!invariants['corruptProfileRecoverable']) {
-      knownDeviations.push('XC-LP-3:corruptProfileRecoverable');
-    }
+  if (
+    ['invalid-json', 'json-not-profile', 'json-null'].includes(kind) &&
+    writable &&
+    dbHealthy &&
+    !pendingValid &&
+    (!canonicalOnline || scenario.canonicalFetch !== 'profile')
+  ) {
+    invariants['corruptBytesRetainedUntilReplacement'] =
+      kvAfter[`profile:${owner}`] === effectiveRaw;
   }
-  if (kind === 'valid' && dbHealthy && !(pendingValid && writable)) {
+  if (kind === 'valid' && writable && dbHealthy && !pendingValid) {
     invariants['validProfileKept'] =
       isProfileShape(app.profile) &&
       app.profile !== null &&
       app.hydrateError === null;
   }
+  if (!writable) {
+    invariants['signedOutProfileHidden'] = app.profile === null;
+  }
   if (
-    kind === 'absent' &&
+    ['absent', 'invalid-json', 'json-not-profile', 'json-null'].includes(
+      kind,
+    ) &&
     dbHealthy &&
     canonicalOnline &&
     !(pendingValid && writable)
@@ -860,8 +861,21 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
 
   invariants['consistencyHydrated'] = consistency.hydrated === true;
   if (writable && dbHealthy) {
-    invariants['consistencySnapshot'] =
-      consistency.snapshot !== null && consistency.loadError === false;
+    const ledgerKnown =
+      scenario.ledger === 'raw-absent' || scenario.ledger === 'valid';
+    if (ledgerKnown) {
+      invariants['consistencySnapshot'] =
+        consistency.snapshot !== null && consistency.loadError === false;
+    } else {
+      invariants['unknownConsistencyHeld'] =
+        consistency.snapshot === null &&
+        consistency.loadError === true &&
+        consistency.celebration === null &&
+        consistency.daySecured === null &&
+        db.kv.get(`consistency:${owner}`) ===
+          kvBefore.get(`consistency:${owner}`) &&
+        !db.kvWrites().some(write => write.key === `consistency:${owner}`);
+    }
   }
   if (
     writable &&
@@ -951,8 +965,7 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
 
   const failed = Object.entries(invariants)
     .filter(([, held]) => !held)
-    .map(([name]) => name)
-    .filter(name => !knownDeviations.some(d => d.endsWith(`:${name}`)));
+    .map(([name]) => name);
 
   return {
     suite: 'stores-hydrate',
@@ -1002,7 +1015,6 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
         .kvWrites()
         .map(w => ({ key: w.key, value: compactValue(w.value) })),
       destructiveStatements: db.destructiveStatements(),
-      knownDeviations,
     },
     invariants,
     ok: failed.length === 0,
@@ -1043,18 +1055,7 @@ describe('non-auth stores persisted-state matrix', () => {
   });
 
   afterAll(() => {
-    const summary = {
-      ...summarize(allRows),
-      knownDeviations: KNOWN_DEVIATIONS,
-      knownDeviationRows: allRows.reduce<Record<string, number>>((acc, row) => {
-        for (const d of (row.observed as { knownDeviations: string[] })
-          .knownDeviations) {
-          const id = d.split(':')[0] as string;
-          acc[id] = (acc[id] ?? 0) + 1;
-        }
-        return acc;
-      }, {}),
-    };
+    const summary = summarize(allRows);
     writeJsonArtifact('stores-hydrate-matrix.rows.json', allRows);
     writeJsonArtifact('stores-hydrate-matrix.summary.json', summary);
     writeTextArtifact(
@@ -1088,14 +1089,13 @@ describe('non-auth stores persisted-state matrix', () => {
     });
   }
 
-  it('every triaged deviation is still reproduced (remove it from KNOWN_DEVIATIONS once fixed)', () => {
-    const seen = new Set<DeviationId>();
-    for (const row of allRows) {
-      for (const d of (row.observed as { knownDeviations: string[] })
-        .knownDeviations) {
-        seen.add(d.split(':')[0] as DeviationId);
-      }
-    }
-    expect([...seen].sort()).toEqual(Object.keys(KNOWN_DEVIATIONS).sort());
+  it('every stored profile is safe and every local corruption case recovers', () => {
+    expect(allRows.length).toBeGreaterThan(SEEDED_COUNT);
+    expect(allRows.every(row => row.invariants['profileShapeSafe'])).toBe(true);
+    expect(
+      allRows.filter(
+        row => row.invariants['corruptProfileRecoverable'] === false,
+      ),
+    ).toEqual([]);
   });
 });

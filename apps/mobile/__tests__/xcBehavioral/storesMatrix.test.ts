@@ -14,10 +14,10 @@
  *   accessResetMidFlight — reset / clear / reconfigure while an operation is
  *                          in flight: the stale response never lands (no
  *                          inherited premium, no orphan `loading`/operation).
- *   accessStaleRefresh   — refreshAccess() started BEFORE a successful
- *                          syncBilling()/purchase lands, resolving AFTER it:
- *                          does the older snapshot overwrite the newer one?
- *                          (observed and asserted; see finding).
+ *   accessStaleRefresh   — an active refresh blocks a competing billing
+ *                          operation; after refresh settles (or retries), the
+ *                          next operation installs its verified entitlement
+ *                          without an older snapshot overwriting it.
  *   appHydrateStorm      — overlapping hydrate() calls across owner switches
  *                          with slow kv reads and a pending pre-auth profile:
  *                          final state belongs to the active owner, never a
@@ -49,6 +49,11 @@ import {
 } from '../../testing/xcBehavioral/evidence';
 import { createFakeLocalDb } from '../../testing/xcBehavioral/fakeLocalDb';
 import { deferred, type Deferred } from '../../testing/xcBehavioral/deferred';
+import { createPendingFulfilmentStorage } from '../../src/billing/pendingFulfilment';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
 
 // ─── appStore seams ────────────────────────────────────────────────────────
 
@@ -136,6 +141,8 @@ interface Calls {
 
 /** Every dependency call returns a deferred the test settles explicitly. */
 function billingDeps() {
+  setActiveDataOwner('7fc2c743-028f-4ec6-942c-a84508f3be38');
+  const billingDb = createSqliteTestDb();
   const calls: Calls = {
     configure: 0,
     loadPlans: 0,
@@ -152,6 +159,10 @@ function billingDeps() {
     return d.promise;
   };
   const deps = {
+    canonicalAppUserId: '7fc2c743-028f-4ec6-942c-a84508f3be38',
+    pendingFulfilmentStorage: createPendingFulfilmentStorage(
+      () => billingDb.db,
+    ),
     store: {
       configure: () => hold<void>('configure'),
       loadPlans: () => hold<StorePlans>('loadPlans'),
@@ -211,6 +222,7 @@ beforeEach(() => {
 afterEach(() => {
   clearAccessStoreConfiguration();
   clearApiSession();
+  closeSqliteTestDatabases();
 });
 
 /** Brings the store to `ready` with plans + a free access snapshot. */
@@ -503,7 +515,7 @@ describe('xc-matrix-behavioral: accessStore / appStore storms', () => {
     }
   });
 
-  describe('accessStaleRefresh: refreshAccess() started before a sync/purchase, resolving after it', () => {
+  describe('accessStaleRefresh: a loading refresh settles before another membership operation can start', () => {
     for (const seed of scenarioSeeds('accessStaleRefresh')) {
       it(`seed ${seed}`, async () => {
         const random = seededRandom(seed);
@@ -525,7 +537,26 @@ describe('xc-matrix-behavioral: accessStore / appStore storms', () => {
             await flush();
             const slowGet = b.pending.find(p => p.name === 'getAccess')!;
             expect(slowGet).toBeDefined();
-            // 2. The user completes a purchase / restore / sync meanwhile.
+            // 2. A loading refresh owns the operation slot. StoreKit cannot
+            // begin against an unresolved account snapshot.
+            expect(await useAccessStore.getState()[winner]()).toBe(false);
+            expect(
+              b.calls.purchase + b.calls.restore + b.calls.syncBilling,
+            ).toBe(0);
+            if (refreshFails) slowGet.d.reject(new Error('503'));
+            else slowGet.d.resolve(access(false, 1));
+            expect(await refresh).toBe(!refreshFails);
+            if (refreshFails) {
+              expect(useAccessStore.getState().canonicalAccess).toBeNull();
+              const retry = useAccessStore.getState().refreshAccess();
+              await flush();
+              b.pending
+                .find(p => p.name === 'getAccess' && !p.d.settled)!
+                .d.resolve(access(false, 1));
+              expect(await retry).toBe(true);
+            }
+            // 3. With the earlier response settled, the user's retry can
+            // complete one store/backend operation without a stale writer.
             const win = useAccessStore.getState()[winner]();
             await flush();
             const storeStep =
@@ -553,15 +584,12 @@ describe('xc-matrix-behavioral: accessStore / appStore storms', () => {
             expect(useAccessStore.getState().canonicalAccess?.premium).toBe(
               true,
             );
-            // 3. The OLDER refresh response lands last.
-            if (refreshFails) slowGet.d.reject(new Error('503'));
-            else slowGet.d.resolve(access(false, 1));
-            await refresh;
             const state = useAccessStore.getState();
             const premiumAfter = state.canonicalAccess?.premium ?? null;
             // Server-authoritative premium was verified by the NEWER call;
             // an older in-flight snapshot must not regress it.
             const staleOverwrotePremium = premiumAfter !== true;
+            expect(staleOverwrotePremium).toBe(false);
             expect(state.operation).toBe('idle');
             expect(state.status).not.toBe('loading');
             return {

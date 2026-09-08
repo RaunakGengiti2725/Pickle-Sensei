@@ -40,6 +40,11 @@
  * Replay: XC_LP_SEED_FILTER=<seed> XC_LP_SCENARIO_FILTER=<scenario> npx jest …
  */
 import React from 'react';
+import {
+  canonicalDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../../src/data/accountScope';
+import * as ReactNative from 'react-native';
 import { AppState, NativeModules, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
@@ -74,7 +79,11 @@ jest.mock('../../../src/data/db', () => ({
 
 const mockKeychain = {
   store: new Map<string, { username: string; password: string }>(),
-  log: [] as { op: 'get' | 'set' | 'reset'; at: number }[],
+  log: [] as {
+    op: 'get' | 'set' | 'reset';
+    at: number;
+    refreshToken?: string;
+  }[],
 };
 jest.mock('react-native-keychain', () => ({
   ACCESSIBLE: {
@@ -86,7 +95,12 @@ jest.mock('react-native-keychain', () => ({
     password: string,
     options: { service?: string } = {},
   ) => {
-    mockKeychain.log.push({ op: 'set', at: Date.now() });
+    mockKeychain.log.push({
+      op: 'set',
+      at: Date.now(),
+      refreshToken: (JSON.parse(password) as { refreshToken?: string })
+        .refreshToken,
+    });
     mockKeychain.store.set(options.service ?? '__default__', {
       username,
       password,
@@ -186,30 +200,30 @@ jest.mock('react-native-safe-area-context', () => {
 });
 jest.mock('../../../src/navigation/RootNavigator', () => {
   const RN = jest.requireActual<typeof import('react-native')>('react-native');
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return {
     RootNavigator: () => R.createElement(RN.Text, null, 'ROOT_NAVIGATOR'),
   };
 });
 jest.mock('../../../src/screens/OnboardingScreen', () => {
   const RN = jest.requireActual<typeof import('react-native')>('react-native');
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return {
     OnboardingScreen: () => R.createElement(RN.Text, null, 'ONBOARDING'),
   };
 });
 jest.mock('../../../src/screens/WelcomeScreen', () => {
   const RN = jest.requireActual<typeof import('react-native')>('react-native');
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return { WelcomeScreen: () => R.createElement(RN.Text, null, 'WELCOME') };
 });
 jest.mock('../../../src/screens/SignInScreen', () => {
   const RN = jest.requireActual<typeof import('react-native')>('react-native');
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return { SignInScreen: () => R.createElement(RN.Text, null, 'SIGN_IN') };
 });
 jest.mock('../../../src/screens/SplashScreen', () => {
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return {
     SplashScreen: (props: { ready: boolean; onFinished: () => void }) => {
       R.useEffect(() => {
@@ -233,7 +247,7 @@ jest.mock('../../../src/design/BrandNotice', () => ({
 }));
 jest.mock('../../../src/design/components', () => {
   const RN = jest.requireActual<typeof import('react-native')>('react-native');
-  const R = jest.requireActual<typeof import('react')>('react');
+  const R = jest.requireMock<typeof import('react')>('react');
   return {
     LoadingState: (props: { label?: string }) =>
       R.createElement(RN.Text, null, `LOADING:${props.label ?? ''}`),
@@ -245,27 +259,60 @@ jest.mock('../../../src/design/components', () => {
       ),
     BrandSpinner: () => null,
     BrandButton: () => null,
+    Button: RN.Pressable,
+    PressableScale: RN.Pressable,
   };
 });
 
-import App from '../../../App';
-import { useAuthStore } from '../../../src/auth/authStore';
-import { useAppStore } from '../../../src/state/appStore';
-import { useNotificationStore } from '../../../src/notifications/notificationStore';
-import { useConsistencyStore } from '../../../src/consistency/store';
-import { useWalkthroughStore } from '../../../src/walkthrough/walkthroughStore';
-import {
-  clearApiSession,
-  getApiSession,
-} from '../../../src/account/apiSession';
-import { stopSessionKeeper } from '../../../src/account/sessionKeeper';
-import { clearSyncRuntime } from '../../../src/data/syncRuntime';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  canonicalDataOwner,
-  getActiveDataOwner,
-  setActiveDataOwner,
-} from '../../../src/data/accountScope';
+// A cold process has fresh module state, including private hydration promises.
+// Keep only the renderer's React/native identities and the durable test seams.
+jest.doMock('react', () => React);
+jest.doMock('react-native', () => ReactNative);
+let App: typeof import('../../../App').default;
+let useAuthStore: typeof import('../../../src/auth/authStore').useAuthStore;
+let useAppStore: typeof import('../../../src/state/appStore').useAppStore;
+let useNotificationStore: typeof import('../../../src/notifications/notificationStore').useNotificationStore;
+let useConsistencyStore: typeof import('../../../src/consistency/store').useConsistencyStore;
+let clearApiSession: typeof import('../../../src/account/apiSession').clearApiSession;
+let getApiSession: typeof import('../../../src/account/apiSession').getApiSession;
+let stopSessionKeeper: typeof import('../../../src/account/sessionKeeper').stopSessionKeeper;
+let clearSyncRuntime: typeof import('../../../src/data/syncRuntime').clearSyncRuntime;
+let getActiveDataOwner: typeof import('../../../src/data/accountScope').getActiveDataOwner;
+
+function loadProcessRuntime(): void {
+  jest.isolateModules(() => {
+    App =
+      jest.requireActual<typeof import('../../../App')>('../../../App').default;
+    useAuthStore = jest.requireActual<
+      typeof import('../../../src/auth/authStore')
+    >('../../../src/auth/authStore').useAuthStore;
+    useAppStore = jest.requireActual<
+      typeof import('../../../src/state/appStore')
+    >('../../../src/state/appStore').useAppStore;
+    useNotificationStore = jest.requireActual<
+      typeof import('../../../src/notifications/notificationStore')
+    >('../../../src/notifications/notificationStore').useNotificationStore;
+    useConsistencyStore = jest.requireActual<
+      typeof import('../../../src/consistency/store')
+    >('../../../src/consistency/store').useConsistencyStore;
+    clearApiSession = jest.requireActual<
+      typeof import('../../../src/account/apiSession')
+    >('../../../src/account/apiSession').clearApiSession;
+    getApiSession = jest.requireActual<
+      typeof import('../../../src/account/apiSession')
+    >('../../../src/account/apiSession').getApiSession;
+    stopSessionKeeper = jest.requireActual<
+      typeof import('../../../src/account/sessionKeeper')
+    >('../../../src/account/sessionKeeper').stopSessionKeeper;
+    clearSyncRuntime = jest.requireActual<
+      typeof import('../../../src/data/syncRuntime')
+    >('../../../src/data/syncRuntime').clearSyncRuntime;
+    getActiveDataOwner = jest.requireActual<
+      typeof import('../../../src/data/accountScope')
+    >('../../../src/data/accountScope').getActiveDataOwner;
+  });
+}
+loadProcessRuntime();
 
 // ─── Scripted server ─────────────────────────────────────────────────────────
 
@@ -299,6 +346,8 @@ interface RefreshCall {
   inflightAtStart: number;
   /** process generation (bumped on kill+relaunch) that issued the request */
   proc: number;
+  /** The requesting process was still alive when this response arrived. */
+  delivered: boolean;
 }
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -387,6 +436,7 @@ class ScriptedServer {
         at: this.now(),
         token,
         outcome: 'pending',
+        delivered: false,
         inflightAtStart: sameProc,
         proc,
       };
@@ -466,6 +516,7 @@ class ScriptedServer {
         if (call.outcome === 'pending') call.outcome = 'aborted-by-client';
         throw error;
       } finally {
+        call.delivered = proc === this.proc;
         this.inflightByProc.set(proc, (this.inflightByProc.get(proc) ?? 1) - 1);
       }
     }
@@ -994,42 +1045,13 @@ function desiredOwnerNow(): string | null {
 let processResetting = false;
 
 function resetProcessState(): void {
-  // Equivalent of the OS killing the process: every in-memory singleton is
-  // gone, only Keychain + SQLite survive.
+  // Unmount first, then discard every application module. Retaining a Zustand
+  // singleton while clearing a few public fields is a remount, not process death.
   processResetting = true;
   clearSyncRuntime();
   stopSessionKeeper();
   clearApiSession();
-  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-  useAuthStore.setState({
-    session: null,
-    hydrated: false,
-    busy: false,
-    error: null,
-    deletionCleanup: null,
-  });
-  useAppStore.setState({
-    hydrated: false,
-    ownerKey: null,
-    profile: null,
-    hydrateError: null,
-  });
-  useNotificationStore.setState({
-    hydrated: false,
-    ownerKey: null,
-    permission: 'unknown',
-    persistFailed: false,
-    scheduleFailed: false,
-  });
-  useConsistencyStore.setState({
-    hydrated: false,
-    ownerKey: null,
-    snapshot: null,
-    loadError: false,
-    celebration: null,
-    daySecured: null,
-  });
-  useWalkthroughStore.setState({ visible: false, queued: false });
+  loadProcessRuntime();
   processResetting = false;
 }
 
@@ -1117,101 +1139,110 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
     readyText: string | null;
   }[] = [];
 
-  unsubscribers.push(
-    useAuthStore.subscribe((next, prev) => {
-      if (!prev.hydrated && next.hydrated) {
-        authHydratedAt = rel();
-        log('auth.hydrated', {
-          session: next.session
-            ? `${next.session.provider}:${next.session.canonicalAppUserId ?? '-'}`
-            : null,
-          activeOwner: getActiveDataOwner(),
-        });
-      }
-      if (prev.session && !next.session) {
-        // A process kill drops the in-memory session too; that is not a
-        // sign-out (the vault record survives).
-        if (!processResetting)
-          signOutEvents.push({ at: rel(), from: prev.session.provider });
-        log('auth.session-cleared', {
-          from: prev.session.provider,
-          processKill: processResetting,
-        });
-      }
-      if (!prev.session && next.session) {
-        log('auth.session-set', {
-          session: `${next.session.provider}:${next.session.canonicalAppUserId ?? '-'}`,
-        });
-      }
-    }),
-  );
-  unsubscribers.push(
-    useAppStore.subscribe((next, prev) => {
-      // hydrate() begins by set({hydrated:false, ownerKey: owner, profile: null})
-      if (prev.hydrated !== false || prev.ownerKey !== next.ownerKey) {
-        if (!next.hydrated && next.ownerKey) {
-          const authNow = useAuthStore.getState();
-          if (!authNow.hydrated) appHydrateStartsBeforeAuth += 1;
-          const launch = launches[launches.length - 1];
-          if (
-            launch &&
-            authHydratedAt !== null &&
-            authHydratedAt < launch.startedAt
-          ) {
-            // auth.hydrated stamp predates this launch: app hydration ran on
-            // a stale auth result.
-            appHydrateStartsBeforeAuthTimestamp += 1;
+  const subscribeStores = () => {
+    unsubscribers.push(
+      useAuthStore.subscribe((next, prev) => {
+        if (!prev.hydrated && next.hydrated) {
+          authHydratedAt = rel();
+          log('auth.hydrated', {
+            session: next.session
+              ? `${next.session.provider}:${next.session.canonicalAppUserId ?? '-'}`
+              : null,
+            activeOwner: getActiveDataOwner(),
+          });
+        }
+        if (prev.session && !next.session) {
+          // A process kill drops the in-memory session too; that is not a
+          // sign-out (the vault record survives).
+          if (!processResetting)
+            signOutEvents.push({ at: rel(), from: prev.session.provider });
+          log('auth.session-cleared', {
+            from: prev.session.provider,
+            processKill: processResetting,
+          });
+        }
+        if (!prev.session && next.session) {
+          log('auth.session-set', {
+            session: `${next.session.provider}:${next.session.canonicalAppUserId ?? '-'}`,
+          });
+        }
+      }),
+    );
+    unsubscribers.push(
+      useAppStore.subscribe((next, prev) => {
+        // hydrate() begins by set({hydrated:false, ownerKey: owner, profile: null})
+        if (prev.hydrated !== false || prev.ownerKey !== next.ownerKey) {
+          if (!next.hydrated && next.ownerKey) {
+            const authNow = useAuthStore.getState();
+            if (!authNow.hydrated) appHydrateStartsBeforeAuth += 1;
+            const launch = launches[launches.length - 1];
+            if (
+              launch &&
+              authHydratedAt !== null &&
+              authHydratedAt < launch.startedAt
+            ) {
+              // auth.hydrated stamp predates this launch: app hydration ran on
+              // a stale auth result.
+              appHydrateStartsBeforeAuthTimestamp += 1;
+            }
+            if (firstAppHydrateOwner === null) {
+              firstAppHydrateOwner = next.ownerKey;
+              signedOutBeforeFirstAppHydrate = signOutEvents.length > 0;
+            }
+            const desired = desiredOwnerNow();
+            if (desired !== null && desired !== next.ownerKey)
+              ownerMismatchAtAppStart += 1;
+            log('app.hydrate-start', {
+              owner: next.ownerKey,
+              authHydrated: authNow.hydrated,
+              desired,
+            });
           }
-          if (firstAppHydrateOwner === null) {
+        }
+        if (!prev.hydrated && next.hydrated) {
+          // Signed-out hydration settles synchronously without a loading-state
+          // transition. Its completed owner is still part of the cold proof.
+          if (firstAppHydrateOwner === null && next.ownerKey) {
             firstAppHydrateOwner = next.ownerKey;
             signedOutBeforeFirstAppHydrate = signOutEvents.length > 0;
           }
-          const desired = desiredOwnerNow();
-          if (desired !== null && desired !== next.ownerKey)
-            ownerMismatchAtAppStart += 1;
-          log('app.hydrate-start', {
+          if (next.ownerKey !== getActiveDataOwner())
+            ownerMismatchAtStoreFinish += 1;
+          log('app.hydrated', {
             owner: next.ownerKey,
-            authHydrated: authNow.hydrated,
-            desired,
+            activeOwner: getActiveDataOwner(),
+            profile: next.profile ? 'present' : null,
+            hydrateError: next.hydrateError,
           });
         }
-      }
-      if (!prev.hydrated && next.hydrated) {
-        if (next.ownerKey !== getActiveDataOwner())
-          ownerMismatchAtStoreFinish += 1;
-        log('app.hydrated', {
-          owner: next.ownerKey,
-          activeOwner: getActiveDataOwner(),
-          profile: next.profile ? 'present' : null,
-          hydrateError: next.hydrateError,
-        });
-      }
-    }),
-  );
-  unsubscribers.push(
-    useNotificationStore.subscribe((next, prev) => {
-      if (!prev.hydrated && next.hydrated) {
-        if (next.ownerKey !== getActiveDataOwner())
-          ownerMismatchAtStoreFinish += 1;
-        log('notifications.hydrated', {
-          owner: next.ownerKey,
-          activeOwner: getActiveDataOwner(),
-        });
-      }
-    }),
-  );
-  unsubscribers.push(
-    useConsistencyStore.subscribe((next, prev) => {
-      if (!prev.hydrated && next.hydrated) {
-        if (next.ownerKey !== getActiveDataOwner())
-          ownerMismatchAtStoreFinish += 1;
-        log('consistency.hydrated', {
-          owner: next.ownerKey,
-          activeOwner: getActiveDataOwner(),
-        });
-      }
-    }),
-  );
+      }),
+    );
+    unsubscribers.push(
+      useNotificationStore.subscribe((next, prev) => {
+        if (!prev.hydrated && next.hydrated) {
+          if (next.ownerKey !== getActiveDataOwner())
+            ownerMismatchAtStoreFinish += 1;
+          log('notifications.hydrated', {
+            owner: next.ownerKey,
+            activeOwner: getActiveDataOwner(),
+          });
+        }
+      }),
+    );
+    unsubscribers.push(
+      useConsistencyStore.subscribe((next, prev) => {
+        if (!prev.hydrated && next.hydrated) {
+          if (next.ownerKey !== getActiveDataOwner())
+            ownerMismatchAtStoreFinish += 1;
+          log('consistency.hydrated', {
+            owner: next.ownerKey,
+            activeOwner: getActiveDataOwner(),
+          });
+        }
+      }),
+    );
+  };
+  subscribeStores();
 
   const state: LaunchState = {
     renderer: null,
@@ -1354,7 +1385,9 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
       }
       case 'kill-relaunch':
         unmount('kill');
+        for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
         resetProcessState();
+        subscribeStores();
         server.proc += 1;
         cursor = 0;
         mount('relaunch-after-kill');
@@ -1400,7 +1433,9 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
   // ── Next-day cold relaunch with the server healthy.
   log('next-day-relaunch');
   unmount('next-day');
+  for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
   resetProcessState();
+  subscribeStores();
   server.proc += 1;
   server.mode = 'rotate';
   server.latencyMs = 50;
@@ -1437,21 +1472,36 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
     scenario.install === 'existing-vault' ||
     scenario.install === 'existing-vault-no-profile';
   const refusedOutcomes = server.refreshCalls.filter(
-    c => c.outcome.startsWith('401') || c.outcome.startsWith('403'),
+    c =>
+      c.delivered &&
+      (c.outcome.startsWith('401') || c.outcome.startsWith('403')),
   );
   const legitimateRefusal = refusedOutcomes.some(
-    c => c.outcome === '401' || c.outcome === '403',
+    c =>
+      c.outcome === '401' ||
+      c.outcome === '403' ||
+      (c.outcome === '401-already-rotated' &&
+        server.refreshCalls.some(
+          prior =>
+            prior.token === c.token &&
+            prior.proc < c.proc &&
+            prior.outcome.startsWith('rotated→') &&
+            !prior.delivered,
+        )),
   );
   const staleRefusal = refusedOutcomes.some(
     c =>
       c.outcome === '401-already-rotated' || c.outcome === '401-unknown-token',
   );
-  // Rotations the server completed whose successor the client never persisted.
+  // A response to a dead process cannot be persisted by the client. Strict
+  // single-use servers may then refuse that credential on relaunch; that is
+  // an explicit refusal, while every successor delivered alive must survive.
   const deliveredSuccessors = server.refreshCalls
     .filter(
       c =>
-        c.outcome.startsWith('rotated→') ||
-        c.outcome.startsWith('reuse-window→'),
+        c.delivered &&
+        (c.outcome.startsWith('rotated→') ||
+          c.outcome.startsWith('reuse-window→')),
     )
     .map(c => c.outcome.split('→')[1]!);
   const lastDelivered =
@@ -1509,16 +1559,17 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
       finalSession?.provider === 'apple' &&
       finalSession.canonicalAppUserId === CANONICAL_ID;
     invariants['noImplicitSignOut'] = legitimateRefusal ? true : endedSignedIn;
-    invariants['noRotationLoss'] =
-      lastDelivered === null || legitimateRefusal
-        ? true
-        : finalVaultToken === lastDelivered ||
-          server.valid.has(finalVaultToken ?? '');
+    invariants['noRotationLoss'] = deliveredSuccessors.every(token =>
+      mockKeychain.log.some(
+        entry => entry.op === 'set' && entry.refreshToken === token,
+      ),
+    );
     invariants['vaultTokenServerValid'] = legitimateRefusal
       ? finalVaultRaw === null
       : finalVaultToken !== null && server.valid.has(finalVaultToken);
     invariants['profiledAccountLandsInApp'] = legitimateRefusal
-      ? finalText.includes('WELCOME')
+      ? finalText.includes('SIGN_IN') &&
+        useAuthStore.getState().restoreState.status === 'reauth_required'
       : finalText.includes('ROOT_NAVIGATOR');
   }
   if (explicitSignOutAt !== null) {
@@ -1616,67 +1667,6 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
   };
 }
 
-// ─── Known deviations (rows whose failure set is exactly explained) ─────────
-
-const KNOWN_DEVIATIONS = {
-  'XC-LP-6':
-    'sessionKeeper: a second authStore.hydrate() (Gate remount via RootErrorBoundary retry, or any re-entrant hydrate) calls stopSessionKeeper() while a /v1/auth/refresh is in flight; the response that rotates the refresh token is discarded (`if (!live()) return`) and the vault keeps the pre-rotation token. The second hydrate then presents that stale token; a server with strict single-use rotation answers 401 and the client signs the account out (noImplicitSignOut + noRotationLoss fail).',
-  'XC-LP-7':
-    'process kill during an in-flight refresh: the server rotated, the client never received it, the vault keeps the pre-rotation token; on relaunch a strict single-use server answers 401 and the client signs out. Client-side only a persist-before-use ordering or a server reuse window can mitigate.',
-  'XC-LP-8':
-    'Gate remount while auth is already hydrated (RootErrorBoundary retry for a signed-in user): the mount effect fires appStore.hydrate() at once because desiredOwner is truthy from the stale auth state, while the re-entrant authStore.hydrate() flips the active owner to signed-out (`setActiveDataOwner(SIGNED_OUT_DATA_OWNER)`) before re-reading the vault; appStore.hydrate() bails on its owner-mismatch check, desiredOwner never changes so nothing re-triggers it, and the gate stays on "Loading your account" indefinitely with a valid session and bearer.',
-} as const;
-type DeviationId = keyof typeof KNOWN_DEVIATIONS;
-
-function classifyDeviation(row: MatrixRow): DeviationId | null {
-  const inputs = row.inputs as {
-    steps: Step[];
-    mode: ServerMode;
-    reuse: ReusePolicy;
-  };
-  const observed = row.observed as {
-    staleRefusal: boolean;
-    launchesStuckLoading: number[];
-    midText: string;
-  };
-  const kinds = inputs.steps.map(s => s.kind);
-  const reentrant =
-    kinds.includes('remount') || kinds.includes('second-hydrate');
-  if (
-    kinds.includes('remount') &&
-    observed.launchesStuckLoading.length > 0 &&
-    row.failed.every(
-      name =>
-        name === 'readyWithinDeadline' || name === 'singleInflightRefresh',
-    )
-  ) {
-    return 'XC-LP-8';
-  }
-  // A re-entrant hydrate leaves the first keeper's request in flight while
-  // the second one issues its own: two concurrent refreshes from one process.
-  const explainedBySecondKeeper = new Set(['singleInflightRefresh']);
-  const explainedByStaleToken = new Set([
-    'noImplicitSignOut',
-    'noRotationLoss',
-    'vaultTokenServerValid',
-    'profiledAccountLandsInApp',
-  ]);
-  const unexplained = row.failed.filter(
-    name =>
-      !explainedByStaleToken.has(name) &&
-      !(reentrant && explainedBySecondKeeper.has(name)),
-  );
-  if (unexplained.length > 0) return null;
-  const staleFailures = row.failed.filter(name =>
-    explainedByStaleToken.has(name),
-  );
-  if (staleFailures.length === 0) return reentrant ? 'XC-LP-6' : null;
-  if (!observed.staleRefusal || inputs.reuse !== 'strict') return null;
-  if (kinds.includes('kill-relaunch') && !reentrant) return 'XC-LP-7';
-  if (reentrant) return 'XC-LP-6';
-  return null;
-}
-
 // ─── Suite ───────────────────────────────────────────────────────────────────
 
 const nativeModules = NativeModules as { PickleAuth?: unknown };
@@ -1731,37 +1721,11 @@ describe('XC matrix-lifecycle-persistence — harness C: launch ordering', () =>
     }, 600_000);
   }
 
-  it('writes artifacts and every failure is a catalogued deviation', () => {
-    const deviations: Record<DeviationId, MatrixRow[]> = {
-      'XC-LP-6': [],
-      'XC-LP-7': [],
-      'XC-LP-8': [],
-    };
-    const untriaged: MatrixRow[] = [];
-    for (const row of rows) {
-      if (row.ok) continue;
-      const id = classifyDeviation(row);
-      if (id) deviations[id].push(row);
-      else untriaged.push(row);
-    }
+  it('writes artifacts and every launch invariant holds', () => {
+    const failures = rows.filter(row => !row.ok);
     const summary = {
       ...summarize(rows),
-      deviations: Object.fromEntries(
-        Object.entries(deviations).map(([id, list]) => [
-          id,
-          {
-            description: KNOWN_DEVIATIONS[id as DeviationId],
-            rows: list.length,
-            scenarios: list.map(r => ({
-              scenario: r.scenario,
-              seed: r.seed,
-              failed: r.failed,
-              inputs: r.inputs,
-            })),
-          },
-        ]),
-      ),
-      untriaged: untriaged.map(r => ({
+      failures: failures.map(r => ({
         scenario: r.scenario,
         seed: r.seed,
         failed: r.failed,
@@ -1780,15 +1744,12 @@ describe('XC matrix-lifecycle-persistence — harness C: launch ordering', () =>
       JSON.stringify({
         harness: 'C',
         rows: rows.length,
-        untriaged: untriaged.length,
-        deviations: Object.fromEntries(
-          Object.entries(deviations).map(([k, v]) => [k, v.length]),
-        ),
+        failures: failures.length,
         paths,
       }),
     );
     expect(
-      untriaged.map(r => ({
+      failures.map(r => ({
         scenario: r.scenario,
         seed: r.seed,
         failed: r.failed,
