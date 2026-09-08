@@ -20,6 +20,7 @@
 // JSON under XC_OUT_DIR (default artifacts/xc-matrix-concurrency-edge/latest/).
 
 import { billingRpcResponse } from "./routesHarness.ts";
+import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
 
 export const SUPABASE_URL = "http://supabase.xc.test";
 export const WEBHOOK_SECRET = "xc-webhook-secret";
@@ -751,6 +752,12 @@ export class FakeSupabase {
             (id): id is string => typeof id === "string" && !this.users.has(id),
           );
           return billingRpcResponse(this, fn, body)!;
+        }
+        if (fn === "read_analysis_release_policy") {
+          this.count("rpc.read_analysis_release_policy");
+          return who.role === "service"
+            ? jsonResponse(200, await activeReleasePolicyRow())
+            : jsonResponse(403, { code: "42501", message: "server credentials required" });
         }
         if (fn === "access_state") {
           this.count("rpc.access_state");

@@ -4,6 +4,7 @@
 // the REAL handler (auth → rate limits → routing → billing/webhook/drills).
 
 import { deletionChallengeHash, type AppleDeletionOutcome } from "../accountDeletionOperations.ts";
+import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
 
 interface StubDeletionOperation {
   id: string;
@@ -711,6 +712,11 @@ export async function loadHarness(): Promise<Harness> {
 
   const realFetch = globalThis.fetch;
   const realServe = Deno.serve;
+  const releasePolicy = await activeReleasePolicyRow();
+  const defaultRpcs = () => ({
+    is_api_session_active: true,
+    read_analysis_release_policy: releasePolicy,
+  });
   const state: Harness = {
     handler: () => Promise.reject(new Error("handler not captured")),
     realFetch,
@@ -719,7 +725,7 @@ export async function loadHarness(): Promise<Harness> {
     respond: () => null,
     subscriber: { entitlements: {} },
     tables: {},
-    rpcs: { is_api_session_active: true },
+    rpcs: defaultRpcs(),
     rpcErrors: {},
     billingOrder: 0,
     billingMissingUsers: [],
@@ -732,7 +738,7 @@ export async function loadHarness(): Promise<Harness> {
       state.respond = () => null;
       state.subscriber = { entitlements: {} };
       state.tables = {};
-      state.rpcs = { is_api_session_active: true };
+      state.rpcs = defaultRpcs();
       state.rpcErrors = {};
       state.billingOrder = 0;
       state.billingMissingUsers = [];

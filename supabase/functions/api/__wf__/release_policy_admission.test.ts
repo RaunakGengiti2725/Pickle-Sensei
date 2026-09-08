@@ -13,8 +13,8 @@
 // non-5xx, non-chargeable verdict and the chargeable RPC must never be
 // invoked. Abstentions (low_confidence) and mechanics-only partials are never
 // chargeable and settle regardless of the authority. A storage failure of the
-// authority itself is not authorization either: it stays retryable (503 /
-// shot.write_failed) and still never reaches the chargeable RPC.
+// authority itself is not authorization either: it stays retryable (503, the
+// outbox keeps every row) and still never reaches the chargeable RPC.
 //
 // The policy fixture is built here (not imported from the harness) so the
 // file runs unchanged against BASE_SHA, where it must fail.
@@ -319,19 +319,36 @@ Deno.test(
 );
 
 Deno.test(
-  "W01-02 sync: authority storage failure → scored shot stays retryable, apply RPC never called",
+  "W01-02 sync: authority storage failure → retryable 503 for the batch, apply RPC never called",
   async () => {
     const auth = signIn();
     h.rpcErrors.read_analysis_release_policy = 500;
     const scored = shot("scored");
-    const result = await sync(auth, [scored]);
-    assertEquals(result.status, 200, JSON.stringify(result.body));
-    assertEquals(result.body.acceptedIds, []);
-    assertEquals(
-      result.body.rejected.map((entry) => [entry.id, entry.code]),
-      [[scored.id, "shot.write_failed"]],
+    const response = await h.handler(
+      userRequest("POST", "/v1/shots:sync", {
+        token: auth.token,
+        ip: auth.ip,
+        body: { shots: [scored] },
+      }),
     );
+    const body = (await response.json()) as { error: { message: string } };
+    assertEquals(response.status, 503, JSON.stringify(body));
+    assert(typeof body.error.message === "string" && body.error.message.length > 0);
     assertEquals(h.callsTo(APPLY_RPC).length, 0);
+  },
+);
+
+Deno.test(
+  "W01-02 sync: a batch without a live scored shot never consults the authority",
+  async () => {
+    const auth = signIn();
+    h.rpcErrors.read_analysis_release_policy = 500;
+    const abstained = shot("low_confidence");
+    const result = await sync(auth, [abstained]);
+    assertEquals(result.status, 200, JSON.stringify(result.body));
+    assertEquals(result.body.acceptedIds, [abstained.id]);
+    assertEquals(h.callsTo(POLICY_RPC).length, 0);
+    assertEquals(h.callsTo(APPLY_RPC).length, 1);
   },
 );
 
