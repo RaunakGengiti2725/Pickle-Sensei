@@ -5284,7 +5284,7 @@ begin
     insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason)
     values ('00000000-0000-4000-8000-000000000054', tess_device, tess_grant, 1, tess_ticket, 'allocated', 'support_review');
     raise exception 'T9: an allocation carries no release reason';
-  exception when check_violation | unique_violation then null;
+  exception when check_violation or unique_violation then null;
   end;
   if (select count(*) from public.offline_allocation_ledger) <> n then
     raise exception 'T9: refused writes must not persist';

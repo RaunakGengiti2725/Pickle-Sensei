@@ -1435,11 +1435,7 @@ Deno.test(
 
 // ─── W04-01: device registry, offline grants, append-only allocation ledger ──
 
-const OFFLINE_TABLES = [
-  "offline_devices",
-  "offline_grants",
-  "offline_allocation_ledger",
-] as const;
+const OFFLINE_TABLES = ["offline_devices", "offline_grants", "offline_allocation_ledger"] as const;
 
 /** Every `public.<name>` user RPC the offline routes call: session-bound
  * definers that never read or write outside the caller's own rows. */
@@ -1485,8 +1481,9 @@ Deno.test(
       ok(
         statements.some(
           (s) =>
-            s.startsWith(`create policy ${table}_select_own on public.${table} for select to authenticated using (`) &&
-            s.includes("user_id = (select auth.uid())"),
+            s.startsWith(
+              `create policy ${table}_select_own on public.${table} for select to authenticated using (`,
+            ) && s.includes("user_id = (select auth.uid())"),
         ),
         `public.${table} reads are owner-scoped`,
       );
@@ -1550,10 +1547,7 @@ Deno.test(
       ),
       "a grant never outlives the verified entitlement",
     );
-    ok(
-      raw.includes("unique (device_id, generation)"),
-      "grant generations are unique per device",
-    );
+    ok(raw.includes("unique (device_id, generation)"), "grant generations are unique per device");
     const [grantGuard] = functionBodies(raw, "guard_offline_grant");
     ok(grantGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_grant`);
     ok(
@@ -1674,9 +1668,7 @@ Deno.test(
         `${OFFLINE_DEVICE_GRANTS} must not schedule a sweep: ${statement}`,
       );
       ok(
-        !(
-          /^(update|delete from) public\.offline_allocation_ledger\b/.test(statement)
-        ),
+        !/^(update|delete from) public\.offline_allocation_ledger\b/.test(statement),
         `${OFFLINE_DEVICE_GRANTS} must never rewrite the ledger: ${statement}`,
       );
     }
@@ -1703,9 +1695,10 @@ Deno.test(
       "offline_hold_count() counts outstanding + released tickets across the caller's identities behind the API gate",
     );
     ok(
-      statements.includes(
-        "revoke all on function public.offline_hold_count() from public, anon",
-      ) && statements.includes("grant execute on function public.offline_hold_count() to authenticated"),
+      statements.includes("revoke all on function public.offline_hold_count() from public, anon") &&
+        statements.includes(
+          "grant execute on function public.offline_hold_count() to authenticated",
+        ),
       "offline_hold_count() is granted to authenticated only",
     );
 
@@ -1716,10 +1709,14 @@ Deno.test(
       const [body] = functionBodies(raw, name);
       ok(body, `${OFFLINE_DEVICE_GRANTS} must redefine public.${name} to count offline holds`);
       ok(
-        body.includes("public.lifetime_scored_count()") && body.includes("public.offline_hold_count()"),
+        body.includes("public.lifetime_scored_count()") &&
+          body.includes("public.offline_hold_count()"),
         `public.${name} must count lifetime scored + offline holds`,
       );
-      ok(!/security\s+definer/.test(body.slice(0, body.indexOf("$$"))), `public.${name} stays invoker`);
+      ok(
+        !/security\s+definer/.test(body.slice(0, body.indexOf("$$"))),
+        `public.${name} stays invoker`,
+      );
     }
     const [reserve] = functionBodies(raw, "reserve_analysis_permit");
     ok(
@@ -1748,11 +1745,15 @@ Deno.test(
       );
       ok(body.includes("(select auth.uid())"), `public.${name} scopes to the caller`);
       ok(
-        statements.some((s) =>
-          s.startsWith(`revoke all on function public.${name}(`) && s.endsWith(" from public, anon"),
+        statements.some(
+          (s) =>
+            s.startsWith(`revoke all on function public.${name}(`) &&
+            s.endsWith(" from public, anon"),
         ) &&
-          statements.some((s) =>
-            s.startsWith(`grant execute on function public.${name}(`) && s.endsWith(" to authenticated"),
+          statements.some(
+            (s) =>
+              s.startsWith(`grant execute on function public.${name}(`) &&
+              s.endsWith(" to authenticated"),
           ),
         `public.${name} is executable by authenticated only`,
       );
@@ -1792,7 +1793,8 @@ Deno.test(
     );
     const [release] = functionBodies(raw, "release_offline_ticket");
     ok(
-      release.includes("'offline.ticket_consumed'") && release.includes("'offline.ticket_not_found'"),
+      release.includes("'offline.ticket_consumed'") &&
+        release.includes("'offline.ticket_not_found'"),
       "release_offline_ticket never releases a consumed ticket",
     );
 
@@ -1803,15 +1805,15 @@ Deno.test(
         "offline_allocation_ledger_append_only",
         "offline_allocation_ledger_guard_event",
       ]) {
-        ok(
-          !dropsTriggerWithoutRecreating(later, trigger),
-          `${later.file} removes ${trigger}`,
-        );
+        ok(!dropsTriggerWithoutRecreating(later, trigger), `${later.file} removes ${trigger}`);
       }
       for (const statement of later.statements) {
         for (const table of OFFLINE_TABLES) {
           ok(
-            !(statement.startsWith("drop table") && new RegExp(`\\bpublic\\.${table}\\b`).test(statement)),
+            !(
+              statement.startsWith("drop table") &&
+              new RegExp(`\\bpublic\\.${table}\\b`).test(statement)
+            ),
             `${later.file} drops public.${table}`,
           );
           ok(
