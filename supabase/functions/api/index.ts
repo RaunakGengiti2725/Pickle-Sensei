@@ -3110,6 +3110,30 @@ function providerTransactionIdentity(
   return nonSubscription ? providerTransactionIdentifier(row.id) : null;
 }
 
+/** The subscription record whose lineage the pending purchase STARTED. After a
+ * renewal RevenueCat's `subscriptions[product]` row reports the renewal as its
+ * latest transaction (`store_transaction_id`, `purchase_date`) while
+ * `original_purchase_date` keeps the lineage's first purchase, so the journaled
+ * transaction id is no longer present anywhere in the subscriber. The lineage
+ * is proved only by that original purchase date matching the evidence exactly
+ * and a LATER, differently identified store transaction having replaced it. An
+ * unidentified latest transaction, a latest purchase that is not later than the
+ * evidence, or the evidence's own id beside another date is a conflict, not a
+ * renewal. Lifetime records have no lineage. */
+function subscriptionLineageRow(
+  subscription: unknown,
+  transactionId: string,
+  purchasedAt: string,
+): Record<string, unknown> | null {
+  if (!isRecord(subscription)) return null;
+  if (isoTimestamp(subscription.original_purchase_date) !== purchasedAt) return null;
+  const latestPurchase = isoTimestamp(subscription.purchase_date);
+  if (latestPurchase === null || Date.parse(latestPurchase) <= Date.parse(purchasedAt)) return null;
+  const latestId = providerTransactionIdentity(subscription, false);
+  if (latestId === null || latestId === transactionId) return null;
+  return subscription;
+}
+
 function billingFulfilmentOf(
   request: BillingFulfilmentRequest,
   subscriber: Record<string, unknown>,
@@ -3137,15 +3161,23 @@ function billingFulfilmentOf(
   );
   // Ambiguous absence, product-only matches, RC's own non-subscription `id`, or
   // conflicting transaction records never authorize another purchase.
-  if (matching.length !== 1) return result;
-  const row = matching[0];
+  if (matching.length > 1) return result;
+  const lineage =
+    matching.length === 0
+      ? subscriptionLineageRow(subscriptions[productId], transactionId, purchasedAt)
+      : null;
+  const row = matching[0] ?? lineage;
+  if (row === undefined || row === null) return result;
   const activeProduct =
     isRecord(subscriber.entitlements) &&
     verdict.activeEntitlements.some((name) => {
       const entitlement = (subscriber.entitlements as Record<string, unknown>)[name];
       return isRecord(entitlement) && entitlement.product_identifier === productId;
     });
-  if (row.refunded_at !== undefined && row.refunded_at !== null) {
+  // A refund recorded on a renewal-headed lineage belongs to whichever
+  // transaction RevenueCat refunded, never provably to the journaled original;
+  // the original's verdict follows the lineage's access state instead.
+  if (lineage === null && row.refunded_at !== undefined && row.refunded_at !== null) {
     const refund = isoTimestamp(row.refunded_at);
     if (
       !refund ||
