@@ -63,12 +63,6 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   maxFramePixels: 4096 * 2160,
   /** Sidecar timestamps may run this far past the container duration. */
   timelineToleranceMs: 50,
-  /**
-   * The clip may carry at most this much time without a tracked pose at its
-   * start, at its end, or between two consecutive pose frames. Beyond it the
-   * evidence no longer covers the clip it vouches for.
-   */
-  maxUntrackedSpanMs: 2500,
   minPoseFrames: 12,
   minLandmarkVisibility: 0.3,
   /** Wrist samples further apart than this are a tracking gap, not motion. */
@@ -83,7 +77,7 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   /** An event's span is cut where the smoothed speed drops below this fraction of its peak. */
   runFloorRatio: 0.12,
   /** Two speed peaks of one wrist a contact dip apart are one event only while the speed between them stays above this fraction of the lesser peak. */
-  eventValleyRatio: 0.5,
+  eventValleyRatio: 0.8,
   /**
    * Two speed peaks of one wrist further apart than a contact dip are
    * distinct events only when the speed between them drops at least this
@@ -171,6 +165,25 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
   minStrokeMotionMs: 150,
   /** A single stroke's continuous motion never lasts longer than this; two complete swings cannot fit. */
   maxStrokeMotionMs: 2000,
+  /**
+   * A peak folded into an event as jitter rises out of the valley before it
+   * by at most this fraction of the event's highest peak. Jitter peaks on
+   * one movement's acceleration or deceleration sit on the slope and climb
+   * no further than the noise that made them; a volley climbs back up by
+   * its own depth. Measured against the highest peak, not the lesser one, so
+   * a rally whose peaks decay (or rise) a little per volley cannot chain
+   * itself together pairwise.
+   */
+  maxJitterRiseRatio: 0.1,
+  /**
+   * No stretch of the clip — its lead-in before the first tracked frame, its
+   * tail after the last, a gap between two consecutive pose frames, or the
+   * hitting wrist unmeasured while the body is tracked — may go this long
+   * unobserved. A stroke's motion core (`minStrokeMotionMs`) fits inside a
+   * longer stretch and would never be measured, so the clip could hold any
+   * number of strokes the evidence cannot see.
+   */
+  maxUnobservedSpanMs: 150,
 });
 
 export const IMPORT_ADMISSION_REASONS = Object.freeze([
@@ -703,7 +716,13 @@ function groupPeaks(
         lesserPeak - valley.value <
           torsoLength * limits.minPeakProminenceTorsoPerSecond &&
         valley.value > lesserPeak * limits.maxSharedValleyRatio;
-      if (!valley.gap && (contactDip || jitter)) {
+      const highestPeak = Math.max(
+        smoothed[open.maxIndex] ?? 0,
+        smoothed[peakIndex] ?? 0,
+      );
+      const rise = (smoothed[peakIndex] ?? 0) - valley.value;
+      const jitterRise = rise <= highestPeak * limits.maxJitterRiseRatio;
+      if (!valley.gap && (contactDip || (jitter && jitterRise))) {
         open.peakIndices.push(peakIndex);
         if ((smoothed[peakIndex] ?? 0) > (smoothed[open.maxIndex] ?? 0))
           open.maxIndex = peakIndex;
@@ -1196,19 +1215,33 @@ export function admitImportedStrokeEvents(
       comparableEventCount,
     };
   }
+  const poseGap = unobservedPoseGap(frames);
+  if (poseGap) {
+    return {
+      admitted: false,
+      version,
+      reason: 'pose_coverage_incomplete',
+      detail:
+        `No pose was tracked between ${poseGap.fromMs} and ${poseGap.toMs} ms ` +
+        `(${poseGap.toMs - poseGap.fromMs} ms; at most ${limits.maxUnobservedSpanMs} ms may go unobserved); a stroke could hide in that gap.`,
+      candidates,
+      comparableEventCount,
+    };
+  }
   // The hitting wrist's evidence must be continuous while the player is
   // tracked: frames that carry the body but not this wrist for longer than
   // a sample gap could hide a whole stroke, so the clip cannot prove exactly
   // one. Stretches without any pose frame are bounded by the coverage gate.
-  const hole = wristTrackingHole(frames, lead.wrist);
+  const hole =
+    wristTrackingHole(frames, lead.wrist) ?? wristEdgeHole(frames, lead.wrist);
   if (hole) {
     return {
       admitted: false,
       version,
       reason: 'wrist_not_tracked',
       detail:
-        `${lead.wrist} was not tracked between ${hole.fromMs} and ${hole.toMs} ms ` +
-        `(${hole.toMs - hole.fromMs} ms, more than the ${limits.maxSampleGapMs} ms sample gap); a stroke could hide in that hole.`,
+        `${lead.wrist} was not tracked ${hole.where} (${hole.fromMs}–${hole.toMs} ms, ` +
+        `${hole.toMs - hole.fromMs} ms; at most ${hole.limitMs} ms may go unmeasured); a stroke could hide in that hole.`,
       candidates,
       comparableEventCount,
     };
@@ -1251,6 +1284,14 @@ export function admitImportedStrokeEvents(
   };
 }
 
+interface UnobservedSpan {
+  fromMs: number;
+  toMs: number;
+  where: string;
+  /** The longest stretch of this kind that may go unobserved. */
+  limitMs: number;
+}
+
 /**
  * The first stretch of pose frames on which `wrist` is not tracked that is
  * longer than `maxSampleGapMs` and lies between two frames where it is:
@@ -1259,7 +1300,7 @@ export function admitImportedStrokeEvents(
 function wristTrackingHole(
   frames: readonly CanonicalPoseFrame[],
   wrist: WristName,
-): { fromMs: number; toMs: number } | null {
+): UnobservedSpan | null {
   const limits = IMPORT_ADMISSION_LIMITS;
   let lastTrackedMs: number | null = null;
   let untrackedFrames = 0;
@@ -1274,7 +1315,12 @@ function wristTrackingHole(
       untrackedFrames > 0 &&
       frame.timestampMs - lastTrackedMs > limits.maxSampleGapMs
     ) {
-      return { fromMs: lastTrackedMs, toMs: frame.timestampMs };
+      return {
+        fromMs: lastTrackedMs,
+        toMs: frame.timestampMs,
+        where: 'between two of its measurements',
+        limitMs: limits.maxSampleGapMs,
+      };
     }
     lastTrackedMs = frame.timestampMs;
     untrackedFrames = 0;
@@ -1282,21 +1328,88 @@ function wristTrackingHole(
   return null;
 }
 
-/** Longest stretch of the clip without a tracked pose: lead-in, tail, or an interior gap. */
-function longestUntrackedSpanMs(
+/**
+ * The stretch of pose frames before the first frame on which `wrist` is
+ * tracked, or after the last, when it is longer than `maxUnobservedSpanMs`:
+ * the body was measured throughout, the wrist only from some point on (or
+ * only up to some point), so strokes of that wrist before (after) it are
+ * unmeasured.
+ */
+function wristEdgeHole(
+  frames: readonly CanonicalPoseFrame[],
+  wrist: WristName,
+): UnobservedSpan | null {
+  const limits = IMPORT_ADMISSION_LIMITS;
+  const firstFrame = frames[0];
+  const lastFrame = frames[frames.length - 1];
+  if (!firstFrame || !lastFrame) return null;
+  const tracked = frames.filter(
+    frame => landmarkPoint(frame, wrist, 1) !== null,
+  );
+  const firstTracked = tracked[0];
+  const lastTracked = tracked[tracked.length - 1];
+  if (!firstTracked || !lastTracked) {
+    return {
+      fromMs: firstFrame.timestampMs,
+      toMs: lastFrame.timestampMs,
+      where: 'on any frame',
+      limitMs: limits.maxUnobservedSpanMs,
+    };
+  }
+  if (
+    firstTracked.timestampMs - firstFrame.timestampMs >
+    limits.maxUnobservedSpanMs
+  ) {
+    return {
+      fromMs: firstFrame.timestampMs,
+      toMs: firstTracked.timestampMs,
+      where: 'before its first measurement while the body was',
+      limitMs: limits.maxUnobservedSpanMs,
+    };
+  }
+  if (
+    lastFrame.timestampMs - lastTracked.timestampMs >
+    limits.maxUnobservedSpanMs
+  ) {
+    return {
+      fromMs: lastTracked.timestampMs,
+      toMs: lastFrame.timestampMs,
+      where: 'after its last measurement while the body was',
+      limitMs: limits.maxUnobservedSpanMs,
+    };
+  }
+  return null;
+}
+
+/**
+ * The first pair of consecutive pose frames further apart than
+ * `maxUnobservedSpanMs`: the extractor emits no frame while it finds no
+ * person, so the stretch between them was never observed.
+ */
+function unobservedPoseGap(
+  frames: readonly CanonicalPoseFrame[],
+): { fromMs: number; toMs: number } | null {
+  const limits = IMPORT_ADMISSION_LIMITS;
+  for (let index = 1; index < frames.length; index += 1) {
+    const fromMs = frames[index - 1]?.timestampMs ?? 0;
+    const toMs = frames[index]?.timestampMs ?? 0;
+    if (toMs - fromMs > limits.maxUnobservedSpanMs) return { fromMs, toMs };
+  }
+  return null;
+}
+
+/**
+ * How much of the clip lies before the first tracked frame or after the
+ * last: the stretch of the container that no pose frame vouches for.
+ */
+function unobservedEdgeMs(
   frames: readonly CanonicalPoseFrame[],
   durationMs: number,
 ): number {
   const first = frames[0];
   const last = frames[frames.length - 1];
   if (!first || !last) return durationMs;
-  let longest = Math.max(first.timestampMs, durationMs - last.timestampMs);
-  for (let index = 1; index < frames.length; index += 1) {
-    const gap =
-      (frames[index]?.timestampMs ?? 0) - (frames[index - 1]?.timestampMs ?? 0);
-    if (gap > longest) longest = gap;
-  }
-  return longest;
+  return Math.max(first.timestampMs, durationMs - last.timestampMs);
 }
 
 /**
@@ -1351,15 +1464,15 @@ export function admitImportedClip(
       comparableEventCount: 0,
     };
   }
-  const untrackedMs = longestUntrackedSpanMs(sequence.frames, clip.durationMs);
-  if (untrackedMs > limits.maxUntrackedSpanMs) {
+  const untrackedMs = unobservedEdgeMs(sequence.frames, clip.durationMs);
+  if (untrackedMs > limits.maxUnobservedSpanMs) {
     return {
       admitted: false,
       version,
       reason: 'pose_coverage_incomplete',
       detail:
-        `The clip carries ${Math.round(untrackedMs)} ms without a tracked pose ` +
-        `(at most ${limits.maxUntrackedSpanMs} ms is admissible); the evidence does not cover the clip.`,
+        `The clip begins or ends with ${Math.round(untrackedMs)} ms without a tracked pose ` +
+        `(at most ${limits.maxUnobservedSpanMs} ms is admissible: a stroke could hide in a longer stretch); the evidence does not cover the clip.`,
       candidates: [],
       comparableEventCount: 0,
     };
@@ -1369,15 +1482,15 @@ export function admitImportedClip(
       landmarkPoint(frame, 'left_wrist', 1) !== null ||
       landmarkPoint(frame, 'right_wrist', 1) !== null,
   );
-  const untrackedWristMs = longestUntrackedSpanMs(wristFrames, clip.durationMs);
-  if (untrackedWristMs > limits.maxUntrackedSpanMs) {
+  const untrackedWristMs = unobservedEdgeMs(wristFrames, clip.durationMs);
+  if (untrackedWristMs > limits.maxUnobservedSpanMs) {
     return {
       admitted: false,
       version,
       reason: 'wrist_not_tracked',
       detail:
-        `The clip carries ${Math.round(untrackedWristMs)} ms without either wrist tracked ` +
-        `(at most ${limits.maxUntrackedSpanMs} ms is admissible); strokes in that stretch would go unmeasured.`,
+        `The clip begins or ends with ${Math.round(untrackedWristMs)} ms without either wrist tracked ` +
+        `(at most ${limits.maxUnobservedSpanMs} ms is admissible); strokes in that stretch would go unmeasured.`,
       candidates: [],
       comparableEventCount: 0,
     };
