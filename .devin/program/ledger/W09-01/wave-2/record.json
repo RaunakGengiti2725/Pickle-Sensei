@@ -1,0 +1,246 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W09-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "2b3a2d8993aedf4723365a068fb604f78e4a2dfc6bd008a8168e91e6ddb2e623",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W09-01-r1",
+      "phase": "review",
+      "prompt_sha256": "81e8259d82ed12df00a62d7600d41fa148acd747dfe19df7f4ff438531e7b160",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W09-01-r1",
+      "phase": "adversary",
+      "prompt_sha256": "9da9a6ec179f3a2db3186ee225ffc6a424c3ae68077db19f24992f31e0c473d5",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "candidate": {
+    "branch": "devin/pp/w09-01/impl-r1",
+    "head_sha": "ef72f07848f7efa2434da2a2060a2a70c7beeb2f",
+    "round": 1
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W09-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2db5407f-7907-42cb-abb3-af09d0060e54/attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06f6a7f0-08e5-465b-a467-401a2434175f/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34f11bea-a3b1-4389-9037-df9728f8a4e2/ac2-candidate.log"
+        ],
+        "attack_branch": "devin/pp/w09-01/attack-ef72f078",
+        "attack_branch_sha": "89d947b28ba5c43cd010483278a10952c3d40fe5",
+        "attacked_sha": "ef72f07848f7efa2434da2a2060a2a70c7beeb2f",
+        "attacks_tried": 15,
+        "breaks": [
+          {
+            "expected": "Implementer summary claims 'auto-pause still freezes on the exact checkpoint frame' under Reduce Motion; a checkpoint the sighted 30fps path pauses on must also pause for a Reduce Motion user. The finish() branch of the tick (FormReviewPlayer.tsx ~294-307) does not check whether advanceTo() just paused; the 120ms tick widens the affected end window from 33ms to 120ms, so this is behaviour the candidate introduced for the reduced-motion path (the unguarded finish() itself predates the candidate - INFERRED from the unchanged code).",
+            "observed": "Recover checkpoint at 2650ms in a 2665ms clip, playing on from the follow-through stop with Reduce Motion on: the 120ms tick jumps 2640 -> 2760, the tick that crosses 2665 calls advanceTo(durationMs) (which pauses on 2650) and then finish() unconditionally, so the replay ends at 2665 with the play button reading 'Play replay', accessibilityValue.now=2665 and no stop card for the last checkpoint. At 30fps (A1a) the same clip freezes on 2650 with its caption.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09AccessibleSeek.attack.test.tsx -t 'A1b' (VERIFIED exit 1; control A1a at frame rate passes with the same fixture)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w09AccessibleSeek.attack.test.tsx",
+            "title": "Reduce Motion clock swallows the last checkpoint when it lies inside the final 120ms tick window"
+          },
+          {
+            "expected": "Corrupt/partial persisted clip state must not produce an adjustable value outside [min, max]: either clamp the initial playhead to durationMs like every other seek path (seekToX, onSeekAccessibilityAction, jumpTo callers use clamp01) or derive durationMs so it covers every stop.",
+            "observed": "clip.durationMs=1000 with initialStop.atMs=2800 (analysis extends past the clip record): accessibilityValue = {min 0, max 1000, now 2800}; VoiceOver is handed a value outside the announced range.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09AccessibleSeek.attack.test.tsx -t 'A3b' (VERIFIED exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w09AccessibleSeek.attack.test.tsx",
+            "title": "Adjustable accessibilityValue.now exceeds max when the initial stop lies past a shorter persisted clip duration"
+          },
+          {
+            "expected": "An increment must never decrease accessibilityValue.now (monotonic adjustable contract). Same root cause as A3b: the initial playhead is not clamped to the clip duration.",
+            "observed": "From the same state (now=2800, max=1000) one 'increment' action lands on 1000: a forward gesture moves the playhead 1800ms backwards.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09AccessibleSeek.attack.test.tsx -t 'A3c' (VERIFIED exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w09AccessibleSeek.attack.test.tsx",
+            "title": "Increment (swipe up) from an out-of-range playhead moves the playhead backwards"
+          },
+          {
+            "expected": "After seeking, 'Next checkpoint' should go to the first checkpoint strictly ahead of the playhead (1200ms). The transport resolves the stop by the span under the playhead rather than by atMs; this is pre-existing base behaviour for finger scrubs (INFERRED - the transport code is unchanged by the candidate) but the new VoiceOver seek is the first way a non-sighted user reaches an in-span pre-checkpoint position.",
+            "observed": "Six increments land on 1020ms (inside the prepare span 900-1500 but before its checkpoint at 1200ms); pressing form-review-next-stop goes to 1700ms (accelerate), skipping the 1200ms checkpoint that is 180ms ahead.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w09AccessibleSeek.attack.test.tsx -t 'A9' (VERIFIED exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w09AccessibleSeek.attack.test.tsx",
+            "title": "'Next checkpoint' after a VoiceOver seek skips the first checkpoint ahead of the playhead"
+          }
+        ],
+        "package_id": "W09-01",
+        "summary": "Attacked candidate ef72f078 (branch devin/pp/w09-01/impl-r1) with an attack-only Jest suite apps/mobile/__tests__/w09AccessibleSeek.attack.test.tsx pushed on devin/pp/w09-01/attack-ef72f078 @ 89d947b2 (no production or candidate-test changes; the suite passes root eslint + prettier --check, exit 0, and `cd apps/mobile && npx tsc --noEmit` exit 0 with it present). Candidate acceptance re-verified first: AC1 `npx jest --ci --silent __tests__/w09AccessibleSeek.test.tsx __tests__/formReview*.test.ts*` exit 0, 4 suites / 84 tests passed / 0 failed / 0 skipped (ac1-candidate.log); AC2 `npx tsc --noEmit` exit 0 after `npm ci` (ac2-candidate.log; the first run failed only because @sentry packages were not installed in this VM). Final attack run `cd apps/mobile && npx jest --ci __tests__/w09AccessibleSeek.attack.test.tsx __tests__/w09AccessibleSeek.test.tsx`: exit 1, 2 suites, 21 tests: 17 passed / 4 failed / 0 skipped (attack-final.log) - the candidate's own 6 tests all pass; the 4 failures are the reproduced breaks. attacks_tried=15 across 9 dimensions: (A1) reduced-motion tick granularity vs auto-pause near clip end [A1a control pass, A1b BREAK P2]; (A2) 120 non-integral-step swipes never leave [0,max]/NaN, seek-to-end then play restarts and re-arms every checkpoint [pass]; (A3) NaN/0 clip duration falls back to the finite measured extent [pass], clip shorter than analysis with initialStop past the end [A3b BREAK P3, A3c BREAK P3]; (A4) unadvertised/empty/undefined accessibility actions never seek or pause [pass]; (A5) VoiceOver seek vs already-queued clock tick, background->active pair, every non-active AppState value pauses, single listener [pass]; (A6) unmount mid-playback leaves no interval or AppState listener, remount on a stop restores position/visited [pass]; (A7) prohibited-copy scan over all text/labels/hints/values at rest, playing, every stop and both ends; spoken value == stop card on every stop [pass]; (A8) reduce-motion flip mid-playback and 1/4x rate preserve wall-clock rate [pass]; (A9) Next checkpoint after a between-checkpoint VoiceOver seek [BREAK P3]. No P0/P1: no crash, data loss or billing surface is touched by this package. Caveats: all evidence is Linux Jest + react-test-renderer with fake timers (VERIFIED); no Apple runtime/VoiceOver claims are made (the M4 runner was not used, per instructions). Timer-ordering attacks step time in 10ms chunks so React commits between ticks (a single large advanceTimersByTime fires queued ticks past a pause before the interval is cleared, which is a harness artefact and was NOT counted as a break)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6bf7289-51fe-4387-aa14-06eb1aca91c5/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09AccessibleSeek.test.tsx __tests__/formReview*.test.ts*",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC1",
+            "note": "VERIFIED on HEAD ef72f078: 4 suites (w09AccessibleSeek, formReviewScreen, formReviewModel, formReviewGeometry), 84/84 passed. Regression proof (kind=regress semantics): the committed test file run alone against BASE src (implementation stashed, `git diff --quiet BASE -- apps/mobile/src` confirmed identical) with `cd apps/mobile && npx jest --ci --silent __tests__/w09AccessibleSeek.test.tsx` → exit 1, 6 executed / 0 passed / 6 failed / 0 skipped (accessibilityRole undefined, accessibilityValue undefined, no onAccessibilityAction), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/bef301ff-44d2-4ea6-b178-af69e7a5bd4c/ac1-regress-base.log ; on the candidate the same 6 pass → proof outcome 0. Baseline of the pre-existing formReview* suites on BASE (before the new file existed): exit 0, 78/78, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ddb4052-00e9-49b1-b9db-e5fb5afe9a3b/base-ac1.log . Logs also at artifacts/w09-01/*.log in the checkout (gitignored).",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d766ed8-a866-4fa1-abc9-2f4f801b6d22/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC2",
+            "note": "VERIFIED on HEAD, no diagnostics. Required `cd apps/mobile && npm ci` first: the pre-installed node_modules on this VM predated BASE's @sentry/react-native dependency (tsc reported TS2307 for @sentry/react-native before the install — environment staleness, not a code failure).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/585617cd-9797-4b16-ab9a-f9e47b15840a/ac3-lint-format.log",
+            "command": "npx eslint apps/mobile/src/review/FormReviewPlayer.tsx apps/mobile/__tests__/w09AccessibleSeek.test.tsx && npx prettier --check apps/mobile/src/review/FormReviewPlayer.tsx apps/mobile/__tests__/w09AccessibleSeek.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC3",
+            "note": "VERIFIED from repo root (root ESLint + root Prettier 3.9.6) on both changed files: no ESLint findings, 'All matched files use Prettier code style!'. Also VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5b8e8c9-e874-4509-92aa-5d0982f80e8c/root-format-check.log) and `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: regression suite renders the shipping FormReviewPlayer directly (react-test-renderer, fake timers, the same stroke fixture as formReviewScreen.test.tsx) and drives the timeline host's onAccessibilityAction, a spied AppState.addEventListener, and the design system's reduceMotionChanged listener. Minimal fix reuses existing state transitions (jumpTo/setPlayingState/useReducedMotion) and mirrors the StrokeResult scrubber convention (SEEK_STEPS=20, increment/decrement action constants). No new modules; no changes outside write_paths.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bef301ff-44d2-4ea6-b178-af69e7a5bd4c/ac1-regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6bf7289-51fe-4387-aa14-06eb1aca91c5/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d766ed8-a866-4fa1-abc9-2f4f801b6d22/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/585617cd-9797-4b16-ab9a-f9e47b15840a/ac3-lint-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5b8e8c9-e874-4509-92aa-5d0982f80e8c/root-format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ab0f193-da04-4859-bdf9-f87e5e6049fc/related-suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ddb4052-00e9-49b1-b9db-e5fb5afe9a3b/base-ac1.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w09-01/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w09AccessibleSeek.test.tsx",
+          "apps/mobile/src/review/FormReviewPlayer.tsx"
+        ],
+        "head_sha": "ef72f07848f7efa2434da2a2060a2a70c7beeb2f",
+        "out_of_scope_files": [],
+        "package_id": "W09-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w09AccessibleSeek.test.tsx"
+        ],
+        "residual_risks": [
+          "iOS runtime behaviour (VoiceOver actually invoking increment/decrement, AppState transitions on device) is INFERRED from React Native's documented props and the existing StrokeResult scrubber; it is not provable from Linux and this package forbids running the Mac runner.",
+          "Native-driven playback (ClipPlayer present) is paused on backgrounding via the shared playing state that already drives the native `playing` prop; the JS-clock path is what the Jest suite exercises.",
+          "The coarser 120ms Reduce Motion tick applies only to the pose-only/JS-clock replay; native video playback cadence is the player's own."
+        ],
+        "summary": "Defect on BASE_SHA 55d80326 (VERIFIED by reading + by the failing regression run): apps/mobile/src/review/FormReviewPlayer.tsx lines 526-539 rendered the Form Review timeline as a plain `accessible` View with only a label/hint and touch responder handlers (seekToX/endScrub, lines 321-329). It had no accessibilityRole=\"adjustable\", no accessibilityValue, no accessibilityActions and no onAccessibilityAction, so VoiceOver users could not seek at all (the only seek path was a finger drag). The player also had no AppState handling: a running replay (JS clock, lines 282-294; native ClipPlayer otherwise) kept its playing state when the app left the foreground. Reduced motion was honoured only by FormReviewOverlay's arrow entrance gate (FormReviewOverlay.tsx 245-265); the pose-only replay clock always ran at 30fps. By contrast the sibling replay scrubber in src/components/StrokeResult.tsx already had the adjustable role + increment/decrement pattern. Fix (apps/mobile/src/review/FormReviewPlayer.tsx only): the timeline View now carries accessibilityRole=\"adjustable\", accessibilityValue {min 0, max durationMs, now playheadMs, text = clock + title of the stop under the playhead}, accessibilityActions [increment, decrement] and onSeekAccessibilityAction, which moves by durationMs/20 (clamped) through the existing jumpTo() so, exactly like a finger scrub, playback pauses, the native seek is requested and every checkpoint ahead is re-armed; unknown actions are ignored. A new AppState 'change' effect pauses playback whenever the app is not active (never auto-resumes; unsubscribes on unmount). With Reduce Motion on, the JS replay clock ticks every 120ms instead of every 33ms at the same wall-clock rate (auto-pause still freezes on the exact checkpoint frame). FormReviewOverlay.tsx was not modified: its reduced-motion arrow gate already behaves correctly and the new test pins it (Animated.timing not called, reducedMotion prop true). Regression test apps/mobile/__tests__/w09AccessibleSeek.test.tsx (6 tests) was committed first (919d7f3d) and fails 6/6 on BASE src; implementation commit ef72f078. All acceptance commands VERIFIED exit 0 on HEAD; additionally 11 related suites that render the player/result surfaces (resultGuide, savedTechniqueConfirmationRoute, resultRearmLoop, resultEvidenceAudit, coachLockAudit, strokeResultSurface, RootNavigator.buttons, flow-navigation-tabs-routes, ResultScreen.buttons, flow-analyze-result.result, analyzeScreenFullFlowE2E) pass 294/294 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ab0f193-da04-4859-bdf9-f87e5e6049fc/related-suites.log). No PR opened; branch devin/pp/w09-01/impl-r1 pushed to origin."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/894669ed-190e-456d-b5e2-9032a310452e/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09AccessibleSeek.test.tsx __tests__/formReview*.test.ts*",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC1",
+            "note": "VERIFIED by reviewer on HEAD ef72f078 (after `cd apps/mobile && npm ci`, exit 0 — pre-installed node_modules lacked @sentry/react-native): 4 suites (w09AccessibleSeek, formReviewScreen, formReviewModel, formReviewGeometry), 84/84 passed, 0 skipped. Also at artifacts/review-w09-01/ac1-candidate.log in the checkout. Regression proof (step 3): checked out BASE 55d80326, copied only apps/mobile/__tests__/w09AccessibleSeek.test.tsx from the candidate (`git diff --quiet BASE -- apps/mobile/src` confirmed src identical), ran `cd apps/mobile && npx jest --ci --silent __tests__/w09AccessibleSeek.test.tsx` → exit 1, 6 executed / 0 passed / 6 failed / 0 skipped (accessibilityRole undefined, onAccessibilityAction undefined, no AppState listener registered, accessibilityValue undefined) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/09b545d3-16eb-4b2d-84f9-83209e66c9bc/regress-base.log ; same command on candidate ef72f078 → exit 0, 6/6 passed — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/de358ca3-ad93-4666-8194-bcbe18aae0be/regress-candidate.log . Proof outcome 0.",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3392f25d-18b2-4352-8784-d7841c13f6ad/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC2",
+            "note": "VERIFIED by reviewer on HEAD ef72f078 after npm ci: exit 0, zero diagnostics (empty log). Also at artifacts/review-w09-01/ac2-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b4a95b4-10a4-437c-9e53-7f81ff1fb765/ac3-lint-format.log",
+            "command": "npx eslint apps/mobile/src/review/FormReviewPlayer.tsx apps/mobile/__tests__/w09AccessibleSeek.test.tsx && npx prettier --check apps/mobile/src/review/FormReviewPlayer.tsx apps/mobile/__tests__/w09AccessibleSeek.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-01-AC3",
+            "note": "VERIFIED by reviewer from repo root (root ESLint, root Prettier 3.9.6) on both changed files (the complete `git diff --stat BASE..HEAD` set): no ESLint findings; 'All matched files use Prettier code style!'. `git diff --check BASE HEAD` exit 0. Also at artifacts/review-w09-01/ac3-lint-format.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/894669ed-190e-456d-b5e2-9032a310452e/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3392f25d-18b2-4352-8784-d7841c13f6ad/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b4a95b4-10a4-437c-9e53-7f81ff1fb765/ac3-lint-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/09b545d3-16eb-4b2d-84f9-83209e66c9bc/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de358ca3-ad93-4666-8194-bcbe18aae0be/regress-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e133016f-e133-469b-b276-701dab10fb07/full-mobile-jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (not provable on Linux): real VoiceOver increment/decrement dispatch and AppState transitions on device are covered only by React Native's documented props + the existing StrokeResult scrubber convention; a Mac/device pass would confirm.",
+          "INFERRED: the AppState effect (FormReviewPlayer.tsx:311-316) also pauses on the transient 'inactive' state (Control Center, incoming call, system alert). This is consistent with 'keep playback in foreground' but means a brief system sheet stops the replay and requires a deliberate Play.",
+          "INFERRED: native-driven playback (ClipPlayer present) pauses on backgrounding via the shared `playing` prop (FormReviewPlayer.tsx:467); the Jest suite only exercises the JS-clock path. The 120ms Reduce Motion cadence applies only to the pose-only JS replay, not to native video frame cadence.",
+          "Full mobile jest on the candidate (extra, not an acceptance criterion): exit 0, 308 suites passed / 1 suite skipped (importedRealFootageAnalysis.test.ts — the documented Mac-artifact-gated suite, untouched by this candidate), 5895 passed / 1 skipped / 0 failed; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/e133016f-e133-469b-b276-701dab10fb07/full-mobile-jest.log"
+        ],
+        "package_id": "W09-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "ef72f07848f7efa2434da2a2060a2a70c7beeb2f",
+        "scope_violation": false,
+        "summary": "APPROVE W09-01 candidate ef72f07848f7efa2434da2a2060a2a70c7beeb2f (branch devin/pp/w09-01/impl-r1, 2 commits over BASE 55d80326: 919d7f3d test, ef72f078 impl). SCOPE (VERIFIED): `git diff --stat BASE..HEAD` = exactly apps/mobile/__tests__/w09AccessibleSeek.test.tsx (+536) and apps/mobile/src/review/FormReviewPlayer.tsx (+55/-4); both under write_paths; FormReviewOverlay.tsx (also in write_paths) untouched; no serial-group path touched; out_of_scope_files empty and correct; scope_violation=false. OBJECTIVE MET AS SHIPPED BEHAVIOUR (VERIFIED by reading + running): the change edits the shipping FormReviewPlayer itself (no orphan module). (a) Accessible seek: the timeline host View (FormReviewPlayer.tsx:566-590) now has accessibilityRole=\"adjustable\", accessibilityValue {min 0, max round(durationMs), now round(playheadMs), text clock+stop title}, accessibilityActions [increment, decrement] and onAccessibilityAction → onSeekAccessibilityAction (lines 353-369), which steps durationMs/20 (clamped via clamp01) through the pre-existing jumpTo() so playback pauses, native seek is requested and stops ahead are re-armed; unknown actions are no-ops; guard for durationMs<=0. Mirrors the existing StrokeResult.tsx scrubber pattern (SCRUB_STEPS/increment/decrement, lines 117/215-226/312-321). (b) Foreground: new AppState 'change' effect (lines 309-316) pauses via the existing setPlayingState when state !== 'active' and playback is running; never auto-resumes; subscription removed on unmount. (c) Reduced motion: JS replay clock uses tickMs = reduced ? 120 : 1000/30 for both the interval period and the per-tick advance (lines 234, 295-307), preserving wall-clock rate; the overlay arrow gate (reducedMotion={reduced}, line 486) was already present on BASE and is now pinned by the test. Finger drag path (seekToX/endScrub) unchanged. INVARIANTS/REVIEW.md (VERIFIED): no test weakened/skipped/deleted/reordered; grep of the diff for ts-ignore|eslint-disable|any|'|| true'|passWithNoTests|.skip|.only|timeouts → none; no existing code comment modified (only the accessibilityHint string, which is user-facing copy, changed); new copy ('Drag, or swipe up and down, to move through the clip; dots mark measured checkpoints') is compliant with APP_STORE_SUBMISSION.md rules (no banned terms/claims); no migrations, SQL, edge, auth, billing, navigation or analysis files touched; no secrets; no new dependencies (package-lock.json unchanged). Behavioural change carries a new 6-test suite (REVIEW.md evidence bar satisfied). ACCEPTANCE (all re-run by me, see acceptance_reverified): AC1 exit 0 84/84; AC2 exit 0; AC3 exit 0. REGRESSION PROOF: new test file on BASE src → exit 1, 6/6 fail for the expected reasons; on candidate → exit 0, 6/6 pass. EXTRA: full `npx jest --ci --silent` in apps/mobile on the candidate exit 0 (308 suites pass, 1 documented Mac-gated suite skipped, 5895 tests pass). Residual (non-blocking, INFERRED): on-device VoiceOver/AppState behaviour cannot be proven from Linux; 'inactive' also pauses; native-video path pause is via the shared `playing` prop; Reduce Motion cadence affects only the JS pose replay.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-2"
+}

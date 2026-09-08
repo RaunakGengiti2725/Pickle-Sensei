@@ -1,0 +1,249 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W09-08-r1",
+      "phase": "implement",
+      "prompt_sha256": "5225128b52a566dea0ebe6683407cccd69f3a83bc8169931db23081d5f04376d",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W09-08-r1",
+      "phase": "review",
+      "prompt_sha256": "04369633242cd1811ee060d616618c477f94f8aa3935c0bb823c74c8f9f7a12a",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W09-08-r1",
+      "phase": "adversary",
+      "prompt_sha256": "282ada0fb34580c2fff9055107b8137786089f551ad4b2917e09cc6c82033743",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "candidate": {
+    "branch": "devin/pp/w09-08/impl-r1",
+    "head_sha": "315fb2ef47501f6771e60cb8dc79db85b92bd630",
+    "round": 1
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W09-08",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a798d6e4-bb40-472c-a889-f5405ac3ad2a/all-attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d34970a3-b7be-4050-a073-82239eb62e86/unit-attack-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/01e328ca-ebc6-4bb2-8600-63758f065429/integration-attack-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4d395fbf-c3e6-480a-bf11-4042d5be4ac7/ac1-candidate.log"
+        ],
+        "attack_branch": "devin/pp/w09-08/attack-315fb2ef",
+        "attack_branch_sha": "3b2f17ddcedff1e35058a335c9677f5414d2f839",
+        "attacked_sha": "315fb2ef47501f6771e60cb8dc79db85b92bd630",
+        "attacks_tried": 10,
+        "breaks": [
+          {
+            "expected": "A handoff whose navigation did not land within TRY_AGAIN_HANDOFF_TTL_MS of the tap is null/expired regardless of wall-clock direction (monotonic clock, or treat negative elapsed as expired) and records try_again_failed reason 'handoff_expired'.",
+            "observed": "expired() is `Date.now() - armedAtMs > TTL` on the wall clock. Arm at 12:00:00, set the device clock back to 11:00:30.001 (1h rollback, then TTL+1ms elapsed): peekTryAgainHandoff() still returns the backhand_drive handoff and consume would seed the next capture with it. VERIFIED fails on candidate (1/1) and also on BASE 55d80326 (unit-attack-on-base.log) — not a regression, but the candidate rewrote the TTL path and kept the wall-clock arithmetic.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attack/w09_08.tryAgainHandoff.attack.test.ts -t 'ATTACK 1 — wall-clock rollback a handoff armed before the device clock is set back'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts",
+            "title": "Wall-clock rollback keeps an abandoned Try Again handoff live past its 30s TTL (pre-existing on BASE, kept by candidate)"
+          },
+          {
+            "expected": "Owner validation delegates to isDataOwnerContextCurrent (or mirrors it): a SIGNED_OUT-owned hop is never consumed.",
+            "observed": "With the active owner = SIGNED_OUT_DATA_OWNER (isDataOwnerContextCurrent(snapshot) === false), armTryAgain + peek/consume return the handoff and record try_again_rearmed. The candidate's private ownerCurrent() compares ownerKey+generation only; the repo's canonical predicate isDataOwnerContextCurrent() additionally refuses SIGNED_OUT ('a signed-out process has no readable/writable product bucket'). VERIFIED fails 1/1 on candidate. INFERRED: no shipping Result surface is reachable while signed out, so user impact is unlikely; the deviation from the canonical predicate is the finding.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attack/w09_08.tryAgainHandoff.attack.test.ts -t 'ATTACK 2'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts",
+            "title": "A handoff armed under the SIGNED_OUT owner is consumable — ownerCurrent() re-implements the owner check and drops accountScope's signed-out clause"
+          },
+          {
+            "expected": "After an owner generation change the previous chain is gone in every observable way (tryAgainStackDepth() === 0, peekTryAgainOrigin() === null), whether or not its top hop had been consumed.",
+            "observed": "Owner A: arm→consume, arm→consume (depth 2). Switch to owner B: peekTryAgainOrigin() is null and consume returns null, but tryAgainStackDepth() stays 2 (A→B→A variant: 1) and nothing is recorded. The candidate's own test pins depth 0 + 'owner_changed' for the same switch when the top hop is still pending, so the module's post-switch state depends on whether the last hop was consumed. VERIFIED fails 2/2 on candidate. No shipping caller reads depth/origin, so no user-visible effect — hook-level inconsistency.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attack/w09_08.tryAgainHandoff.attack.test.ts -t 'ATTACK 3'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts",
+            "title": "Dead chain lingers after an owner change when the top hop was already consumed (depth reports the previous owner's hops; no owner_changed telemetry)"
+          },
+          {
+            "expected": "The 'original clip retry entry' the module claims to preserve cannot be altered through references handed out to callers (freeze or copy on arm/consume).",
+            "observed": "armTryAgain stores the caller's object by reference and consume/peekTryAgainOrigin return that same reference (not frozen, not copied). Writing declaredStroke/sessionId on the consumed object changes peekTryAgainOrigin(); writing auto/declaredStroke on the armed object after the tap changes what consume returns. VERIFIED fails 2/2 on candidate; the arm-side aliasing also fails on BASE (pre-existing). INFERRED: current shipping callers (ResultScreen/ResultDetailsScreen/FormReviewScreen pass a fresh tryAgainFromResult object; AnalyzeScreen only reads `rearm`) do not mutate, so no user-visible effect today.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attack/w09_08.tryAgainHandoff.attack.test.ts -t 'ATTACK 4'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts",
+            "title": "Hops alias caller objects: mutating the handoff returned by consume rewrites the preserved 'original clip' origin; mutating the object passed to armTryAgain rewrites the pending hop"
+          },
+          {
+            "expected": "The origin is the retry armed from the clip the current loop started from; a TRY AGAIN from a Result belonging to a different practice set / clip starts a new chain (or the objective defines chain boundaries explicitly).",
+            "observed": "Owner A: Try Again from clip in set-1 (arm→consume), then Try Again from a different clip in set-2 (arm→consume). peekTryAgainOrigin() returns the set-1 handoff. The only chain boundaries are owner-generation change, TTL expiry of a pending hop, and clearTryAgainHandoff (saved-analysis route mount / non-camera Analyze mount); tapping TRY AGAIN on a different clip's Result is treated as hop N of the old chain. VERIFIED fails 1/1 on candidate. Note the candidate's own test uses distinct sessionIds per hop and expects one chain, so this is a semantics disagreement with the objective's 'original clip retry entry'; nothing in the shipping app reads peekTryAgainOrigin, so no user-visible effect.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attack/w09_08.tryAgainHandoff.attack.test.ts -t 'ATTACK 5'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts",
+            "title": "Chain identity is not tied to the clip/practice set: a Try Again from a different saved clip continues the previous chain, so the 'original clip' origin is the wrong clip"
+          }
+        ],
+        "package_id": "W09-08",
+        "summary": "Adversarial run against W09-08 candidate 315fb2ef (branch devin/pp/w09-08/impl-r1); attack branch devin/pp/w09-08/attack-315fb2ef @ 3b2f17dd (2 new test files, candidate code/tests untouched). Baseline VERIFIED: AC1 `cd apps/mobile && npx jest --ci --silent __tests__/w09TryAgainStack.test.ts __tests__/h27.tryAgainStaleHandoff.test.ts` exit 0, 12/12 (ac1-candidate.log); AC2 `npx tsc --noEmit` exit 0 AFTER `npm ci` (first run failed with 11 TS2307/TS7006 errors because @sentry/react-native was missing from the snapshot's node_modules — environment, not candidate); AC3 on my attack files `npx eslint ... && npx prettier --check ...` exit 0/0. Attacks (10 distinct, 23 tests): unit suite apps/mobile/__tests__/attack/w09_08.tryAgainHandoff.attack.test.ts = 19 tests, 7 failed / 12 passed on candidate (`npx jest --ci` exit 1, all-attack-final.log): [1] wall-clock rollback (1 of 2 fails), [2] SIGNED_OUT owner consumable (fails), [3] consumed-top + owner change leaves dead chain / depth (2 fail), [4] object aliasing corrupts origin/pending hop (2 fail), [5] chain not scoped to clip/set (fails), [6] double submit / racing consumers / interleaved owner switch (3 pass), [7] guest→signed-out→guest, signed-in→signed-out, B-over-A then A returns (3 pass), [8] TTL boundary exactly/+1ms, far-future clock jump, re-arm over expired pending keeps origin (3 pass), [9] eviction order over 10 cycles keeps origin+newest, pending origin replaced by second tap (2 pass). Integration suite apps/mobile/__tests__/attack/w09_08.analyzeScreenStaleHandoff.attack.test.tsx mounts the real AnalyzeScreen (same mock set as analyzeScreenRearmSignals.test.tsx): 4/4 pass on candidate — same-owner AUTO re-arm auto-launches capture (control), owner A→B and A→B→A between tap and mount produce NO auto-launch + 'owner_changed' + depth 0, second mount under B starts clean; on BASE 55d80326 the same 3 stale-owner tests FAIL (integration-attack-on-base.log), so the candidate's core objective (stale handoff rejection across owner generations) is VERIFIED on the shipping consumer path. Severity: no P0/P1. Break 1 (P2) is pre-existing on BASE (VERIFIED, unit-attack-on-base.log) — the candidate kept wall-clock TTL arithmetic. Breaks 2–5 are P3: they concern the new owner predicate deviating from accountScope's canonical isDataOwnerContextCurrent, and the bounded-stack/origin bookkeeping (depth, origin preservation, chain identity) which nothing in the shipping app reads — peekTryAgainOrigin/tryAgainStackDepth are test hooks only, so the 'bounded stack + original clip entry' half of the objective is INFERRED to be unobservable to users (relevant for the reviewer's 'behaviour vs. module' judgement). Not attacked (N/A for this package): network, SQL/Edge roles, free-rating conservation, copy — no server surface or user-facing copy changed. artifacts/ is gitignored, so logs are attached as URLs."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w09-08/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09TryAgainStack.test.ts __tests__/h27.tryAgainStaleHandoff.test.ts",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC1",
+            "note": "Regression proof: same command on BASE_SHA (regression-test commit db005db8 only) exit 1, 12 executed / 4 passed / 8 failed / 0 skipped (artifacts/w09-08/ac1-base.log: all 8 w09TryAgainStack tests fail, 4 h27 tests pass); on HEAD 315fb2ef exit 0, 12/12 (2 suites). Proof outcome 0.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-08/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC2",
+            "note": "First run exited 2 only because the snapshot's apps/mobile/node_modules lacked @sentry/react-native (already in package-lock); after `cd apps/mobile && npm ci` (exit 0, no lockfile change, artifacts/w09-08/npm-ci.log) tsc exits 0 with no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w09-08/format-check.log",
+            "command": "npx eslint apps/mobile/src/screens/tryAgainHandoff.ts apps/mobile/__tests__/w09TryAgainStack.test.ts && npx prettier --check apps/mobile/src/screens/tryAgainHandoff.ts apps/mobile/__tests__/w09TryAgainStack.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC3",
+            "note": "Root eslint + prettier on both changed files exit 0 (run from repo root). Also VERIFIED: root `pnpm format:check` exit 0 (artifacts/w09-08/format-check.log); `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression test first (commit db005db8, fails on BASE), then minimal implementation in tryAgainHandoff.ts (commit 315fb2ef). Owner fencing reuses the existing accountScope DataOwnerContext (ownerKey+generation) rather than a parallel account mechanism; the TryAgainHandoff shape and armTryAgain/consumeTryAgainHandoff/clearTryAgainHandoff/peekTryAgainHandoff signatures are unchanged so every existing toEqual pin holds.",
+        "attachment_urls": [],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — exit 2 on the pre-installed snapshot (TS2307 @sentry/react-native missing from node_modules); environment-only, resolved by `cd apps/mobile && npm ci`; not a source defect.",
+          "cd apps/mobile && npx jest --ci --silent — 1 pre-existing skipped suite (describe.skip in apps/mobile/__tests__/importedRealFootageAnalysis.test.ts / wf/flow-data-layer-typed-failures-ui.test.tsx, untouched by this package); 308 suites / 5898 tests pass, 1 skipped, exit 0 (artifacts/w09-08/full-mobile-jest.log)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w09-08/impl-r1",
+        "files_changed": [
+          "apps/mobile/src/screens/tryAgainHandoff.ts",
+          "apps/mobile/__tests__/w09TryAgainStack.test.ts"
+        ],
+        "head_sha": "315fb2ef47501f6771e60cb8dc79db85b92bd630",
+        "out_of_scope_files": [],
+        "package_id": "W09-08",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w09TryAgainStack.test.ts"
+        ],
+        "residual_risks": [
+          "'Bounded navigation stack' is implemented as the handoff module's bounded hop stack (per manifest phrasing and write_paths); the react-navigation route stack itself (Result->Analyze pushes) is unchanged because navigation/ is a serial group this package does not hold and the screens' navigate calls are pinned by existing tests.",
+          "Owner fence compares against getDataOwnerSnapshot() at consume time; a handoff armed while SIGNED_OUT and consumed while still signed out is accepted (same owner/generation), matching existing behaviour for unauthenticated flows.",
+          "INFERRED (not run): no native/Apple verification needed — changed files are TypeScript + Jest only."
+        ],
+        "summary": "Defect on BASE (apps/mobile/src/screens/tryAgainHandoff.ts:50-90): the Try Again handoff was a single mutable slot (pendingHandoff/pendingArmedAtMs) bounded only by a 30s TTL. It carried no DataOwnerContext, so a handoff armed under account A was consumed after switching to B or after A->B->A (new generation) — consumeTryAgainHandoff returned the stale handoff (VERIFIED: w09TryAgainStack.test.ts fails 8/12 on BASE, artifacts/w09-08/ac1-base.log) — and repeated Result -> TRY AGAIN -> Analyze cycles kept no bounded chain or original-clip retry entry. Fix (only inside write_paths): the module now keeps `hops: TryAgainHop[]` bounded by TRY_AGAIN_STACK_LIMIT=3 — the bottom hop is the retry armed from the original clip and is preserved while older intermediate hops are evicted; each hop records getDataOwnerSnapshot() (ownerKey+generation from src/data/accountScope.ts) at arm time; consume/peek reject a hop whose ownerKey or generation differs, recording stabilitySlo try_again_failed reason 'owner_changed' and dropping the chain; TTL expiry still records 'handoff_expired'; re-arming over an unconsumed hop replaces it (existing single-shot semantics preserved); clearTryAgainHandoff drops the whole chain; arming under a new owner generation starts a fresh chain instead of reviving old state. New exports peekTryAgainOrigin/tryAgainStackDepth pin the chain. Wiring: shipping callers are unchanged and exercise the new behaviour — ResultScreen/ResultDetailsScreen/FormReviewScreen call armTryAgain then navigate('Analyze',{source:'camera'}); AnalyzeScreen calls consumeTryAgainHandoff; RootNavigator/AnalyzeScreen call clearTryAgainHandoff. VERIFIED: AC1 (12/12), AC2 (exit 0), AC3 (exit 0), pnpm format:check (exit 0), git diff --check (exit 0); related suites 206/206 (artifacts/w09-08/related-suites.log); full apps/mobile jest 5898 passed / 1 pre-existing skipped / exit 0 (artifacts/w09-08/full-mobile-jest.log). Commits: db005db8 (regression test only), 315fb2ef (implementation). Branch pushed; no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35d3f2c0-4fb3-4bdd-a311-410c55535b7d/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w09TryAgainStack.test.ts __tests__/h27.tryAgainStaleHandoff.test.ts",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC1",
+            "note": "VERIFIED on 315fb2ef after `cd apps/mobile && npm ci` (exit 0, https://la-hacks-rttothemoon.devinenterprise.com/attachments/4fa2262e-369c-4e9e-8108-8b4a059bc9d8/npm-ci.log): 2 suites / 12 tests passed. Regression proof (kind=test but re-proved per procedure step 3): BASE 55d80326 + only apps/mobile/__tests__/w09TryAgainStack.test.ts copied over -> same command exit 1, 12 executed / 4 passed / 8 failed / 0 skipped (h27 4/4 pass; w09 0/8). 3 of the 8 fail behaviourally (peek/consume return the stale handoff after an owner change), 5 fail with TypeError because tryAgainStackDepth/peekTryAgainOrigin/TRY_AGAIN_STACK_LIMIT do not exist on base. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/31cbe71c-8f7b-4928-b10c-5af71a6e834d/ac1-base.log (repo copy: artifacts/review-w09-08/ac1-base.log).",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5df28565-21a9-40a1-9bc8-256fb7083a49/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC2",
+            "note": "VERIFIED on 315fb2ef: exit 0, no diagnostics (log contains only the exit line). Ran after `cd apps/mobile && npm ci` because the snapshot's apps/mobile/node_modules lacked @sentry/react-native (same environment condition the implementer reported; lockfile unchanged, `git status` clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ec7cfe7-64d2-4660-843b-29a5efcdfab4/ac3-lint.log",
+            "command": "npx eslint apps/mobile/src/screens/tryAgainHandoff.ts apps/mobile/__tests__/w09TryAgainStack.test.ts && npx prettier --check apps/mobile/src/screens/tryAgainHandoff.ts apps/mobile/__tests__/w09TryAgainStack.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W09-08-AC3",
+            "note": "VERIFIED from repo root on 315fb2ef against both changed files (the complete change set per `git diff --stat`): eslint no output, prettier 'All matched files use Prettier code style!', exit 0. Also VERIFIED `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35d3f2c0-4fb3-4bdd-a311-410c55535b7d/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31cbe71c-8f7b-4928-b10c-5af71a6e834d/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5df28565-21a9-40a1-9bc8-256fb7083a49/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ec7cfe7-64d2-4660-843b-29a5efcdfab4/ac3-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aebca14c-57d1-4fb2-93d3-ef644e40d8a4/full-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4fa2262e-369c-4e9e-8108-8b4a059bc9d8/npm-ci.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/screens/tryAgainHandoff.ts:76-82 — ownerCurrent() accepts a SIGNED_OUT_DATA_OWNER snapshot as 'current' (unlike accountScope.isDataOwnerContextCurrent, which never treats signed-out as current). A handoff armed and consumed while signed out is accepted; this matches BASE behaviour and h27 relies on it, but it is a deliberate divergence from the data-layer fence worth noting.",
+          "apps/mobile/src/screens/tryAgainHandoff.ts:89-100 — the chain's origin (hops[0]) is only reset by clearTryAgainHandoff() or an owner-generation change, not when a Result from a different practice set / clip arms a new hop, so 'original clip' means 'first hop since the last clear', not a per-clip identity. Only test hooks (peekTryAgainOrigin/tryAgainStackDepth) observe the origin; no shipping code path reads it.",
+          "5 of the 8 new tests fail on BASE via TypeError on missing exports rather than a behavioural assertion; the 3 owner-change tests fail behaviourally, which is what proves the P1 defect."
+        ],
+        "package_id": "W09-08",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "315fb2ef47501f6771e60cb8dc79db85b92bd630",
+        "scope_violation": false,
+        "summary": "APPROVE W09-08 candidate 315fb2ef47501f6771e60cb8dc79db85b92bd630 (2 commits over BASE 55d80326: db005db8 test-only, 315fb2ef implementation). SCOPE (VERIFIED `git diff --stat`): exactly apps/mobile/src/screens/tryAgainHandoff.ts (+102/-15) and apps/mobile/__tests__/w09TryAgainStack.test.ts (+210 new) — both in write_paths, no serial-group paths touched, scope_violation=false. SHIPPED BEHAVIOUR (INFERRED from code): the module is not a dead module — armTryAgain is called by ResultScreen.tsx:409, ResultDetailsScreen.tsx:104, FormReviewScreen.tsx:149; consumeTryAgainHandoff by AnalyzeScreen.tsx:790; clearTryAgainHandoff by AnalyzeScreen.tsx:787/793 and RootNavigator.tsx:320 (SavedAnalyzeRoute) — so the bounded hop stack and owner-generation rejection are exercised on the real Result -> TRY AGAIN -> Analyze path with no caller changes. Owner fence reuses getDataOwnerSnapshot() (ownerKey+generation) from src/data/accountScope.ts; the 'owner_changed' reason fits the existing `{kind:'try_again_failed'; reason:string}` StabilitySloEvent shape in packages/shared-types (no type edits needed). ACCEPTANCE (all VERIFIED by my own runs): AC1 exit 0, 12/12 (2 suites); AC2 tsc exit 0 no diagnostics; AC3 eslint+prettier exit 0 on both changed files; `git diff --check` exit 0. REGRESSION PROOF (VERIFIED): BASE + new test file only -> exit 1, 8 failed / 4 passed (3 behavioural failures showing the stale handoff was consumed across owners on base; 5 TypeErrors on the new inspection exports); candidate -> exit 0, 12/12. regression_fails_on_base=true. BROADER (VERIFIED): full `cd apps/mobile && npx jest --ci --silent` on the candidate exit 0, 308 suites passed / 5898 tests passed / 1 skipped suite (describe.skip in importedRealFootageAnalysis.test.ts and wf/flow-data-layer-typed-failures-ui.test.tsx, present on BASE and untouched here). INVARIANTS (VERIFIED by reading the whole diff): no tests weakened/skipped/reordered, no `|| true`/passWithNoTests/@ts-ignore/any/eslint-disable/timeout inflation, no migrations, no RLS/grants/session code, no billing code, no user-facing copy, existing code comments preserved verbatim (only new comments added), TryAgainHandoff shape and the four existing export signatures unchanged. Non-blocking observations listed separately (signed-out owner treated as current, origin only reset on clear/owner change, 5 base failures are TypeErrors). Logs also at artifacts/review-w09-08/ in the checkout (untracked, not committed). No pushes, no PR, no Mac runner use.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-2"
+}

@@ -1,0 +1,240 @@
+{
+  "agent_counts": {
+    "completed": 2,
+    "failed": 0,
+    "launched": 2,
+    "requested": 2
+  },
+  "agents": [
+    {
+      "label": "implement-P0-05-r1",
+      "phase": "implement",
+      "prompt_sha256": "51b730633d59dfff8d4277fba6aef145911f308527fdd95b20064c9e786d13d0",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-P0-05-r2",
+      "phase": "implement",
+      "prompt_sha256": "7c4941e2e3107181eb10ec56225736102822daeed3fe8591f32bd55e1d31556a",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "P0-05",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: P0-05-AC4 7 skipped/ignored"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/918d7572-9f10-4a69-9ab5-cd12abd5752f/cand-format.log",
+            "command": "pnpm format:check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC1",
+            "note": "VERIFIED on HEAD 7f2d720e; repo-local copy artifacts/p0-05/cand-format.log (artifacts/ is gitignored). Also exit 0 on BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e4efffd-f427-4d72-945c-12527aa220d5/cand-lint.log",
+            "command": "pnpm lint",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC2",
+            "note": "VERIFIED on HEAD 7f2d720e (eslint . incl. new test file); repo-local copy artifacts/p0-05/cand-lint.log. Also exit 0 on BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fabaa664-8c6d-490c-893e-93ebd3baf0d1/cand-typecheck.log",
+            "command": "pnpm typecheck",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC3",
+            "note": "VERIFIED on HEAD 7f2d720e (pnpm -r --parallel typecheck; capture-envelope tsconfig includes test/**); repo-local copy artifacts/p0-05/cand-typecheck.log. Also exit 0 on BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/beef3832-5add-4185-b784-84f5993a61a6/cand-test.log",
+            "command": "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+            "executed": 2800,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC4",
+            "note": "VERIFIED on HEAD 7f2d720e with docker compose postgres_test on localhost:5433 (Node 22.23.2, pnpm 10.15.1, ffmpeg 4.4.2). All 27 workspace test packages passed. The 7 skips are pre-existing conditional skips present on BASE_SHA and untouched by this package: packages/queue test/sqs.integration.test.ts (3, env-gated) and packages/swing-lab test/sessionEngine.test.ts (4). @pickle/capture-envelope: 75 passed (72 pre-existing + 3 new). Regression proof: new test/ffmpegPortability.test.ts on BASE_SHA (fixture files at 55d80326) -> exit 1, 3 executed / 1 passed / 2 failed / 0 skipped (artifacts/p0-05/regress-base.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/33a858a0-bb50-4a09-90ac-ddc37c9f98f6/regress-base.log); on HEAD -> exit 0, 3/3 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/21d67fd9-820a-4bb4-8a36-a08653022eaf/candidate-capture-envelope-test.log). BASE run of this command: exit 1 (see baseline_failures_observed). git diff --check: exit 0.",
+            "passed": 2793,
+            "skipped": 7,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Checked out BASE_SHA, ran the four acceptance commands to baseline (only AC4 failed), traced the ffmpeg option error to two fixture files and to a prior regression via git log, wrote the regression pin first (verified failing on BASE, committed separately), applied the minimal 2-line fix, re-ran the package suite then the four root commands plus git diff --check, pushed the required branch.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/918d7572-9f10-4a69-9ab5-cd12abd5752f/cand-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e4efffd-f427-4d72-945c-12527aa220d5/cand-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fabaa664-8c6d-490c-893e-93ebd3baf0d1/cand-typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/beef3832-5add-4185-b784-84f5993a61a6/cand-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b484067d-cdd1-46c7-9770-5ea354b9d146/base-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/33a858a0-bb50-4a09-90ac-ddc37c9f98f6/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21d67fd9-820a-4bb4-8a36-a08653022eaf/candidate-capture-envelope-test.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test -> exit 1 on BASE_SHA: @pickle/capture-envelope 2 failed (test/redteamEnvelope.test.ts 'VFR/timing_stability' fixture and test/redteamBypassF22.test.ts 'duplicate PTS' fixture) with ffmpeg 4.4.2 'Unrecognized option fps_mode'; pnpm -r stopped there (792 passed / 2 failed / 3 skipped across 797 executed before abort). Log: artifacts/p0-05/base-test.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/b484067d-cdd1-46c7-9770-5ea354b9d146/base-test.log). This failure is INSIDE write_paths (packages/) and was fixed by this package, not waived.",
+          "pnpm format:check / pnpm lint / pnpm typecheck all exit 0 on BASE_SHA (artifacts/p0-05/base-format.log, base-lint.log, base-typecheck.log) — no pre-existing failures there."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/p0-05/impl-r1",
+        "files_changed": [
+          "packages/capture-envelope/test/ffmpegPortability.test.ts",
+          "packages/capture-envelope/test/redteamBypassF22.test.ts",
+          "packages/capture-envelope/test/redteamEnvelope.test.ts"
+        ],
+        "head_sha": "7f2d720eb157f111832b24b5dcaeda13a92b23e4",
+        "out_of_scope_files": [],
+        "package_id": "P0-05",
+        "regression_tests_added": [
+          "packages/capture-envelope/test/ffmpegPortability.test.ts"
+        ],
+        "residual_risks": [
+          "The portability pin is a static source scan (regex over the package's .ts files) rather than a runtime ffmpeg probe; it guards the specific `-fps_mode` regression and requires `-vsync passthrough` in the three known re-timed fixtures, but would not catch other future ffmpeg >= 5-only options.",
+          "`-vsync` is deprecated (not removed) in ffmpeg 5.1+ and still accepted through 8.0; if a future ffmpeg drops it, the fixtures would need a version-conditional switch.",
+          "The 7 skipped workspace tests (queue sqs.integration x3, swing-lab sessionEngine x4) are pre-existing conditional skips on BASE_SHA and out of this package's remit; they were not investigated beyond confirming they predate this change."
+        ],
+        "summary": "Defect on BASE_SHA 55d80326: root `pnpm test` exits 1 because @pickle/capture-envelope's synthetic ffmpeg fixtures pass `-fps_mode passthrough` — packages/capture-envelope/test/redteamEnvelope.test.ts:134 (VFR fixture) and packages/capture-envelope/test/redteamBypassF22.test.ts:269 (duplicate-PTS fixture). `-fps_mode` exists only in ffmpeg >= 5.1; Ubuntu 22.04 (the Linux verification plane and this VM) ships ffmpeg 4.4.2, which aborts with 'Unrecognized option fps_mode. Error splitting the argument list', so both fixture builds throw before their assertions and pnpm -r stops the workspace run. packages/capture-envelope/src/redteamF22.ts already uses `-vsync passthrough`, and repo history (commit 8aff8376 'ffmpeg fixtures use -vsync passthrough (ffmpeg 4.4+)') shows the fixtures had been fixed once and regressed in a later merge. format:check, lint and typecheck were already green on BASE_SHA. Fix (2 commits): (1) a810bc73 adds test/ffmpegPortability.test.ts, a static pin over every .ts in the package's src/ and test/ (excluding itself) asserting no quoted `-fps_mode` argument exists and that the three re-timed fixture files use `\"-vsync\", \"passthrough\"` — fails on BASE (2 of 3), passes on HEAD; (2) 7f2d720e changes the two fixture arguments from `-fps_mode` to `-vsync` (2-line diff). No existing test was weakened, skipped, reordered or edited beyond that flag; no comments modified; all edits under packages/ (write_paths). Acceptance on HEAD: format:check 0, lint 0, typecheck 0, workspace test 0 (2793 passed / 0 failed / 7 pre-existing skipped), git diff --check 0. Branch pushed to origin/devin/pp/p0-05/impl-r1 (no PR, no force-push)."
+      },
+      "round": 1
+    },
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [],
+        "reasons": [
+          "blocked: 4 of the 7 skips flagged by the judge (packages/swing-lab/test/sessionEngine.test.ts:436 replay describes for afn-sasebo-rally1 and afn-sasebo-rally2, 2 tests each) can only be exercised with Mac-generated artifacts datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/{report.json,pose.json,people.json,extract-meta.json}. They are gitignored, exist nowhere in the repo or its history, and are produced exclusively by `pnpm lab:regen` (packages/swing-lab/src/benchRegen.ts -> src/analyzeVideo.ts: `swift build -c release` in native/swing-lab + Apple Vision `pose.apple-vision` extraction) on macOS. The only available Linux pose artifacts (tools/latency-bench/artifacts/afn-sasebo-rally1, POSE_MODEL_VERSION mediapipe-pose-landmarker-full-LINUX-BENCH) are a different provider, so using them would fabricate the replay's measured Apple Vision expectations. Dependency: the coordinator runs `pnpm lab:regen` (or restores the run dirs) on the M4 runner and either commits the four afn-sasebo-rally{1,2} artifact sets under a non-ignored fixture path or provides them to the cloud plane; this package may not push to ci/mac-* or use the Mac runner. Everything else in the package is complete and pushed: all four acceptance commands exit 0 on 9e9ad1a2 with 0 failed and the 3 queue skips eliminated."
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4cd7648d-1dfa-45a8-9730-81448928012d/head-format.log",
+            "command": "pnpm format:check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC1",
+            "note": "VERIFIED on 9e9ad1a2 (artifacts/p0-05/head-format.log in the checkout; artifacts/ is gitignored so uploaded). 'All matched files use Prettier code style!'. Also VERIFIED passing on BASE_SHA (artifacts/p0-05/base-format.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2c20d36-c8e8-495e-b0d3-94f3f675fb1c/head-lint.log",
+            "command": "pnpm lint",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC2",
+            "note": "VERIFIED on 9e9ad1a2 (artifacts/p0-05/head-lint.log): eslint . exit 0, no findings. Also VERIFIED passing on BASE_SHA (artifacts/p0-05/base-lint.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fc734a3b-b740-40c1-ad4f-aa6cd4003f30/head-typecheck.log",
+            "command": "pnpm typecheck",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC3",
+            "note": "VERIFIED on 9e9ad1a2 (artifacts/p0-05/head-typecheck.log): pnpm -r --parallel typecheck exit 0, 0 'error TS' lines across all workspaces.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8642fd38-1dfd-489b-b601-34e3262fae00/head-test.log",
+            "command": "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+            "executed": 2807,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-05-AC4",
+            "note": "VERIFIED on 9e9ad1a2 (artifacts/p0-05/head-test.log): 27 of 28 workspaces ran (apps/mobile has no pnpm test script by design), exit 0, 2803 passed / 0 failed / 4 skipped. Services: docker compose postgres_test (5433) + elasticmq (9324); SQS_ENDPOINT_TEST was NOT exported (env | grep -c SQS_ENDPOINT_TEST = 0) — the 3 @pickle/queue ElasticMQ tests now RUN and pass via the new resolver (head-test.log line 71-72: 3 files / 15 tests; head-queue.log). BASE_SHA on the same command: exit 1 (artifacts/p0-05/base-test.log = https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d8a3a3f-b8ca-432e-b55e-3b10b356c66d/base-test.log) — @pickle/capture-envelope 2 failed / 70 passed (ffmpeg 4.4.2 'Unrecognized option fps_mode'), @pickle/queue 5 passed / 3 skipped, run aborted before later workspaces. The 4 remaining skips are the two `describe.skipIf(!existsSync(report.json))` replay blocks in packages/swing-lab/test/sessionEngine.test.ts:434-436 for afn-sasebo-rally1/afn-sasebo-rally2; the gate inputs (datasets/paddle-bench/runs/<id>/{report,pose,people,extract-meta}.json) are gitignored (.gitignore:19), absent from the repo and its full history (git log --all -- datasets/paddle-bench/runs/ is empty), and are produced only by `pnpm lab:regen` -> packages/swing-lab/src/analyzeVideo.ts which runs `swift build` of native/swing-lab and Apple Vision pose extraction (providerId pose.apple-vision) on macOS. Not reproducible on the Linux/cloud plane; the Mac runner is coordinator-owned and off-limits for this package. A skipped test is not counted as a pass here — see blocked/blocked_reason.",
+            "passed": 2803,
+            "skipped": 4,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Reproduced all four acceptance commands on BASE_SHA with docker postgres_test up (format/lint pass, test exit 1). Branched devin/pp/p0-05/impl-r2 from BASE_SHA, cherry-picked the sound r1 commits (regression test then fix). Started docker-compose elasticmq (the repo's own local broker at 9324, the same default scripts/verify-cloud.sh probes) and wrote a resolver-based gate for the SQS suite with its own regression test committed first (verified failing on BASE). Dropped the banned --passWithNoTests flags. Investigated the 4 swing-lab replay skips: traced the gate inputs to Mac-only Apple Vision extraction (analyzeVideo.ts swift build + pose.apple-vision), confirmed no committed or historical copies, and refused to substitute the non-canonical MediaPipe latency-bench artifacts. Re-ran all acceptance commands plus git diff --check on the final HEAD and pushed.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4cd7648d-1dfa-45a8-9730-81448928012d/head-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2c20d36-c8e8-495e-b0d3-94f3f675fb1c/head-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fc734a3b-b740-40c1-ad4f-aa6cd4003f30/head-typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8642fd38-1dfd-489b-b601-34e3262fae00/head-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e344396-2c3e-4375-ac62-7689a5f39742/head-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d8a3a3f-b8ca-432e-b55e-3b10b356c66d/base-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/754b2485-ae30-4cdc-8061-08b0cec67ac1/regress-queue-endpoint-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/eae2237d-c89c-485d-8101-fe00150aa293/head-queue.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test on BASE_SHA 55d80326: exit 1 — @pickle/capture-envelope test/redteamBypassF22.test.ts + test/redteamEnvelope.test.ts fail under ffmpeg 4.4.2 ('Unrecognized option fps_mode'); inside write_paths, FIXED in this candidate (d7c44ee4)",
+          "Same command on BASE_SHA: @pickle/queue test/sqs.integration.test.ts 3 skipped because SQS_ENDPOINT_TEST is not exported by the acceptance command (only scripts/verify-cloud.sh probed the broker); inside write_paths, FIXED in this candidate (0b0cb626)",
+          "Same command: @pickle/swing-lab test/sessionEngine.test.ts 4 skipped (Mac-only Apple Vision replay artifacts absent) — pre-existing on BASE_SHA and on the prior candidate; NOT fixable from the cloud plane, recorded not waived (see blocked_reason)"
+        ],
+        "blocked": true,
+        "blocked_reason": "4 of the 7 skips flagged by the judge (packages/swing-lab/test/sessionEngine.test.ts:436 replay describes for afn-sasebo-rally1 and afn-sasebo-rally2, 2 tests each) can only be exercised with Mac-generated artifacts datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/{report.json,pose.json,people.json,extract-meta.json}. They are gitignored, exist nowhere in the repo or its history, and are produced exclusively by `pnpm lab:regen` (packages/swing-lab/src/benchRegen.ts -> src/analyzeVideo.ts: `swift build -c release` in native/swing-lab + Apple Vision `pose.apple-vision` extraction) on macOS. The only available Linux pose artifacts (tools/latency-bench/artifacts/afn-sasebo-rally1, POSE_MODEL_VERSION mediapipe-pose-landmarker-full-LINUX-BENCH) are a different provider, so using them would fabricate the replay's measured Apple Vision expectations. Dependency: the coordinator runs `pnpm lab:regen` (or restores the run dirs) on the M4 runner and either commits the four afn-sasebo-rally{1,2} artifact sets under a non-ignored fixture path or provides them to the cloud plane; this package may not push to ci/mac-* or use the Mac runner. Everything else in the package is complete and pushed: all four acceptance commands exit 0 on 9e9ad1a2 with 0 failed and the 3 queue skips eliminated.",
+        "branch": "devin/pp/p0-05/impl-r2",
+        "files_changed": [
+          "apps/admin-web/package.json",
+          "packages/capture-envelope/test/ffmpegPortability.test.ts",
+          "packages/capture-envelope/test/redteamBypassF22.test.ts",
+          "packages/capture-envelope/test/redteamEnvelope.test.ts",
+          "packages/queue/test/sqs.integration.test.ts",
+          "packages/queue/test/sqsTestEndpoint.test.ts",
+          "packages/queue/test/sqsTestEndpoint.ts",
+          "packages/shared-types/package.json"
+        ],
+        "head_sha": "9e9ad1a279ddd91c88fbc69bc85a0ac2347f0d38",
+        "out_of_scope_files": [],
+        "package_id": "P0-05",
+        "regression_tests_added": [
+          "packages/capture-envelope/test/ffmpegPortability.test.ts (cherry-picked from r1 970af97d; FAILS on BASE_SHA: two fixtures pass the ffmpeg>=5.1-only -fps_mode flag)",
+          "packages/queue/test/sqsTestEndpoint.test.ts (7 tests; FAILS on BASE_SHA: exit 1, 'Cannot find module ./sqsTestEndpoint.js', artifacts/p0-05/regress-queue-endpoint-base.log = https://la-hacks-rttothemoon.devinenterprise.com/attachments/754b2485-ae30-4cdc-8061-08b0cec67ac1/regress-queue-endpoint-base.log)"
+        ],
+        "residual_risks": [
+          "4 swing-lab replay tests (sessionEngine.test.ts afn-sasebo-rally1/2) still skip on any machine without the Mac-generated datasets/paddle-bench/runs artifacts; needs the coordinator's M4 runner (`pnpm lab:regen`) — outside this package's plane and permissions.",
+          "The ElasticMQ auto-detect probes http://localhost:9324 only when SQS_ENDPOINT_TEST is unset; a developer with an unrelated service on 9324 would see the 3 SQS tests run and fail loudly rather than skip (explicit SQS_ENDPOINT_TEST='' opts out). scripts/verify-cloud.sh still prints its own 'skips its 3 SQS tests' message when the broker is down (not editable here: ci-scripts serial group); docs/devin/TEST_MATRIX.md still documents 7 skips (docs, out of write_paths).",
+          "The r1 ffmpeg fix uses -vsync passthrough, deprecated-but-present in ffmpeg 5.x-7.x; if a future ffmpeg removes -vsync the portability test will need retargeting to a version-detecting helper.",
+          "apps/mobile is intentionally outside `pnpm test` (npm-only); its jest suite was not part of this package's acceptance and was not run."
+        ],
+        "summary": "Defects on BASE_SHA 55d80326 (VERIFIED): (1) packages/capture-envelope/test/redteamBypassF22.test.ts and test/redteamEnvelope.test.ts pass `-fps_mode passthrough` to ffmpeg, an ffmpeg>=5.1 flag; the cloud plane has ffmpeg 4.4.2, so `pnpm test` exited 1 ('Unrecognized option fps_mode', 2 failed/70 passed in that workspace, run aborted). (2) packages/queue/test/sqs.integration.test.ts:16 gated the 3 ElasticMQ tests on a raw `process.env[\"SQS_ENDPOINT_TEST\"]` read; the manifest acceptance command is a bare `pnpm test` that never exports it (only scripts/verify-cloud.sh:224-231 probed http://localhost:9324), so the suite skipped even with docker-compose elasticmq running. (3) packages/swing-lab/test/sessionEngine.test.ts:436 skips 4 replay tests when datasets/paddle-bench/runs/afn-sasebo-rally{1,2}/report.json is absent — Mac/Apple Vision artifacts not derivable on Linux (see blocked_reason). Fixes, regression test first each: cherry-picked r1 970af97d (test/ffmpegPortability.test.ts pins no -fps_mode + -vsync passthrough in the 3 re-timed invocations) and d7c44ee4 (-vsync passthrough in both fixtures); new 4804eff1 packages/queue/test/sqsTestEndpoint.test.ts (7 tests: explicit env wins, '' opts out, unset+reachable ephemeral http server -> used, unset+closed port -> '', non-http rejected, integration file wired to the resolver) then 0b0cb626 packages/queue/test/sqsTestEndpoint.ts (resolveSqsTestEndpoint: explicit SQS_ENDPOINT_TEST > reachable http://localhost:9324 via node:http probe accepting any HTTP response, ElasticMQ answers 400 > '') and sqs.integration.test.ts:17 `const endpoint = await resolveSqsTestEndpoint()`. 9e9ad1a2 removes `--passWithNoTests` from @pickle/shared-types and @pickle/admin-web test scripts (both have real suites, 302 and 97 tests; the flag is on the hard-rule ban list and would let a future zero-test run pass). Result on HEAD 9e9ad1a2 (all VERIFIED, logs under artifacts/p0-05/ and uploaded): pnpm format:check exit 0; pnpm lint exit 0; pnpm typecheck exit 0; the exact AC4 command exit 0 with 2803 passed / 0 failed / 4 skipped across 27 workspaces (down from 7 skipped + 2 failed); git diff --check exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e344396-2c3e-4375-ac62-7689a5f39742/head-diff-check.log). No existing comments modified, no tests weakened/reordered, no out-of-scope files, no PR opened, branch devin/pp/p0-05/impl-r2 pushed."
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "BLOCKED_EXTERNAL",
+  "wave_id": "wave-2"
+}

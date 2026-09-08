@@ -1,0 +1,410 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-H06-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "c06938f50e91f545d86008538d89fa1dae00907dfac66a9257f46df521c99bcf",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-H06-01-r1",
+      "phase": "review",
+      "prompt_sha256": "622692361b9c173e9fc691ba66c9b83dd4cc01a6b5cb15c8b88cef5f7cfadbd0",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-H06-01-r1",
+      "phase": "adversary",
+      "prompt_sha256": "657e969f30e6226d89e431c83e69b338d6fce13c06807a329d0c58311877a43f",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-H06-01-r2",
+      "phase": "implement",
+      "prompt_sha256": "ff3ffa10022aeed2d465e90fe79c17f8588595950e0bcfd057f17b2f80fdbb19",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "H06-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3db5ff2c-d5b9-443e-b738-4d92aef8a302/attack-run1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/333050e2-0597-45e5-aa70-aa9323ecc141/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/292d7393-e4ee-418c-b9f6-cd6d1f90d882/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5656d2c8-c5cf-46ba-b42e-309d0a140cb5/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fc48e15-25af-475d-80e2-de3690c7b61a/ac3-prettier.log"
+        ],
+        "attack_branch": "devin/pp/h06-01/attack-df2671c8",
+        "attack_branch_sha": "ac8b0bae6748938778c32325cdee25af7e755715",
+        "attacked_sha": "df2671c8347bbe1b7aa01db0adb96d7168e2e11f",
+        "attacks_tried": 34,
+        "breaks": [
+          {
+            "expected": "Mobile copy test fails and names the file/phrase; rendered string 'Google Play' / 'most precise read' / 'Live Court' is what the user reads.",
+            "observed": "Candidate scan status 'passed' for src fixtures `'…Google ' + 'Play settings.'`, `'…for the most ' + 'precise read.'`, `['Live', 'Court …'].join(' ')` — the scanner records each StringLiteral separately and never joins adjacent BinaryExpression/ArrayLiteral operands, so the rendered phrase is never matched.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'concatenated literals'  (3 tests, all fail = false negative)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "Scanner misses forbidden phrases split across `'…' + '…'` concatenation / array join (pattern already used in 10 src files, incl. AnalyzeScreen.tsx:594-599 where the candidate's own 'most precise read' fix lived)"
+          },
+          {
+            "expected": "Scan flags 'Android' / 'DUPR' as user-facing copy.",
+            "observed": "`STORE_LABELS = { android: 'Android' }`, `RATING_SYSTEM = { external: 'DUPR' }` rendered via `<Text>{RATING_SYSTEM.external}</Text>`, and `const platform = 'Android'` interpolated into `<Text>{`Also available on ${platform}.`}</Text>` all pass the candidate scan — isCopyContext() requires multi-word text or a /label|title|text|…/ binding name, and template interpolations are dropped.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'single-word copy outside a copy-named binding'  (3 tests fail)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "Single-word forbidden terms rendered from non-copy-named bindings are not scanned (existing pattern `PROVIDER_LABELS = { guest: 'Guest' }` in ManageAccountScreen.tsx:58)"
+          },
+          {
+            "expected": "Any operator-entered store copy under an `ENTER:` prompt is scanned regardless of markdown formatting.",
+            "observed": "docs/APP_STORE_SUBMISSION.md variants `| Subtitle | \\`ENTER:\\` Pickleball coach for Android |`, `\\`ENTER:\\` (release notes)\\nPaste exactly:\\n\\n```\\nNow on Android too…```` and `- \\`ENTER:\\`\\n\\n  ```\\n  Now on Android too…` all pass the dossier scan (the control with a backticked ENTER value `Better than SwingVision` IS flagged, proving the harness).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'dossier store copy outside the extractor'  (3 tests fail)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "App Store dossier extractor skips ENTER values that are not backticked, fenced ENTER blocks with an intervening note line, and indented (list-item) fenced blocks"
+          },
+          {
+            "expected": "Each phrase is flagged under its category (ai-coach-equivalence, superlative, accuracy-percentage, live-court, competitor, google-play, guest-mode).",
+            "observed": "Unflagged JSX text: 'Your personal AI-coach, always in your pocket.', 'AI coaching that replaces lessons.', 'Like having a coach in your pocket.', 'No need for a coach — Pickle Sensei does it.', 'The ultimate pickleball coaching app.', 'The most effective way to fix your dink.', 'BEST-VALUE', 'Scores land with 95% precision.', 'Accuracy of 95 pct on every stroke.', 'Accurate 9 times out of 10.', 'Live Courts coach you in real time.', 'Better than PB-Vision.', 'Also on GooglePlay.', 'Ratings you take as a guest stay on this phone.' Flagged (not breaks): 'The very best pickleball coach on iPhone.', 'Best pickleball coaching app.'. Of the 14, 'Like having a coach in your pocket.' and 'Ratings you take as a guest…' are the most debatable readings of the policy; the rest are direct forms of the forbidden categories.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'phrasings the rules do not cover'  (16 tests: 14 fail, 2 pass)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "Rule vocabulary gaps: 12 forbidden-claim phrasings under APP_STORE_SUBMISSION.md rules pass the scan"
+          },
+          {
+            "expected": "JSX text is entity-decoded and text is NFKC-normalised / stripped of zero-width & soft-hyphen code points before matching.",
+            "observed": "JSX text 'Google&nbsp;Play', 'Live&#32;Court', and literals containing U+00AD ('Goo\\u00ADgle Play') / U+200B ('An\\u200Bdroid') pass the scan; React decodes the entities and the invisible code points render as the plain word. Adversarial rather than accidental, hence P3.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'HTML entities|invisible code points'  (4 tests fail)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "JSX HTML entities and invisible code points inside a forbidden term evade the regexes"
+          },
+          {
+            "expected": "All JS/TS module extensions the Metro bundler resolves are scanned.",
+            "observed": "src/Fixture.jsx and src/copy.js containing 'Manage subscription in Google Play' pass the scan (sourceFiles() filters /\\.tsx?$/). Today src/ has one .js file (a test), so this is latent; P3.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts -t 'files the walker ignores'  (2 tests fail)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts",
+            "title": "Walker only scans .ts/.tsx — copy in a .jsx/.js module under src/ is never read"
+          }
+        ],
+        "package_id": "H06-01",
+        "summary": "ATTACKED df2671c8 (branch devin/pp/h06-01/impl-r1). Candidate ACs re-verified on this box (VERIFIED): AC1 `cd apps/mobile && npx jest --ci --silent __tests__/h06ForbiddenClaims.test.ts` exit 0, 23 passed/0 failed/0 skipped (ac1-jest.log); AC2 `npx tsc --noEmit` exit 0 after `npm ci` (ac2-tsc.log); AC3 root eslint + prettier --check over the changed mobile files exit 0 (ac3-*.log). ATTACK SUITE apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts (pushed on devin/pp/h06-01/attack-df2671c8 @ ac8b0bae6748938778c32325cdee25af7e755715; passes root eslint + prettier): copies the candidate scanner byte-for-byte into a throwaway sandbox mirroring its resolved paths (src/, App.tsx, ios/…/Info.plist, docs/APP_STORE_SUBMISSION.md), injects one piece of copy per test and runs the candidate via a child jest --json. No production code and no candidate test was modified. Command `cd apps/mobile && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts` → exit 1, 34 executed / 5 passed / 29 failed / 0 skipped (attack-run1.log). All 29 failures are `Expected: 'failed' Received: 'passed'` = the candidate scanner did NOT flag the copy (confirmed false negatives, not harness errors); the 5 passes are the 3 controls (direct 'Google Play' JSX text, 'BEST VALUE' attribute, backticked dossier ENTER competitor) plus 2 vocabulary phrases the rules do cover. Confirmed breaks: (P1) phrases split across `+` concatenation / array join are invisible — the repo already wraps copy this way in 10 src files including the very AnalyzeScreen line the candidate fixed; (P1) single-word terms ('Android', 'DUPR') in non-copy-named maps/enums and template interpolations are skipped — the `PROVIDER_LABELS = { guest: 'Guest' }` pattern exists today; (P2) dossier extractor misses non-backticked ENTER values, ENTER blocks with a note line before the fence, and indented fences; (P2) 12 forbidden-claim phrasings not in the rule vocabulary ('AI-coach', 'ultimate', 'most effective', 'BEST-VALUE', '95% precision', '95 pct', '9 times out of 10', 'Live Courts', 'PB-Vision', 'GooglePlay', etc.); (P3) JSX entities / soft-hyphen / zero-width evasions; (P3) .jsx/.js under src/ never walked. Not applicable / not attempted: concurrency, replay, network, RLS, free-rating conservation (the package is a static copy scanner with no runtime or SQL surface). No Mac runner used; no PR opened; no force-push."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f348a84b-5b29-48c8-8285-2e872bdad665/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/h06ForbiddenClaims.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC1",
+            "kind": "regress",
+            "note": "PROOF: same command on BASE_SHA 55d80326 (test committed alone at 32bcba78, sources at base) exit_code=1, executed=23 passed=22 failed=1 skipped=0; the failing test listed 5 violations: ManageAccountScreen.tsx:77 'Google Play' (storeName), :78 'Manage subscription in Google Play', :992 '...App Store or Google Play subscription', PaywallScreen.tsx:572 heroBadge 'BEST VALUE', AnalyzeScreen.tsx:599 'the most precise read'. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/e3da6842-42a2-4fe2-8e90-70f22056e0ae/ac1-base-55d80326.log (repo path artifacts/h06-01/ac1-base-55d80326.log, gitignored). Candidate HEAD df2671c8 exit 0, 23/23 passed. VERIFIED.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/99e1dc5c-b6a2-499a-92de-f46a4281463b/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC2",
+            "kind": "check",
+            "note": "Empty output, exit 0 on HEAD df2671c8 (after `cd apps/mobile && npm ci` restored missing @sentry/* packages in node_modules). VERIFIED.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bcfae5e0-9957-4a75-987d-1193ac007560/ac3-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/__tests__/h06ForbiddenClaims.test.ts apps/mobile/__tests__/paywallPodium.test.tsx apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/screens/PaywallScreen.tsx && npx prettier --check apps/mobile/__tests__/h06ForbiddenClaims.test.ts apps/mobile/__tests__/paywallPodium.test.tsx apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/screens/PaywallScreen.tsx docs/APP_STORE_SUBMISSION.md",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC3",
+            "kind": "check",
+            "note": "Run from repo root (root ESLint/Prettier). ESLint produced no findings; Prettier: 'All matched files use Prettier code style!'. VERIFIED. Supplemental: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5a7d76e-8828-419e-80d1-486c0aeeff02/format-check-head.log); `git diff --check` exit 0, no output.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression test first (commit 32bcba78): apps/mobile/__tests__/h06ForbiddenClaims.test.ts walks apps/mobile/src/** + App.tsx with the TypeScript compiler API and extracts every string/template/JSX-text literal, then applies forbidden-term rules (android, google-play/play-store, guest-mode, live-court, dupr, competitors SwingVision/PB Vision/Selkirk/JOOLA, accuracy-percentage, superlatives incl. best value/#1/most precise/most accurate/unmatched/revolutionary/etc., AI-coach-equivalence 'like a real coach'). The same rules run over the operator-entered store copy in docs/APP_STORE_SUBMISSION.md (ENTER:/PASTE: cells, description/keywords/review notes — policy prose that names the banned terms is deliberately excluded to avoid false positives) and over ios/PickleSensei/Info.plist NS*UsageDescription + CFBundleDisplayName. Positive fixtures pin that 'Your best score this month', 'SAVE 33%', 'estimate', 'validated', 'server-accepted' are allowed. Then the minimal fix commit (df2671c8) changed exactly the 5 flagged strings in shipping screens and kept the two paywall tests + dossier screenshot instruction in step with the new badge.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e3da6842-42a2-4fe2-8e90-70f22056e0ae/ac1-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f348a84b-5b29-48c8-8285-2e872bdad665/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/99e1dc5c-b6a2-499a-92de-f46a4281463b/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bcfae5e0-9957-4a75-987d-1193ac007560/ac3-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5a7d76e-8828-419e-80d1-486c0aeeff02/format-check-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e1da819-fcb2-4c1f-95e9-7cd8e6f92bff/related-suites-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/49405fc7-362b-4a9b-8d1c-51bbd6147583/mobile-full-jest-head.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — on the fresh checkout of BASE_SHA it failed with missing modules @sentry/react-native / @sentry/browser because node_modules was incomplete (environment, not source); `cd apps/mobile && npm ci` (exit 0) resolved it and tsc then passed on base+test and on HEAD.",
+          "cd apps/mobile && npx jest --ci --silent — 1 suite skipped on base and HEAD: apps/mobile/__tests__/importedRealFootageAnalysis.test.ts uses describe/test.skip at BASE_SHA (pre-existing, untouched). HEAD full run: 308 suites passed / 1 skipped, 5912 tests passed / 1 skipped, exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/49405fc7-362b-4a9b-8d1c-51bbd6147583/mobile-full-jest-head.log)."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/h06-01/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/h06ForbiddenClaims.test.ts",
+          "apps/mobile/__tests__/paywallPodium.test.tsx",
+          "apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx",
+          "apps/mobile/src/screens/ManageAccountScreen.tsx",
+          "apps/mobile/src/screens/PaywallScreen.tsx",
+          "docs/APP_STORE_SUBMISSION.md"
+        ],
+        "head_sha": "df2671c8347bbe1b7aa01db0adb96d7168e2e11f",
+        "out_of_scope_files": [
+          "apps/mobile/src/screens/ManageAccountScreen.tsx — the two 'Google Play' violations live here (there is no copy*.ts module in src/; user-facing strings are inline in screens). Minimal edit: dropped the Android subscription-management branch (iPhone-only app) and the 'or Google Play' clause of the deletion notice. Not under any serial_group_paths prefix.",
+          "apps/mobile/src/screens/PaywallScreen.tsx — 'BEST VALUE' superlative badge is inline here; one-token change to 'RECOMMENDED'. Not under any serial_group_paths prefix.",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx — 'the most precise read' superlative is inline here; one phrase change to 'a stroke-specific read'. Not under any serial_group_paths prefix.",
+          "apps/mobile/__tests__/paywallPodium.test.tsx — existing assertion expected the literal 'BEST VALUE' badge; updated the expected string to the new badge (no assertion weakened/removed).",
+          "apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx — existing negative assertion checked the literal 'BEST VALUE' badge is absent on the monthly plan; updated the literal to the new badge (same assertion strength).",
+          "docs/APP_STORE_SUBMISSION.md — the manifest lists 'APP_STORE_SUBMISSION.md' at the repo root, but the dossier actually lives at docs/APP_STORE_SUBMISSION.md (root file does not exist). One-line edit to the §10.3 review-screenshot instruction so it names the badge the paywall now shows."
+        ],
+        "package_id": "H06-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/h06ForbiddenClaims.test.ts"
+        ],
+        "residual_risks": [
+          "The dossier scan covers operator-entered/pasted store copy cells (ENTER:/PASTE: and the description/keywords/promo/review-notes blocks) rather than the whole file, because the dossier's policy prose intentionally names the forbidden terms. New store copy added outside those cell forms would need to follow the same convention to be scanned.",
+          "The superlative rule is a curated word list (best value, the best, best-in-class, #1, number one, most accurate/precise/advanced, unmatched, unrivaled, revolutionary, cutting-edge, state-of-the-art, award-winning); it will not catch novel superlative phrasings outside the list.",
+          "Copy is scanned as string literals; runtime-composed strings (e.g. template interpolation of a banned term from a variable) are scanned per literal fragment only."
+        ],
+        "summary": "Defect on BASE_SHA 55d80326: no test guarded user-facing/store copy against the APP_STORE_SUBMISSION.md forbidden terms, and the shipping app carried five violations — apps/mobile/src/screens/ManageAccountScreen.tsx:77 (`storeName: 'Google Play'`), :78 (`accessibilityLabel: 'Manage subscription in Google Play'`), :992 ('Deleting an account does not cancel an App Store or Google Play subscription.'), apps/mobile/src/screens/PaywallScreen.tsx:572 (`heroBadge=\"BEST VALUE\"`), apps/mobile/src/screens/AnalyzeScreen.tsx:599 ('declare the technique for the most precise read.'). The Info.plist permission prompts and the dossier's actual store copy were already clean (VERIFIED by the same scan). Fix: added the scanner test (fails on base 22/23, passes on HEAD 23/23), removed the Android subscription-management branch (iPhone-only app; SUBSCRIPTION_MANAGEMENT is now App Store or null), dropped 'or Google Play' from the deletion notice, renamed the yearly badge to 'RECOMMENDED' (paywallPodium + PaywallScreen.buttons tests updated to the new literal, dossier §10.3 review-screenshot row updated to match), and reworded 'the most precise read' to 'a stroke-specific read'. Manifest write_path `apps/mobile/src/**/copy*.ts` matched no file (strings are inline in screens) and root `APP_STORE_SUBMISSION.md` does not exist (dossier is docs/APP_STORE_SUBMISSION.md) — all edits outside write_paths are listed in out_of_scope_files; none touch a serial_group_paths prefix. AC1/AC2/AC3 + pnpm format:check + git diff --check all exit 0; full mobile jest 5912 passed / 1 pre-existing skip. Two commits pushed to devin/pp/h06-01/impl-r1 (head df2671c8347bbe1b7aa01db0adb96d7168e2e11f); no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/adaf6141-5ebf-4448-af05-d69d708c89a2/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/h06ForbiddenClaims.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC1",
+            "note": "kind=regress PROOF holds (exit_code 0 = new tests FAIL on base, PASS on candidate). Candidate HEAD df2671c8: 1 suite, 23/23 passed (repo log artifacts/h06-01-review/ac1-head.log). BASE run: checked out 55d80326, copied ONLY the 3 test files from the candidate (h06ForbiddenClaims.test.ts new; paywallPodium.test.tsx and wf/PaywallScreen.buttons.test.tsx modified), ran `npx jest --ci --silent` on those 3 → exit 1, Suites 2 failed/1 passed, Tests 2 failed/73 passed/0 skipped (75 total); failures: h06ForbiddenClaims 'mobile user-facing strings › contains none of the forbidden terms' listing exactly 5 violations (AnalyzeScreen.tsx:599 superlative 'the most precise read'; ManageAccountScreen.tsx:77 'Google Play', :78 'Manage subscription in Google Play', :992 '...App Store or Google Play subscription'; PaywallScreen.tsx:572 'BEST VALUE'), and paywallPodium 'renders all three podium columns...' (expects 'RECOMMENDED', base shows 'BEST VALUE'). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/db879d97-8a48-49e4-812a-28a854ab244f/regress-base-55d80326.log (repo path artifacts/h06-01-review/regress-base-55d80326.log). Same 3 suites on candidate HEAD: exit 0, 3 suites passed, 75/75 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/5bdda42b-6ee4-4ff7-9304-73de8f2c5639/regress-head-df2671c8.log). Supplemental full mobile jest on HEAD: `cd apps/mobile && npx jest --ci --silent` exit 0, Suites 308 passed/1 skipped, Tests 5912 passed/1 skipped (pre-existing describe.skip in importedRealFootageAnalysis.test.ts at base): https://la-hacks-rttothemoon.devinenterprise.com/attachments/55d99b26-f0bc-4444-9f36-421e47ce47ec/mobile-full-jest-head.log. All VERIFIED.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4dcf3fb8-fa4f-425f-a4b3-9fa27cd0d8c0/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC2",
+            "note": "Exit 0, empty output (0 bytes) on HEAD df2671c8 after `cd apps/mobile && npm ci` (exit 0) restored the missing @sentry/* packages in the snapshot's node_modules — environment, not source. VERIFIED. Repo log artifacts/h06-01-review/ac2-tsc-head.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5000d38f-75e7-4cc3-a37f-5507f6d542eb/ac3-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/__tests__/h06ForbiddenClaims.test.ts apps/mobile/__tests__/paywallPodium.test.tsx apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/screens/PaywallScreen.tsx && npx prettier --check <same 6 files> docs/APP_STORE_SUBMISSION.md",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC3",
+            "note": "Run from repo root with root ESLint/Prettier over all 7 changed files. ESLint: no findings. Prettier: 'All matched files use Prettier code style!'. Also `git diff --check 55d80326..df2671c8` exit 0. VERIFIED. Repo log artifacts/h06-01-review/ac3-eslint-prettier-head.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/adaf6141-5ebf-4448-af05-d69d708c89a2/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4dcf3fb8-fa4f-425f-a4b3-9fa27cd0d8c0/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5000d38f-75e7-4cc3-a37f-5507f6d542eb/ac3-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/db879d97-8a48-49e4-812a-28a854ab244f/regress-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5bdda42b-6ee4-4ff7-9304-73de8f2c5639/regress-head-df2671c8.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/55d99b26-f0bc-4444-9f36-421e47ce47ec/mobile-full-jest-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Implementer summary states write_path `apps/mobile/src/**/copy*.ts` matched no file; VERIFIED false — apps/mobile/src/notifications/copy.ts exists (untouched by the candidate, so no effect on the fix; claim accuracy only).",
+          "Scanner gap (INFERRED from FORBIDDEN_RULES, VERIFIED by grep): the guest-mode rule matches only 'guest mode' / 'as (a) guest' / 'guest account|access|sign-in|entry|login', so the pre-existing user-facing literals 'Guest · this device' (apps/mobile/src/screens/SettingsScreen.tsx:236,245) and provider label 'Guest' (apps/mobile/src/screens/ManageAccountScreen.tsx:61) are not flagged. They sit on the `provider === 'guest'` branch which docs/APP_STORE_SUBMISSION.md rule 4 says has no UI entry point, and they do not literally say 'guest mode', so not a violation of the written rule — but a follow-up could tighten the rule or remove the dead branch.",
+          "Manifest write_path `APP_STORE_SUBMISSION.md` (repo root) does not exist; the dossier is docs/APP_STORE_SUBMISSION.md (VERIFIED: `ls APP_STORE_SUBMISSION.md` → no such file). Manifest path should be corrected; the candidate's edit to docs/APP_STORE_SUBMISSION.md is the intended file."
+        ],
+        "package_id": "H06-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "df2671c8347bbe1b7aa01db0adb96d7168e2e11f",
+        "scope_violation": false,
+        "summary": "APPROVE H06-01 candidate df2671c8347bbe1b7aa01db0adb96d7168e2e11f (base 55d80326). SCOPE (VERIFIED via `git diff --stat`): 7 files — apps/mobile/__tests__/h06ForbiddenClaims.test.ts (write_path); apps/mobile/src/screens/{AnalyzeScreen,ManageAccountScreen,PaywallScreen}.tsx, apps/mobile/__tests__/paywallPodium.test.tsx, apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx, docs/APP_STORE_SUBMISSION.md — all listed in out_of_scope_files with justification, none under any serial_group_paths prefix (apps/mobile/src/screens/ and apps/mobile/__tests__/ are in no group; docs/APP_STORE_SUBMISSION.md is not docs/RELEASE_READINESS_2026-09-07.md). The screen edits are the minimum needed to fix the 5 violations the scan finds (the manifest write_path copy*.ts cannot hold them — the strings are inline in screens), the two test edits swap the literal 'BEST VALUE'→'RECOMMENDED' with identical assertion strength (one positive toContain, one negative not.toContain), and the dossier edit updates the §10.3 review-screenshot instruction to the badge the paywall now shows. Root APP_STORE_SUBMISSION.md does not exist; docs/APP_STORE_SUBMISSION.md is the dossier. scope_violation=false. BEHAVIOUR (1b): the objective is a test + copy fixes; the test runs in the shipping mobile jest suite and the copy fixes are in shipping screens — no dead module. ACCEPTANCE (all re-run by me on HEAD): AC1 jest 23/23 exit 0; AC2 tsc exit 0 empty output; AC3 root eslint+prettier exit 0 on every changed file. REGRESSION PROOF: 3 candidate test files copied onto base → exit 1 (2 failed/73 passed) with exactly the 5 documented violations + paywallPodium badge mismatch; same on candidate → exit 0 (75/75). Full mobile jest on HEAD: 5912 passed / 1 pre-existing skip, exit 0. INVARIANTS: no test weakened/skipped/deleted; no `any`/ts-ignore/eslint-disable/`|| true`/timeouts (grep of diff empty); no existing comment edited; no migration/RLS/grant/session/billing logic touched (SUBSCRIPTION_MANAGEMENT collapses the Android branch to null on an iPhone-only app — Platform import remains used at lines 421/817, ESLint clean); new copy ('RECOMMENDED', 'a stroke-specific read', 'App Store subscription') complies with APP_STORE_SUBMISSION.md rules 4/5 — no superlative, competitor, platform, accuracy or AI-coach claims. Independent grep of apps/mobile/src for the forbidden terms finds only non-user-facing Platform.OS/type-literal uses of 'android' and the LiveCourtEngine class identifier — VERIFIED no remaining user-facing violation. Non-blocking: scanner's guest rule does not cover the pre-existing 'Guest · this device' / 'Guest' labels on the no-entry-point guest branch; implementer's 'copy*.ts matched no file' claim is inaccurate (src/notifications/copy.ts exists, untouched); manifest's root APP_STORE_SUBMISSION.md path should be corrected to docs/.",
+        "verdict": "approve"
+      },
+      "round": 1
+    },
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: unknown acceptance id 'H06-01-ADVERSARY'",
+          "impl: unknown acceptance id 'H06-01-RELATED'"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ec830fc1-394d-41d9-9583-e95812917a64/h06-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/h06ForbiddenClaims.test.ts",
+            "executed": 59,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC1",
+            "note": "Regression proof (kind=regress semantics): same command on BASE_SHA 55d80326 (test file added, no other change) exits 1 — 59 total, 58 passed, 1 failed ('contains none of the forbidden terms') naming AnalyzeScreen.tsx:595 [superlative] 'the most precise read', ManageAccountScreen.tsx:77/78/992 [google-play], PaywallScreen.tsx:572 [superlative] 'BEST VALUE'; base log https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7e2b3cc-6216-4dce-ad55-b0410110aba1/h06-base-55d80326.log (also artifacts/h06/h06-base-55d80326.log in the checkout, gitignored). Candidate run also in artifacts/h06/h06-candidate.log.",
+            "passed": 59,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7aa6410-10d1-41c0-97b0-02f710c1abee/tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC2",
+            "note": "Empty output = clean typecheck. Required `cd apps/mobile && npm ci` first: the pre-provisioned node_modules lacked @sentry/react-native (11 TS2307/TS7006 errors before the install, all in src/diagnostics/*; none related to this package).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7812346a-ad01-4934-9ce6-02f3b49abcd7/eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/h06ForbiddenClaims.test.ts apps/mobile/__tests__/paywallPodium.test.tsx apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/screens/PaywallScreen.tsx && npx prettier --check apps/mobile/__tests__/h06ForbiddenClaims.test.ts apps/mobile/__tests__/paywallPodium.test.tsx apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/screens/PaywallScreen.tsx docs/APP_STORE_SUBMISSION.md",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-AC3",
+            "note": "Run from repo root (root ESLint config). eslint exit 0 with empty output; prettier: 'All matched files use Prettier code style!' https://la-hacks-rttothemoon.devinenterprise.com/attachments/574186cb-8719-4a7f-85e5-96a032144804/prettier.log. Also `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f291e720-5d14-4e76-994e-fd1e4cbcddde/format-check.log) and `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f9f0d269-ab46-4fd0-a0d8-203211abca52/h06-attack-candidate.log",
+            "command": "cd apps/mobile && git show origin/devin/pp/h06-01/attack-df2671c8:apps/mobile/__tests__/h06ForbiddenClaims.attack.test.ts > __tests__/h06ForbiddenClaims.attack.test.ts && npx jest --ci __tests__/h06ForbiddenClaims.attack.test.ts",
+            "executed": 34,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-ADVERSARY",
+            "note": "Prior-round adversary suite run against the candidate scanner (it copies the candidate test file byte-for-byte into fixture projects). All 34 pass, including the two P1 groups: 'copy assembled from concatenated literals' (3) and 'single-word copy outside a copy-named binding' (3), plus entities, invisible code points, .js/.jsx files, expanded phrasings, and dossier extraction. The attack file was removed after the run and is not committed.",
+            "passed": 34,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12bbd3a2-fad1-40c2-a506-d309a9362671/related-suites.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/paywallPodium.test.tsx __tests__/wf/PaywallScreen.buttons.test.tsx __tests__/manageAccountScreen.test.tsx __tests__/wf/ManageAccountScreen.buttons.test.tsx __tests__/wf/flow-account-deletion.test.tsx",
+            "executed": 127,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H06-01-RELATED",
+            "note": "Suites covering the three edited screens; 5 suites, 127 tests.",
+            "passed": 127,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Scanner (single Jest file, TypeScript compiler API, no new deps): (1) walks every .ts/.tsx/.js/.jsx under apps/mobile/src plus App.tsx (excluding tests, .d.ts, __tests__/__mocks__/fixtures); (2) records strings AS RENDERED — a per-file literal resolver maps `const x = '…'` and `OBJ.key` literals so `'…' + '…'` concatenations, `[…].join(sep)`, template literals `${x}` and JSX `{expr}` interpolations are joined before matching; JSX text/attribute entities (&nbsp;, &#32;, &#x…) are decoded and invisible code points (soft hyphen, ZW*, LRM/RLM, WJ, BOM, CGJ) stripped; (3) single-word values reach the scan regardless of binding name — implementation tokens are excluded by SHAPE only (identifier-like/camelCase/snake_case/URL/path/hex/kebab tokens, property-name slots, literal type nodes, import/export specifiers), while anything rendered in JSX is always scanned; (4) rules cover Android, Google Play/Play Store/play.google.com, guest-mode phrasings, Live Court(s), DUPR, SwingVision/PB Vision/Selkirk/JOOLA, accuracy % / 'N out of M' correctness claims, an expanded superlative list (best-*, most *, #1, world-class, ultimate, unmatched, top-rated, award-winning, revolutionary, guaranteed results, …) and AI-coach-equivalence phrasings; (5) also scans ios/PickleSensei/Info.plist string values (permission prompts, display name), Swift string literals under apps/mobile/ios (LocalPods + app target), the public /privacy /terms /support text in supabase/functions/api/legal.ts (long template literals reported per paragraph so violations get their own line), and docs/APP_STORE_SUBMISSION.md STORE COPY only — backticked and plain `ENTER:` values, fenced blocks after an ENTER prompt (allowing intervening note lines and list indentation), the character-count table and screenshot captions — so policy prose that names the forbidden terms is not mistaken for submission copy. Each rule has positive fixtures plus approved-copy controls (Confidence 82%, SAVE 33%, 'Rating 7 out of 10', Platform.OS === 'android', provider ids, BillingPlatform union, URLs); the walker has fixtures for concatenation, join, entities, invisible Unicode, single-word bindings, template interpolation, .js/.jsx, and dossier extraction variants. The shipping corpus assertions require non-trivial corpus sizes so an extractor regression cannot pass vacuously. Wiring: the test lives in apps/mobile/__tests__ and runs under the canonical mobile gate (`npx jest --silent` / scripts/verify-cloud.sh), so the audit is on the shipping validation path.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7e2b3cc-6216-4dce-ad55-b0410110aba1/h06-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ec830fc1-394d-41d9-9583-e95812917a64/h06-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f9f0d269-ab46-4fd0-a0d8-203211abca52/h06-attack-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12bbd3a2-fad1-40c2-a506-d309a9362671/related-suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7aa6410-10d1-41c0-97b0-02f710c1abee/tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7812346a-ad01-4934-9ce6-02f3b49abcd7/eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/574186cb-8719-4a7f-85e5-96a032144804/prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f291e720-5d14-4e76-994e-fd1e4cbcddde/format-check.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — on the pre-provisioned VM node_modules (before `npm ci`) exits 2 with 11 errors, all 'Cannot find module @sentry/react-native' / implicit any in src/diagnostics/{privacy,sentry}.ts and their tests. Environment staleness (package.json pins @sentry/react-native 8.24.0; node_modules/@sentry was absent), not a source defect: after `cd apps/mobile && npm ci` the same command exits 0 on BASE_SHA and on HEAD."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/h06-01/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/h06ForbiddenClaims.test.ts",
+          "apps/mobile/__tests__/paywallPodium.test.tsx",
+          "apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx",
+          "apps/mobile/src/screens/ManageAccountScreen.tsx",
+          "apps/mobile/src/screens/PaywallScreen.tsx",
+          "docs/APP_STORE_SUBMISSION.md"
+        ],
+        "head_sha": "104120cf6343e8b3f3d5307764df418447855153",
+        "out_of_scope_files": [
+          "apps/mobile/src/screens/ManageAccountScreen.tsx — the Google Play subscription-management branch and deletion notice are the shipping user-facing copy the scan flags; no copy*.ts module exists that owns them, so the minimal fix is in the screen (not under any serial_group_paths prefix).",
+          "apps/mobile/src/screens/PaywallScreen.tsx — 'BEST VALUE' hero badge (superlative) is defined inline in the screen; replaced with 'RECOMMENDED' (not under any serial_group_paths prefix).",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx — 'the most precise read' (superlative) is inline in the screen; replaced with 'a stroke-specific read' (not under any serial_group_paths prefix).",
+          "apps/mobile/__tests__/paywallPodium.test.tsx, apps/mobile/__tests__/wf/PaywallScreen.buttons.test.tsx — two assertions updated to the new badge text 'RECOMMENDED' (same shape/strength as before; one positive, one negative).",
+          "docs/APP_STORE_SUBMISSION.md — the manifest lists 'APP_STORE_SUBMISSION.md' but the dossier lives at docs/APP_STORE_SUBMISSION.md (no root copy exists); one UPLOAD: instruction updated so the review-screenshot guidance names the shipped badge label."
+        ],
+        "package_id": "H06-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/h06ForbiddenClaims.test.ts"
+        ],
+        "residual_risks": [
+          "Scanner is regex/AST heuristic, not a language model: copy assembled at runtime from non-literal sources (server responses, i18n tables loaded from JSON, values computed by functions) is not resolved. The resolver follows one level of `const`/object-literal bindings within a file; cross-module imports of copy constants are scanned at their definition site (the defining file is in the walk) but not re-joined at the render site.",
+          "Descriptive uses of 'fastest'/'strongest' (e.g. 'the fastest wrist moment in this swing', 'analyzes the strongest swing') are deliberately NOT flagged — they describe a measurement inside a clip, not a product claim. If the reviewer reads the policy as banning every superlative form, those four strings (formReviewModel.ts:918, AnalyzeScreen.tsx:421, GuidedCaptureViewController.swift:409, dossier App Review notes lines 868/875) would need rewording; the Swift one is under the native-pod serial group this package does not hold.",
+          "The header comment of apps/mobile/__tests__/paywallPodium.test.tsx still says 'BEST VALUE' (describes the old badge); left unchanged per the hard rule 'do not modify existing code comments'.",
+          "The manifest write path 'APP_STORE_SUBMISSION.md' does not exist at the repo root; the authoritative dossier is docs/APP_STORE_SUBMISSION.md and was edited there (listed in out_of_scope_files).",
+          "apps/mobile/__tests__/wf/SignInScreen.buttons.test.tsx asserts the UI surfaces a mocked Google Sign-In SDK error 'Google Play services are out of date.' — that text originates from the SDK at runtime, not from app copy, so it is outside the scanner's corpus by design.",
+          "Android platform code paths remain in the app (Platform.OS === 'android' checks, BillingPlatform 'android', Android RevenueCat key) as implementation-only; the scan intentionally does not flag them. Removing Android scope is outside this package."
+        ],
+        "summary": "Defect on BASE_SHA: no forbidden-claims scan existed, and the shipping app carried five user-facing violations of docs/APP_STORE_SUBMISSION.md §policy — apps/mobile/src/screens/ManageAccountScreen.tsx:77-78 ('Google Play' / 'Manage subscription in Google Play' in the Android SUBSCRIPTION_MANAGEMENT branch of an iPhone-only app) and :992 (deletion notice '...App Store or Google Play subscription'), apps/mobile/src/screens/PaywallScreen.tsx:572 (hero badge 'BEST VALUE'), apps/mobile/src/screens/AnalyzeScreen.tsx:599 ('...for the most precise read.' — assembled from `+`-concatenated literals, the exact pattern the r1 scanner missed). The r1 scanner had two P1 false-negative classes (concatenation/array-join not joined; single-word terms outside copy-named bindings dropped). Regression test committed first (cdde869c): apps/mobile/__tests__/h06ForbiddenClaims.test.ts, 59 tests — it fails on BASE_SHA naming exactly those five strings and passes on HEAD. Fix commit (104120cf): App Store-only subscription management + deletion notice, 'BEST VALUE' -> 'RECOMMENDED' (two paywall test assertions and the dossier's UPLOAD: screenshot instruction follow), 'the most precise read' -> 'a stroke-specific read'. All three manifest acceptance commands pass, plus the prior-round adversary suite (34/34), pnpm format:check and git diff --check. Branch devin/pp/h06-01/impl-r2 pushed; no PR opened."
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "REQUEUE",
+  "wave_id": "wave-2"
+}

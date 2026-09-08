@@ -1,0 +1,159 @@
+{
+  "agent_counts": {
+    "completed": 1,
+    "failed": 0,
+    "launched": 1,
+    "requested": 1
+  },
+  "agents": [
+    {
+      "label": "implement-W02-03-r3",
+      "phase": "implement",
+      "prompt_sha256": "c04d29aebf9d716d5c1ba62ef1ec592d0d7d71e86f3da4b616cb7b16414ea5e4",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W02-03",
+  "requeued_from": {
+    "branch": "devin/pp/w02-03/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w02-03/attack-5a4bb26e",
+      "adversary_breaks": [
+        {
+          "expected": "A finalize whose acknowledgement cannot be parsed as the server's permit verdict is ambiguous: the attempt must stay `release_pending` (HOLD/recover on the same permit id) until a parseable verdict arrives, so the server-side reservation is actually released and the free-rating slot is not left reserved. Product invariant: ambiguous commitment => HOLD/recover, never fabricated completion.",
+          "observed": "Kill at commit_shot_inserted_mid_transaction leaves a RESERVED attempt. On relaunch the recovery POSTs /finalize; the fault proxy answers 200 text/html, 204 with no body, or 302 -> 200 HTML and NEVER forwards to the rating service. Local analysis_execution_attempts row ends state='released' (terminalReason null); server permit for the same id is still status='reserved'; a third clean launch does nothing (fixed point). src/data/api.ts request() returns null for any 2xx body that is not JSON (response.json().catch(() => null)) and release() never inspects the response, so runJournal.recoverOne treats the resolved promise as a settled permit. VERIFIED. Pre-existing on BASE_SHA: `git diff --stat 42291369..5a4bb26e -- apps/mobile/src` is empty; the candidate harness makes it reachable/observable but did not introduce it.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"finalize answered with a 200 text/html|finalize answered with a 204|302 to a captive-portal\"  (Node 22.23.2; 3 failed / 0 passed of the 3 selected)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A3 network faults on the relaunch' -> unverifiableAcks + redirects[portal_html])",
+          "title": "Unverified 2xx finalize answer (200 text/html, 204 empty, or 302 -> captive-portal page) is recorded as `released` while the server permit stays `reserved`"
+        },
+        {
+          "expected": "Transport artifacts (redirect off the API route, a 404 from a route that is not the sync endpoint) must not consume the retry budget; the committed result must eventually drain exactly once when the network is honest. No durable result may be stranded.",
+          "observed": "Kill at result_committed_before_sync_request (one scored shot + one outbox row committed). Relaunch with POST /v1/shots:sync answered 302/307 -> GET -> 404: outbox.attempts goes 0 -> 2 in ONE launch (both triggerOutboxSync passes count it as permanent). After OUTBOX_MAX_ATTEMPTS(8) redirected launches (4 are enough) a clean relaunch leaves outbox=[{attempts:8,...}], receipts=[], server shots=[] and the server permit stays status='reserved' -- the user holds a validated score that the server never receives and the permit is never finalized `scored`. VERIFIED; pre-existing on BASE_SHA (sync.ts isPermanentSyncFailure treats every 4xx except 401/408/429 as permanent).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w02ProcessDeathAttack.test.ts -t \"relaunch sync answered 30. to a route the API does not have|every relaunch sync redirected\"  (Node 22.23.2; 3 failed / 0 passed of the 3 selected)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w02ProcessDeathAttack.test.ts (describe 'A3 network faults on the relaunch' -> syncFaults[redirect not_found] and 'every relaunch sync redirected')",
+          "title": "shot.sync redirected to a 404 burns the bounded outbox budget (2 attempts per launch); after OUTBOX_MAX_ATTEMPTS the durable scored result is stranded and never delivered even when the network is honest again"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "5a4bb26e3ea9d31ea4f20b99d9667975a60e6c10"
+  },
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [],
+        "reasons": [
+          "blocked: AC1 cannot pass inside W02-03's write_paths: the two r2 adversary breaks (unverified 2xx finalize acknowledgement recorded as `released`; redirect->404 transport artifacts consuming the outbox budget) are pre-existing defects in apps/mobile/src/data/api.ts (request() lines ~200-233: follows 3xx silently and returns `null` for any non-JSON 2xx body via `response.json().catch(() => null)`; release() lines ~321-331 never inspects the acknowledgement). apps/mobile/src/data/ is serial group `mobile-data`, which W02-03 does not hold (manifest serial_groups: []), so the SCOPE POLICY forbids editing it on impl-r3. The verified minimal fix (1 commit, 1 file) is pushed as devin/pp/w02-03/impl-r3-mobile-data-fix @ 46ad4433a65e4402ad887c44f38b7ac813ea33a0 (impl-r3 + that commit) for the coordinator to either grant W02-03 the mobile-data group (then cherry-pick 46ad4433 onto impl-r3) or hand to the package holding mobile-data. Asked the coordinator for a decision; no answer received in this session."
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/24a7493c-7849-45e8-a9fd-07ddcc737a87/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts",
+            "executed": 28,
+            "exit_code": 1,
+            "failed": 9,
+            "id": "W02-03-AC1",
+            "note": "VERIFIED on impl-r3 head 1e9eedb9 (Node 24.19.0). 12 unique kill points + control + hermeticity = 19 PASS. The 9 FAIL are the regression tests for the two r2 adversary breaks (6x finalize non-verdict/redirect ack -> attempt recorded 'terminal/release_rejected' instead of 'release_pending'; 3x shot-sync redirect->404 -> outbox.attempts 2 per launch / budget exhaustion). Their root cause is apps/mobile/src/data/api.ts request()/release() which is under serial group 'mobile-data' that W02-03 does not hold, so the fix is NOT on impl-r3 (SCOPE POLICY). REGRESSION PROOF: BASE_SHA 55d80326 run of the same command -> exit 1, 'No tests found' (suite absent; https://la-hacks-rttothemoon.devinenterprise.com/attachments/965b36c2-b7db-47ec-bc03-8ec7df334936/ac1-base.log); tests-only commit dc3055f1 -> exit 1, 28 executed / 18 passed / 10 failed / 0 skipped (the 9 above + the ambient-PD_KILL hermeticity test; https://la-hacks-rttothemoon.devinenterprise.com/attachments/b421fd07-fc50-4b90-a225-f460e46b8d26/ac1-tests-only-commit.log). With the mobile-data fix applied (side branch devin/pp/w02-03/impl-r3-mobile-data-fix @ 46ad4433a65e4402ad887c44f38b7ac813ea33a0 = impl-r3 + 1 commit touching only apps/mobile/src/data/api.ts) the same command -> exit 0, 28 executed / 28 passed / 0 failed / 0 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab80ff56-8c56-4021-9c02-116f13bbc470/fixbranch-process-death.log); full mobile jest on that branch -> exit 0, 309 suites, 5918 tests: 5917 passed / 1 skipped (pre-existing skip) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5982554-d4a6-42d2-a337-33e524f44a13/fixbranch-full-jest.log).",
+            "passed": 19,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d83f5410-b6ec-4a81-b053-3d798103a81a/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC2",
+            "note": "VERIFIED on impl-r3 head 1e9eedb9. Also exit 0 on the side branch 46ad4433 (api.ts fix).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d0fbff96-0743-4964-9e12-d6da047ec013/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__harness__/processDeath/child.ts apps/mobile/__harness__/processDeath/durableSqlite.ts apps/mobile/__harness__/processDeath/faultProxy.ts apps/mobile/__harness__/processDeath/harness.ts apps/mobile/__harness__/processDeath/killPoints.ts apps/mobile/__harness__/processDeath/killSwitch.ts apps/mobile/__harness__/processDeath/ratingService.ts apps/mobile/__harness__/processDeath/reactNativeStub.ts apps/mobile/__harness__/processDeath/register.js apps/mobile/__harness__/processDeath/report.ts apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts && npx prettier --check <same 11 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-03-AC3",
+            "note": "VERIFIED at repo root on impl-r3 head. Root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/e6367789-3431-467d-8e98-cfd505365df9/format-check.log); `git diff --check 55d80326..HEAD` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/794a385e-c29f-4376-8195-4a62b381853e/git-diff-check.log). eslint+prettier also exit 0 for apps/mobile/src/data/api.ts on the side branch.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA on devin/pp/w02-03/impl-r3. Ported the sound r2 harness (child Node process + node:sqlite, 12 deterministic kill points via a kill switch armed by PD_KILL/PD_KILL_ID, loopback rating service with idempotent reserve/finalize/shots:sync). Added a fault-injecting loopback proxy (faultProxy.ts: 200 text/html, 204 empty, 301/302/307/308 -> captive-portal HTML or JSON 404 route, stall) and `runLaunches()` multi-launch orchestration so the suite can drive kill -> faulted relaunch -> honest relaunch sequences. Regression tests committed FIRST (dc3055f1; 10 failed on that commit: 9 shipping-path + 1 hermeticity). In-scope fix committed separately (1e9eedb9): harness.ts spawns children with every inherited PD_* variable stripped, so ambient PD_KILL never arms a launch. The shipping-path fix (out of scope for W02-03, on the side branch 46ad4433) changes only api.ts: (1) request() throws ApiError(502,'network.redirected') when `response.redirected` or `response.url` differs from the requested URL, so every call site (release, syncShots, ...) classifies redirected answers as transient — this alone makes the shot-sync redirect->404 cases retryable with attempts 0, no sync.ts change needed; (2) release() requires the 2xx acknowledgement to be a JSON object and, when it names a permit, that it is this permit, not `reserved`, and not settled as another outcome; otherwise ApiError(502,'access.permit_release_unconfirmed') so runJournal keeps the attempt `release_pending` under the same permit id. Rule kept tolerant of bodies without a `permit` key ({}, {ok:true}) because 13 existing test fakes (704 tests) answer finalize that way and tests may not be modified.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/24a7493c-7849-45e8-a9fd-07ddcc737a87/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/965b36c2-b7db-47ec-bc03-8ec7df334936/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b421fd07-fc50-4b90-a225-f460e46b8d26/ac1-tests-only-commit.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d83f5410-b6ec-4a81-b053-3d798103a81a/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d0fbff96-0743-4964-9e12-d6da047ec013/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e6367789-3431-467d-8e98-cfd505365df9/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/794a385e-c29f-4376-8195-4a62b381853e/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab80ff56-8c56-4021-9c02-116f13bbc470/fixbranch-process-death.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5982554-d4a6-42d2-a337-33e524f44a13/fixbranch-full-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd3a1a44-1be9-452a-9a7c-206650369380/fixbranch-affected-jest.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx jest --ci --silent __tests__/w02ProcessDeathRecovery.test.ts on BASE_SHA 55d80326 -> exit 1 'No tests found' (suite does not exist on base; not a failure of an existing test)"
+        ],
+        "blocked": true,
+        "blocked_reason": "AC1 cannot pass inside W02-03's write_paths: the two r2 adversary breaks (unverified 2xx finalize acknowledgement recorded as `released`; redirect->404 transport artifacts consuming the outbox budget) are pre-existing defects in apps/mobile/src/data/api.ts (request() lines ~200-233: follows 3xx silently and returns `null` for any non-JSON 2xx body via `response.json().catch(() => null)`; release() lines ~321-331 never inspects the acknowledgement). apps/mobile/src/data/ is serial group `mobile-data`, which W02-03 does not hold (manifest serial_groups: []), so the SCOPE POLICY forbids editing it on impl-r3. The verified minimal fix (1 commit, 1 file) is pushed as devin/pp/w02-03/impl-r3-mobile-data-fix @ 46ad4433a65e4402ad887c44f38b7ac813ea33a0 (impl-r3 + that commit) for the coordinator to either grant W02-03 the mobile-data group (then cherry-pick 46ad4433 onto impl-r3) or hand to the package holding mobile-data. Asked the coordinator for a decision; no answer received in this session.",
+        "branch": "devin/pp/w02-03/impl-r3",
+        "files_changed": [
+          "apps/mobile/__harness__/processDeath/child.ts",
+          "apps/mobile/__harness__/processDeath/durableSqlite.ts",
+          "apps/mobile/__harness__/processDeath/faultProxy.ts",
+          "apps/mobile/__harness__/processDeath/harness.ts",
+          "apps/mobile/__harness__/processDeath/killPoints.ts",
+          "apps/mobile/__harness__/processDeath/killSwitch.ts",
+          "apps/mobile/__harness__/processDeath/ratingService.ts",
+          "apps/mobile/__harness__/processDeath/reactNativeStub.ts",
+          "apps/mobile/__harness__/processDeath/register.js",
+          "apps/mobile/__harness__/processDeath/report.ts",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts"
+        ],
+        "head_sha": "1e9eedb98134d4b0d2c61895ced7f5004b8c9b43",
+        "out_of_scope_files": [],
+        "package_id": "W02-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: exercises at least eight deterministic kill points",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: control + 12x 'kill at <point> -> relaunch recovers to exactly one durable outcome'",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: is hermetic: ambient PD_KILL / PD_KILL_ID in the parent environment never arm a launch",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: finalize answered with {200 text/html | 204 no body | 302/307 captive portal | 302/307 -> 404} -> attempt stays release_pending on the same permit; next honest launch releases it once (6 cases)",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: relaunch sync answered with {200 text/html | 204 | 302/307 portal | 302/307 -> 404} -> outbox attempts stay 0; next honest launch delivers the shot exactly once (6 cases)",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts :: a committed result outlives OUTBOX_MAX_ATTEMPTS redirected sync passes and drains once when the network is honest"
+        ],
+        "residual_risks": [
+          "Linux/Node harness only (Node 24.19.0, node:sqlite, undici fetch): it does not establish native iOS runtime behaviour. The redirect detection relies on `Response.redirected`/`Response.url`; INFERRED (not verified on device) that React Native's whatwg-fetch populates `url` from XHR `responseURL` after NSURLSession follows a redirect.",
+          "The finalize acknowledgement rule accepts any JSON object without a `permit` key (e.g. `{}`) as a verdict, to stay compatible with 13 existing test fakes that cannot be modified under this package; a hostile intermediary returning JSON `{}` with 200 would still be recorded as released. The production route always answers `{permit, access}`, so a stricter `permit`-required check is possible once those fakes are updated (out of W02-03 scope).",
+          "Kill points are deterministic instrumentation points inside the harness child (SQLite statement hooks + fetch hooks), not OS-level random SIGKILL timing; 12 points cover every journal/result/outbox step but not arbitrary instruction boundaries.",
+          "Evidence logs live under .devin/program/evidence/W02-03/r3/ which is git-ignored (*.log); they are preserved as uploaded attachments only."
+        ],
+        "summary": "DEFECTS ON BASE_SHA (VERIFIED via the new fault-proxy regressions; INFERRED root cause from code): (1) apps/mobile/src/data/api.ts request() (fetchAndRead, ~L200-233) returns `null` for any 2xx body that is not JSON (`response.json().catch(() => null)`) and never notices a followed redirect; release() (~L321-331) awaits request() and returns void without inspecting the acknowledgement, so runJournal.recoverOne() marks a `release_pending` attempt `released` (or, for a redirected 404, `terminal/release_rejected`) while the server permit stays `reserved`. (2) Because a redirect to a non-API route surfaces as a plain ApiError(404), sync.ts isPermanentSyncFailure() counts it as permanent: outbox.attempts +2 per launch (two triggerOutboxSync passes), and after OUTBOX_MAX_ATTEMPTS the committed scored shot is stranded. (3) r2 harness.ts spawned children with `{...process.env, ...env}`, so an ambient PD_KILL armed control/relaunch children. WORK ON impl-r3 (head 1e9eedb9, 2 commits, strictly inside write_paths): tests-first commit dc3055f1 (28-test suite: 12 kill points + control + hermeticity + 13 transport-artifact regressions; 10 fail on that commit) then fix commit 1e9eedb9 (hermetic child environment). Defect (3) is resolved on impl-r3. Defects (1)/(2) are NOT fixable inside write_paths — the only correct fix point is apps/mobile/src/data/api.ts under the unheld `mobile-data` serial group — so AC1 is FAIL on impl-r3 (19/28) and blocked=true. The verified fix is pushed separately as devin/pp/w02-03/impl-r3-mobile-data-fix @ 46ad4433 (impl-r3 + one api.ts commit: redirected answers -> ApiError 502 'network.redirected'; finalize 2xx must be a JSON object naming this permit as not-reserved -> otherwise ApiError 502 'access.permit_release_unconfirmed'); on that branch AC1 is 28/28, AC2/AC3 exit 0, and the full mobile suite is 5917 passed / 1 pre-existing skip. sync.ts and runJournal.ts unchanged. No PR opened, no Mac/native/prod actions."
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "BLOCKED_EXTERNAL",
+  "wave_id": "wave-2"
+}
