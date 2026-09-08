@@ -54,7 +54,21 @@ export function setActiveDataOwner(owner: string): void {
     ownerKey: activeOwner,
     generation: ownerGeneration,
   });
-  ownerListeners.forEach(listener => listener());
+  notifyOwnerListeners();
+}
+
+/** Every fence observes the switch; the first subscriber failure surfaces
+ * only after the last subscriber has run. */
+function notifyOwnerListeners(): void {
+  let failure: { readonly error: unknown } | null = null;
+  for (const listener of ownerListeners) {
+    try {
+      listener();
+    } catch (error) {
+      if (!failure) failure = { error };
+    }
+  }
+  if (failure) throw failure.error;
 }
 
 export function getDataOwnerSnapshot(): DataOwnerContext {
