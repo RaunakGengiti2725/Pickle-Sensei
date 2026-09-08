@@ -16,8 +16,8 @@
 		8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */; };
 		977255527D3C40FF8D2FA736 /* Manrope_400Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */; };
 		9E6182F5C0175ABA960681B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
-		A4F2868DBE2143F58D578CE1 = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF1; };
-		A4F2868DBE2143F58D578CE2 = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF2; };
+		A4F2868DBE2143F58D578CE1 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF1 /* ThirdPartyNotices.txt */; };
+		A4F2868DBE2143F58D578CE2 /* SentryPrivacy.bundle in Resources */ = {isa = PBXBuildFile; fileRef = A4F2868DBE2143F58D578CF2 /* SentryPrivacy.bundle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,8 +33,8 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = PickleSensei/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		958665834C0B4766A4597419 /* Manrope_500Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_500Medium.ttf; path = ../assets/fonts/Manrope_500Medium.ttf; sourceTree = "<group>"; };
 		A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_400Regular.ttf; path = ../assets/fonts/Manrope_400Regular.ttf; sourceTree = "<group>"; };
-		A4F2868DBE2143F58D578CF1 = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = ThirdPartyNotices.txt; path = ../assets/legal/ThirdPartyNotices.txt; sourceTree = "<group>"; };
-		A4F2868DBE2143F58D578CF2 = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; name = SentryPrivacy.bundle; path = ../assets/legal/SentryPrivacy.bundle; sourceTree = "<group>"; };
+		A4F2868DBE2143F58D578CF1 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = ThirdPartyNotices.txt; path = ../assets/legal/ThirdPartyNotices.txt; sourceTree = "<group>"; };
+		A4F2868DBE2143F58D578CF2 /* SentryPrivacy.bundle */ = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; name = SentryPrivacy.bundle; path = ../assets/legal/SentryPrivacy.bundle; sourceTree = "<group>"; };
 		B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_700Bold.ttf; path = ../assets/fonts/Manrope_700Bold.ttf; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -79,8 +79,8 @@
 				7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */,
 				958665834C0B4766A4597419 /* Manrope_500Medium.ttf */,
 				B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */,
-				A4F2868DBE2143F58D578CF1,
-				A4F2868DBE2143F58D578CF2,
+				A4F2868DBE2143F58D578CF1 /* ThirdPartyNotices.txt */,
+				A4F2868DBE2143F58D578CF2 /* SentryPrivacy.bundle */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -176,8 +176,6 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
-			packageReferences = (
-			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -199,8 +197,8 @@
 				8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */,
 				133042A2D91A434388156271 /* Manrope_500Medium.ttf in Resources */,
 				3F0F20C41A4640CE9691634F /* Manrope_700Bold.ttf in Resources */,
-				A4F2868DBE2143F58D578CE1,
-				A4F2868DBE2143F58D578CE2,
+				A4F2868DBE2143F58D578CE1 /* ThirdPartyNotices.txt in Resources */,
+				A4F2868DBE2143F58D578CE2 /* SentryPrivacy.bundle in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -550,12 +548,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }
