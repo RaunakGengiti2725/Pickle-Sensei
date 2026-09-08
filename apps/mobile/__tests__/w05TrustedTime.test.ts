@@ -157,7 +157,7 @@ describe('W05-02 trusted time — anchored on an authenticated server response',
     expect(evaluateLease(lease, reading)).toEqual({ kind: 'expired' });
   });
 
-  it('a later server time that runs behind the trusted clock never rewinds it', async () => {
+  it('an authenticated server time is the authority over local extrapolation', async () => {
     const clocks: Clocks = { monotonicMs: 0, wallMs: SERVER_MS };
     const time = harness(clocks);
     await time.observeServerTime({
@@ -166,19 +166,29 @@ describe('W05-02 trusted time — anchored on an authenticated server response',
     });
     clocks.monotonicMs += 2 * HOUR;
     clocks.wallMs += 2 * HOUR;
+    expect((await time.read()).nowMs).toBe(SERVER_MS + 2 * HOUR);
 
-    const stale = await time.observeServerTime({
-      dateHeader: serverHeader(SERVER_MS - HOUR),
+    // Leases are issued in server time; when the server says less has passed
+    // than the device extrapolated, the device re-anchors to the server.
+    const behind = await time.observeServerTime({
+      dateHeader: serverHeader(SERVER_MS + HOUR),
       authenticated: true,
     });
-    expect(stale.accepted).toBe(true);
+    expect(behind).toEqual({ accepted: true, serverEpochMs: SERVER_MS + HOUR });
     const reading = await time.read();
-    expect(reading.nowMs).toBe(SERVER_MS + 2 * HOUR);
-    expect(storedRecord().serverEpochMs).toBe(SERVER_MS + 2 * HOUR);
+    expect(reading.authority).toBe('anchored');
+    expect(reading.nowMs).toBe(SERVER_MS + HOUR);
+    expect(reading.rollbackDetected).toBe(false);
+    expect(storedRecord().serverEpochMs).toBe(SERVER_MS + HOUR);
+    expect(storedRecord().highWaterMs).toBe(SERVER_MS + HOUR);
 
+    // The device wall clock, by contrast, is never an authority: winding it
+    // back after the re-anchor changes nothing but the rollback flag.
     clocks.monotonicMs += HOUR;
+    clocks.wallMs = SERVER_MS - DAY;
     const later = await time.read();
-    expect(later.nowMs).toBe(SERVER_MS + 3 * HOUR);
+    expect(later.nowMs).toBe(SERVER_MS + 2 * HOUR);
+    expect(later.rollbackDetected).toBe(true);
   });
 
   it('checkpoints the high-water mark while the process lives', async () => {
@@ -512,6 +522,7 @@ describe('W05-02 trusted time — storage and input faults', () => {
       authenticated: true,
     });
     clocks.monotonicMs += DAY;
+    clocks.wallMs += DAY;
     const reading = await time.read();
     expect(
       evaluateLease(
@@ -526,6 +537,7 @@ describe('W05-02 trusted time — storage and input faults', () => {
       ),
     ).toEqual({ kind: 'active', remainingMs: DAY });
     clocks.monotonicMs += LEASE_MAX_MS;
+    clocks.wallMs += LEASE_MAX_MS;
     expect(
       evaluateLease(
         { issuedAtMs: SERVER_MS, expiresAtMs: SERVER_MS + 30 * DAY },
