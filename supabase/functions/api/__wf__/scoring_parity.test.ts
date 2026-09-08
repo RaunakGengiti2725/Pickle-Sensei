@@ -334,6 +334,9 @@ interface EdgeScoringModule {
   SCORING_DEFINITION: typeof SCORING_DEFINITION;
   SCORING_DEFINITION_VERSION: string;
   PLAYER_RANK_TIERS: typeof SCORING_DEFINITION.components.tiers.thresholds;
+  RANK_CONFIDENCE_CAP: number;
+  RANK_HUNDREDTHS_PER_POINT: number;
+  RANK_RATING_DECIMALS: number;
   playerRankTierForRating(rating: number): string;
   compareTechniqueOrder(
     a: { shot_type: string; score: number },
@@ -355,6 +358,14 @@ Deno.test(
     assert(edge.SCORING_DEFINITION === SCORING_DEFINITION, "same module instance");
     assertEquals(edge.SCORING_DEFINITION_VERSION, SCORING_DEFINITION_VERSION);
     assert(edge.PLAYER_RANK_TIERS === DEFINITION.tiers.thresholds, "tier ladder by reference");
+    assertEquals(edge.RANK_CONFIDENCE_CAP, DEFINITION.confidenceWeight.cap);
+    assertEquals(edge.RANK_HUNDREDTHS_PER_POINT, DEFINITION.scoreQuantization.perPoint);
+    assertEquals(edge.RANK_RATING_DECIMALS, DEFINITION.rating.rounding.decimals);
+    // The port rounds the hundredths mean to a whole number; that IS the
+    // definition's `rating.rounding` only while one point holds 10^decimals
+    // hundredths. A definition change that breaks this must fail here.
+    assertEquals(10 ** edge.RANK_RATING_DECIMALS, edge.RANK_HUNDREDTHS_PER_POINT);
+    assertEquals(DEFINITION.rating.rounding.mode, "half-away-from-zero");
     for (const tier of DEFINITION.tiers.thresholds) {
       assertEquals(edge.playerRankTierForRating(tier.minRating), tier.key, tier.key);
       assertEquals(

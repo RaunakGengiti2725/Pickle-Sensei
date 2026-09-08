@@ -2697,7 +2697,13 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
     daysQ.rows.map((row) => String(row.day)),
     new Date().toISOString().slice(0, 10),
   );
-  const payload = { series, improving: [], needsAttention: [], streak };
+  const payload = {
+    definitionVersion: SCORING_DEFINITION_VERSION,
+    series,
+    improving: [],
+    needsAttention: [],
+    streak,
+  };
   await cacheSetFenced(fence, JSON.stringify(payload), 60);
   return json(200, payload);
 }
@@ -2711,21 +2717,12 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
  * supabase/migrations/20260829150000_player_rank.sql (thresholds unchanged
  * by the averaging-formula migration 20260830120000_production_launch.sql
  * and the form-weighted migration 20260831130000_form_weighted_rank.sql). */
-const PLAYER_RANK_TIERS = [
-  { key: "bronze", label: "Bronze", minRating: 0 },
-  { key: "silver", label: "Silver", minRating: 3.5 },
-  { key: "gold", label: "Gold", minRating: 5 },
-  { key: "platinum", label: "Platinum", minRating: 6.5 },
-  { key: "diamond", label: "Diamond", minRating: 7.5 },
-] as const;
-
-function playerRankTierForRating(rating: number): string {
-  let current: string = PLAYER_RANK_TIERS[0].key;
-  for (const tier of PLAYER_RANK_TIERS) {
-    if (rating >= tier.minRating) current = tier.key;
-  }
-  return current;
-}
+import {
+  compareTechniqueOrder,
+  playerRankTierForRating,
+  ratingFromTechniques,
+  SCORING_DEFINITION_VERSION,
+} from "./scoringDefinition.ts";
 
 /** GET /v1/rank — mirrors apps/mobile/src/progress/playerRank.ts
  * parsePlayerRank exactly. The saved row (player_rank_state, maintained by
@@ -2792,7 +2789,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
       confidence_weight: Number(row.confidence_weight),
     }))
     .filter((row) => Number.isFinite(row.score))
-    .sort((a, b) => b.score - a.score || (a.shot_type < b.shot_type ? -1 : 1));
+    .sort(compareTechniqueOrder);
   if (techniqueRows.length === 0) {
     // No scored evidence → honestly unranked, never a fabricated Bronze.
     const empty = { rank: null };
@@ -2829,19 +2826,13 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
     // somehow lacks confidence_weight (older view still deployed), fall back
     // to min(sampled_count, 5) — the two are equal by construction (window
     // 8 ≥ cap 5) — and finally to 1 (a technique row proves ≥1 analysis).
-    let confidenceSum = 0;
-    let weightedHundredths = 0;
-    for (const t of techniqueRows) {
-      const confidenceWeight =
-        Number.isFinite(t.confidence_weight) && t.confidence_weight >= 1
-          ? t.confidence_weight
-          : Number.isFinite(t.sampled_count) && t.sampled_count >= 1
-            ? Math.min(t.sampled_count, 5)
-            : 1;
-      confidenceSum += confidenceWeight;
-      weightedHundredths += confidenceWeight * Math.round(t.score * 100);
+    const inlineRating = ratingFromTechniques(techniqueRows);
+    if (inlineRating === null) {
+      const empty = { rank: null };
+      await cacheSetFenced(fence, JSON.stringify(empty), 60);
+      return json(200, empty);
     }
-    rating = Math.round(weightedHundredths / confidenceSum) / 100;
+    rating = inlineRating;
     tier = playerRankTierForRating(rating);
     scoredShotCount = null;
     updatedAt = null;
@@ -2854,6 +2845,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   );
   const payload = {
     rank: {
+      definitionVersion: SCORING_DEFINITION_VERSION,
       rating,
       tier,
       techniqueCount: techniques.length,
