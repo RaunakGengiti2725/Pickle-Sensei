@@ -42,50 +42,52 @@ jest.mock('react-native-linear-gradient', () => {
   return { __esModule: true, default: Gradient };
 });
 
-/** react-test-renderer host refs resolve to node mocks; `findNodeHandle`
- * maps a node mock to its tag so focus restoration is observable. */
-interface NodeMock {
+/** The RN Jest preset renders `View` as a class component, so a ref names
+ * that component instance rather than a native node. `findNodeHandle` here
+ * follows the instance's fibre to the host element it rendered and hands
+ * out one stable tag per host element, recorded with its accessibility
+ * label so focus restoration is observable. */
+interface Fiber {
   tag: number;
-  label: string | undefined;
-  measureInWindow: () => void;
-  measure: () => void;
-  setNativeProps: () => void;
+  child: Fiber | null;
+  stateNode: unknown;
+  memoizedProps: unknown;
 }
+const HOST_COMPONENT_FIBER = 5;
 const nodeTags = new Map<number, string | undefined>();
+const hostTags = new WeakMap<object, number>();
 let nextTag = 0;
-function mockIsNodeHandle(value: unknown): value is NodeMock {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'tag' in value &&
-    typeof (value as { tag: unknown }).tag === 'number'
-  );
-}
-function createNodeMock(element: React.ReactElement): NodeMock {
-  const tag = ++nextTag;
-  const label = (element.props as { accessibilityLabel?: string })
-    .accessibilityLabel;
-  nodeTags.set(tag, label);
-  return {
-    tag,
-    label,
-    measureInWindow: () => {},
-    measure: () => {},
-    setNativeProps: () => {},
-  };
+function mockHostTag(instance: unknown): number | null {
+  if (typeof instance !== 'object' || instance === null) return null;
+  let fiber = (instance as { _reactInternals?: Fiber })._reactInternals ?? null;
+  while (fiber && fiber.tag !== HOST_COMPONENT_FIBER) fiber = fiber.child;
+  if (
+    !fiber ||
+    typeof fiber.stateNode !== 'object' ||
+    fiber.stateNode === null
+  ) {
+    return null;
+  }
+  let tag = hostTags.get(fiber.stateNode);
+  if (tag === undefined) {
+    tag = ++nextTag;
+    hostTags.set(fiber.stateNode, tag);
+    nodeTags.set(
+      tag,
+      (fiber.memoizedProps as { accessibilityLabel?: string })
+        .accessibilityLabel,
+    );
+  }
+  return tag;
 }
 jest.mock('react-native/Libraries/ReactNative/RendererProxy', () => {
-  const actual = jest.requireActual<
-    typeof import('react-native/Libraries/ReactNative/RendererProxy')
-  >('react-native/Libraries/ReactNative/RendererProxy');
+  const actual = jest.requireActual<{
+    findNodeHandle: (instance: unknown) => number | null;
+  }>('react-native/Libraries/ReactNative/RendererProxy');
   return {
     ...actual,
     findNodeHandle: (instance: unknown) =>
-      mockIsNodeHandle(instance)
-        ? instance.tag
-        : actual.findNodeHandle(
-            instance as Parameters<typeof actual.findNodeHandle>[0],
-          ),
+      mockHostTag(instance) ?? actual.findNodeHandle(instance),
   };
 });
 
@@ -195,12 +197,9 @@ function Shell(props: { paywall?: boolean; onClosePaywall?: () => void }) {
   );
 }
 
-async function mount(element: React.ReactElement, withNodeMocks = false) {
+async function mount(element: React.ReactElement) {
   await act(async () => {
-    renderer = TestRenderer.create(
-      element,
-      withNodeMocks ? { createNodeMock } : undefined,
-    );
+    renderer = TestRenderer.create(element);
   });
 }
 
@@ -560,7 +559,7 @@ describe('focus returns to the trigger', () => {
 
   it('Settings → App walkthrough · Replay: dismissing the tour moves VoiceOver focus back to the row', async () => {
     seedSettingsStores();
-    await mount(<SettingsWithCeremonies />, true);
+    await mount(<SettingsWithCeremonies />);
     const row = replayRow();
     expect(row).toBeDefined();
     await act(async () => row.props.onClick());
@@ -577,7 +576,7 @@ describe('focus returns to the trigger', () => {
   });
 
   it('a ceremony without a trigger leaves VoiceOver focus alone on dismissal', async () => {
-    await mount(<Shell />, true);
+    await mount(<Shell />);
     await raiseRank();
     await press('rank-up-continue');
     expect(overlays()).toHaveLength(0);
