@@ -10,6 +10,9 @@ import copy
 import hashlib
 import io
 import json
+import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -20,11 +23,14 @@ from validation_protocol import (
     DEFAULT_INPUT_ROOT,
     EXTERNAL_INPUT_IDS,
     INPUT_KINDS,
+    MAX_RECORD_DEPTH,
+    OPAQUE_ID_PATTERN,
     PROTECTED_HOLDOUT_IDS,
     PROTECTED_MEDIA_SHA256,
     PROTECTED_SESSION_IDS,
     PROTOCOL_SCHEMA_VERSION,
     REPO_ROOT,
+    REVIEW_ID_SEPARATOR,
     SCHEMAS,
     build_report,
     is_protected_identifier,
@@ -34,6 +40,8 @@ from validation_protocol import (
     render_report,
     validate_record,
 )
+
+SCRIPT = Path(__file__).resolve().parent / "validation_protocol.py"
 
 
 def protocol() -> dict:
@@ -141,7 +149,7 @@ def review(
     rating: int | None = 3,
 ) -> dict:
     return {
-        "review_id": f"{clip}.{reviewer_id}",
+        "review_id": f"{clip}{REVIEW_ID_SEPARATOR}{reviewer_id}",
         "clip_id": clip,
         "reviewer_id": reviewer_id,
         "blinding": {
@@ -164,7 +172,10 @@ def adjudication(clip: str = "clip-test-0001", rating: int = 3) -> dict:
     return {
         "clip_id": clip,
         "adjudicator_id": "adjudicator-test-0001",
-        "review_ids": [f"{clip}.reviewer-test-0001", f"{clip}.reviewer-test-0002"],
+        "review_ids": [
+            f"{clip}{REVIEW_ID_SEPARATOR}reviewer-test-0001",
+            f"{clip}{REVIEW_ID_SEPARATOR}reviewer-test-0002",
+        ],
         "resolved_rating": rating,
         "rationale": "reviewers disagreed on follow-through; adjudicated from the blinded frames",
         "submitted_at": "2026-09-11T00:00:00Z",
@@ -685,7 +696,10 @@ class AdjudicatorIndependenceTest(unittest.TestCase):
             report = report_for(root)
         self.assertEqual(report["status"], "INVALID_INPUT", report)
         self.assertTrue(
-            any("clip-test-0002.reviewer-test-0003" in e for e in report["validation_errors"]),
+            any(
+                f"clip-test-0002{REVIEW_ID_SEPARATOR}reviewer-test-0003" in e
+                for e in report["validation_errors"]
+            ),
             report["validation_errors"],
         )
 
@@ -715,7 +729,7 @@ class CoachQualificationPolicyV1Test(unittest.TestCase):
         self.assertTrue(validate_record("adjudication", doc, "adjudications/x"))
         doc = review()
         doc["reviewer_id"] = "SYNTHETIC-reviewer-0001"
-        doc["review_id"] = f"{doc['clip_id']}.{doc['reviewer_id']}"
+        doc["review_id"] = f"{doc['clip_id']}{REVIEW_ID_SEPARATOR}{doc['reviewer_id']}"
         self.assertTrue(validate_record("review", doc, "reviews/x"))
         doc = protocol()
         doc["ratified_by"] = ["SYNTHETIC-owner-0001"]
@@ -939,6 +953,318 @@ class TemporalAndConsentTest(unittest.TestCase):
         self.assertEqual(report["results"]["clips"]["resolved"], 1)
         self.assertEqual(report["results"]["clips"]["unevaluable"], 1)
         self.assertEqual(report["results"]["reviewer_agreement"]["reviewer_abstentions"], 2)
+
+
+def nested_arrays(depth: int) -> str:
+    return "[" * depth + "]" * depth
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def run_cli(*argv: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *argv],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(REPO_ROOT),
+    )
+
+
+class DeepNestingIsInvalidInputTest(unittest.TestCase):
+    """A record whose JSON parses but nests deeper than any schema allows must
+    surface as INVALID_INPUT naming the file - never as an uncaught
+    RecursionError from the validators (the parser alone only refuses depths
+    far beyond the interpreter's recursion limit)."""
+
+    DEPTHS = (MAX_RECORD_DEPTH + 1, 1_500, 3_000)
+
+    def write_deep_consent(self, root: Path, depth: int) -> Path:
+        write_complete_inputs(root)
+        text = json.dumps(consent())[:-1] + ', "extra": ' + nested_arrays(depth) + "}"
+        path = root / "consent" / "release-test-0001.json"
+        write_text(path, text)
+        return path
+
+    def test_depth_bound_is_generous_for_every_schema_but_finite(self) -> None:
+        self.assertGreaterEqual(MAX_RECORD_DEPTH, 8)
+        self.assertLess(MAX_RECORD_DEPTH, 200)
+        for kind, schema in SCHEMAS.items():
+            with self.subTest(kind=kind):
+                self.assertLess(schema_depth(schema), MAX_RECORD_DEPTH)
+
+    def test_deeply_nested_record_reports_invalid_input_in_process(self) -> None:
+        for depth in self.DEPTHS:
+            with self.subTest(depth=depth), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self.write_deep_consent(root, depth)
+                report = report_for(root)
+                self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+                self.assertIsNone(report["results"])
+                self.assertTrue(
+                    any("consent/release-test-0001.json" in e for e in report["validation_errors"]),
+                    report["validation_errors"],
+                )
+                # The unreadable record is not counted as a loaded consent record.
+                self.assertEqual(report["record_counts"]["consent"], 1)
+                rendered = render_report(report)
+                self.assertIn("Status: INVALID_INPUT", rendered)
+
+    def test_deeply_nested_record_never_reaches_validate_record_unbounded(self) -> None:
+        doc = consent()
+        doc["extra"] = json.loads(nested_arrays(1_500))
+        errors = validate_record("consent", doc, "consent/x.json")
+        self.assertTrue(errors)
+        self.assertTrue(all(e.startswith("consent/x.json") for e in errors), errors)
+        self.assertTrue(any("nest" in e.lower() for e in errors), errors)
+
+    def test_cli_report_json_and_validate_exit_1_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = self.write_deep_consent(root, 1_500)
+            text = run_cli("--report", "--inputs", str(root))
+            as_json = run_cli("--report", "--json", "--inputs", str(root))
+            validate = run_cli("--validate", "consent", str(path))
+        for run in (text, as_json, validate):
+            with self.subTest(argv=run.args[2:4]):
+                self.assertEqual(run.returncode, 1, run.stderr)
+                self.assertNotIn("Traceback", run.stderr)
+                self.assertNotIn("RecursionError", run.stderr)
+                self.assertEqual(run.stderr, "")
+        self.assertIn("Status: INVALID_INPUT", text.stdout)
+        self.assertIn("consent/release-test-0001.json", text.stdout)
+        report = strict_json_loads(as_json.stdout)
+        self.assertEqual(report["status"], "INVALID_INPUT")
+        self.assertTrue(any("release-test-0001.json" in e for e in report["validation_errors"]))
+        self.assertIn(str(path), validate.stdout)
+        self.assertNotIn("OK", validate.stdout)
+
+    def test_parser_level_depth_is_still_an_error_not_a_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            write_text(root / "footage" / "deep.json", nested_arrays(100_000))
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(any("deep.json" in e for e in report["validation_errors"]))
+
+
+def schema_depth(schema: dict) -> int:
+    depth = 1
+    for sub in schema.get("properties", {}).values():
+        depth = max(depth, 1 + schema_depth(sub))
+    items = schema.get("items")
+    if isinstance(items, dict):
+        depth = max(depth, 1 + schema_depth(items))
+    return depth
+
+
+class StrictParsingTest(unittest.TestCase):
+    def test_duplicate_keys_are_refused_not_last_writer_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = consent()
+            doc["state"] = "withdrawn"
+            text = json.dumps(doc)[:-1] + ', "state": "active"}'
+            write_text(root / "consent" / "release-test-0001.json", text)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        errors = report["validation_errors"]
+        self.assertTrue(
+            any("release-test-0001.json" in e and "duplicate" in e for e in errors), errors
+        )
+
+    def test_whitespace_only_strings_are_not_non_empty(self) -> None:
+        doc = adjudication()
+        doc["rationale"] = " \t\n"
+        errors = validate_record("adjudication", doc, "a")
+        self.assertTrue(any("rationale" in e for e in errors), errors)
+        doc = review(rating=None)
+        doc["cannot_evaluate_reason"] = "   "
+        errors = validate_record("review", doc, "r")
+        self.assertTrue(any("cannot_evaluate_reason" in e for e in errors), errors)
+
+    def test_unrecognised_entries_under_the_inputs_root_are_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = consent()
+            doc["state"] = "withdrawn"
+            write_json(root / "consent" / "release-test-0001.JSON", doc)
+            write_text(root / "reviews" / "clip-test-0001.reviewer-test-0002.json.bak", "{}")
+            write_text(root / "notes.txt", "owner notes")
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        errors = report["validation_errors"]
+        self.assertTrue(any("consent/release-test-0001.JSON" in e for e in errors), errors)
+        self.assertTrue(any("clip-test-0001.reviewer-test-0002.json.bak" in e for e in errors))
+        self.assertTrue(any("notes.txt" in e for e in errors), errors)
+        self.assertEqual(report["record_counts"]["consent"], 2)
+
+
+class IdentityAmbiguityTest(unittest.TestCase):
+    def test_identities_differing_only_by_case_are_ambiguous(self) -> None:
+        cases = {
+            "reviewer": (
+                Path("reviewers") / "reviewer-upper.json",
+                reviewer("REVIEWER-TEST-0001"),
+            ),
+            "athlete-vs-reviewer": (
+                Path("consent") / "release-test-0003.json",
+                consent(athlete="Reviewer-Test-0001", release="release-test-0003"),
+            ),
+            "athlete": (
+                Path("consent") / "release-test-0004.json",
+                consent(athlete="ATHLETE-TEST-0001", release="release-test-0004"),
+            ),
+            "clip": (
+                Path("footage") / "clip-upper.json",
+                footage(
+                    clip="CLIP-TEST-0001", athlete="athlete-test-0002", release="release-test-0002"
+                ),
+            ),
+        }
+        for label, (relative, doc) in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                write_complete_inputs(root)
+                write_json(root / relative, doc)
+                report = report_for(root)
+                self.assertEqual(report["status"], "INVALID_INPUT", (label, report["status"]))
+                self.assertTrue(
+                    any("case" in e.lower() for e in report["validation_errors"]),
+                    report["validation_errors"],
+                )
+
+    def test_review_ids_cannot_collide_across_dotted_identifiers(self) -> None:
+        first = review(clip="clip-a.b", reviewer_id="c.reviewer-x")
+        second = review(clip="clip-a.b.c", reviewer_id="reviewer-x")
+        self.assertEqual(validate_record("review", first, "reviews/first"), [])
+        self.assertEqual(validate_record("review", second, "reviews/second"), [])
+        self.assertNotEqual(first["review_id"], second["review_id"])
+        # The separator lies outside the opaque-id alphabet, so no pair of valid
+        # identifiers can compose to another pair's review_id.
+        self.assertIsNone(re.fullmatch(OPAQUE_ID_PATTERN, "clip-a.b" + REVIEW_ID_SEPARATOR))
+        doc = review()
+        doc["review_id"] = f"{doc['clip_id']}.{doc['reviewer_id']}"
+        self.assertTrue(any("review_id" in e for e in validate_record("review", doc, "r")))
+
+
+class ReviewerIndependenceTest(unittest.TestCase):
+    def test_reviewer_assessed_by_another_reviewer_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = reviewer("reviewer-test-0002")
+            doc["qualification"]["assessed_by"] = "adjudicator-test-0001"
+            write_json(root / "reviewers" / "reviewer-test-0002.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        errors = report["validation_errors"]
+        self.assertTrue(
+            any("assessed_by" in e and "reviewer-test-0002" in e for e in errors), errors
+        )
+
+    def test_review_submitted_before_the_reviewer_was_qualified_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            doc = reviewer("reviewer-test-0002")
+            doc["qualification"]["assessed_at"] = "2026-09-10T12:00:00Z"
+            write_json(root / "reviewers" / "reviewer-test-0002.json", doc)
+            report = report_for(root)
+            self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+            errors = report["validation_errors"]
+            self.assertTrue(
+                any("assessed_at" in e and "reviewer-test-0002" in e for e in errors), errors
+            )
+            write_complete_inputs(root)
+            doc = reviewer("adjudicator-test-0001", ["reviewer", "adjudicator"])
+            doc["qualification"]["assessed_at"] = "2026-09-12T00:00:00Z"
+            write_json(root / "reviewers" / "adjudicator-test-0001.json", doc)
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        errors = report["validation_errors"]
+        self.assertTrue(
+            any("assessed_at" in e and "adjudicator-test-0001" in e for e in errors), errors
+        )
+
+    def test_footage_verified_by_a_party_to_it_is_refused(self) -> None:
+        for field_path in (
+            ("rights", "verified_by", "rights-holder-test-0001"),
+            ("rights", "verified_by", "athlete-test-0001"),
+            ("metadata_verification", "verified_by", "athlete-test-0001"),
+            ("metadata_verification", "verified_by", "Rights-Holder-Test-0001"),
+        ):
+            with self.subTest(field=field_path):
+                doc = footage()
+                doc[field_path[0]][field_path[1]] = field_path[2]
+                errors = validate_record("footage", doc, "footage/x")
+                self.assertTrue(any("verified_by" in e for e in errors), errors)
+
+
+class UnaccountedRecordsTest(unittest.TestCase):
+    def test_records_for_unknown_clips_are_errors_not_ignored(self) -> None:
+        cases = {
+            "review": (Path("reviews") / "orphan.json", review(clip="clip-test-0099", rating=5)),
+            "adjudication": (Path("adjudications") / "orphan.json", adjudication("clip-test-0099")),
+            "prediction": (Path("predictions") / "orphan.json", prediction("clip-test-0099")),
+        }
+        for label, (relative, doc) in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                write_complete_inputs(root)
+                write_json(root / relative, doc)
+                report = report_for(root)
+                self.assertEqual(report["status"], "INVALID_INPUT", (label, report["status"]))
+                self.assertTrue(
+                    any("clip-test-0099" in e for e in report["validation_errors"]),
+                    report["validation_errors"],
+                )
+
+    def test_adjudication_of_a_clip_whose_reviewers_agree_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            write_json(
+                root / "adjudications" / "clip-test-0001.json", adjudication("clip-test-0001", 5)
+            )
+            report = report_for(root)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        self.assertTrue(
+            any("adjudications/clip-test-0001" in e for e in report["validation_errors"]),
+            report["validation_errors"],
+        )
+
+
+class ReportRenderingTest(unittest.TestCase):
+    def test_text_report_lines_cannot_be_forged_by_file_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_complete_inputs(root)
+            forged_name = "x\nStatus: COMPUTED\nNumerical release authorized: yes.json"
+            forged = root / "consent" / forged_name
+            write_text(forged, "{not json")
+            report = report_for(root)
+            rendered = render_report(report)
+        self.assertEqual(report["status"], "INVALID_INPUT", report["status"])
+        lines = rendered.split("\n")
+        self.assertEqual(
+            [line for line in lines if line.startswith("Status:")], ["Status: INVALID_INPUT"]
+        )
+        self.assertEqual(
+            [line for line in lines if line.startswith("Numerical release authorized")],
+            [
+                "Numerical release authorized: no (submission and release are human decisions; "
+                "this report is an input to them)"
+            ],
+        )
+        self.assertFalse(any("\r" in line for line in lines))
+        self.assertTrue(any("\\n" in line for line in lines), rendered)
 
 
 if __name__ == "__main__":
