@@ -3,6 +3,7 @@ import {
   Animated,
   BackHandler,
   Easing,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -20,15 +21,33 @@ import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { Icon, type IconName } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import type { BillingPeriod, StorePlan } from '../billing/types';
+import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import {
   selectHasPremium,
+  selectMembershipState,
   selectNeedsFulfilmentRecovery,
   useAccessStore,
 } from '../state/accessStore';
+import { showBrandNotice } from '../design/BrandNotice';
 import {
   freeRatingAllowanceCopy,
+  membershipHeroCopy,
   RATING_CONSUMPTION_RULE,
 } from './paywallCopy';
+
+async function openSubscriptionManagement(): Promise<void> {
+  try {
+    await Linking.openURL(APP_STORE_SUBSCRIPTIONS_URL);
+  } catch {
+    showBrandNotice({
+      title: 'Could not open subscriptions',
+      detail:
+        'Open App Store account settings to manage or cancel your subscription.',
+      tone: 'danger',
+      eyebrow: 'STORE UNAVAILABLE',
+    });
+  }
+}
 
 export interface PaywallScreenProps {
   onClose: () => void;
@@ -255,6 +274,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
   const [widePrices, setWidePrices] = useState(false);
   const accessibleLayout = useWindowDimensions().fontScale > 1.3 || widePrices;
   const useWidePrices = useCallback(() => setWidePrices(true), []);
+  const accessState = useAccessStore();
   const {
     status,
     operation,
@@ -271,13 +291,19 @@ export function PaywallScreen(props: PaywallScreenProps) {
     retryPendingFulfilment,
     reconcileBilling,
     clearError,
-  } = useAccessStore();
+  } = accessState;
   const premium = useAccessStore(selectHasPremium);
   const pendingRecovery = useAccessStore(selectNeedsFulfilmentRecovery);
   const recoveryRequired =
     pendingRecovery ||
     reconciliation.status === 'unavailable' ||
     reconciliation.status === 'checking';
+  const membership = selectMembershipState(accessState);
+  const hero = membershipHeroCopy(membership, recoveryRequired);
+  // A purchase the server has not settled is never re-offered: while it is
+  // pending or on hold the pricing page carries no plan or price at all.
+  const offerWithheld =
+    membership.kind === 'pending' || membership.kind === 'hold';
   const error = accessError ?? reconciliation.error;
   const mounted = useRef(true);
   const pricingRequested = useRef(false);
@@ -441,12 +467,9 @@ export function PaywallScreen(props: PaywallScreenProps) {
             <View style={styles.crownBadge}>
               <Icon name="crown" size={28} color={color.onDarkMuted} />
             </View>
-            <Text style={styles.activeEyebrow}>MEMBERSHIP VERIFIED</Text>
-            <Text style={styles.activeTitle}>Your full court is open.</Text>
-            <Text style={styles.activeSub}>
-              Unlimited rating access is verified on this account. Published
-              reviewed coaching stays tied to it.
-            </Text>
+            <Text style={styles.activeEyebrow}>{membership.eyebrow}</Text>
+            <Text style={styles.activeTitle}>{membership.title}</Text>
+            <Text style={styles.activeSub}>{membership.detail}</Text>
             <PressableScale
               onPress={props.onClose}
               accessibilityLabel="Continue coaching"
@@ -455,6 +478,31 @@ export function PaywallScreen(props: PaywallScreenProps) {
               <Text style={styles.primaryButtonText}>Continue coaching</Text>
               <Icon name="arrow" color={color.onVolt} size={20} />
             </PressableScale>
+            {membership.retryAllowed ? (
+              <PressableScale
+                testID="paywall-retry"
+                onPress={() => void retry()}
+                accessibilityLabel="Retry membership verification"
+                disabled={busy}
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  Retry verification
+                </Text>
+              </PressableScale>
+            ) : null}
+            {membership.manageSubscription ? (
+              <PressableScale
+                testID="paywall-manage-subscription"
+                onPress={() => void openSubscriptionManagement()}
+                accessibilityLabel="Manage subscription in the App Store"
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  Manage subscription
+                </Text>
+              </PressableScale>
+            ) : null}
           </View>
         </View>
       </View>
@@ -528,24 +576,19 @@ export function PaywallScreen(props: PaywallScreenProps) {
             >
               <View style={styles.hero}>
                 <Text style={styles.eyebrow}>
-                  {recoveryRequired
-                    ? 'MEMBERSHIP VERIFICATION'
-                    : 'STORE-VERIFIED PRICING'}
+                  {hero?.eyebrow ?? 'STORE-VERIFIED PRICING'}
                 </Text>
                 <Text style={styles.title}>
-                  {recoveryRequired
-                    ? 'Verify your membership.'
-                    : 'Choose your plan.'}
+                  {hero?.title ?? 'Choose your plan.'}
                 </Text>
                 <Text style={styles.subtitle}>
-                  {recoveryRequired
-                    ? 'Verification is pending, not another purchase. Retry with our server without opening the app store.'
-                    : `${allowanceCopy} Every price below comes from your app store — never an estimate.`}
+                  {hero?.detail ??
+                    `${allowanceCopy} Every price below comes from your app store — never an estimate.`}
                 </Text>
               </View>
 
               <View style={styles.plans}>
-                {plans ? (
+                {plans && !offerWithheld ? (
                   <View
                     testID="paywall-plan-options"
                     style={[
@@ -588,13 +631,13 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   </View>
                 ) : null}
 
-                {selectedPlan ? (
+                {selectedPlan && !offerWithheld ? (
                   <Text style={styles.selectedSummary}>
                     {selectedPlanSummary(selectedPlan)}
                   </Text>
                 ) : null}
 
-                {status === 'loading' && !plans ? (
+                {status === 'loading' && !plans && !offerWithheld ? (
                   <View
                     accessibilityRole="progressbar"
                     accessibilityLabel="Loading App Store pricing"
@@ -610,7 +653,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   </View>
                 ) : null}
 
-                {!plans && status !== 'loading' ? (
+                {!plans && status !== 'loading' && !offerWithheld ? (
                   <View style={styles.unavailableCard}>
                     <Icon name="shield" color={color.onDark} size={22} />
                     <View style={styles.unavailableCopy}>
@@ -701,7 +744,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 </Text>
               </View>
 
-              {selectedPlan ? (
+              {selectedPlan && !offerWithheld ? (
                 <Text style={styles.legalText}>
                   {selectedPlan.period === 'lifetime'
                     ? `${selectedPlan.priceString} one-time purchase. Not a subscription — no renewal.`
@@ -751,19 +794,14 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   <Icon name="crown" size={27} color={color.onDarkMuted} />
                 </View>
                 <Text style={styles.eyebrow}>
-                  {recoveryRequired
-                    ? 'MEMBERSHIP VERIFICATION'
-                    : 'PLAY PAST THE FIRST TWO'}
+                  {hero?.eyebrow ?? 'PLAY PAST THE FIRST TWO'}
                 </Text>
                 <Text style={styles.title}>
-                  {recoveryRequired
-                    ? 'Verify your membership.'
-                    : 'A coach for every stroke.'}
+                  {hero?.title ?? 'A coach for every stroke.'}
                 </Text>
                 <Text style={styles.subtitle}>
-                  {recoveryRequired
-                    ? 'Verification is pending, not another purchase. Retry with our server without opening the app store.'
-                    : `${allowanceCopy} Membership keeps scoring, practice, and progress moving together.`}
+                  {hero?.detail ??
+                    `${allowanceCopy} Membership keeps scoring, practice, and progress moving together.`}
                 </Text>
                 <Text style={styles.ratingRule}>{RATING_CONSUMPTION_RULE}</Text>
               </View>
