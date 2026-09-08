@@ -17,7 +17,7 @@ import hashlib
 import json
 import os
 
-MANIFEST_VERSION = "2026-09-08.3"
+MANIFEST_VERSION = "2026-09-08.4"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 CONTINUATION_BRANCH = "codex/production-continuation-20260907"
 HANDOFF_SHA = "c23d16013b9872cdba7541329c9151d23045090b"
@@ -454,7 +454,7 @@ pkg(
 pkg(
     "W06-04", "W06", "Mobile Home/Library/Progress partition scored vs partial vs abstain using the shared definition",
     "Mobile rank/progress views compute via the shared definition, show the definition version in ResultDetails, and never blend partial outcomes into rank.",
-    severity="P0", source_ids=["W06-SOFTWARE"], plane="cloud", deps=["W06-01", "W01-05"],
+    severity="P0", source_ids=["W06-SOFTWARE"], plane="cloud", deps=["W06-01", "W01-05", "INT-13"],
     write_paths=["apps/mobile/src/progress/", "apps/mobile/src/screens/ProgressScreen.tsx", "apps/mobile/src/screens/HomeScreen.tsx", "apps/mobile/__tests__/w06MobileParity.test.tsx"],
     acceptance=[mobile_jest("__tests__/w06MobileParity.test.tsx __tests__/progress*.test.ts*", "mobile parity suites pass"), MOBILE_TSC, MOBILE_LINT],
 )
@@ -758,6 +758,162 @@ pkg("H09-01", "H09", "Dead/unreachable path resolution: liveCourt, 3D remnants, 
     severity="P1", source_ids=["H09-DEAD-PATHS"], plane="cloud",
     write_paths=["apps/mobile/src/flow/liveCourt.ts", "apps/mobile/src/flow/liveSessionCoach.ts", "apps/mobile/src/flow/liveSessionSummary.ts", "apps/mobile/__tests__/liveCourt.test.ts", "apps/mobile/__tests__/liveSessionCoach.test.ts", "docs/DECISIONS.md"],
     acceptance=[MOBILE_FULL_JEST, MOBILE_TSC, MOBILE_LINT])
+
+# ---------------------------------------------------------------------------
+# INT — confirmed P0/P1 breaks from the integration-adversary fan-out adv-1
+# (.devin/program/ledger/_adversary/adv-1/*.json, attacked head 30a4065036a9).
+# Each package cites the adversary test that reproduces the break; the
+# implementer must make that attack pass WITHOUT weakening it and add the
+# regression to the shipping suites.
+# ---------------------------------------------------------------------------
+ADV1 = ".devin/program/ledger/_adversary/adv-1"
+pkg(
+    "INT-01", "INT", "SQL: free_rating_ledger append-only trigger; partial/low_confidence shot rows terminal; handle_new_user bounds provider metadata",
+    f"Forward migration + matrix: (a) trigger refuses any decrement/reset/DELETE of public.free_rating_ledger for every role (owner included), as security_regression.sql §D2 does for the other ledgers; (b) shots.result_kind can never move partial/low_confidence → scored (BEFORE UPDATE trigger, all roles) so a relabel can never charge a rating; (c) handle_new_user() truncates/nulls provider display_name/avatar_url to the profiles_text_bounds caps so a long Apple/Google name never aborts auth.users creation. Breaks: {ADV1}/backend-sql-rls.json (adv_01/adv_02/adv_03).",
+    severity="P0", source_ids=["INT-ADV1-backend-sql-rls"], plane="cloud",
+    write_paths=["supabase/migrations/20260908170000_ledger_monotonic_terminal_shots.sql", "supabase/tests/security_regression.sql", "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts"],
+    serial_groups=["sql"],
+    acceptance=[RLS, regress("adv_01/adv_02/adv_03 attacks fail on base and pass on head across all four histories"), EDGE_TESTS],
+    invariants=["partial/failed/withheld results never consume a credit", "free ratings are never refunded by a row edit"],
+)
+pkg(
+    "INT-02", "INT", "Edge GET /v1/rank never serves a fabricated rank: definitionVersion on every payload, corrupt persisted state re-derived or refused, NULL technique score is no evidence",
+    f"buildRankResponse + inline fallback: include SCORING_DEFINITION.version; re-derive tier from rating (or refuse the row) so a contradictory/unknown stored tier never reaches the client; refuse ratings outside [0,10]; a technique row with a NULL/non-finite score is not countable → rank null. Breaks: {ADV1}/analysis-scoring.json (R1–R3).",
+    severity="P0", source_ids=["INT-ADV1-analysis-scoring"], plane="cloud", deps=["W06-02"],
+    write_paths=["supabase/functions/api/index.ts", "supabase/functions/api/scoringDefinition.ts", "supabase/functions/api/__wf__/int02_rank_route_hardening.test.ts"],
+    serial_groups=["edge-index"],
+    acceptance=[EDGE_CHECK, EDGE_TESTS, regress("adv_analysis_scoring_rank_route attacks fail on base, pass on head")],
+    invariants=["unknown or corrupt state never becomes a fabricated numeric output"],
+)
+pkg(
+    "INT-03", "INT", "Edge POST /v1/shots:sync one verdict per id (acceptedIds ∩ rejected = ∅, no duplicates); auth gateway clamps Retry-After",
+    f"Dedupe submitted ids before settlement (or reject the batch as malformed) so the mobile parser can always acknowledge; retryAfterOf() parses HTTP delta-seconds (digits only) and clamps the relayed value to ≤ 3600 s, else falls back to AUTH_RETRY_AFTER_SECONDS. Breaks: {ADV1}/analysis-scoring.json (A5, A6b), {ADV1}/networking-recovery.json (Retry-After).",
+    severity="P0", source_ids=["INT-ADV1-analysis-scoring", "INT-ADV1-networking-recovery"], plane="cloud",
+    write_paths=["supabase/functions/api/index.ts", "supabase/functions/api/http.ts", "supabase/functions/api/__wf__/int03_sync_verdicts_retry_after.test.ts"],
+    serial_groups=["edge-index"],
+    acceptance=[EDGE_CHECK, EDGE_TESTS, regress("duplicate-id and unbounded Retry-After attacks fail on base, pass on head")],
+)
+pkg(
+    "INT-04", "INT", "Mobile outbox: whole-request 413/400 isolates the faulty row instead of burning sibling attempts; last_error bounded",
+    f"drainOutbox: a whole-request composition failure (413, 400 non-JSON) bisects/isolates the offending row (mark it alone for repair) and leaves sibling attempts untouched so healthy ratings still sync; recordRowFailure truncates last_error to a bounded length (≤ 2000 chars). Breaks: {ADV1}/networking-recovery.json (oversized row), {ADV1}/performance-bounds.json (1 MiB last_error).",
+    severity="P0", source_ids=["INT-ADV1-networking-recovery", "INT-ADV1-performance-bounds"], plane="cloud",
+    write_paths=["apps/mobile/src/data/sync.ts", "apps/mobile/src/data/sync/outbox.ts", "apps/mobile/__tests__/int04OutboxIsolation.test.ts"],
+    serial_groups=["mobile-data"],
+    acceptance=[mobile_jest("__tests__/int04OutboxIsolation.test.ts __tests__/offlineNetwork.test.ts __tests__/wf/flow-offline-network-errors.data.test.ts", "outbox isolation + neighbouring sync suites pass"), regress("oversized-row and 1 MiB error attacks fail on base, pass on head"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["a valid rating is never dead-lettered because of a sibling row"],
+)
+pkg(
+    "INT-05", "INT", "Mobile runJournal.recover isolates an undecodable row and still recovers every decodable sibling",
+    f"recover(): decode per row inside the loop; an undecodable row is held and reported as unknownStorage while releases for the valid siblings still run (orphaned permits released). Break: {ADV1}/sync-outbox-persistence.json.",
+    severity="P0", source_ids=["INT-ADV1-sync-outbox-persistence"], plane="cloud",
+    write_paths=["apps/mobile/src/analysis/runJournal.ts", "apps/mobile/__tests__/int05RunJournalIsolation.test.ts"],
+    serial_groups=["mobile-analysis"],
+    acceptance=[mobile_jest("__tests__/int05RunJournalIsolation.test.ts __tests__/runJournal*.test.ts", "journal suites pass"), regress("bit-rot sibling attack fails on base, passes on head"), MOBILE_TSC, MOBILE_LINT],
+)
+pkg(
+    "INT-06", "INT", "Mobile consistency engine drops a corrupt/ancient activity timestamp instead of erasing the genuine history",
+    f"dayForInstant()/buildConsistencySnapshot/computeConsistencySnapshot and parseConsistencyLedger: timestamps before a sane floor (or non-formattable dates) are dropped per row; days/streak/trainedDays computed from the remaining rows. Break: {ADV1}/performance-bounds.json (ancient activity).",
+    severity="P1", source_ids=["INT-ADV1-performance-bounds"], plane="cloud",
+    write_paths=["apps/mobile/src/consistency/", "apps/mobile/__tests__/int06ConsistencyAncientActivity.test.ts"],
+    acceptance=[mobile_jest("__tests__/int06ConsistencyAncientActivity.test.ts __tests__/consistency*.test.ts", "consistency suites pass"), regress("ancient-timestamp attack fails on base, passes on head"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["corrupt persisted state never becomes fabricated empty history"],
+)
+pkg(
+    "INT-07", "INT", "GeometricPhaseSegmenter near-linear in frame count with byte-identical output on golden fixtures",
+    f"Replace the quadratic scan in packages/vision-geometry/src/phaseSegmenter.ts with a linear/prefix-sum formulation; every existing golden/regression test in vision-geometry, swing-lab and apps/mobile must pass UNCHANGED (segmentation output identical); 60 s @ 60 fps segments in < 1 s in V8. Break: {ADV1}/performance-bounds.json (quadratic).",
+    severity="P1", source_ids=["INT-ADV1-performance-bounds"], plane="cloud",
+    write_paths=["packages/vision-geometry/src/phaseSegmenter.ts", "packages/vision-geometry/test/int07PhaseSegmenterScaling.test.ts"],
+    acceptance=[("test", "pnpm --filter @pickle/vision-geometry test && pnpm --filter @pickle/swing-lab test", "vision-geometry + swing-lab suites pass; the only tolerated skips are the documented Mac-artifact replay describes", MAC_ARTIFACT_SKIPS_SWING_LAB), regress("60 s @ 60 fps budget attack fails on base, passes on head"), ("test", "cd apps/mobile && npx jest --ci --silent __tests__/analyzeCapture*.test.ts __tests__/imported*.test.ts", "mobile analysis suites pass unchanged; the only tolerated skip is the documented Mac-artifact suite", MAC_ARTIFACT_SKIP_MOBILE), ("check", "pnpm -r typecheck", "workspace typecheck passes")],
+    invariants=["no scientific output change: identical phases on every golden fixture"],
+)
+pkg(
+    "INT-08", "INT", "Imported clips pass the capture-envelope quality gate before scoring",
+    f"AnalyzeScreen/runCaptureAnalysis evaluate attemptCaptureEnvelope (or an import-specific gate with the same resolution/frame-rate floors) for captureMode='imported_video'; an UNSUPPORTED clip ends quality_blocked/unavailable with zero scored finalizations and no credit. Break: {ADV1}/import-media-capture.json (G1).",
+    severity="P0", source_ids=["INT-ADV1-import-media-capture"], plane="cloud", deps=["W03-01"],
+    write_paths=["apps/mobile/src/analysis/runCaptureAnalysis.ts", "apps/mobile/src/screens/AnalyzeScreen.tsx", "apps/mobile/src/camera/importAdmission.ts", "apps/mobile/__tests__/int08ImportEnvelopeGate.test.ts"],
+    serial_groups=["mobile-analysis"],
+    acceptance=[mobile_jest("__tests__/int08ImportEnvelopeGate.test.ts __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts", "import gate suites pass"), regress("240p @ 8 fps import attack fails on base, passes on head"), MOBILE_TSC, MOBILE_LINT],
+)
+pkg(
+    "INT-09", "INT", "ManageAccount: iPhone-only copy (no Google Play anywhere) and a synchronous in-flight guard on 'Permanently delete'",
+    f"Remove every 'Google Play'/Android literal from ManageAccountScreen (deletion notice says 'an App Store subscription' only; drop the android branch); a ref-based guard makes a same-tick double tap confirm deletion exactly once. Breaks: {ADV1}/ui-flows-a11y.json, {ADV1}/release-config.json (A9).",
+    severity="P0", source_ids=["INT-ADV1-ui-flows-a11y", "INT-ADV1-release-config"], plane="cloud", deps=["W08-01"],
+    write_paths=["apps/mobile/src/screens/ManageAccountScreen.tsx", "apps/mobile/__tests__/int09ManageAccountCopyGuard.test.tsx"],
+    acceptance=[mobile_jest("__tests__/int09ManageAccountCopyGuard.test.tsx __tests__/w08ManageAccountDeletion.test.tsx __tests__/h06ForbiddenClaims.test.ts", "copy + deletion suites pass"), regress("Google Play copy scan and double-press attacks fail on base, pass on head"), MOBILE_TSC, MOBILE_LINT],
+)
+pkg(
+    "INT-10", "INT", "Dossier agreement: 'Third-party SDKs in binary' names the linked Sentry SDK (disabled transport); 'Build number' row states the committed identity is the source",
+    f"docs/APP_STORE_SUBMISSION.md rows corrected to the binary/Fastfile truth (RNSentry 8.24.0 / Sentry Cocoa 9.24.0 linked, transport disabled; fastlane only refuses build ≤ newest uploaded, never increments). No product claim is added. Breaks: {ADV1}/release-config.json (A1, A4). The build-number bump itself is the coordinator's freeze step (W12-01), not this package.",
+    severity="P1", source_ids=["INT-ADV1-release-config"], plane="cloud",
+    write_paths=["docs/APP_STORE_SUBMISSION.md", "apps/mobile/__tests__/int10DossierAgreement.test.ts"],
+    acceptance=[mobile_jest("__tests__/int10DossierAgreement.test.ts __tests__/h06ForbiddenClaims.test.ts", "dossier agreement + forbidden-claims suites pass"), regress("A1/A4 attacks fail on base, pass on head"), ROOT_FMT],
+)
+pkg(
+    "INT-11", "INT", "Secret-scanning gate: .gitleaks.toml allowlists scoped to fixture strings/regexes, never whole files",
+    f"Rewrite every path-only [[allowlists]] entry so a real credential next to a fixture still fails scripts/security-scan.sh (gitleaks 8.30.1 semantics: a global paths entry skips the whole file); keep the existing fixtures green. Break: {ADV1}/security-privacy.json.",
+    severity="P1", source_ids=["INT-ADV1-security-privacy"], plane="cloud",
+    write_paths=[".gitleaks.toml", "scripts/security-scan.sh", "apps/mobile/__tests__/int11SecurityScanAllowlist.test.ts"],
+    serial_groups=["ci-scripts"],
+    acceptance=[("check", "scripts/security-scan.sh --tree", "gate still passes on the clean tree"), regress("synthetic-credential-at-allowlisted-path attacks fail on base, pass on head"), mobile_jest("__tests__/int11SecurityScanAllowlist.test.ts", "allowlist suite passes")],
+)
+pkg(
+    "INT-12", "INT", "Form Review accessible seek: advertised range always contains the playhead; increment never moves it backwards",
+    f"FormReviewPlayer seeds durationMs from max(clip.durationMs, measured analysis extent, initial stop) and clamps increment/decrement monotonically. Break: {ADV1}/ui-flows-a11y.json (seek).",
+    severity="P1", source_ids=["INT-ADV1-ui-flows-a11y"], plane="cloud",
+    write_paths=["apps/mobile/src/screens/FormReviewScreen.tsx", "apps/mobile/src/components/FormReview*", "apps/mobile/__tests__/int12FormReviewSeek.test.tsx"],
+    acceptance=[mobile_jest("__tests__/int12FormReviewSeek.test.tsx __tests__/formReview*.test.tsx", "form review suites pass"), regress("corrupt-duration seek attack fails on base, passes on head"), MOBILE_TSC, MOBILE_LINT],
+)
+pkg(
+    "INT-13", "INT", "Mobile rank parsing: strict domain, tier derived from rating, definitionVersion on the account summary, code-unit tie ordering",
+    f"parsePlayerRank/summaryFromServer accept only primitive finite numbers in domain (rating/score ∈ [0,10], counts non-negative integers consistent with technique rows), derive tier from rating, carry definitionVersion, and order equal-score techniques by code-unit like computePlayerRank; anything else → no rank shown. Break: {ADV1}/analysis-scoring.json (M1–M4).",
+    severity="P0", source_ids=["INT-ADV1-analysis-scoring"], plane="cloud",
+    write_paths=["apps/mobile/src/progress/playerRank.ts", "apps/mobile/__tests__/int13RankParsing.test.ts"],
+    acceptance=[mobile_jest("__tests__/int13RankParsing.test.ts __tests__/playerRank*.test.ts __tests__/progress*.test.ts*", "rank suites pass"), regress("hostile /v1/rank payload attacks fail on base, pass on head"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["unknown or corrupt state never becomes a fabricated Bronze 0.00"],
+)
+pkg(
+    "INT-14", "INT", "media-worker: sweepDeletedMedia round-robins with attempt tracking; final_hard_delete detaches pro_reference/drill media FKs",
+    f"Poisoned rows cannot starve newer deleted assets (ORDER BY last attempt, attempt tracking as processDeletionTasks does); a new packages/database migration gives pro_reference.media_asset_id / fk_drill_media ON DELETE SET NULL so account deletion terminates. Break: {ADV1}/deletion-managed-media.json (W02, W03b).",
+    severity="P1", source_ids=["INT-ADV1-deletion-managed-media"], plane="cloud",
+    write_paths=["services/media-worker/src/worker.ts", "services/media-worker/test/int14DeletionSweep.test.ts", "packages/database/migrations/"],
+    acceptance=[("test", "cd services/media-worker && DATABASE_URL_TEST=<disposable postgres url> npx vitest run", "media-worker suite passes against a disposable Postgres"), regress("starvation and FK attacks fail on base, pass on head"), ("check", "pnpm -r typecheck", "workspace typecheck passes")],
+)
+pkg(
+    "INT-15", "INT", "Offline allocation is never auto-reclaimed: a reserved permit stays counted past 24h; a premium-sourced reservation backs its delayed sync",
+    f"reserve_analysis_permit()/access_state()/apply_synced_shot(): a still-reserved permit is counted as outstanding regardless of age (release only by the device, its receipt, or an explicit operator action — never the clock); a permit reserved under a verified entitlement (access_source=premium) settles 'accepted' at delayed upload even if the entitlement lapsed meanwhile, and Pro leases are bounded at reservation by min(7 days, verified expiry). Break: {ADV1}/offline-lease.json (OL-PG-1, OL-PG-4).",
+    severity="P0", source_ids=["INT-ADV1-offline-lease"], plane="cloud",
+    write_paths=["supabase/migrations/20260908180000_offline_allocation_never_reclaimed.sql", "supabase/tests/security_regression.sql", "supabase/functions/api/__wf__/int15_offline_allocation.test.ts"],
+    serial_groups=["sql"],
+    acceptance=[RLS, EDGE_TESTS, regress("OL-PG-1/OL-PG-4 attacks fail on base, pass on head")],
+    invariants=["offline allocation ≠ consumption; never auto-reclaimed on disconnect", "Pro lease ≤ 7 days and ≤ verified entitlement expiry"],
+)
+pkg(
+    "INT-16", "INT", "Server charge boundary requires BOTH validated outputs: benchmark marker on the sync payload, withheld/absent benchmark settles released/partial, out-of-domain never charged, final refusal settles the reservation",
+    f"shared-types: ShotAnalysis sync payload carries the technique-benchmark status; Edge + apply_synced_shot(): a 'scored' row without a validated benchmark marker (absent or insufficient_evidence) is settled released/partial and never finalizes the permit or increments the ledger; a scored shot outside the active release policy's supportedInputs is refused as unsupported (not charged); a FINAL refusal of the only shot a reservation can back settles that reservation released/<typed reason> so the free slot returns immediately. Breaks: {ADV1}/charging-permits.json (ATK-E1, E2, E3, M1 server half). Mobile adopts the field in W01-05/INT-17.",
+    severity="P0", source_ids=["INT-ADV1-charging-permits"], plane="cloud",
+    write_paths=["packages/shared-types/src/", "supabase/functions/api/index.ts", "supabase/functions/api/releasePolicy.ts", "supabase/migrations/20260908190000_charge_requires_both_outputs.sql", "supabase/tests/security_regression.sql", "supabase/functions/api/__wf__/int16_joint_charge_boundary.test.ts"],
+    serial_groups=["edge-index", "sql", "shared-types"],
+    acceptance=[SHARED_TYPES, EDGE_CHECK, EDGE_TESTS, RLS, regress("ATK-E1/E2/E3 attacks fail on base, pass on head")],
+    invariants=["charge only after both validated outputs are durably delivered", "partial/failed/withheld/replayed results never consume a credit", "ambiguous commitment ⇒ HOLD with recovery, never a silent dead end"],
+)
+pkg(
+    "INT-17", "INT", "Mobile sends the benchmark marker with every scored sync and treats a final release refusal as a typed settlement, not a dead letter",
+    f"Sync payload carries the technique-benchmark status from the run record (INT-16 contract); a run without a validated benchmark queues resultKind partial; a final access.release_not_authorized answer marks the local rating withheld and settles the reservation through the typed path instead of burning OUTBOX_MAX_ATTEMPTS. Breaks: {ADV1}/charging-permits.json (ATK-M1, ATK-M2).",
+    severity="P0", source_ids=["INT-ADV1-charging-permits"], plane="cloud", deps=["INT-16", "W01-05"],
+    write_paths=["apps/mobile/src/analysis/", "apps/mobile/src/data/sync.ts", "apps/mobile/__tests__/int17BenchmarkMarkerSync.test.ts"],
+    serial_groups=["mobile-analysis", "mobile-data"],
+    acceptance=[mobile_jest("__tests__/int17BenchmarkMarkerSync.test.ts __tests__/w01PartialOutcome.test.tsx __tests__/offlineNetwork.test.ts", "chargeability + sync suites pass"), regress("ATK-M1/ATK-M2 attacks fail on base, pass on head"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["charge only after both validated outputs are durably delivered"],
+)
+pkg(
+    "INT-18", "INT", "Billing: a purchase whose lineage the provider reports lapsed settles to a terminal 'expired' verdict, never pending forever",
+    f"POST /v1/billing/sync: fulfilment evidence matched to a RevenueCat record of the same product with original_purchase_date == evidence purchase date (renewal replaced purchase_date/store_transaction_id), expired, no active entitlement → outcome 'expired' so the mobile pending record clears; missing provider data still stays pending (never inferred as refund/expiry). Break: {ADV1}/billing-entitlement.json (ADV-3a/3b).",
+    severity="P0", source_ids=["INT-ADV1-billing-entitlement"], plane="cloud", deps=["W07-02"],
+    write_paths=["supabase/functions/api/index.ts", "supabase/functions/api/__wf__/int18_lapsed_lineage_terminal.test.ts"],
+    serial_groups=["edge-index"],
+    acceptance=[EDGE_CHECK, EDGE_TESTS, regress("ADV-3a/3b attacks fail on base, pass on head")],
+    invariants=["missing provider data is never interpreted as refund, expiry or successful fulfilment"],
+)
 
 # ---------------------------------------------------------------------------
 # W12 — integration acceptance (integration writer)

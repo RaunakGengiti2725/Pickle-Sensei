@@ -1,8 +1,8 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
-  "manifest_version": "2026-09-08.3",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
   "packages": [
     {
       "acceptance": [
@@ -396,6 +396,933 @@
         "apps/mobile/__tests__/liveCourt.test.ts",
         "apps/mobile/__tests__/liveSessionCoach.test.ts",
         "docs/DECISIONS.md"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "./supabase/tests/run_rls_tests.sh",
+          "criterion": "fresh-install + all historical-upgrade SQL security matrices pass",
+          "id": "INT-01-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "adv_01/adv_02/adv_03 attacks fail on base and pass on head across all four histories",
+          "id": "INT-01-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-01-AC3",
+          "kind": "test"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-01",
+      "invariants": [
+        "partial/failed/withheld results never consume a credit",
+        "free ratings are never refunded by a row edit"
+      ],
+      "mode": null,
+      "objective": "Forward migration + matrix: (a) trigger refuses any decrement/reset/DELETE of public.free_rating_ledger for every role (owner included), as security_regression.sql §D2 does for the other ledgers; (b) shots.result_kind can never move partial/low_confidence → scored (BEFORE UPDATE trigger, all roles) so a relabel can never charge a rating; (c) handle_new_user() truncates/nulls provider display_name/avatar_url to the profiles_text_bounds caps so a long Apple/Google name never aborts auth.users creation. Breaks: .devin/program/ledger/_adversary/adv-1/backend-sql-rls.json (adv_01/adv_02/adv_03).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "sql"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-backend-sql-rls"
+      ],
+      "title": "SQL: free_rating_ledger append-only trigger; partial/low_confidence shot rows terminal; handle_new_user bounds provider metadata",
+      "write_paths": [
+        "supabase/migrations/20260908170000_ledger_monotonic_terminal_shots.sql",
+        "supabase/tests/security_regression.sql",
+        "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+          "criterion": "frozen Deno 2.5.6 typecheck of the Edge entry point passes",
+          "id": "INT-02-AC1",
+          "kind": "check"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-02-AC2",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "adv_analysis_scoring_rank_route attacks fail on base, pass on head",
+          "id": "INT-02-AC3",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "W06-02"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-02",
+      "invariants": [
+        "unknown or corrupt state never becomes a fabricated numeric output"
+      ],
+      "mode": null,
+      "objective": "buildRankResponse + inline fallback: include SCORING_DEFINITION.version; re-derive tier from rating (or refuse the row) so a contradictory/unknown stored tier never reaches the client; refuse ratings outside [0,10]; a technique row with a NULL/non-finite score is not countable → rank null. Breaks: .devin/program/ledger/_adversary/adv-1/analysis-scoring.json (R1–R3).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "edge-index"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-analysis-scoring"
+      ],
+      "title": "Edge GET /v1/rank never serves a fabricated rank: definitionVersion on every payload, corrupt persisted state re-derived or refused, NULL technique score is no evidence",
+      "write_paths": [
+        "supabase/functions/api/index.ts",
+        "supabase/functions/api/scoringDefinition.ts",
+        "supabase/functions/api/__wf__/int02_rank_route_hardening.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+          "criterion": "frozen Deno 2.5.6 typecheck of the Edge entry point passes",
+          "id": "INT-03-AC1",
+          "kind": "check"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-03-AC2",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "duplicate-id and unbounded Retry-After attacks fail on base, pass on head",
+          "id": "INT-03-AC3",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-03",
+      "invariants": [],
+      "mode": null,
+      "objective": "Dedupe submitted ids before settlement (or reject the batch as malformed) so the mobile parser can always acknowledge; retryAfterOf() parses HTTP delta-seconds (digits only) and clamps the relayed value to ≤ 3600 s, else falls back to AUTH_RETRY_AFTER_SECONDS. Breaks: .devin/program/ledger/_adversary/adv-1/analysis-scoring.json (A5, A6b), .devin/program/ledger/_adversary/adv-1/networking-recovery.json (Retry-After).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "edge-index"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-analysis-scoring",
+        "INT-ADV1-networking-recovery"
+      ],
+      "title": "Edge POST /v1/shots:sync one verdict per id (acceptedIds ∩ rejected = ∅, no duplicates); auth gateway clamps Retry-After",
+      "write_paths": [
+        "supabase/functions/api/index.ts",
+        "supabase/functions/api/http.ts",
+        "supabase/functions/api/__wf__/int03_sync_verdicts_retry_after.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int04OutboxIsolation.test.ts __tests__/offlineNetwork.test.ts __tests__/wf/flow-offline-network-errors.data.test.ts",
+          "criterion": "outbox isolation + neighbouring sync suites pass",
+          "id": "INT-04-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "oversized-row and 1 MiB error attacks fail on base, pass on head",
+          "id": "INT-04-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-04-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-04-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-04",
+      "invariants": [
+        "a valid rating is never dead-lettered because of a sibling row"
+      ],
+      "mode": null,
+      "objective": "drainOutbox: a whole-request composition failure (413, 400 non-JSON) bisects/isolates the offending row (mark it alone for repair) and leaves sibling attempts untouched so healthy ratings still sync; recordRowFailure truncates last_error to a bounded length (≤ 2000 chars). Breaks: .devin/program/ledger/_adversary/adv-1/networking-recovery.json (oversized row), .devin/program/ledger/_adversary/adv-1/performance-bounds.json (1 MiB last_error).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-data"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-networking-recovery",
+        "INT-ADV1-performance-bounds"
+      ],
+      "title": "Mobile outbox: whole-request 413/400 isolates the faulty row instead of burning sibling attempts; last_error bounded",
+      "write_paths": [
+        "apps/mobile/src/data/sync.ts",
+        "apps/mobile/src/data/sync/outbox.ts",
+        "apps/mobile/__tests__/int04OutboxIsolation.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int05RunJournalIsolation.test.ts __tests__/runJournal*.test.ts",
+          "criterion": "journal suites pass",
+          "id": "INT-05-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "bit-rot sibling attack fails on base, passes on head",
+          "id": "INT-05-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-05-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-05-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-05",
+      "invariants": [],
+      "mode": null,
+      "objective": "recover(): decode per row inside the loop; an undecodable row is held and reported as unknownStorage while releases for the valid siblings still run (orphaned permits released). Break: .devin/program/ledger/_adversary/adv-1/sync-outbox-persistence.json.",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-analysis"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-sync-outbox-persistence"
+      ],
+      "title": "Mobile runJournal.recover isolates an undecodable row and still recovers every decodable sibling",
+      "write_paths": [
+        "apps/mobile/src/analysis/runJournal.ts",
+        "apps/mobile/__tests__/int05RunJournalIsolation.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int06ConsistencyAncientActivity.test.ts __tests__/consistency*.test.ts",
+          "criterion": "consistency suites pass",
+          "id": "INT-06-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "ancient-timestamp attack fails on base, passes on head",
+          "id": "INT-06-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-06-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-06-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-06",
+      "invariants": [
+        "corrupt persisted state never becomes fabricated empty history"
+      ],
+      "mode": null,
+      "objective": "dayForInstant()/buildConsistencySnapshot/computeConsistencySnapshot and parseConsistencyLedger: timestamps before a sane floor (or non-formattable dates) are dropped per row; days/streak/trainedDays computed from the remaining rows. Break: .devin/program/ledger/_adversary/adv-1/performance-bounds.json (ancient activity).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-performance-bounds"
+      ],
+      "title": "Mobile consistency engine drops a corrupt/ancient activity timestamp instead of erasing the genuine history",
+      "write_paths": [
+        "apps/mobile/src/consistency/",
+        "apps/mobile/__tests__/int06ConsistencyAncientActivity.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "pnpm --filter @pickle/vision-geometry test && pnpm --filter @pickle/swing-lab test",
+          "criterion": "vision-geometry + swing-lab suites pass; the only tolerated skips are the documented Mac-artifact replay describes",
+          "documented_skips": [
+            "afn-sasebo-rally1: wrist-only batch",
+            "afn-sasebo-rally1: streaming the series",
+            "afn-sasebo-rally2: wrist-only batch",
+            "afn-sasebo-rally2: streaming the series"
+          ],
+          "id": "INT-07-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "60 s @ 60 fps budget attack fails on base, passes on head",
+          "id": "INT-07-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/analyzeCapture*.test.ts __tests__/imported*.test.ts",
+          "criterion": "mobile analysis suites pass unchanged; the only tolerated skip is the documented Mac-artifact suite",
+          "documented_skips": [
+            "importedRealFootageAnalysis.test.ts"
+          ],
+          "id": "INT-07-AC3",
+          "kind": "test"
+        },
+        {
+          "command": "pnpm -r typecheck",
+          "criterion": "workspace typecheck passes",
+          "id": "INT-07-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-07",
+      "invariants": [
+        "no scientific output change: identical phases on every golden fixture"
+      ],
+      "mode": null,
+      "objective": "Replace the quadratic scan in packages/vision-geometry/src/phaseSegmenter.ts with a linear/prefix-sum formulation; every existing golden/regression test in vision-geometry, swing-lab and apps/mobile must pass UNCHANGED (segmentation output identical); 60 s @ 60 fps segments in < 1 s in V8. Break: .devin/program/ledger/_adversary/adv-1/performance-bounds.json (quadratic).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-performance-bounds"
+      ],
+      "title": "GeometricPhaseSegmenter near-linear in frame count with byte-identical output on golden fixtures",
+      "write_paths": [
+        "packages/vision-geometry/src/phaseSegmenter.ts",
+        "packages/vision-geometry/test/int07PhaseSegmenterScaling.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int08ImportEnvelopeGate.test.ts __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts",
+          "criterion": "import gate suites pass",
+          "id": "INT-08-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "240p @ 8 fps import attack fails on base, passes on head",
+          "id": "INT-08-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-08-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-08-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "W03-01"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-08",
+      "invariants": [],
+      "mode": null,
+      "objective": "AnalyzeScreen/runCaptureAnalysis evaluate attemptCaptureEnvelope (or an import-specific gate with the same resolution/frame-rate floors) for captureMode='imported_video'; an UNSUPPORTED clip ends quality_blocked/unavailable with zero scored finalizations and no credit. Break: .devin/program/ledger/_adversary/adv-1/import-media-capture.json (G1).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-analysis"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-import-media-capture"
+      ],
+      "title": "Imported clips pass the capture-envelope quality gate before scoring",
+      "write_paths": [
+        "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+        "apps/mobile/src/screens/AnalyzeScreen.tsx",
+        "apps/mobile/src/camera/importAdmission.ts",
+        "apps/mobile/__tests__/int08ImportEnvelopeGate.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int09ManageAccountCopyGuard.test.tsx __tests__/w08ManageAccountDeletion.test.tsx __tests__/h06ForbiddenClaims.test.ts",
+          "criterion": "copy + deletion suites pass",
+          "id": "INT-09-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "Google Play copy scan and double-press attacks fail on base, pass on head",
+          "id": "INT-09-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-09-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-09-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "W08-01"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-09",
+      "invariants": [],
+      "mode": null,
+      "objective": "Remove every 'Google Play'/Android literal from ManageAccountScreen (deletion notice says 'an App Store subscription' only; drop the android branch); a ref-based guard makes a same-tick double tap confirm deletion exactly once. Breaks: .devin/program/ledger/_adversary/adv-1/ui-flows-a11y.json, .devin/program/ledger/_adversary/adv-1/release-config.json (A9).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-ui-flows-a11y",
+        "INT-ADV1-release-config"
+      ],
+      "title": "ManageAccount: iPhone-only copy (no Google Play anywhere) and a synchronous in-flight guard on 'Permanently delete'",
+      "write_paths": [
+        "apps/mobile/src/screens/ManageAccountScreen.tsx",
+        "apps/mobile/__tests__/int09ManageAccountCopyGuard.test.tsx"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int10DossierAgreement.test.ts __tests__/h06ForbiddenClaims.test.ts",
+          "criterion": "dossier agreement + forbidden-claims suites pass",
+          "id": "INT-10-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "A1/A4 attacks fail on base, pass on head",
+          "id": "INT-10-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "pnpm format:check",
+          "criterion": "root Prettier check passes",
+          "id": "INT-10-AC3",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-10",
+      "invariants": [],
+      "mode": null,
+      "objective": "docs/APP_STORE_SUBMISSION.md rows corrected to the binary/Fastfile truth (RNSentry 8.24.0 / Sentry Cocoa 9.24.0 linked, transport disabled; fastlane only refuses build ≤ newest uploaded, never increments). No product claim is added. Breaks: .devin/program/ledger/_adversary/adv-1/release-config.json (A1, A4). The build-number bump itself is the coordinator's freeze step (W12-01), not this package.",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-release-config"
+      ],
+      "title": "Dossier agreement: 'Third-party SDKs in binary' names the linked Sentry SDK (disabled transport); 'Build number' row states the committed identity is the source",
+      "write_paths": [
+        "docs/APP_STORE_SUBMISSION.md",
+        "apps/mobile/__tests__/int10DossierAgreement.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "scripts/security-scan.sh --tree",
+          "criterion": "gate still passes on the clean tree",
+          "id": "INT-11-AC1",
+          "kind": "check"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "synthetic-credential-at-allowlisted-path attacks fail on base, pass on head",
+          "id": "INT-11-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int11SecurityScanAllowlist.test.ts",
+          "criterion": "allowlist suite passes",
+          "id": "INT-11-AC3",
+          "kind": "test"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-11",
+      "invariants": [],
+      "mode": null,
+      "objective": "Rewrite every path-only [[allowlists]] entry so a real credential next to a fixture still fails scripts/security-scan.sh (gitleaks 8.30.1 semantics: a global paths entry skips the whole file); keep the existing fixtures green. Break: .devin/program/ledger/_adversary/adv-1/security-privacy.json.",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "ci-scripts"
+      ],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-security-privacy"
+      ],
+      "title": "Secret-scanning gate: .gitleaks.toml allowlists scoped to fixture strings/regexes, never whole files",
+      "write_paths": [
+        ".gitleaks.toml",
+        "scripts/security-scan.sh",
+        "apps/mobile/__tests__/int11SecurityScanAllowlist.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int12FormReviewSeek.test.tsx __tests__/formReview*.test.tsx",
+          "criterion": "form review suites pass",
+          "id": "INT-12-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "corrupt-duration seek attack fails on base, passes on head",
+          "id": "INT-12-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-12-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-12-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-12",
+      "invariants": [],
+      "mode": null,
+      "objective": "FormReviewPlayer seeds durationMs from max(clip.durationMs, measured analysis extent, initial stop) and clamps increment/decrement monotonically. Break: .devin/program/ledger/_adversary/adv-1/ui-flows-a11y.json (seek).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-ui-flows-a11y"
+      ],
+      "title": "Form Review accessible seek: advertised range always contains the playhead; increment never moves it backwards",
+      "write_paths": [
+        "apps/mobile/src/screens/FormReviewScreen.tsx",
+        "apps/mobile/src/components/FormReview*",
+        "apps/mobile/__tests__/int12FormReviewSeek.test.tsx"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int13RankParsing.test.ts __tests__/playerRank*.test.ts __tests__/progress*.test.ts*",
+          "criterion": "rank suites pass",
+          "id": "INT-13-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "hostile /v1/rank payload attacks fail on base, pass on head",
+          "id": "INT-13-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-13-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-13-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-13",
+      "invariants": [
+        "unknown or corrupt state never becomes a fabricated Bronze 0.00"
+      ],
+      "mode": null,
+      "objective": "parsePlayerRank/summaryFromServer accept only primitive finite numbers in domain (rating/score ∈ [0,10], counts non-negative integers consistent with technique rows), derive tier from rating, carry definitionVersion, and order equal-score techniques by code-unit like computePlayerRank; anything else → no rank shown. Break: .devin/program/ledger/_adversary/adv-1/analysis-scoring.json (M1–M4).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-analysis-scoring"
+      ],
+      "title": "Mobile rank parsing: strict domain, tier derived from rating, definitionVersion on the account summary, code-unit tie ordering",
+      "write_paths": [
+        "apps/mobile/src/progress/playerRank.ts",
+        "apps/mobile/__tests__/int13RankParsing.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd services/media-worker && DATABASE_URL_TEST=<disposable postgres url> npx vitest run",
+          "criterion": "media-worker suite passes against a disposable Postgres",
+          "id": "INT-14-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "starvation and FK attacks fail on base, pass on head",
+          "id": "INT-14-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "pnpm -r typecheck",
+          "criterion": "workspace typecheck passes",
+          "id": "INT-14-AC3",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-14",
+      "invariants": [],
+      "mode": null,
+      "objective": "Poisoned rows cannot starve newer deleted assets (ORDER BY last attempt, attempt tracking as processDeletionTasks does); a new packages/database migration gives pro_reference.media_asset_id / fk_drill_media ON DELETE SET NULL so account deletion terminates. Break: .devin/program/ledger/_adversary/adv-1/deletion-managed-media.json (W02, W03b).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [],
+      "severity": "P1",
+      "source_ids": [
+        "INT-ADV1-deletion-managed-media"
+      ],
+      "title": "media-worker: sweepDeletedMedia round-robins with attempt tracking; final_hard_delete detaches pro_reference/drill media FKs",
+      "write_paths": [
+        "services/media-worker/src/worker.ts",
+        "services/media-worker/test/int14DeletionSweep.test.ts",
+        "packages/database/migrations/"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "./supabase/tests/run_rls_tests.sh",
+          "criterion": "fresh-install + all historical-upgrade SQL security matrices pass",
+          "id": "INT-15-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-15-AC2",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "OL-PG-1/OL-PG-4 attacks fail on base, pass on head",
+          "id": "INT-15-AC3",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-15",
+      "invariants": [
+        "offline allocation ≠ consumption; never auto-reclaimed on disconnect",
+        "Pro lease ≤ 7 days and ≤ verified entitlement expiry"
+      ],
+      "mode": null,
+      "objective": "reserve_analysis_permit()/access_state()/apply_synced_shot(): a still-reserved permit is counted as outstanding regardless of age (release only by the device, its receipt, or an explicit operator action — never the clock); a permit reserved under a verified entitlement (access_source=premium) settles 'accepted' at delayed upload even if the entitlement lapsed meanwhile, and Pro leases are bounded at reservation by min(7 days, verified expiry). Break: .devin/program/ledger/_adversary/adv-1/offline-lease.json (OL-PG-1, OL-PG-4).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "sql"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-offline-lease"
+      ],
+      "title": "Offline allocation is never auto-reclaimed: a reserved permit stays counted past 24h; a premium-sourced reservation backs its delayed sync",
+      "write_paths": [
+        "supabase/migrations/20260908180000_offline_allocation_never_reclaimed.sql",
+        "supabase/tests/security_regression.sql",
+        "supabase/functions/api/__wf__/int15_offline_allocation.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "pnpm --filter @pickle/shared-types typecheck && pnpm --filter @pickle/shared-types test",
+          "criterion": "shared-types typecheck and tests pass",
+          "id": "INT-16-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+          "criterion": "frozen Deno 2.5.6 typecheck of the Edge entry point passes",
+          "id": "INT-16-AC2",
+          "kind": "check"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-16-AC3",
+          "kind": "test"
+        },
+        {
+          "command": "./supabase/tests/run_rls_tests.sh",
+          "criterion": "fresh-install + all historical-upgrade SQL security matrices pass",
+          "id": "INT-16-AC4",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "ATK-E1/E2/E3 attacks fail on base, pass on head",
+          "id": "INT-16-AC5",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-16",
+      "invariants": [
+        "charge only after both validated outputs are durably delivered",
+        "partial/failed/withheld/replayed results never consume a credit",
+        "ambiguous commitment ⇒ HOLD with recovery, never a silent dead end"
+      ],
+      "mode": null,
+      "objective": "shared-types: ShotAnalysis sync payload carries the technique-benchmark status; Edge + apply_synced_shot(): a 'scored' row without a validated benchmark marker (absent or insufficient_evidence) is settled released/partial and never finalizes the permit or increments the ledger; a scored shot outside the active release policy's supportedInputs is refused as unsupported (not charged); a FINAL refusal of the only shot a reservation can back settles that reservation released/<typed reason> so the free slot returns immediately. Breaks: .devin/program/ledger/_adversary/adv-1/charging-permits.json (ATK-E1, E2, E3, M1 server half). Mobile adopts the field in W01-05/INT-17.",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "edge-index",
+        "sql",
+        "shared-types"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-charging-permits"
+      ],
+      "title": "Server charge boundary requires BOTH validated outputs: benchmark marker on the sync payload, withheld/absent benchmark settles released/partial, out-of-domain never charged, final refusal settles the reservation",
+      "write_paths": [
+        "packages/shared-types/src/",
+        "supabase/functions/api/index.ts",
+        "supabase/functions/api/releasePolicy.ts",
+        "supabase/migrations/20260908190000_charge_requires_both_outputs.sql",
+        "supabase/tests/security_regression.sql",
+        "supabase/functions/api/__wf__/int16_joint_charge_boundary.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/int17BenchmarkMarkerSync.test.ts __tests__/w01PartialOutcome.test.tsx __tests__/offlineNetwork.test.ts",
+          "criterion": "chargeability + sync suites pass",
+          "id": "INT-17-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "ATK-M1/ATK-M2 attacks fail on base, pass on head",
+          "id": "INT-17-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "INT-17-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "INT-17-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "INT-16",
+        "W01-05"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-17",
+      "invariants": [
+        "charge only after both validated outputs are durably delivered"
+      ],
+      "mode": null,
+      "objective": "Sync payload carries the technique-benchmark status from the run record (INT-16 contract); a run without a validated benchmark queues resultKind partial; a final access.release_not_authorized answer marks the local rating withheld and settles the reservation through the typed path instead of burning OUTBOX_MAX_ATTEMPTS. Breaks: .devin/program/ledger/_adversary/adv-1/charging-permits.json (ATK-M1, ATK-M2).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-analysis",
+        "mobile-data"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-charging-permits"
+      ],
+      "title": "Mobile sends the benchmark marker with every scored sync and treats a final release refusal as a typed settlement, not a dead letter",
+      "write_paths": [
+        "apps/mobile/src/analysis/",
+        "apps/mobile/src/data/sync.ts",
+        "apps/mobile/__tests__/int17BenchmarkMarkerSync.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+          "criterion": "frozen Deno 2.5.6 typecheck of the Edge entry point passes",
+          "id": "INT-18-AC1",
+          "kind": "check"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "INT-18-AC2",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "ADV-3a/3b attacks fail on base, pass on head",
+          "id": "INT-18-AC3",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "W07-02"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "INT-18",
+      "invariants": [
+        "missing provider data is never interpreted as refund, expiry or successful fulfilment"
+      ],
+      "mode": null,
+      "objective": "POST /v1/billing/sync: fulfilment evidence matched to a RevenueCat record of the same product with original_purchase_date == evidence purchase date (renewal replaced purchase_date/store_transaction_id), expired, no active entitlement → outcome 'expired' so the mobile pending record clears; missing provider data still stays pending (never inferred as refund/expiry). Break: .devin/program/ledger/_adversary/adv-1/billing-entitlement.json (ADV-3a/3b).",
+      "parent": "INT",
+      "plane": "cloud",
+      "serial_groups": [
+        "edge-index"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "INT-ADV1-billing-entitlement"
+      ],
+      "title": "Billing: a purchase whose lineage the provider reports lapsed settles to a terminal 'expired' verdict, never pending forever",
+      "write_paths": [
+        "supabase/functions/api/index.ts",
+        "supabase/functions/api/__wf__/int18_lapsed_lineage_terminal.test.ts"
       ]
     },
     {
@@ -1983,7 +2910,8 @@
       "competing": 1,
       "deps": [
         "W06-01",
-        "W01-05"
+        "W01-05",
+        "INT-13"
       ],
       "estimate_minutes": 60,
       "external_blocker": null,
