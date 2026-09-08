@@ -50,6 +50,7 @@ import {
   runCaptureAnalysis,
   type RunCaptureAnalysisOutcome,
 } from '../../src/analysis/runCaptureAnalysis';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 const SUITE = 'permitLifecycleMatrix';
 const OWNER = '22222222-2222-4222-8222-222222222222';
@@ -244,7 +245,7 @@ function permitServer(): PermitServer {
       if (server.releaseMode === 'network_throw') {
         throw new TypeError('Network request failed');
       }
-      return json(200, { ok: true });
+      return json(200, finalizeAcknowledgement(url, body));
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });

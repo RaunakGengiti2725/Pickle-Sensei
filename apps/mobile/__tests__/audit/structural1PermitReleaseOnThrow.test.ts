@@ -23,6 +23,7 @@ import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { LocalDb } from '../../src/data/db';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -86,8 +87,9 @@ function permitServer(): {
       });
     }
     if (url.includes('/finalize')) {
-      finalized.push({ url, body: JSON.parse(String(init?.body)) });
-      return jsonResponse({ ok: true });
+      const body: unknown = JSON.parse(String(init?.body));
+      finalized.push({ url, body });
+      return jsonResponse(finalizeAcknowledgement(url, body));
     }
     throw new Error(`Unexpected fetch: ${url}`);
   });

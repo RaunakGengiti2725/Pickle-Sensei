@@ -18,6 +18,7 @@ import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../../src/data/db';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -75,8 +76,9 @@ function permitServer(options: PermitServerOptions = {}) {
       });
     }
     if (url.includes('/finalize')) {
+      const body: unknown = JSON.parse(String(init?.body));
       finalizeUrls.push(url);
-      finalizeBodies.push(JSON.parse(String(init?.body)));
+      finalizeBodies.push(body);
       switch (options.release ?? 'ok') {
         case 'reject_network':
           throw new TypeError('Network request failed');
@@ -86,7 +88,7 @@ function permitServer(options: PermitServerOptions = {}) {
             500,
           );
         default:
-          return jsonResponse({ ok: true });
+          return jsonResponse(finalizeAcknowledgement(url, body));
       }
     }
     throw new Error(`Unexpected fetch: ${url}`);
@@ -362,8 +364,9 @@ describe('controls — release boundary variants', () => {
           });
         }
         if (url.includes('/finalize')) {
-          finalizeBodies.push({ url, body: JSON.parse(String(init?.body)) });
-          return jsonResponse({ ok: true });
+          const body: unknown = JSON.parse(String(init?.body));
+          finalizeBodies.push({ url, body });
+          return jsonResponse(finalizeAcknowledgement(url, body));
         }
         throw new Error(`Unexpected fetch: ${url}`);
       }),

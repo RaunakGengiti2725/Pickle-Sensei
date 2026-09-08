@@ -1223,7 +1223,7 @@ async function runnerSetup(noPose = false, auto = false) {
         expect(permit).toBeDefined();
         expect([null, body.outcome]).toContain(permit?.outcome);
         if (permit) permit.outcome = body.outcome;
-        return ok({ permit });
+        return ok({ permit: { ...permit, status: 'finalized' } });
       }
       if (url.endsWith('/v1/sessions')) return ok({});
       if (url.endsWith('/v1/shots:sync')) {

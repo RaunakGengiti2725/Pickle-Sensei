@@ -192,6 +192,31 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Every API error is a JSON envelope `{ error: { code, message } }`. A 4xx
+ * WITHOUT a coded envelope (a captive portal's 403 page, a gateway's 404
+ * HTML, a proxy's plain-text 400) was written by an intermediary, not by the
+ * route: it is no verdict on the request and must not be recorded as one.
+ * 401, 408 and 429 keep their status — every caller already treats them as
+ * "sign in / try again later" rather than as a verdict, and a 401 must still
+ * reach the session keeper. */
+function isUnreadableClientError(status: number): boolean {
+  return (
+    status >= 400 &&
+    status < 500 &&
+    status !== 401 &&
+    status !== 408 &&
+    status !== 429
+  );
+}
+
+function unreadableAnswer(): ApiError {
+  return new ApiError(
+    502,
+    'network.invalid_response',
+    'The rating service answered without a readable result. Your work is saved on this device and will be retried.',
+  );
+}
+
 async function request<T>(
   config: ApiConfigState,
   method: string,
@@ -240,28 +265,25 @@ async function request<T>(
     }
     const json: unknown = await response.json().catch(() => undefined);
     if (timedOut) throw timeoutError();
-    const verdict = isJsonObject(json) ? json : null;
     if (!response.ok) {
       if (response.status === 401 && token) {
         reportApiUnauthorized(token);
       }
-      const failure = verdict?.['error'];
+      const failure = isJsonObject(json) ? json['error'] : undefined;
       const code = isJsonObject(failure) ? failure['code'] : undefined;
       const message = isJsonObject(failure) ? failure['message'] : undefined;
+      const verdictCode = typeof code === 'string' && code !== '' ? code : null;
+      if (verdictCode === null && isUnreadableClientError(response.status)) {
+        throw unreadableAnswer();
+      }
       throw new ApiError(
         response.status,
-        typeof code === 'string' ? code : 'unknown',
+        verdictCode ?? 'unknown',
         typeof message === 'string' ? message : response.statusText,
       );
     }
-    if (verdict === null) {
-      throw new ApiError(
-        502,
-        'network.invalid_response',
-        'The rating service answered without a readable result. Your work is saved on this device and will be retried.',
-      );
-    }
-    return verdict as T;
+    if (!isJsonObject(json)) throw unreadableAnswer();
+    return json as T;
   };
   try {
     return await Promise.race([fetchAndRead(), deadline]);
@@ -363,24 +385,27 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
   };
 }
 
-/** The finalize route only ever answers 2xx with a JSON object, so a body
- * that is empty or not JSON (a 204, a text/html page) was written by
- * something that never reached the route and is no verdict on this permit.
- * When the body names the permit it settled, it must be this one, no longer
- * `reserved`, and not settled as some other outcome. */
+/** The finalize route answers 2xx only with `{ permit, access }` where the
+ * permit view names the permit it settled. A body that names no permit
+ * (`{}`, `{ ok: true }`, an error envelope, a permit without id/status) was
+ * written by something that never reached the route and is no verdict on
+ * this permit. The named permit must be this one, no longer `reserved`, and
+ * settled as the requested outcome (any other outcome is a 409 verdict, not
+ * an acknowledgement). */
 function acknowledgesRelease(
   body: unknown,
   permitId: string,
   outcome: ReleasableAnalysisOutcome,
 ): boolean {
-  if (typeof body !== 'object' || body === null) return false;
-  const permit = (body as { permit?: unknown }).permit;
-  if (permit === undefined) return true;
-  if (typeof permit !== 'object' || permit === null) return false;
-  const view = permit as { id?: unknown; status?: unknown; outcome?: unknown };
-  if (view.id !== undefined && view.id !== permitId) return false;
-  if (view.status === 'reserved') return false;
-  return typeof view.outcome !== 'string' || view.outcome === outcome;
+  if (!isJsonObject(body)) return false;
+  const permit = body['permit'];
+  if (!isJsonObject(permit)) return false;
+  return (
+    permit['id'] === permitId &&
+    typeof permit['status'] === 'string' &&
+    permit['status'] !== 'reserved' &&
+    permit['outcome'] === outcome
+  );
 }
 
 /** The permit id gates inference and every durable write, and is the path

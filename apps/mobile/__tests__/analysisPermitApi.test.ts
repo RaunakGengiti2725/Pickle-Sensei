@@ -9,6 +9,7 @@ import {
   establishApiSession,
   setApiUnauthorizedListener,
 } from '../src/account/apiSession';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 const permit = {
   id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
@@ -54,7 +55,11 @@ describe('analysis permit API', () => {
     const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({}),
+      json: async () =>
+        finalizeAcknowledgement(
+          `https://api.example.test/v1/analysis-permits/${permit.id}/finalize`,
+          { outcome: 'low_confidence' },
+        ),
     } as Response);
     const client = createAnalysisPermitClient({
       baseUrl: 'https://api.example.test',
