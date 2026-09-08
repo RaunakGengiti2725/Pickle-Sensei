@@ -1325,6 +1325,13 @@ export function AnalyzeScreen({
         });
         return;
       }
+      if (outcome.kind === 'partial') {
+        usabilityFunnel.log('result_opened');
+        leaveScreen(() =>
+          navigation.replace('Result', { analysisId: outcome.analysisId }),
+        );
+        return;
+      }
       const presentation = strokeIntentPresentation(outcome.record);
       if (presentation) {
         usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);

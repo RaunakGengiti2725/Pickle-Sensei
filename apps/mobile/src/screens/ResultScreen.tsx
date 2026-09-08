@@ -101,6 +101,7 @@ import {
 } from '../components/strokeResultModel';
 import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
 import { TECHNIQUE_BENCHMARK_UNAVAILABLE } from '../progress/techniqueBenchmarkDisplay';
+import { readPartialOutcome } from '../analysis/partialOutcome';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -506,6 +507,10 @@ function ResultGuide(props: ResultGuideProps) {
   }, [stepIndex]);
 
   const shotLabel = analysis ? humanize(analysis.shotType) : 'stroke';
+  // Mechanics-only partial: the release authority withheld the benchmark, so
+  // the page states that explicitly — no score, confidence or range exists
+  // to show, and no rating was consumed.
+  const partial = readPartialOutcome(record);
 
   // ── Abstained: ONE honest page — the full sheet, inline ────────────────
   if (!scored || step === null) {
@@ -514,7 +519,9 @@ function ResultGuide(props: ResultGuideProps) {
         stepKey="abstained"
         stepIndex={0}
         total={1}
-        label="RESULT · NOT SCORED"
+        label={
+          partial ? 'RESULT · BENCHMARK UNAVAILABLE' : 'RESULT · NOT SCORED'
+        }
         onClose={props.onClose}
         footer={
           <GuideFooter
@@ -529,6 +536,25 @@ function ResultGuide(props: ResultGuideProps) {
         }
       >
         <View testID="result-guide-step-abstained">
+          {partial ? (
+            <View
+              style={styles.partialNotice}
+              testID="result-partial-benchmark"
+            >
+              <Text style={[type.micro, styles.kicker]}>
+                MECHANICS RECORDED · RATING NOT CONSUMED
+              </Text>
+              <Text
+                style={[type.caption, styles.benchmarkNote]}
+                testID="result-benchmark-status"
+              >
+                {TECHNIQUE_BENCHMARK_UNAVAILABLE}
+              </Text>
+              <Text style={[type.caption, styles.benchmarkNote]}>
+                {partial.message}
+              </Text>
+            </View>
+          ) : null}
           {props.syncEvidence.kind === 'needs_repair' ? (
             <SyncRepairNotice
               analysisId={props.analysisId}
@@ -1898,6 +1924,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     maxWidth: 320,
   },
+  partialNotice: { alignItems: 'center', marginBottom: space.lg },
   insightCard: { marginTop: space.lg, padding: space.lg },
   insightHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   insightSentence: { color: color.onDark, marginTop: space.sm },
