@@ -42,6 +42,7 @@ import {
   TRUSTED_TIME_CHECKPOINT_INTERVAL_MS,
   TRUSTED_TIME_KEYCHAIN_ACCOUNT,
   TRUSTED_TIME_KEYCHAIN_SERVICE,
+  TRUSTED_TIME_KEYCHAIN_TIMEOUT_MS,
   TRUSTED_TIME_ROLLBACK_TOLERANCE_MS,
   createTrustedTime,
   evaluateLease,
@@ -782,11 +783,14 @@ describe('W05-02 trusted time — the device sleeps while the app is suspended',
       kind: 'reconcile_required',
       reason: 'elapsed_unmeasured',
     });
+    // The wall clock seen on the foreground checkpoint plus the process
+    // clock's minute since.
+    expect(resumed.nowMs).toBe(SERVER_MS + 3 * MINUTE);
 
     // Neither clock is ever allowed to run backwards.
     clocks.continuousMs = -DAY;
     clocks.monotonicMs = -DAY;
-    expect((await time.read()).nowMs).toBe(SERVER_MS + 2 * MINUTE);
+    expect((await time.read()).nowMs).toBe(SERVER_MS + 3 * MINUTE);
   });
 });
 
@@ -1312,6 +1316,69 @@ describe('W05-02 trusted time — storage and input faults', () => {
         reading,
       ),
     ).toEqual({ kind: 'active', remainingMs: DAY });
+    // A lease issued within tolerance ahead of the clock never reports more
+    // than the cap remaining.
+    expect(
+      evaluateLease(
+        {
+          issuedAtMs: SERVER_MS + TRUSTED_TIME_ROLLBACK_TOLERANCE_MS,
+          expiresAtMs: SERVER_MS + 30 * DAY,
+        },
+        reading,
+      ),
+    ).toEqual({ kind: 'active', remainingMs: LEASE_MAX_MS });
+  });
+
+  it('a Keychain call that never answers is bounded and reported unavailable', async () => {
+    jest.useFakeTimers();
+    try {
+      const hanging: TrustedTimeKeychain = {
+        ACCESSIBLE: Keychain.ACCESSIBLE,
+        getGenericPassword: () => new Promise(() => {}),
+        setGenericPassword: () => new Promise(() => {}),
+      };
+      const clocks: Clocks = { monotonicMs: 0, wallMs: SERVER_MS };
+      const time = harness(clocks, hanging);
+      const pending = time.read();
+      await jest.advanceTimersByTimeAsync(TRUSTED_TIME_KEYCHAIN_TIMEOUT_MS - 1);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      const reading = await pending;
+      expect(reading.authority).toBe('none');
+      expect(reading.storage).toBe('unavailable');
+      // A store that never answered is not asked again in this process.
+      let again: Awaited<ReturnType<typeof time.read>> | null = null;
+      void time.read().then(value => {
+        again = value;
+      });
+      await jest.advanceTimersByTimeAsync(0);
+      expect(again).not.toBeNull();
+
+      const observing = time.observeServerTime({
+        dateHeader: serverHeader(SERVER_MS),
+        authenticated: true,
+      });
+      await jest.advanceTimersByTimeAsync(2 * TRUSTED_TIME_KEYCHAIN_TIMEOUT_MS);
+      expect(await observing).toEqual({
+        accepted: true,
+        serverEpochMs: SERVER_MS,
+      });
+      clocks.monotonicMs += HOUR;
+      clocks.wallMs += HOUR;
+      const anchored = time.read();
+      await jest.advanceTimersByTimeAsync(2 * TRUSTED_TIME_KEYCHAIN_TIMEOUT_MS);
+      const after = await anchored;
+      expect(after.authority).toBe('anchored');
+      expect(after.storage).toBe('unavailable');
+      expect(after.nowMs).toBe(SERVER_MS + HOUR);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('caps a Pro lease at OFFLINE_PRO_LEASE_MAX_SECONDS from issue', async () => {
@@ -1396,6 +1463,8 @@ describe('W05-02 trusted time — wired into the API client', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    // The jest AppState mock has no state; the app is in the foreground.
+    (AppState as { currentState: AppStateStatus }).currentState = 'active';
 
     const before = await trustedTime.read();
     expect(before.authority).toBe('none');
@@ -1418,6 +1487,7 @@ describe('W05-02 trusted time — wired into the API client', () => {
 
     const reading = await trustedTime.read();
     expect(reading.authority).toBe('anchored');
+    expect(reading.continuity).toBe('measured');
     expect(reading.nowMs).toBeGreaterThanOrEqual(permitServerMs);
     expect(reading.nowMs).toBeLessThan(permitServerMs + HOUR);
     expect(storedRecord().serverEpochMs).toBe(permitServerMs);
