@@ -100,13 +100,6 @@ export const IMPORT_ADMISSION_LIMITS = Object.freeze({
    * so a louder burst can never erase a real stroke from the candidates.
    */
   minCandidatePeakTorsoPerSecond: 1,
-  /**
-   * Motion that peaks at most this long before a much stronger peak (below
-   * `comparablePeakRatio` of it) is that stroke's wind-up — the backswing
-   * reverses direction and so measures as its own burst — not a stroke of its
-   * own. Any further apart, a weaker stroke-sized event is a separate stroke.
-   */
-  preparationWindowMs: 700,
   /** Peaks within this distance of an event's first peak belong to that event (contact dip, both wrists in one swing). */
   sameEventPeakDistanceMs: 350,
   /** A single stroke's motion core lasts at least this long; shorter bursts are tracking spikes. */
@@ -182,8 +175,8 @@ export interface StrokeEventCandidate {
   /**
    * True when this candidate is a stroke-sized event: it peaks at or above
    * `minStrokePeakTorsoPerSecond`, or within `comparablePeakRatio` of the
-   * strongest peak in the clip — and is not the wind-up of the much stronger
-   * peak that follows it within `preparationWindowMs`.
+   * strongest peak in the clip. Each test only ever adds comparable events,
+   * so a louder stroke elsewhere in the clip never demotes this one.
    */
   comparable: boolean;
 }
@@ -829,20 +822,12 @@ export function admitImportedStrokeEvents(
   let strongest = 0;
   for (const candidate of measured)
     if (candidate.peakSpeed > strongest) strongest = candidate.peakSpeed;
-  measured.forEach((candidate, index) => {
-    const preparation = measured
-      .slice(index + 1)
-      .some(
-        later =>
-          later.peakMs - candidate.peakMs <= limits.preparationWindowMs &&
-          candidate.peakSpeed < later.peakSpeed * limits.comparablePeakRatio,
-      );
+  for (const candidate of measured) {
     candidate.comparable =
-      !preparation &&
-      (candidate.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond ||
-        (strongest > 0 &&
-          candidate.peakSpeed >= strongest * limits.comparablePeakRatio));
-  });
+      candidate.peakTorsoPerSecond >= limits.minStrokePeakTorsoPerSecond ||
+      (strongest > 0 &&
+        candidate.peakSpeed >= strongest * limits.comparablePeakRatio);
+  }
   const candidates = measured.map(publicCandidate);
   const clusters = clusterComparable(
     measured.filter(candidate => candidate.comparable),
