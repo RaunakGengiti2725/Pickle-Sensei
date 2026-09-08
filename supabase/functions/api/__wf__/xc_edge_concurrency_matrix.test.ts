@@ -1566,7 +1566,7 @@ Deno.test(
           const replay = await timed(rows, r, 0, "webhook.replay", () =>
             h.handler(
               webhookRequest(
-                { id: eventId, type, app_user_id: sub },
+                { id: eventId, type, app_user_id: sub, product_id: "pickle_sensei_pro_monthly" },
                 {
                   ip: ip(r, 10),
                 },
@@ -1712,7 +1712,12 @@ Deno.test(
             const audit = h.fake.tables.webhook_events.filter((e) => e.id === eventId);
             h.fake.overrides.rcDelayMs = undefined;
             const replay = await timed(rows, r, 0, "webhook.replay", () =>
-              h.handler(webhookRequest({ id: eventId, type, app_user_id: sub }, { ip: ip(r, 10) })),
+              h.handler(
+                webhookRequest(
+                  { id: eventId, type, app_user_id: sub, product_id: "pickle_sensei_pro_monthly" },
+                  { ip: ip(r, 10) },
+                ),
+              ),
             );
             const rcAfterReplay = (h.fake.counters["rc.get_subscriber"] ?? 0) - rcBefore;
             users.push({

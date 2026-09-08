@@ -710,13 +710,23 @@ Deno.test(
   },
 );
 
-Deno.test(
-  "characterization: access log route field carries arbitrary unmatched path segments verbatim",
-  async () => {
-    const ip = freshIp();
-    accessLog.length = 0;
-    await call("GET", "/v1/nope/USER-SUPPLIED-SEGMENT-xyz", { ip });
-    const line = accessLog.find((l) => l.includes("USER-SUPPLIED-SEGMENT-xyz"));
-    assert(line, "unmatched path segment appears verbatim in the access log route field");
-  },
-);
+Deno.test("access log route field omits arbitrary unmatched path segments", async () => {
+  const ip = freshIp();
+  accessLog.length = 0;
+  const response = await call("GET", "/v1/nope/USER-SUPPLIED-SEGMENT-xyz", { ip });
+  assertEquals(
+    accessLog.some((line) => line.includes("USER-SUPPLIED-SEGMENT-xyz")),
+    false,
+    "unmatched path segment is redacted",
+  );
+  const entries = accessLog.map((line) => JSON.parse(line) as Record<string, unknown>);
+  assert(
+    entries.some(
+      (entry) =>
+        entry.evt === "api_request" &&
+        entry.route === "/functions/v1/api/v1/:id/:id" &&
+        entry.status === response.status,
+    ),
+    "request status is logged under a redacted route",
+  );
+});

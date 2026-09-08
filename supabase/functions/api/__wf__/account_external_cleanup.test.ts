@@ -1081,10 +1081,19 @@ Deno.test(
 );
 
 Deno.test(
-  "W08 route: ciphertext from a different owner fails closed without provider or Auth deletion",
+  "W08 route: ciphertext from a different owner requires manual Apple action and only deletes the requesting account",
   async () => {
     h.reset();
     const owner = crypto.randomUUID();
+    const foreign = {
+      user_id: OTHER_USER_ID,
+      apple_refresh_token_encrypted: await encryptAppleRefreshToken(
+        "other-owner-refresh",
+        OTHER_USER_ID,
+        h.appleTokenEncryptionKey,
+      ),
+    };
+    const foreignBefore = structuredClone(foreign);
     h.tables.account_external_credentials = [
       {
         user_id: owner,
@@ -1094,13 +1103,32 @@ Deno.test(
           h.appleTokenEncryptionKey,
         ),
       },
+      foreign,
     ];
     const operation = await requestedDeletion(owner);
     h.deletion.age(operation.operationId);
-    assertEquals((await confirmDeletion(owner, operation)).status, 503);
+    const response = await confirmDeletion(owner, operation);
+    assertEquals(response.status, 200);
+    const result = await response.json();
+    assertEquals(result.deleted, true);
+    assertEquals(result.operationId, operation.operationId);
+    assertEquals(result.appleAuthorizationRevocation, "manual_action_required");
+    assert(Number.isFinite(Date.parse(result.completionReceipt.completedAt)));
     assertEquals(h.callsTo("appleid.apple.com/auth/revoke").length, 0);
-    assertEquals(h.callsTo(RC_URL).length, 0);
-    assertEquals(h.callsTo("/auth/v1/admin/users/").length, 0);
+    assertEquals(
+      revenueCatDeletes().map((call) => new URL(call.url).pathname.split("/").at(-1)),
+      [owner],
+    );
+    assertEquals(
+      authAdminDeletes().map((call) => new URL(call.url).pathname.split("/").at(-1)),
+      [owner],
+    );
+    assertEquals(
+      h.tables.account_external_credentials.find(
+        (row) => (row as Record<string, unknown>).user_id === OTHER_USER_ID,
+      ),
+      foreignBefore,
+    );
   },
 );
 

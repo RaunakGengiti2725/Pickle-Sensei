@@ -1086,11 +1086,10 @@ Deno.test(
         logs[0].args[0],
         rpcError ? "[api] shot sync RPC failed:" : "[api] shot sync write failed:",
       );
-      assertEquals(
-        (logs[0].args[1] as Record<string, unknown>).code,
-        rpcError ? "57014" : "unknown",
-      );
-      assertEquals((logs[0].args[1] as Record<string, unknown>).status, rpcError ? 503 : 200);
+      const detail = logs[0].args[rpcError ? 1 : 2] as Record<string, unknown>;
+      assertEquals(detail.code, rpcError ? "57014" : "unknown");
+      assertEquals(detail.status, rpcError ? 503 : 200);
+      if (!rpcError) assertEquals(logs[0].args[1], "shot.write_failed:unknown");
     }
   },
 );

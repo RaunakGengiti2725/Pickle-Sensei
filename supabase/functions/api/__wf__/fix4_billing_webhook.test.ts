@@ -153,7 +153,7 @@ Deno.test(
 // ── FIX4-4 response == DB after a dropped stale verdict ─────────────────────
 
 Deno.test(
-  "FIX4-4: POST /v1/billing/sync whose verdict is dropped as stale re-reads billing_entitlements and answers billing AND access from the persisted row (response == DB)",
+  "FIX4-4: POST /v1/billing/sync whose older ticket is superseded returns the atomic entitlement snapshot and answers billing AND access from the persisted row (response == DB)",
   async () => {
     const sim = await simulate();
     try {
@@ -217,7 +217,11 @@ Deno.test(
       assertEquals(body.access.paywallRequired, false, "free ratings remain (scored_count 0)");
 
       const reads = sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET");
-      assertEquals(reads.length, 1, "exactly one re-read of the durable row");
+      assertEquals(reads.length, 0, "snapshot is returned atomically by the ordered RPC");
+      assertEquals(
+        sim.verdictResults.map((row) => row.applied),
+        [true, false],
+      );
     } finally {
       sim.restore();
     }
@@ -258,7 +262,7 @@ Deno.test(
 );
 
 Deno.test(
-  "FIX4-4: the re-read after a dropped verdict fails → generic 503 (never a made-up billing state)",
+  "FIX4-4: the atomic verdict RPC fails → generic 503 (never a made-up billing state)",
   async () => {
     const sim = await simulate();
     try {
@@ -280,7 +284,7 @@ Deno.test(
       // 500 rather than 503: postgrest-js transparently retries idempotent
       // 503s (1 s / 2 s / 4 s backoff), which this test is not about.
       sim.faults.push({
-        match: (m, u) => m === "GET" && u.startsWith(VERDICT_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         status: 500,
         body: { code: "XX000", message: "could not connect to database" },
         times: 1,

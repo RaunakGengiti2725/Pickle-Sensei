@@ -7,8 +7,8 @@
 //           predicate `access_state()` (and every other DB decision point)
 //           applies to a billing_entitlements row: premium AND (expires_at IS
 //           NULL OR expires_at > now()). Pinned for BOTH the fresh-verdict path
-//           (the verdict just landed) and the re-read path (the verdict was
-//           dropped as stale and the stored row is answered), so the sync
+//           (the verdict just landed) and the superseded-ticket path (the
+//           atomic RPC returns the newer stored row), so the sync
 //           response can never disagree with GET /v1/me/access.
 //   FIX6-2  RevenueCat's `request_date_ms` is trusted as `verified_at` only
 //           within a documented window around the isolate clock read BEFORE
@@ -17,8 +17,8 @@
 //           Outside it the verdict falls back to that pre-request clock exactly
 //           like the absent/NaN/≤0/out-of-range cases, so a bogus provider
 //           clock can never become a monotonic key that outranks every later
-//           real verdict (the wedge), while plausibly-skewed answers stay on
-//           RevenueCat's single clock for cross-isolate ordering.
+//           real verdict (the wedge). Ticket order governs entitlement truth;
+//           plausible provider timestamps remain bounded provenance.
 //
 // Run: cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json fix6_billing.test.ts
 
@@ -119,8 +119,8 @@ Deno.test(
       assertEquals(body.access.paywallRequired, false, "two free ratings remain; not premium");
       assertEquals(
         body.billing.expiresAt,
-        stored.expires_at,
-        "the row is still reported faithfully",
+        null,
+        "expired memberships expose no active expiry or product",
       );
 
       sim.h.rpcs["access_state"] = accessRowFor(stored);
@@ -134,17 +134,27 @@ Deno.test(
   },
 );
 
-// ── FIX6-1 response == access_state(), re-read path ─────────────────────────
+// ── FIX6-1 response == access_state(), superseded-ticket path ─────────────────────────
 
 Deno.test(
-  "FIX6-1: re-read path — the sync's verdict is dropped as stale and the stored row (premium=true, expires_at in the past, verified on a RevenueCat clock 60 s ahead — inside the trusted skew) is answered with the access_state() predicate → false, == GET /v1/me/access",
+  "FIX6-1: superseded-ticket path — the sync's verdict is dropped as stale and the stored row (premium=true, expires_at in the past, verified on a RevenueCat clock 60 s ahead — inside the trusted skew) is answered with the access_state() predicate → false, == GET /v1/me/access",
   async () => {
     const sim = await simulate();
     try {
-      // A RENEWAL webhook lands a premium row whose entitlement expires 100 ms
-      // from now, stamped by RevenueCat 60 s ahead of our clock (a real skew
-      // the window tolerates — the timestamp is trusted as-is).
+      // The older sync waits while a later RENEWAL lands a row expiring in
+      // 100 ms, with RevenueCat's plausible 60-second clock skew. The older
+      // ticket then receives the expired row in its atomic RPC snapshot.
       const rcAhead = Date.now() + 60_000;
+      sim.faults.push({
+        match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+        subscriber: activeSubscriber(),
+        delayMs: 250,
+        times: 1,
+      });
+      const olderSync = sim.h.handler(
+        userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.63" }),
+      );
+      await sleep(20);
       sim.faults.push({
         match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
         subscriber: activeSubscriber(isoAt(Date.now() + 100)),
@@ -158,20 +168,8 @@ Deno.test(
       const seeded = sim.entitlementRows.get(TEST_USER_ID);
       assert(seeded);
       assertEquals(Date.parse(String(seeded.verified_at)), rcAhead, "60 s ahead is trusted");
-      await sleep(120);
-
-      // The user's sync is evaluated NOW (older than the stored key) with the
-      // same still-premium subscriber → dropped by the monotonic trigger, row
-      // re-read: premium=true, expires_at in the past.
-      sim.faults.push({
-        match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-        subscriber: activeSubscriber(),
-        times: 1,
-      });
-      sim.h.rpcs["access_state"] = accessRowFor(seeded);
-      const res = await sim.h.handler(
-        userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.63" }),
-      );
+      sim.h.rpcs.access_state = [{ premium: false, scored_count: 0, reserved_count: 0 }];
+      const res = await olderSync;
       assertEquals(res.status, 200);
       const body = (await res.json()) as SyncBody;
 
@@ -182,12 +180,16 @@ Deno.test(
       assert(Date.parse(String(stored.expires_at)) < Date.now());
       assertEquals(
         sim.h.callsTo(VERDICT_URL).filter((c) => c.method === "GET").length,
-        1,
-        "re-read path: the stored row was fetched once",
+        0,
+        "ordered RPC returns the snapshot atomically",
       );
 
+      assertEquals(
+        sim.verdictResults.map((row) => row.applied),
+        [true, false],
+      );
       assertEquals(dbPremium(stored), false);
-      assertEquals(body.billing.premium, false, "re-read row answered with the DB predicate");
+      assertEquals(body.billing.premium, false, "atomic snapshot answered with the DB predicate");
       assertEquals(body.access.premium, false);
       assertEquals(body.access.entitlements, []);
       assertEquals(body.billing.verifiedAt, isoAt(rcAhead), "the stored row is what is reported");
@@ -223,9 +225,18 @@ Deno.test(
       assertEquals(freshBody.access.premium, true);
       assertEquals(freshBody.access.entitlements, ["premium", "pickle_sensei_pro"]);
 
-      // Re-read path: a newer unexpired verdict is already stored; the sync
-      // evaluated earlier is dropped and the stored (premium, unexpired) row
-      // is answered premium.
+      // A later unexpired verdict overtakes an older expired sync; the
+      // losing ticket still reports the durable active entitlement.
+      sim.faults.push({
+        match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+        subscriber: expiredSubscriber(),
+        delayMs: 150,
+        times: 1,
+      });
+      const olderSync = sim.h.handler(
+        userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.66" }),
+      );
+      await sleep(20);
       const later = Date.now() + 30_000;
       sim.faults.push({
         match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
@@ -237,14 +248,7 @@ Deno.test(
         webhookRequest({ id: "fix6-lifetime-newer", type: "RENEWAL", app_user_id: TEST_USER_ID }),
       );
       assertEquals(await hook.json(), { received: true, verified: true });
-      sim.faults.push({
-        match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-        subscriber: expiredSubscriber(),
-        times: 1,
-      });
-      const reread = await sim.h.handler(
-        userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.66" }),
-      );
+      const reread = await olderSync;
       assertEquals(reread.status, 200);
       const rereadBody = (await reread.json()) as SyncBody;
       assertEquals(sim.entitlementWrites.length, 2, "the older expired verdict was dropped");
@@ -300,9 +304,9 @@ Deno.test(
       );
       const after = Date.now();
       assertEquals(await b.json(), { received: true, verified: true });
-      // The fallback (now) is OLDER than the trusted 4-min-ahead key already
-      // stored, so this verdict is dropped as stale — the row is unchanged and
-      // no far-future key was written.
+      // The newer ticket applies the expiration. The stored timestamp keeps
+      // its monotonic floor without allowing the far-future provider value
+      // to become durable provenance or an ordering key.
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assert(row);
       assertEquals(
@@ -310,7 +314,8 @@ Deno.test(
         inside,
         "the 6-min-ahead value never landed",
       );
-      assertEquals(sim.entitlementWrites.length, 1);
+      assertEquals(sim.entitlementWrites.length, 2);
+      assertEquals(row.premium, false, "newer ticket applies despite the retained timestamp");
       assert(before <= after);
 
       // Direct pin of the fallback: a fresh user, far-future clock → verified_at
@@ -346,7 +351,7 @@ Deno.test(
 // ── FIX6-2 request_date_ms window: behind ───────────────────────────────────
 
 Deno.test(
-  "FIX6-2: request_date_ms up to REVENUECAT_CLOCK_MAX_BEHIND_MS behind the pre-request clock is trusted (so a genuinely older verdict still loses to the newer stored truth); one older than that falls back to the pre-request clock and the fresh truth lands",
+  "FIX6-2: request_date_ms up to REVENUECAT_CLOCK_MAX_BEHIND_MS behind the pre-request clock is trusted for timestamp provenance while ticket order governs the verdict; one older than that falls back to the pre-request clock and the fresh truth lands",
   async () => {
     const sim = await simulate();
     try {
@@ -367,10 +372,9 @@ Deno.test(
         storedAt,
       );
 
-      // (a) 1 h behind — inside the window: RevenueCat's clock is trusted, so
-      // this EXPIRATION is correctly ordered BEFORE the stored 10-min-old
-      // verdict and dropped as stale. Falling back here would have let an
-      // older verdict overwrite newer truth.
+      // (a) 1 h behind — inside the window: preserve RevenueCat's timestamp
+      // in the ticket while its newer verification order applies EXPIRATION.
+      // The durable verified_at floor must not grant the old membership.
       const oneHourAgo = Date.now() - 60 * 60_000;
       sim.faults.push({
         match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
@@ -383,9 +387,17 @@ Deno.test(
       );
       assertEquals(await a.json(), { received: true, verified: true });
       let row = sim.entitlementRows.get(TEST_USER_ID);
-      assertEquals(row?.premium, true, "the genuinely older verdict lost to the stored newer one");
+      assertEquals(row?.premium, false, "newer ticket wins despite an older provider clock");
       assertEquals(Date.parse(String(row?.verified_at)), storedAt);
-      assertEquals(sim.entitlementWrites.length, 1);
+      const verdict = sim.h.callsTo(VERDICT_URL).at(-1)!.body as {
+        p_verdict: { verifiedAt: string };
+      };
+      assertEquals(
+        Date.parse(verdict.p_verdict.verifiedAt),
+        oneHourAgo,
+        "provider timestamp is accepted within the bound",
+      );
+      assertEquals(sim.entitlementWrites.length, 2);
 
       // (b) 25 h behind — outside the window: no live clock produced this for
       // the evaluation RevenueCat just performed. The verdict falls back to
@@ -415,7 +427,7 @@ Deno.test(
         stamped >= before && stamped <= after,
         `verified_at fell back to the pre-request clock (${stamped} ∉ [${before}, ${after}])`,
       );
-      assertEquals(sim.entitlementWrites.length, 2);
+      assertEquals(sim.entitlementWrites.length, 3);
 
       // Why the fallback cannot make a stale verdict win: it is the clock read
       // BEFORE the round trip, so a verdict evaluated after this request began
@@ -434,7 +446,7 @@ Deno.test(
       row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, true);
       assertEquals(Date.parse(String(row?.verified_at)), renewedAt);
-      assertEquals(sim.entitlementWrites.length, 3);
+      assertEquals(sim.entitlementWrites.length, 4);
     } finally {
       sim.restore();
     }

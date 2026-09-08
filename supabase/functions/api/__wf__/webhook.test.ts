@@ -18,11 +18,26 @@ import {
   WEBHOOK_SECRET,
   webhookRequest,
 } from "./routesHarness.ts";
-import { dbUnavailable, VERDICT_URL, EVENTS_URL, simulate } from "./webhookSim.ts";
+import { dbUnavailable, VERDICT_URL, EVENTS_URL, EVENT_CLAIM_URL, simulate } from "./webhookSim.ts";
 
 const PRIVATE_FAILURE_DETAIL = `private-failure-detail ${TEST_USER_ID} user@example.test ${WEBHOOK_SECRET} service-role-test-key https://FAKE-private.test/clip?token=FAKE-provider-token`;
 
 const auditWrites = (h: Harness) => h.callsTo("/rest/v1/rpc/complete_billing_webhook");
+
+function assertPendingWebhook(h: Harness): void {
+  const rows = storedRows(h, "webhook_events");
+  assertEquals(rows.length, 1, "bound reservation retained");
+  assertEquals(rows[0].processed_at, null, "no completion marker");
+}
+
+function expireWebhookLease(h: Harness, eventId: string): void {
+  const claim = storedRows(h, "billing_webhook_claims").find((row) => row.event_id === eventId);
+  assert(claim, "claim exists");
+  claim.lease_expires_at_ms = Date.now() - 1;
+  const row = storedRows(h, "webhook_events").find((row) => row.id === eventId);
+  assert(row, "reservation exists");
+  row.claimed_at = new Date(Date.now() - 300_001).toISOString();
+}
 
 const storedRows = (h: Harness, table: string): Record<string, unknown>[] =>
   (h.tables[table] ?? []) as Record<string, unknown>[];
@@ -170,7 +185,7 @@ Deno.test("webhook: RevenueCat outage → 503 so RevenueCat retries; nothing per
 });
 
 Deno.test(
-  "webhook: the event id is reserved in webhook_events BEFORE RevenueCat is consulted, with ignoreDuplicates, and marked processed once handled",
+  "webhook: the event id is reserved in webhook_events BEFORE RevenueCat is consulted, through the claim RPC, and marked processed once handled",
   async () => {
     const sim = await simulate();
     try {
@@ -183,19 +198,25 @@ Deno.test(
         }),
       );
       const order = sim.h.calls.map((c) => `${c.method} ${c.url.split("?")[0]}`);
-      const reserveIdx = order.indexOf(`POST ${EVENTS_URL}`);
+      const reserveIdx = order.indexOf(`POST ${EVENT_CLAIM_URL}`);
       const rcIdx = order.findIndex((entry) => entry.startsWith(`GET ${RC_URL}`));
       assert(reserveIdx >= 0 && rcIdx >= 0);
       assert(reserveIdx < rcIdx, `reservation precedes verification: ${order.join(" → ")}`);
 
-      const audit = sim.h.callsTo(EVENTS_URL).filter((c) => c.method === "POST");
+      const audit = sim.h.callsTo(EVENT_CLAIM_URL).filter((c) => c.method === "POST");
       assertEquals(audit.length, 1);
-      const row = audit[0].body as Record<string, unknown>;
+      const request = audit[0].body as { p_event_id: string; p_payload: unknown };
+      assertEquals(request.p_event_id, "evt-audit");
+      const row = sim.auditRows.get("evt-audit")!;
       assertEquals(row.id, "evt-audit");
       assertEquals(row.provider, "revenuecat");
       assertEquals(row.event_type, "RENEWAL");
       assertEquals(row.app_user_id, TEST_USER_ID);
-      assert(String(audit[0].headers["prefer"]).includes("resolution=ignore-duplicates"));
+      assertEquals(audit[0].headers.apikey, "service-role-test-key");
+      assertEquals(
+        sim.h.callsTo(EVENTS_URL).filter((call) => call.method !== "GET"),
+        [],
+      );
 
       const stored = sim.auditRows.get("evt-audit");
       assert(stored, "audit row present");
@@ -252,7 +273,8 @@ Deno.test(
       assertEquals(res.status, 503);
       await res.text();
       assertEquals(sim.entitlementUpserts(), 0);
-      assertEquals(sim.auditRows.has("evt-outage"), false, "no row survives a failed delivery");
+      assertEquals(sim.auditRows.get("evt-outage")?.processed_at, null);
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null);
 
       sim.h.subscriber = activeSubscriber();
       const redelivery = await sim.h.handler(webhookRequest(event));
@@ -342,9 +364,9 @@ Deno.test(
         assertEquals(await replay.json(), { received: true, duplicate: true });
       }
       assertEquals(h.callsTo(RC_URL).length, 1);
-      assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 1);
+      assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 1);
       assertEquals(sim.auditRows.size, 1);
-      assertEquals(sim.auditUpserts(), 3);
+      assertEquals(sim.auditUpserts(), 1);
     } finally {
       sim.restore();
     }
@@ -382,9 +404,9 @@ Deno.test(
       assert(rc.some((c) => c.url.endsWith(encodeURIComponent(OTHER_USER_ID))));
       assertEquals(sim.entitlementRows.size, 2, "one entitlement row per account");
       assert(sim.entitlementRows.has(TEST_USER_ID) && sim.entitlementRows.has(OTHER_USER_ID));
-      const audit = h.callsTo(EVENTS_URL).find((c) => c.method === "POST");
+      const audit = h.callsTo(EVENT_CLAIM_URL).find((c) => c.method === "POST");
       assert(audit, "audit row reserved");
-      assertEquals((audit.body as Record<string, unknown>).app_user_id, TEST_USER_ID);
+      assertEquals(sim.auditRows.get("evt-transfer")?.app_user_id, TEST_USER_ID);
       assert(typeof sim.auditRows.get("evt-transfer")?.processed_at === "string");
     } finally {
       sim.restore();
@@ -393,7 +415,7 @@ Deno.test(
 );
 
 Deno.test(
-  "webhook: TRANSFER whose SECOND subject's billing_entitlements write fails transiently (503 PGRST001) → 503, no audit row; the redelivery re-verifies and persists BOTH subjects",
+  "webhook: TRANSFER whose SECOND subject's billing_entitlements write fails transiently (503 PGRST001) → 503, no completion marker; the redelivery re-verifies and persists BOTH subjects",
   async () => {
     const sim = await simulate();
     try {
@@ -416,7 +438,8 @@ Deno.test(
       assert(!/could not connect|PGRST/i.test(text), `generic 5xx body: ${text}`);
       assertEquals(sim.rcCalls(), 2);
       assertEquals(sim.entitlementUpserts(), 2);
-      assertEquals(sim.auditRows.has("evt-transfer-fail"), false, "no audit row");
+      assertEquals(sim.auditRows.get("evt-transfer-fail")?.processed_at, null);
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null);
 
       const redelivery = await sim.h.handler(webhookRequest(event));
       assertEquals(redelivery.status, 200);
@@ -433,7 +456,7 @@ Deno.test(
 );
 
 Deno.test(
-  "webhook: FK 23503 for a never-bootstrapped user (no profiles row) is the documented by-design ack — 200 {verified:false} with the audit row written",
+  "webhook: FK 23503 plus authoritative Auth absence permits a terminal ack — 200 {verified:false} with the audit row written",
   async () => {
     const sim = await simulate();
     try {
@@ -448,6 +471,13 @@ Deno.test(
         },
         times: 1,
       });
+      sim.h.respond = (call) => {
+        if (call.url.endsWith("/auth/v1/admin/users/" + TEST_USER_ID)) {
+          sim.h.billingMissingUsers = [TEST_USER_ID];
+          return Response.json({ code: "user_not_found" }, { status: 404 });
+        }
+        return null;
+      };
       const event = {
         id: "evt-no-profile",
         type: "INITIAL_PURCHASE",
@@ -462,8 +492,8 @@ Deno.test(
       const row = sim.auditRows.get("evt-no-profile");
       assert(row && typeof row.processed_at === "string", "audit row written and processed");
       assert(
-        sim.errors.some((e) => /webhook verdict persist/i.test(e)),
-        "23503 is logged",
+        sim.h.callsTo("/auth/v1/admin/users/").length === 1,
+        "authoritative Auth absence is checked",
       );
 
       const replay = await sim.h.handler(webhookRequest(event));
@@ -500,7 +530,7 @@ Deno.test(
       assertEquals(failed.status, 503);
       assert(!JSON.stringify(await failed.json()).includes("private-failure-detail"));
       assertEquals(storedRows(h, "billing_entitlements"), []);
-      assertEquals(storedRows(h, "webhook_events"), []);
+      assertPendingWebhook(h);
       assertEquals(auditWrites(h).length, 0);
       assertEquals(h.callsTo("/auth/v1/admin/users/").length, 0);
 
@@ -555,7 +585,7 @@ for (const failure of [
         assertEquals(h.callsTo(RC_URL).length, 1);
         assertEquals(h.callsTo("/auth/v1/admin/users/").length, 0);
         assertEquals(auditWrites(h).length, 0);
-        assertEquals(storedRows(h, "webhook_events"), []);
+        assertPendingWebhook(h);
       });
     },
   );
@@ -681,7 +711,7 @@ for (const lookup of [
         assertEquals(h.callsTo("/auth/v1/admin/users/").length, 1);
         assertEquals(h.callsTo(RC_URL).length, 1);
         assertEquals(auditWrites(h).length, 0);
-        assertEquals(storedRows(h, "webhook_events"), []);
+        assertPendingWebhook(h);
       });
     },
   );
@@ -741,13 +771,14 @@ for (const appUserId of [TEST_USER_ID, "$RCAnonymousID:anonymous"]) {
         const failed = await h.handler(webhookRequest(event));
         assertEquals(failed.status, 503);
         assert(!JSON.stringify(await failed.json()).includes("private-failure-detail"));
-        assertEquals(storedRows(h, "webhook_events"), []);
+        assertPendingWebhook(h);
         assertEquals(
           storedRows(h, "billing_entitlements").length,
           appUserId === TEST_USER_ID ? 1 : 0,
         );
 
         h.respond = () => null;
+        expireWebhookLease(h, event.id);
         const retry = await h.handler(webhookRequest(event));
         assertEquals(retry.status, 200);
         assertEquals(await retry.json(), { received: true, verified: appUserId === TEST_USER_ID });
@@ -772,7 +803,14 @@ Deno.test("webhook: a committed audit with lost acknowledgement is safe to repla
     h.respond = (call) => {
       if (call.url.includes("/rest/v1/rpc/complete_billing_webhook")) {
         const body = call.body as { p_event_id: string; p_payload: unknown };
-        h.tables.webhook_events = [{ id: body.p_event_id, payload: body.p_payload }];
+        h.tables.webhook_events = [
+          {
+            id: body.p_event_id,
+            payload: body.p_payload,
+            provider: "revenuecat",
+            processed_at: new Date().toISOString(),
+          },
+        ];
         throw new Error(PRIVATE_FAILURE_DETAIL);
       }
       return null;
@@ -934,7 +972,7 @@ Deno.test(
 );
 
 Deno.test(
-  "webhook: simultaneous deliveries may repeat verification but retain one completion marker",
+  "webhook: simultaneous deliveries verify once but retain one completion marker",
   async () => {
     const h = await loadHarness();
     h.subscriber = activeSubscriber();
@@ -966,11 +1004,11 @@ Deno.test(
       [event.id],
     );
     assertEquals(storedRows(h, "billing_entitlements").length, 1);
-    assertEquals(h.callsTo(RC_URL).length, 2);
+    assertEquals(h.callsTo(RC_URL).length, 1);
     h.respond = () => null;
     const replay = await h.handler(webhookRequest(event));
     assertEquals(await replay.json(), { received: true, duplicate: true });
-    assertEquals(h.callsTo(RC_URL).length, 2);
+    assertEquals(h.callsTo(RC_URL).length, 1);
   },
 );
 
@@ -1165,7 +1203,11 @@ Deno.test(
     const failed = await h.handler(webhookRequest({ id: `outage-${userId}`, app_user_id: userId }));
     assertEquals(failed.status, 503);
     assertEquals(storedRows(h, "billing_entitlements"), prior);
-    assertEquals(storedRows(h, "webhook_events").length, 1);
+    assertEquals(storedRows(h, "webhook_events").length, 2);
+    assertEquals(
+      storedRows(h, "webhook_events").filter((row) => row.processed_at !== null).length,
+      1,
+    );
     assertEquals(h.callsTo("/rest/v1/rpc/begin_billing_verification").length, 2);
   },
 );
@@ -1208,7 +1250,7 @@ Deno.test(
       assertEquals(response.status, 503);
       assertEquals(h.callsTo(RC_URL).length, 0);
       assertEquals(storedRows(h, "billing_entitlements"), []);
-      assertEquals(storedRows(h, "webhook_events"), []);
+      assertPendingWebhook(h);
     });
   },
 );
@@ -1390,6 +1432,7 @@ Deno.test(
     const older = h.handler(webhookRequest(event));
     try {
       await started;
+      expireWebhookLease(h, event.id);
       const newer = await h.handler(webhookRequest(event));
       assertEquals(newer.status, 200);
       assertEquals(await newer.json(), { received: true, verified: true });
@@ -1397,12 +1440,16 @@ Deno.test(
       releaseOld();
     }
     const response = await older;
-    assertEquals(response.status, 200);
+    assertEquals(response.status, 503);
     await response.json();
     const rows = storedRows(h, "billing_entitlements");
     assertEquals(rows.find((row) => row.user_id === TEST_USER_ID)?.premium, false);
     assertEquals(rows.find((row) => row.user_id === OTHER_USER_ID)?.premium, true);
     assertEquals(storedRows(h, "webhook_events").length, 1);
+    assert(
+      rows.every((row) => row.verification_order === 2),
+      "neither stale subject overwrites the newer transfer",
+    );
     assertEquals(h.callsTo(RC_URL).length, 4);
     const tickets = storedRows(h, "billing_verification_tickets");
     assertEquals(
@@ -1471,7 +1518,7 @@ Deno.test(
         webhookRequest({ id: "appeared-before-audit", app_user_id: TEST_USER_ID }),
       );
       assertEquals(response.status, 503);
-      assertEquals(storedRows(h, "webhook_events"), []);
+      assertPendingWebhook(h);
       assertEquals(h.callsTo(RC_URL).length, 0);
     });
   },
@@ -1486,7 +1533,13 @@ Deno.test(
         api_version: "1.0",
         event: { id: "historical-marker", app_user_id: TEST_USER_ID },
       };
-      const historical = { id: "historical-marker", payload, received_at: "2026-01-01T00:00:00Z" };
+      const historical = {
+        id: "historical-marker",
+        payload,
+        provider: "revenuecat",
+        received_at: "2026-01-01T00:00:00Z",
+        processed_at: "2026-01-01T00:00:00Z",
+      };
       h.tables.webhook_events = [historical];
       const replay = await h.handler(webhookRequest(payload.event));
       assertEquals(await replay.json(), { received: true, duplicate: true });
@@ -1554,7 +1607,7 @@ Deno.test(
         assertEquals(h.callsTo(RC_URL).length, 1);
         assertEquals(storedRows(h, "billing_verification_tickets").length, 1);
         assertEquals(storedRows(h, "billing_entitlements"), []);
-        assertEquals(storedRows(h, "webhook_events"), []);
+        assertPendingWebhook(h);
       } finally {
         release();
         await first;
@@ -1579,7 +1632,8 @@ Deno.test(
       assertEquals(conflicting.status, 503);
       assertEquals(h.callsTo(RC_URL).length, 0);
       assertEquals(storedRows(h, "billing_entitlements"), []);
-      assertEquals(storedRows(h, "webhook_events"), []);
+      assertPendingWebhook(h);
+      expireWebhookLease(h, event.id);
       const replay = await h.handler(webhookRequest(event));
       assertEquals(replay.status, 200);
       assertEquals(await replay.json(), { received: true, verified: false });
@@ -1677,7 +1731,14 @@ Deno.test(
         assertEquals(response.status, route === "webhook" ? 503 : 502);
         await response.json();
         assertEquals(storedRows(h, "billing_entitlements"), original);
-        assertEquals(storedRows(h, "webhook_events"), markers);
+        assertEquals(
+          storedRows(h, "webhook_events").filter((row) => row.processed_at !== null),
+          markers,
+        );
+        assertEquals(
+          storedRows(h, "webhook_events").filter((row) => row.processed_at === null).length,
+          route === "webhook" ? 1 : 0,
+        );
         assertEquals(h.callsTo("/rest/v1/rpc/persist_billing_verdict").length, 1);
       }
     }

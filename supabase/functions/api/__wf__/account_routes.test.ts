@@ -524,7 +524,7 @@ Deno.test(
 // ─── Verified-session cache is evicted by account deletion ──────────────────
 
 Deno.test(
-  "after a successful delete-confirm the bearer is re-verified with Supabase Auth, not served from cache",
+  "after successful deletion a revocation tombstone refuses the bearer before another Auth call",
   async () => {
     resetState();
     const userId = crypto.randomUUID();
@@ -550,7 +550,7 @@ Deno.test(
     assertEquals(
       state.authRequests.filter((request) => new URL(request.url).pathname === "/auth/v1/user")
         .length,
-      2,
+      1,
     );
     assertEquals(access.status, 401);
     await access.text();
@@ -838,7 +838,9 @@ Deno.test(
   "logout revokes only the current device, bypasses liveness and evicts its warm bearer",
   async () => {
     resetState();
-    const token = sessionToken(crypto.randomUUID());
+    const userId = crypto.randomUUID();
+    const token = sessionToken(userId);
+    const otherDevice = sessionToken(userId);
     const warm = await call("GET", "/v1/me/access", token);
     assertEquals(warm.status, 200);
     await warm.text();
@@ -850,7 +852,11 @@ Deno.test(
     assertEquals(state.logoutCalls, [{ scope: "local", authorization: `Bearer ${token}` }]);
     assertEquals(state.sessionChecks, before);
     state.sessionActive = true;
-    const after = await call("GET", "/v1/me/access", token);
+    const revoked = await call("GET", "/v1/me/access", token);
+    assertEquals(revoked.status, 401);
+    await revoked.text();
+    assertEquals(state.sessionChecks, before);
+    const after = await call("GET", "/v1/me/access", otherDevice);
     assertEquals(after.status, 200);
     await after.text();
     assertEquals(
@@ -1044,16 +1050,6 @@ Deno.test(
     assertEquals(state.sessionChecks, 9);
   },
 );
-
-const AUTH_SECRET = "credential-must-never-appear-in-auth-logs";
-type AuthFailure = number | "network" | "no-status";
-
-function authFailure(kind: AuthFailure): Response {
-  if (kind === "network") throw new TypeError(`connection failed: ${AUTH_SECRET}`);
-  if (kind === "no-status") return new Response(`not JSON: ${AUTH_SECRET}`, { status: 401 });
-  if (kind === 0) return Response.error();
-  return jsonResponse(kind, { error_code: "injected_auth_failure", msg: AUTH_SECRET });
-}
 
 for (const flow of ["bootstrap", "provider fallback", "getUser"] as const) {
   for (const failure of [
@@ -1461,12 +1457,12 @@ Deno.test("bootstrap has a 30/min per-IP budget before any provider exchange", a
         "/v1/account/bootstrap",
         token,
         undefined,
-        "203.0.113.120",
+        "203.0.113.123",
       );
       assertEquals(response.status, 200, `bootstrap ${i + 1}`);
       await response.text();
     }
-    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.120");
+    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.123");
     assertEquals(blocked.status, 429);
     assertEquals(Number(blocked.headers.get("Retry-After")) >= 1, true);
     await blocked.text();

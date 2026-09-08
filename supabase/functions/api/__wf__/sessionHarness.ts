@@ -406,6 +406,15 @@ export async function loadSessionHarness(
       }
       if (table.startsWith("rpc/")) {
         const fn = table.slice("rpc/".length);
+        if (fn === "account_deletion_allows_apple_bootstrap") {
+          const ownerId = (body as { p_owner_id?: unknown } | null)?.p_owner_id;
+          return bearer === "service-role-test-key"
+            ? jsonResponse(
+                200,
+                state.rpcs[fn] ?? (typeof ownerId === "string" && state.users.has(ownerId)),
+              )
+            : authError(403, "server credentials required");
+        }
         if (fn === "is_api_session_active") {
           const payload = jwtPayload(bearer);
           return jsonResponse(
