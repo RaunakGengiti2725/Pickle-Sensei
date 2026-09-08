@@ -29,6 +29,49 @@ export interface StoreEntitlementState {
   premium: boolean;
   productId: string | null;
   expirationDate: string | null;
+  transaction?: BillingTransactionEvidence;
+}
+
+/** Identifiers only: never retain receipt, purchase token, signature or session. */
+export interface BillingTransactionEvidence {
+  productId: string;
+  transactionId: string;
+  purchasedAt: string;
+}
+
+export function parseBillingTransaction(
+  value: unknown,
+): BillingTransactionEvidence | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const identifier = (id: unknown): id is string =>
+    typeof id === 'string' && /^[A-Za-z0-9._:-]{1,256}$/.test(id);
+  if (
+    !identifier(row.productId) ||
+    !identifier(row.transactionId) ||
+    typeof row.purchasedAt !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(
+      row.purchasedAt,
+    ) ||
+    !Number.isFinite(Date.parse(row.purchasedAt))
+  )
+    return null;
+  return {
+    productId: row.productId,
+    transactionId: row.transactionId,
+    purchasedAt: new Date(row.purchasedAt).toISOString(),
+  };
+}
+
+export interface BillingFulfilmentRequest {
+  pendingId: string;
+  attemptId: string;
+  transaction: BillingTransactionEvidence;
+}
+
+export interface BillingFulfilmentVerdict extends BillingFulfilmentRequest {
+  outcome: 'pending' | 'fulfilled' | 'expired' | 'refunded';
+  verifiedAt: string;
 }
 
 export interface CanonicalAccessState {
@@ -55,6 +98,7 @@ export interface CanonicalBillingState {
 export interface CanonicalBillingSync {
   billing: CanonicalBillingState;
   access: CanonicalAccessState;
+  fulfilment?: BillingFulfilmentVerdict;
 }
 
 export type BillingUnconfiguredReason =
@@ -74,7 +118,8 @@ export type BillingErrorCode =
   | 'billing.backend_unconfigured'
   | 'billing.backend_unavailable'
   | 'billing.backend_invalid_response'
-  | 'billing.backend_verification_pending';
+  | 'billing.backend_verification_pending'
+  | 'billing.purchase_settled';
 
 export interface BillingErrorState {
   code: BillingErrorCode;
@@ -116,7 +161,9 @@ export interface BillingStoreClient {
 
 export interface CanonicalAccessClient {
   getAccess(): Promise<CanonicalAccessState>;
-  syncBilling(): Promise<CanonicalBillingSync>;
+  syncBilling(
+    fulfilment?: BillingFulfilmentRequest,
+  ): Promise<CanonicalBillingSync>;
 }
 
 export interface BillingAccessDependencies {

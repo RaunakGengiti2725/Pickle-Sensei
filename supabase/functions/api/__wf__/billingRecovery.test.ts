@@ -1,8 +1,8 @@
 // Real Edge handler; provider I/O and ordered-ticket persistence are exercised
 // through the existing stateful transport harness. SQL is proved separately.
 import { assertEquals } from "@std/assert";
-import { TEST_USER_ID, userRequest } from "./routesHarness.ts";
-import { simulate } from "./webhookSim.ts";
+import { fakeSupabaseAccessToken, userRequest } from "./routesHarness.ts";
+import { simulate, VERDICT_URL } from "./webhookSim.ts";
 
 const MONTHLY = "pickle_sensei_pro_monthly";
 const LIFETIME = "pickle_sensei_pro_lifetime";
@@ -14,21 +14,188 @@ const entitlement = (expires: string | null, product = MONTHLY, grace: unknown =
   purchase_date: at(-86_400_000),
 });
 
-async function sync(subscriber: Record<string, unknown>) {
+async function sync(subscriber: Record<string, unknown>, body?: unknown) {
   const sim = await simulate();
+  const owner = crypto.randomUUID();
   try {
     sim.h.subscriber = subscriber;
     sim.h.rpcs.access_state = [{ premium: false, scored_count: 0, reserved_count: 0 }];
-    const response = await sim.h.handler(userRequest("POST", "/v1/billing/sync"));
+    const response = await sim.h.handler(
+      userRequest("POST", "/v1/billing/sync", {
+        body,
+        token: fakeSupabaseAccessToken(owner),
+      }),
+    );
     return {
       status: response.status,
       body: await response.json(),
-      stored: sim.entitlementRows.get(TEST_USER_ID),
+      stored: sim.entitlementRows.get(owner),
       writes: sim.entitlementWrites.length,
     };
   } finally {
     sim.restore();
   }
+}
+
+const purchaseEvidence = {
+  pendingId: "11111111-1111-4111-8111-111111111111",
+  attemptId: "22222222-2222-4222-8222-222222222222",
+  transaction: {
+    productId: MONTHLY,
+    transactionId: "1000000123456789",
+    purchasedAt: "2026-08-01T00:00:00.000Z",
+  },
+};
+
+Deno.test(
+  "W07 pending purchase: only a matching active entitlement fulfils a transaction",
+  async () => {
+    const result = await sync(
+      {
+        entitlements: { pickle_sensei_pro: entitlement(at(60_000)) },
+        subscriptions: {
+          [MONTHLY]: {
+            store_transaction_id: purchaseEvidence.transaction.transactionId,
+            purchase_date: purchaseEvidence.transaction.purchasedAt,
+            expires_date: at(60_000),
+            refunded_at: null,
+          },
+        },
+      },
+      { fulfilment: purchaseEvidence },
+    );
+    assertEquals(result.status, 200);
+    assertEquals(result.body.fulfilment?.outcome, "fulfilled");
+    assertEquals(result.body.billing.premium, true);
+  },
+);
+
+Deno.test(
+  "W07 pending purchase: a superseded ticket cannot return a terminal verdict",
+  async () => {
+    const sim = await simulate();
+    try {
+      sim.h.rpcs.access_state = [{ premium: false, scored_count: 0, reserved_count: 0 }];
+      sim.h.subscriber = {
+        entitlements: {},
+        subscriptions: {
+          [MONTHLY]: {
+            store_transaction_id: purchaseEvidence.transaction.transactionId,
+            purchase_date: purchaseEvidence.transaction.purchasedAt,
+            expires_date: at(-1_000),
+          },
+        },
+      };
+      const owner = crypto.randomUUID();
+      sim.faults.push({
+        match: (method, url) => method === "POST" && url === VERDICT_URL,
+        status: 200,
+        body: {
+          outcome: "persisted",
+          user_id: owner,
+          applied: false,
+          billing: {
+            premium: false,
+            productKey: null,
+            expiresAt: null,
+            verifiedAt: at(0),
+            activeEntitlements: [],
+          },
+        },
+      });
+      const response = await sim.h.handler(
+        userRequest("POST", "/v1/billing/sync", {
+          token: fakeSupabaseAccessToken(owner),
+          body: { fulfilment: purchaseEvidence },
+        }),
+      );
+      assertEquals(response.status, 200);
+      assertEquals((await response.json()).fulfilment.outcome, "pending");
+    } finally {
+      sim.restore();
+    }
+  },
+);
+
+Deno.test(
+  "W07 pending purchase: malformed evidence fails before provider verification",
+  async () => {
+    const result = await sync(
+      { entitlements: {} },
+      {
+        fulfilment: {
+          ...purchaseEvidence,
+          transaction: { ...purchaseEvidence.transaction, transactionId: "x".repeat(257) },
+        },
+      },
+    );
+    assertEquals(result.status, 400);
+    assertEquals(result.writes, 0);
+  },
+);
+
+for (const outcome of ["expired", "refunded"]) {
+  Deno.test(`W07 pending purchase: fresh matched subscription proves ${outcome}`, async () => {
+    const result = await sync(
+      {
+        entitlements: {},
+        subscriptions: {
+          [MONTHLY]: {
+            store_transaction_id: purchaseEvidence.transaction.transactionId,
+            purchase_date: purchaseEvidence.transaction.purchasedAt,
+            expires_date: at(-1_000),
+            grace_period_expires_date: null,
+            refunded_at: outcome === "refunded" ? at(-2_000) : null,
+          },
+        },
+      },
+      { fulfilment: purchaseEvidence },
+    );
+    assertEquals(result.status, 200);
+    assertEquals(result.body.fulfilment?.outcome, outcome);
+    assertEquals(result.body.fulfilment?.pendingId, purchaseEvidence.pendingId);
+    assertEquals(result.body.fulfilment?.attemptId, purchaseEvidence.attemptId);
+    assertEquals(result.body.fulfilment?.transaction, purchaseEvidence.transaction);
+    assertEquals(result.body.billing.premium, false);
+  });
+}
+
+for (const reason of [
+  "absence",
+  "other-transaction",
+  "other-purchase-date",
+  "active-grace",
+  "malformed-expiry",
+  "future-refund",
+]) {
+  Deno.test(`W07 pending purchase: ${reason} is not terminal evidence`, async () => {
+    const result = await sync(
+      {
+        entitlements: {},
+        subscriptions:
+          reason === "absence"
+            ? {}
+            : {
+                [MONTHLY]: {
+                  store_transaction_id:
+                    reason === "other-transaction"
+                      ? "different"
+                      : purchaseEvidence.transaction.transactionId,
+                  purchase_date:
+                    reason === "other-purchase-date"
+                      ? at(-60_000)
+                      : purchaseEvidence.transaction.purchasedAt,
+                  expires_date: reason === "malformed-expiry" ? "invalid" : at(-1_000),
+                  grace_period_expires_date: reason === "active-grace" ? at(60_000) : null,
+                  refunded_at: reason === "future-refund" ? at(60_000) : null,
+                },
+              },
+      },
+      { fulfilment: purchaseEvidence },
+    );
+    assertEquals(result.status, 200);
+    assertEquals(result.body.fulfilment?.outcome, "pending");
+  });
 }
 
 Deno.test(

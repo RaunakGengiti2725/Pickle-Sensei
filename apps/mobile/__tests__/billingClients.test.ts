@@ -127,6 +127,45 @@ const access = {
 };
 
 describe('RevenueCat billing client', () => {
+  it('retains only matching purchase transaction identifiers, never receipt or token fields', async () => {
+    const native = sdk();
+    native.purchasePackage.mockResolvedValue({
+      customerInfo: customerInfo(true),
+      transaction: {
+        transactionIdentifier: '1000000123456789',
+        productIdentifier: 'premium_annual_3999',
+        purchaseDate: '2026-09-01T00:00:00Z',
+        purchaseToken: 'never-retain-token',
+        originalJson: 'never-retain-receipt',
+        signature: 'never-retain-signature',
+      },
+    });
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const plans = await client.loadPlans();
+    const result = await client.purchase(plans.annual!.id);
+    expect(result.transaction).toEqual({
+      productId: 'premium_annual_3999',
+      transactionId: '1000000123456789',
+      purchasedAt: '2026-09-01T00:00:00.000Z',
+    });
+    expect(JSON.stringify(result)).not.toContain('never-retain');
+    native.purchasePackage.mockResolvedValue({
+      customerInfo: customerInfo(true),
+      transaction: {
+        transactionIdentifier: '1000000123456789',
+        productIdentifier: 'another_product',
+        purchaseDate: '2026-09-01T00:00:00Z',
+      },
+    });
+    expect(
+      (await client.purchase(plans.annual!.id)).transaction,
+    ).toBeUndefined();
+  });
+
   it('rejects auth-provider subjects instead of configuring RevenueCat', async () => {
     const native = sdk();
     const client = createRevenueCatBillingClient(
@@ -398,6 +437,72 @@ describe('RevenueCat billing client', () => {
 });
 
 describe('canonical access API', () => {
+  it.each([
+    'matched',
+    'old-attempt',
+    'other-transaction',
+    'old-verdict',
+    'invalid-outcome',
+  ] as const)(
+    'binds terminal backend evidence to the request: %s',
+    async scenario => {
+      const request = {
+        pendingId: CANONICAL_USER_ID,
+        attemptId: '22222222-2222-4222-8222-222222222222',
+        transaction: {
+          productId: 'premium_annual_3999',
+          transactionId: '1000000123456789',
+          purchasedAt: '2026-09-01T00:00:00.000Z',
+        },
+      };
+      const fetchFn = jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          billing: {
+            premium: false,
+            productKey: null,
+            expiresAt: null,
+            verifiedAt: '2026-09-07T00:00:00.000Z',
+          },
+          access,
+          fulfilment: {
+            ...request,
+            attemptId: scenario === 'old-attempt' ? 'stale' : request.attemptId,
+            transaction:
+              scenario === 'other-transaction'
+                ? { ...request.transaction, transactionId: 'other' }
+                : request.transaction,
+            outcome: scenario === 'invalid-outcome' ? ['expired'] : 'expired',
+            verifiedAt:
+              scenario === 'old-verdict'
+                ? '2026-08-31T00:00:00.000Z'
+                : '2026-09-07T00:00:00.000Z',
+          },
+        }),
+      })) as unknown as jest.MockedFunction<typeof fetch>;
+      const client = createCanonicalAccessClient({
+        baseUrl: 'https://api.example.test',
+        token: 'real-token',
+        fetchFn,
+      });
+      if (scenario === 'matched')
+        await expect(client.syncBilling(request)).resolves.toMatchObject({
+          fulfilment: { outcome: 'expired' },
+        });
+      else
+        await expect(client.syncBilling(request)).rejects.toMatchObject({
+          code: 'billing.backend_invalid_response',
+        });
+      expect(fetchFn).toHaveBeenCalledWith(
+        'https://api.example.test/v1/billing/sync',
+        expect.objectContaining({
+          body: JSON.stringify({ fulfilment: request }),
+        }),
+      );
+    },
+  );
+
   it('reads access with bearer auth and accepts only coherent server counts', async () => {
     const fetchFn = jest.fn(async () => ({
       ok: true,

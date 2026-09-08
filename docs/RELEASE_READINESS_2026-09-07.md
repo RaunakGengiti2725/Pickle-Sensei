@@ -14,8 +14,9 @@ not current evidence for this candidate.
 - Current source version/build: iOS `1.0` / `1`; release manifest also records
   build `1` and placeholder environments. This needs reconciliation with
   previously uploaded builds before an archive can be submitted.
-- No signing, production mutation, upload, submission, main merge or release
-  has been performed in this session.
+- No distribution signing, production mutation, upload, submission, main merge
+  or release has been performed in this session. Local simulator builds use
+  Xcode ad-hoc signing so Keychain behavior can be tested.
 
 ## 2. Findings register
 
@@ -302,8 +303,184 @@ historical context, not proof of this candidate.
 
 ## 10. Next action
 
-Continue authorized software stabilization and integration. The final packet
-will name the exact owner-approved rollout/submission action only after the
-candidate and remaining external gates are concrete and reviewable.
+The owner requested a GitHub checkpoint for continuation in Devin cloud on
+2026-09-08. Continue from the branch and handoff below. This changes the working
+environment, not the acceptance criteria or human release boundaries.
 
 No release action was performed.
+
+## 11. Devin cloud continuation checkpoint — 2026-09-08
+
+Checkout `codex/production-continuation-20260907`. Read `AGENTS.md`, `REVIEW.md`,
+`docs/prompts/codex-production-readiness.md` and this packet before continuing.
+The owner's scope is completing production readiness, including substantial
+end-to-end Phase 1 implementation while investigating remaining Phase 0 failures.
+The current checkpoint deliberately includes unfinished implementation. It is
+**NO-GO for release**, not a completed release candidate. Earlier findings above
+are chronological evidence; this section records the latest continuation state.
+
+The shipping backend is `supabase/functions/api/` (Deno), not the older Fastify
+service. Use root pnpm 10.15.1 / Node 20.x according to `package.json`, and npm /
+Node 22.x inside `apps/mobile`; do not run pnpm there. Local ignored `artifacts/`
+and credentials are not part of the GitHub handoff. Test counts below summarize
+those local logs; Devin must regenerate evidence on its own final candidate.
+
+### Completed changes to preserve
+
+- `bf366f51`: W02 sync dependency recovery, strict complete/disjoint/unique ACKs,
+  fair durable batches, original-owner session reconstruction, duplicate identity
+  conflict holds, owner-generation fencing and real Result “Retry saving”.
+  Thirteen focused suites / 684 tests passed, including 31 real SQLite cases;
+  mobile typecheck, owned lint and formatting passed. Physical process-death and
+  native UI acceptance remain outstanding.
+- `0c29e54a`: W06(E) removed the unvalidated public benchmark rescale everywhere,
+  including accessibility labels. Ten focused suites / 237 tests passed.
+  The shared release-bound interval predicate and formatter exist; approved
+  positive saved-outcome publication is not wired. No replacement model or
+  scientific validation has been approved.
+- `cdd77d73`: W07 verified billing grace and longest recognized alias access
+  (including lifetime). Eight added cases first reproduced six failures;
+  158 billing/adversarial/ordering regressions then passed, with frozen Deno
+  typecheck and owned lint/format passing.
+- `949288cb`: the simulator launch gate now rejects a dead logger, incomplete
+  observation and a dead app PID; owned logger shutdown is bounded. Fourteen
+  launch-helper fixtures passed on Bash 5 and stock macOS Bash 3.2.
+- `cba1eabf`: bounded Metro module-load tracing preserves the ICNS child's
+  existing five-second, 192 MB, output-size and kill safeguards. It is diagnostic
+  instrumentation; the intermittent config-load timeout is not yet explained.
+
+### Work in progress included in this checkpoint
+
+**W01/W04 release authority:** `analysisReleasePolicy.ts` in shared types defines
+immutable policy bytes, independent mechanics/benchmark approval metadata,
+supported observed inputs and complete output lineage without a self-hash cycle.
+The new migration `20260908020000_analysis_release_authority.sql` adds immutable
+policy storage, append-only decisions, separate output approval, activation,
+irreversible withdrawal and default denial of new authorizations. Mutations are
+database-owner-only; the service role can only read through the dedicated RPC.
+No policy has been installed or approved in production. Edge
+`releasePolicy.ts` checks canonical bytes, SHA-256, document and control state;
+the authenticated `GET /v1/analysis/release-policy` route exposes that authority.
+
+Evidence: 28 new shared policy tests, 302 shared tests total, nine frozen Deno
+policy tests, a focused real PostgreSQL authority/privilege/immutability test,
+and frozen Deno `index.ts` typecheck passed locally. The SQL test used a disposable
+clone; the final CHECK refinement and the newly wired fresh/all-history RLS
+matrix still need a complete run. The new HTTP route needs real-handler tests.
+Root and function-local import resolution must both continue to work; dependency
+versions and lockfiles were not changed for this work.
+
+**This does not yet enforce production charging.** Admission, mobile policy
+fetch, atomic result/receipt/charge settlement, offline grants, allocation
+accounting, native wallet, trusted time, key rotation and delayed receipt
+reconciliation remain to implement. Preserve these integration constraints:
+
+- Existing raw `scored` counts must not charge mechanics-only partial outputs.
+  Change accounting prospectively while preserving the lifetime spent floor,
+  late-linked identities and deletion/recreation anti-reset behavior. Use
+  `lifetime_scored_count()` at decision points; preserve `access_lock_key()`.
+- Bind receipts and replay checks to owner/device/grant/ticket/operation/result,
+  canonical payload digest and full policy lineage. Existing ID-only replay is
+  insufficient. Check replay before spending fresh sequence or credit.
+- Add an honest partial terminal outcome through permit lifecycle guards and
+  tombstones; do not relabel partial output as low confidence to fit an old enum.
+  Preserve API-only RLS and security-invoker user RPCs. Never automatically
+  reclaim a disconnected device's offline allocation.
+- Relevant effective SQL is in `20260907100000_permit_settled_no_delete.sql`,
+  `20260907000000_permit_terminal_client_role.sql`,
+  `20260906140000_permit_lifecycle_null_safe.sql`, and
+  `20260907110000_api_audit_integration.sql`. Add forward migrations after this
+  checkpoint; do not modify committed migration history.
+
+**W07 purchase fulfilment:** mobile pending journal schema 2 stores bounded
+transaction identifiers/date, with schema 1 compatibility. Each reconciliation
+binds a fresh attempt ID, pending record and transaction. Matched provider
+fulfilment or terminal expiry/refund can clear pending state; ambiguous absence
+stays pending. The Edge handler suppresses terminal verdicts from superseded
+ordered tickets. Four focused mobile suites / 122 tests and mobile typecheck
+passed locally. The final focused Edge run passed 169 billing, adversarial and
+ordering tests, including the 19-case recovery suite. These use controlled
+provider fixtures and do not cover the real-provider mismatch below.
+
+**Known provider integration blocker:** the current implementation accepts only
+a string `store_transaction_id` and requires an exact matching transaction in
+RevenueCat v1 subscriber data. The official
+[customer info model](https://www.revenuecat.com/docs/api-v1/customer-info-model)
+shows numeric iOS subscription transaction IDs; its non-subscription example
+has RevenueCat's own ID but no Apple transaction ID. A renewal also replaces
+the latest subscription transaction. Consequently valid purchases, especially
+lifetime purchases, can remain pending indefinitely. Complete verified provider
+reconciliation and add realistic numeric-ID, lifetime and post-renewal cases;
+do not infer a refund/expiry from absence or use product identity alone as
+terminal transaction evidence. The durable transfer queue and source/destination
+verification barrier are also unimplemented. The proposed billing-recovery
+migration does not exist. Preserve retryable incomplete webhooks, authenticated
+reconciliation, ordered verification, live-session checks and billing isolation.
+
+### Phase 0 and remaining dependencies
+
+The third full run on `4f26e5f7504097805105b818cebd202d2bc0bbba` failed overall:
+cloud passed 13/15 stages; lint found an ignored local diagnostic script issue
+(subsequently corrected) and mobile hit the ICNS child timeout (5,808/5,809
+passed). All three Apple stages passed: native Swift suites (105 Vision + 37
+managed-media tests per platform, zero skipped), real Vision extraction, fresh
+mobile Jest (307 suites / 5,809 tests), Pods, actual Release build and ad-hoc
+simulator launch. The app survived the 25-second observation with zero crash,
+fatal or Keychain errors. Screenshots have not been visually reviewed.
+
+A fourth `scripts/verify-all.sh --cloud-args '--tier full --fresh-deps'` run was
+started in an isolated clean checkout of
+`0c29e54a85d77ad35ce4fdcbba49d3395095f8c9`. At handoff preparation, dependencies,
+format, lint, typecheck, workspace tests and database stages had passed; mobile
+was running. This older snapshot excludes the unfinished billing/release-policy
+checkpoint, so even a later pass would not certify the final handoff SHA.
+Local logs are `artifacts/readiness-20260907-baseline/phase0-r4-*`; rerun the
+canonical full gates on the final integrated commit in Devin, with real Mac
+verification for native claims. Do not relax the ICNS timeout or prewarm/reorder
+tests to conceal the unresolved cold config-load failure.
+
+Prioritize charging/release enforcement and its offline/native dependencies,
+complete billing recovery, and shipping account/media deletion. For W08, the
+standalone managed-media package is not yet the shipping native pod integration;
+account cleanup must purge every owner namespace and managed media inventory.
+Inventory pagination must not silently truncate at the current 16-page cap.
+Signed native uploads must reject redirects; React Native fetch follows them.
+W03 import still needs conservative event admission, verified timing and byte
+identity (the Library original-operation retry entry already exists). W06 full
+nine-component comparability across mobile/Edge/SQL rank remains open. W09 still
+needs ResultDetails routing, an accessible review seek control, notification
+press handling before navigation is ready, and native ceremony/focus proof.
+W10 diagnostics must stay disabled until native envelope scrubbing and bounded
+disk retention are implemented and verified. W11 still needs auth/NAT failure
+budget fixes, legacy provider-token retirement, compatible rollout/rollback and
+a final immutable build identity: current Fastlane increments after verification
+would make the verified and uploaded candidates differ.
+
+### Human requirements that remain open
+
+Read-only App Store Connect inspection found app ID `6806918402`, version 1.0
+in PREPARE_FOR_SUBMISSION and newest uploaded VALID build 3. Choose a source
+build greater than 3 and recheck before the human archive. Monthly/yearly are
+in one subscription group; all three products are MISSING_METADATA with no
+review screenshot. US configured prices are $7.99 / $59.99 / $159.99; no store
+metadata, pricing, territory, Family Sharing or release setting was changed.
+Real sandbox purchase/restore/refund/transfer and webhook evidence is absent.
+
+The coach registry has no qualified entries or countable reviews. Numerical
+release needs consented footage, verified metadata, blinded qualified ratings,
+adjudication and the approved validation protocol. Protected holdouts
+`wm-dink-01` and `afn-vic-rally1` must not be used for development. Physical
+small/older and current iPhone tests, attestation, legal/age/assent/media rights,
+backup restoration, operational readiness and production rollout remain open.
+Request only the necessary human input while continuing independent work.
+Production database/Edge/secrets/dashboard changes, distribution signing,
+archive/upload/TestFlight/submission, main merge/tag and release retain their
+existing human approval boundaries. A GitHub checkpoint authorizes none of them.
+
+### Checkpoint verification
+
+After formatting the saved work with root Prettier, changed-source ESLint,
+mobile TypeScript, frozen Deno 2.5.6 `index.ts` typecheck and `git diff --check`
+all passed. Gitleaks 8.30.1 found no leaks in the commit-eligible working tree
+or all 568 commits in the pre-checkpoint HEAD history. This is a continuation
+checkpoint; the full product gates have not passed on its final SHA.

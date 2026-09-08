@@ -50,6 +50,7 @@ run_matrices() {
     done
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/security_regression.sql"
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/account_deletion_operations.sql"
+    run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/analysis_release_policy.sql"
   done
 }
 

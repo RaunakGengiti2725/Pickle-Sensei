@@ -2,14 +2,18 @@ import { canonicalDataOwner } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
 import { withTransaction } from '../data/transactions';
 import { makeUuid } from '../util/uuid';
-import { BillingError } from './types';
+import {
+  BillingError,
+  parseBillingTransaction,
+  type BillingTransactionEvidence,
+} from './types';
 
 export const PENDING_FULFILMENT_KV_NAMESPACE = 'billing.pending-fulfilment';
 export const PENDING_FULFILMENT_MAX_LENGTH = 2_048;
 export const PENDING_FULFILMENT_MAX_BACKOFF_MS = 5 * 60_000;
 
 export interface PendingFulfilment {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   id: string;
   owner: string;
   source: 'purchase' | 'restore';
@@ -17,6 +21,7 @@ export interface PendingFulfilment {
   completedAtMs: number;
   attempts: number;
   lastAttemptAtMs: number | null;
+  transaction?: BillingTransactionEvidence;
 }
 
 export interface PendingFulfilmentStorage {
@@ -53,7 +58,7 @@ export function parsePendingFulfilment(
       throw invalidRecord();
     const record = value as Record<string, unknown>;
     if (
-      record.schemaVersion !== 1 ||
+      (record.schemaVersion !== 1 && record.schemaVersion !== 2) ||
       typeof record.id !== 'string' ||
       canonicalDataOwner(record.id) !== record.id ||
       record.owner !== canonicalDataOwner(owner) ||
@@ -72,8 +77,17 @@ export function parsePendingFulfilment(
     ) {
       throw invalidRecord();
     }
+    const transaction =
+      record.schemaVersion === 2
+        ? parseBillingTransaction(record.transaction)
+        : null;
+    if (
+      record.schemaVersion === 2 &&
+      (record.source !== 'purchase' || !transaction)
+    )
+      throw invalidRecord();
     return {
-      schemaVersion: 1,
+      schemaVersion: record.schemaVersion,
       id: record.id,
       owner: canonicalDataOwner(owner),
       source: record.source,
@@ -81,6 +95,7 @@ export function parsePendingFulfilment(
       completedAtMs: record.completedAtMs,
       attempts: record.attempts,
       lastAttemptAtMs: record.lastAttemptAtMs,
+      ...(transaction ? { transaction } : {}),
     };
   } catch {
     throw invalidRecord();
@@ -90,9 +105,12 @@ export function parsePendingFulfilment(
 export function createPendingFulfilment(
   owner: string,
   source: PendingFulfilment['source'],
+  evidence?: BillingTransactionEvidence,
 ): PendingFulfilment {
+  const transaction =
+    source === 'purchase' ? parseBillingTransaction(evidence) : null;
   return {
-    schemaVersion: 1,
+    schemaVersion: transaction ? 2 : 1,
     id: makeUuid(),
     owner: canonicalDataOwner(owner),
     source,
@@ -100,6 +118,7 @@ export function createPendingFulfilment(
     completedAtMs: Date.now(),
     attempts: 0,
     lastAttemptAtMs: null,
+    ...(transaction ? { transaction } : {}),
   };
 }
 
@@ -164,6 +183,8 @@ export function createPendingFulfilmentStorage(
           (existing.id !== record.id ||
             existing.source !== record.source ||
             existing.completedAtMs !== record.completedAtMs ||
+            JSON.stringify(existing.transaction) !==
+              JSON.stringify(record.transaction) ||
             existing.attempts > record.attempts)
         )
           throw invalidRecord();

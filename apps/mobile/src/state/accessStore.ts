@@ -14,6 +14,7 @@ import {
   type BillingAccessDependencies,
   type BillingErrorCode,
   type BillingErrorState,
+  type BillingFulfilmentRequest,
   type BillingPeriod,
   type CanonicalAccessState,
   type CanonicalBillingSync,
@@ -28,6 +29,7 @@ import {
   isDataOwnerContextCurrent,
   type DataOwnerContext,
 } from '../data/accountScope';
+import { makeUuid } from '../util/uuid';
 
 export type AccessLoadStatus =
   'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
@@ -432,6 +434,7 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
 
   const verifyBackend = async (
     scope: OperationScope,
+    fulfilment?: BillingFulfilmentRequest,
   ): Promise<CanonicalBillingSync> => {
     assertActive(scope);
     const tracker = scope.configuration.reconciliation;
@@ -455,7 +458,9 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
     try {
       const result = await bounded(() => {
         assertActive(scope);
-        return scope.configuration.clients.backend.syncBilling();
+        return fulfilment
+          ? scope.configuration.clients.backend.syncBilling(fulfilment)
+          : scope.configuration.clients.backend.syncBilling();
       });
       assertActive(scope);
       tracker.failures = 0;
@@ -513,9 +518,37 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
       return current.storage.write(attempted, () => assertActive(scope));
     }, pendingError(attempted));
     assertActive(scope);
-    const synced = await verifyBackend(scope);
+    const fulfilmentRequest = attempted.transaction
+      ? {
+          pendingId: attempted.id,
+          attemptId: makeUuid(),
+          transaction: attempted.transaction,
+        }
+      : undefined;
+    const synced = await verifyBackend(scope, fulfilmentRequest);
     assertActive(scope);
-    if (!synced.access.premium && attempted.source === 'purchase') {
+    const disposition = synced.fulfilment;
+    const bound =
+      fulfilmentRequest &&
+      disposition &&
+      disposition.pendingId === fulfilmentRequest.pendingId &&
+      disposition.attemptId === fulfilmentRequest.attemptId &&
+      JSON.stringify(disposition.transaction) ===
+        JSON.stringify(fulfilmentRequest.transaction) &&
+      Number.isFinite(Date.parse(disposition.verifiedAt)) &&
+      Date.parse(disposition.verifiedAt) >=
+        Date.parse(fulfilmentRequest.transaction.purchasedAt);
+    const terminal =
+      bound &&
+      (disposition.outcome === 'expired' || disposition.outcome === 'refunded');
+    const fulfilled =
+      bound && disposition.outcome === 'fulfilled' && synced.access.premium;
+    if (
+      (fulfilmentRequest && !terminal && !fulfilled) ||
+      (!fulfilmentRequest &&
+        !synced.access.premium &&
+        attempted.source === 'purchase')
+    ) {
       return { access: synced.access, error: pendingError(attempted) };
     }
     await bounded(() => {
@@ -527,13 +560,21 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
     set({ pendingFulfilment: null, fulfilmentStatus: 'clear' });
     return {
       access: synced.access,
-      error: synced.access.premium
-        ? null
-        : new BillingError(
-            'billing.restore_failed',
-            'No active Pickle Sensei membership was found for this store account.',
+      error: terminal
+        ? new BillingError(
+            'billing.purchase_settled',
+            disposition.outcome === 'refunded'
+              ? 'The store confirmed this purchase was refunded. Membership verification is complete.'
+              : 'The store confirmed this purchase has expired. Membership verification is complete.',
             false,
-          ),
+          )
+        : synced.access.premium
+          ? null
+          : new BillingError(
+              'billing.restore_failed',
+              'No active Pickle Sensei membership was found for this store account.',
+              false,
+            ),
     };
   };
 
@@ -553,7 +594,9 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
     assertActive(scope);
     set({
       status:
-        result.error && result.error.code !== 'billing.restore_failed'
+        result.error &&
+        result.error.code !== 'billing.restore_failed' &&
+        result.error.code !== 'billing.purchase_settled'
           ? statusFor(result.error)
           : 'ready',
       canonicalAccess: result.access,
@@ -626,10 +669,14 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
           source === 'purchase'
             ? () => current.clients.store.purchase(purchasePlanId!)
             : () => current.clients.store.restore();
-        await request();
+        const storeResult = await request();
         completed = true;
         assertOwnerEpoch(current);
-        record = createPendingFulfilment(current.owner, source);
+        record = createPendingFulfilment(
+          current.owner,
+          source,
+          storeResult?.transaction,
+        );
         remember(current, record);
         if (isCurrent(scope))
           set({ pendingFulfilment: record, fulfilmentStatus: 'pending' });

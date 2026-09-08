@@ -1,5 +1,8 @@
 import {
   BillingError,
+  parseBillingTransaction,
+  type BillingFulfilmentRequest,
+  type BillingFulfilmentVerdict,
   type CanonicalAccessClient,
   type CanonicalAccessState,
   type CanonicalBillingState,
@@ -157,7 +160,11 @@ async function responseBody(response: Response): Promise<unknown> {
 export function createCanonicalAccessClient(
   config: CanonicalAccessApiConfig,
 ): CanonicalAccessClient {
-  const request = async (path: string, method: 'GET' | 'POST') => {
+  const request = async (
+    path: string,
+    method: 'GET' | 'POST',
+    body?: unknown,
+  ) => {
     const values = configuredValues(config);
     const controller = new AbortController();
     let timedOut = false;
@@ -181,7 +188,9 @@ export function createCanonicalAccessClient(
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${values.token}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
+        ...(body ? { body: JSON.stringify(body) } : {}),
         signal: controller.signal,
       });
       if (timedOut) return undefined;
@@ -220,13 +229,51 @@ export function createCanonicalAccessClient(
 
   return {
     getAccess: async () => parseAccess(await request('/v1/me/access', 'GET')),
-    syncBilling: async () => {
-      const value = await request('/v1/billing/sync', 'POST');
+    syncBilling: async fulfilmentRequest => {
+      const value = await request(
+        '/v1/billing/sync',
+        'POST',
+        fulfilmentRequest ? { fulfilment: fulfilmentRequest } : undefined,
+      );
       if (!isRecord(value)) throw invalidResponse();
       const billing = parseBilling(value.billing);
       const access = parseAccess(value.access);
       if (billing.premium !== access.premium) throw invalidResponse();
-      return { billing, access } satisfies CanonicalBillingSync;
+      const fulfilment =
+        value.fulfilment === undefined
+          ? undefined
+          : parseFulfilment(value.fulfilment, fulfilmentRequest);
+      return {
+        billing,
+        access,
+        ...(fulfilment ? { fulfilment } : {}),
+      } satisfies CanonicalBillingSync;
     },
+  };
+}
+
+function parseFulfilment(
+  value: unknown,
+  request?: BillingFulfilmentRequest,
+): BillingFulfilmentVerdict {
+  if (!request || !isRecord(value)) throw invalidResponse();
+  const transaction = parseBillingTransaction(value.transaction);
+  if (
+    !transaction ||
+    value.pendingId !== request.pendingId ||
+    value.attemptId !== request.attemptId ||
+    JSON.stringify(transaction) !== JSON.stringify(request.transaction) ||
+    typeof value.outcome !== 'string' ||
+    !['pending', 'fulfilled', 'expired', 'refunded'].includes(value.outcome) ||
+    !isIsoDate(value.verifiedAt) ||
+    (value.outcome !== 'pending' &&
+      Date.parse(value.verifiedAt) < Date.parse(transaction.purchasedAt))
+  )
+    throw invalidResponse();
+  return {
+    ...request,
+    transaction,
+    outcome: value.outcome as BillingFulfilmentVerdict['outcome'],
+    verifiedAt: value.verifiedAt,
   };
 }

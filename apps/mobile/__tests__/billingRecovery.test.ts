@@ -2,6 +2,7 @@ import { createCanonicalAccessClient } from '../src/billing/accessApi';
 import {
   BillingError,
   type BillingAccessDependencies,
+  type BillingFulfilmentRequest,
   type CanonicalAccessState,
   type CanonicalBillingSync,
   type StoreEntitlementState,
@@ -133,7 +134,9 @@ function dependencies() {
     },
     backend: {
       getAccess: jest.fn(async () => freeAccess),
-      syncBilling: jest.fn(async () => synced()),
+      syncBilling: jest.fn(async (_request?: BillingFulfilmentRequest) =>
+        synced(),
+      ),
     },
   } satisfies BillingAccessDependencies;
 }
@@ -163,6 +166,132 @@ afterEach(() => {
 });
 
 describe('owner-bound durable billing fulfilment', () => {
+  it.each([
+    'absence',
+    'pending',
+    'old-attempt',
+    'other-transaction',
+    'old-verdict',
+  ] as const)(
+    'retains a transaction-bound purchase when recovery supplies %s',
+    async reason => {
+      const { storage } = durableStorage();
+      const clients = dependencies();
+      const transaction = {
+        productId: storeEntitlement.productId!,
+        transactionId: '1000000123456789',
+        purchasedAt: '2026-09-01T00:00:00.000Z',
+      };
+      clients.store.purchase.mockResolvedValue({
+        ...storeEntitlement,
+        transaction,
+      });
+      clients.backend.syncBilling.mockImplementation(async request => ({
+        ...synced(false),
+        ...(reason === 'absence'
+          ? {}
+          : {
+              fulfilment: {
+                ...request!,
+                outcome:
+                  reason === 'pending'
+                    ? ('pending' as const)
+                    : ('expired' as const),
+                attemptId:
+                  reason === 'old-attempt' ? 'old-attempt' : request!.attemptId,
+                transaction:
+                  reason === 'other-transaction'
+                    ? { ...transaction, transactionId: 'other' }
+                    : transaction,
+                verifiedAt:
+                  reason === 'old-verdict'
+                    ? '2026-08-31T00:00:00.000Z'
+                    : '2026-09-07T00:00:00.000Z',
+              },
+            }),
+      }));
+      configure(clients, storage);
+      await useAccessStore.getState().initialize();
+      await useAccessStore.getState().purchaseSelected();
+      await useAccessStore.getState().retryPendingFulfilment();
+      expect(await storage.read(OWNER_A)).toMatchObject({
+        schemaVersion: 2,
+        transaction,
+      });
+      expect(clients.backend.syncBilling).toHaveBeenCalledTimes(2);
+      expect(
+        clients.backend.syncBilling.mock.calls[0]?.[0]?.attemptId,
+      ).not.toBe(clients.backend.syncBilling.mock.calls[1]?.[0]?.attemptId);
+      await useAccessStore.getState().purchaseSelected();
+      expect(clients.store.purchase).toHaveBeenCalledTimes(1);
+      expect(clients.store.restore).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['expired', 'refunded'] as const)(
+    'relaunch clears a transaction-bound %s purchase only after a fresh backend disposition',
+    async outcome => {
+      const { db, storage } = await sqliteStorage();
+      try {
+        const transaction = {
+          productId: storeEntitlement.productId!,
+          transactionId: '1000000123456789',
+          purchasedAt: '2026-09-01T00:00:00.000Z',
+        };
+        const first = dependencies();
+        first.store.purchase.mockResolvedValue({
+          ...storeEntitlement,
+          transaction,
+        });
+        first.backend.syncBilling.mockRejectedValueOnce(
+          new Error('offline after charge'),
+        );
+        configure(first, storage);
+        await useAccessStore.getState().initialize();
+        await useAccessStore.getState().purchaseSelected();
+        expect(await storage.read(OWNER_A)).toMatchObject({
+          schemaVersion: 2,
+          transaction,
+        });
+        clearAccessStoreConfiguration();
+
+        const relaunched = dependencies();
+        relaunched.backend.syncBilling.mockImplementation(async request => {
+          if (!request)
+            throw new Error('Recovery must send its durable purchase identity');
+          return {
+            ...synced(false),
+            fulfilment: {
+              ...request,
+              outcome,
+              verifiedAt: '2026-09-07T00:00:00.000Z',
+            },
+          };
+        });
+        configure(relaunched, storage);
+        await useAccessStore.getState().initialize();
+        expect(relaunched.backend.syncBilling).toHaveBeenCalledWith({
+          pendingId: expect.any(String),
+          attemptId: expect.any(String),
+          transaction,
+        });
+        expect(await storage.read(OWNER_A)).toBeNull();
+        expect(useAccessStore.getState()).toMatchObject({
+          fulfilmentStatus: 'clear',
+          canonicalAccess: { premium: false },
+          error: { code: 'billing.purchase_settled', retryable: false },
+        });
+        expect(first.store.purchase).toHaveBeenCalledTimes(1);
+        expect(relaunched.store.purchase).not.toHaveBeenCalled();
+        expect(relaunched.store.restore).not.toHaveBeenCalled();
+        expect(relaunched.store.readEntitlement).not.toHaveBeenCalled();
+      } finally {
+        clearAccessStoreConfiguration();
+        await db.close();
+      }
+    },
+  );
+
   it.each(['purchaseSelected', 'restorePurchases'] as const)(
     '%s persists completion before backend verification and never grants from StoreKit',
     async operation => {

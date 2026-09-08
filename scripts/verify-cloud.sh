@@ -280,7 +280,7 @@ stage_edge() {
   need deno
   (cd supabase/functions/api/__wf__ && deno task test)
   deno check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts
-  deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts supabase/functions/api/canonicalDigest.test.ts
+  deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts supabase/functions/api/canonicalDigest.test.ts supabase/functions/api/releasePolicy.test.ts
   (cd supabase/functions/api && deno check cache.ts rateLimit.ts http.ts legal.ts)
 }
 

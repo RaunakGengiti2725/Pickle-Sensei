@@ -80,6 +80,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.112.4";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
+import { readVerifiedReleasePolicy } from "./releasePolicy.ts";
 import {
   cacheDel,
   cacheFence,
@@ -2971,6 +2972,100 @@ interface BillingVerdict {
    * round trip. Drives the monotonic verified_at guard on
    * billing_entitlements. */
   verifiedAt: string;
+  fulfilment?: BillingFulfilmentVerdict;
+}
+
+interface BillingFulfilmentRequest {
+  pendingId: string;
+  attemptId: string;
+  transaction: { productId: string; transactionId: string; purchasedAt: string };
+}
+interface BillingFulfilmentVerdict extends BillingFulfilmentRequest {
+  outcome: "pending" | "fulfilled" | "expired" | "refunded";
+  verifiedAt: string;
+}
+
+function parseBillingFulfilment(value: unknown): BillingFulfilmentRequest | null {
+  if (
+    !isRecord(value) ||
+    !isUuid(value.pendingId) ||
+    !isUuid(value.attemptId) ||
+    !isRecord(value.transaction)
+  )
+    return null;
+  const { productId, transactionId, purchasedAt } = value.transaction;
+  if (
+    typeof productId !== "string" ||
+    !/^[A-Za-z0-9._:-]{1,256}$/.test(productId) ||
+    typeof transactionId !== "string" ||
+    !/^[A-Za-z0-9._:-]{1,256}$/.test(transactionId) ||
+    isoTimestamp(purchasedAt) === null
+  )
+    return null;
+  return {
+    pendingId: value.pendingId,
+    attemptId: value.attemptId,
+    transaction: { productId, transactionId, purchasedAt: isoTimestamp(purchasedAt)! },
+  };
+}
+
+function billingFulfilmentOf(
+  request: BillingFulfilmentRequest,
+  subscriber: Record<string, unknown>,
+  verdict: BillingVerdict,
+): BillingFulfilmentVerdict {
+  const result: BillingFulfilmentVerdict = {
+    ...request,
+    outcome: "pending",
+    verifiedAt: verdict.verifiedAt,
+  };
+  const { productId, transactionId, purchasedAt } = request.transaction;
+  const checkedAt = Date.parse(verdict.verifiedAt);
+  if (checkedAt < Date.parse(purchasedAt)) return result;
+  const subscriptions = isRecord(subscriber.subscriptions) ? subscriber.subscriptions : {};
+  const purchases =
+    isRecord(subscriber.non_subscriptions) && Array.isArray(subscriber.non_subscriptions[productId])
+      ? (subscriber.non_subscriptions[productId] as unknown[])
+      : [];
+  const candidates = [subscriptions[productId], ...purchases];
+  const matching = candidates.filter(
+    (row): row is Record<string, unknown> =>
+      isRecord(row) &&
+      typeof row.store_transaction_id === "string" &&
+      row.store_transaction_id === transactionId &&
+      isoTimestamp(row.purchase_date) === purchasedAt,
+  );
+  // Ambiguous absence, product-only matches, RC's own non-subscription `id`, or
+  // conflicting transaction records never authorize another purchase.
+  if (matching.length !== 1) return result;
+  const row = matching[0];
+  const activeProduct =
+    isRecord(subscriber.entitlements) &&
+    verdict.activeEntitlements.some((name) => {
+      const entitlement = (subscriber.entitlements as Record<string, unknown>)[name];
+      return isRecord(entitlement) && entitlement.product_identifier === productId;
+    });
+  if (row.refunded_at !== undefined && row.refunded_at !== null) {
+    const refund = isoTimestamp(row.refunded_at);
+    if (
+      !refund ||
+      Date.parse(refund) > checkedAt ||
+      Date.parse(refund) < Date.parse(purchasedAt) ||
+      activeProduct
+    )
+      return result;
+    return { ...result, outcome: "refunded" };
+  }
+  if (activeProduct) return { ...result, outcome: "fulfilled" };
+  // Only an explicitly expired recurring transaction is terminal. A missing
+  // lifetime entitlement without a provider refund record remains unresolved.
+  if (row !== subscriptions[productId]) return result;
+  const expiry = isoTimestamp(row.expires_date);
+  const grace = row.grace_period_expires_date;
+  if (!expiry || (grace !== null && grace !== undefined && isoTimestamp(grace) === null))
+    return result;
+  const horizon = Math.max(Date.parse(expiry), grace == null ? 0 : Date.parse(String(grace)));
+  return horizon <= checkedAt ? { ...result, outcome: "expired" } : result;
 }
 
 /** Largest millisecond value `Date` can represent (±100 000 000 days). */
@@ -3019,7 +3114,10 @@ function revenueCatRequestDate(
 
 /** Fetch + fold the subscriber's entitlements from RevenueCat. Returns null
  * when RevenueCat cannot be reached (callers respond retryably). */
-async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVerdict | null> {
+async function verifyRevenueCatSubscriber(
+  appUserId: string,
+  fulfilment?: BillingFulfilmentRequest,
+): Promise<BillingVerdict | null> {
   const rcKey =
     Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? Deno.env.get("REVENUECAT_PUBLIC_SDK_KEY");
   if (!rcKey) return null;
@@ -3115,6 +3213,7 @@ async function verifyRevenueCatSubscriber(appUserId: string): Promise<BillingVer
       verdict.expiresAt = horizon;
     }
   }
+  if (fulfilment) verdict.fulfilment = billingFulfilmentOf(fulfilment, subscriber, verdict);
   return verdict;
 }
 
@@ -4708,12 +4807,40 @@ async function handleRequest(request: Request): Promise<Response> {
       });
     }
 
+    case "GET /v1/analysis/release-policy": {
+      const admin = billingAdminDb();
+      if (!admin)
+        return serviceUnavailable("Analysis release authority", { name: "MissingConfiguration" });
+      try {
+        const policy = await readVerifiedReleasePolicy(() =>
+          admin.rpc("read_analysis_release_policy"),
+        );
+        return json(200, {
+          schemaVersion: "analysis-release-authority-v1",
+          serverTime: Math.floor(Date.now() / 1000),
+          policy,
+        });
+      } catch (error) {
+        return serviceUnavailable("Analysis release authority", error);
+      }
+    }
+
     case "GET /v1/me/access": {
       const payload = await accessPayload(authed);
       return payload instanceof Response ? payload : json(200, payload);
     }
 
     case "POST /v1/billing/sync": {
+      const syncBody = await readBody(request);
+      const fulfilment = Object.hasOwn(syncBody, "fulfilment")
+        ? parseBillingFulfilment(syncBody.fulfilment)
+        : undefined;
+      if (fulfilment === null)
+        return codedError(
+          400,
+          "invalid_billing_fulfilment",
+          "Invalid purchase verification evidence.",
+        );
       // apps/mobile/src/billing/accessApi.ts syncBilling (lines 187-194)
       // parses { billing, access } and requires billing.premium ===
       // access.premium. Entitlements are verified SERVER-SIDE against
@@ -4756,7 +4883,7 @@ async function handleRequest(request: Request): Promise<Response> {
           { operation: "user_lookup" },
         );
       }
-      const providerVerdict = await verifyRevenueCatSubscriber(authed.id);
+      const providerVerdict = await verifyRevenueCatSubscriber(authed.id, fulfilment);
       if (!providerVerdict) {
         return codedError(
           502,
@@ -4813,6 +4940,14 @@ async function handleRequest(request: Request): Promise<Response> {
           verifiedAt: billing.verifiedAt,
         },
         access,
+        ...(providerVerdict.fulfilment
+          ? {
+              fulfilment: {
+                ...providerVerdict.fulfilment,
+                outcome: persisted.applied ? providerVerdict.fulfilment.outcome : "pending",
+              },
+            }
+          : {}),
       });
     }
 

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import {
   BillingError,
+  parseBillingTransaction,
   type BillingPeriod,
   type BillingStoreClient,
   type FreeTrialDisplay,
@@ -74,6 +75,11 @@ export interface RevenueCatSdk {
   }>;
   purchasePackage(aPackage: RevenueCatPackageLike): Promise<{
     customerInfo: RevenueCatCustomerInfoLike;
+    transaction?: {
+      transactionIdentifier: string;
+      productIdentifier: string;
+      purchaseDate: string;
+    };
   }>;
   restorePurchases(): Promise<RevenueCatCustomerInfoLike>;
   getCustomerInfo(): Promise<RevenueCatCustomerInfoLike>;
@@ -408,7 +414,17 @@ export function createRevenueCatBillingClient(
         }
         try {
           const result = await native.purchasePackage(aPackage);
-          return entitlementFrom(result?.customerInfo);
+          const transaction = parseBillingTransaction({
+            productId: result.transaction?.productIdentifier,
+            transactionId: result.transaction?.transactionIdentifier,
+            purchasedAt: result.transaction?.purchaseDate,
+          });
+          return {
+            ...entitlementFrom(result?.customerInfo),
+            ...(transaction?.productId === aPackage.product.identifier
+              ? { transaction }
+              : {}),
+          };
         } catch (error) {
           throw purchaseError(error);
         }

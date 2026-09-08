@@ -1,5 +1,6 @@
 export * from "./analysisFeedback.js";
 export * from "./analysisOutcome.js";
+export * from "./analysisReleasePolicy.js";
 export * from "./binomialBounds.js";
 export * from "./captureEnvelope.js";
 export * from "./consent.js";
