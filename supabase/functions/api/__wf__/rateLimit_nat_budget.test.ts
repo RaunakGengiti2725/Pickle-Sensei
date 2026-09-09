@@ -4,18 +4,24 @@
 // a whole venue. The auth-failure budget (AUTH_FAILURE_LIMIT = 30 / 300 s)
 // exists to starve token stuffing, so it must be sharded by the CREDENTIAL
 // being refused, not by the egress address, and a 401 that only says "this
-// session is dead" (logged out, expired, banned — a liveness verdict the app
-// acts on by signing out) must not count as an attack signal at all. Pinned
-// here through the REAL handler (routesHarness) plus module-level checks of
-// rateLimit.ts (harness.ts isolates + fake Upstash):
+// session is dead" (logged out, expired, banned, refresh token gone or already
+// rotated — a liveness verdict the app acts on by signing out) must not count
+// as an attack signal at all. Pinned here through the REAL handler
+// (routesHarness) plus module-level checks of rateLimit.ts (harness.ts
+// isolates + fake Upstash):
 //
 //   * thirty distinct forged bearers refused by Supabase Auth from one egress
 //     leave a co-tenant's valid bearer, refresh token and fresh sign-in at 200;
 //   * thirty signed-out handsets (liveness refusals) charge no stuffing signal;
 //   * one forged credential replayed is held (429 + Retry-After) after 30
-//     refusals, wherever it is presented, while other credentials from the
-//     same address are still judged once by Auth ("probation"), so a
-//     saturated egress fast-fails REPLAYS without holding anyone new;
+//     refusals — sequentially or in one parallel burst — wherever it is
+//     presented, while other credentials from the same address are still
+//     judged once by Auth ("probation"), so a saturated egress fast-fails
+//     REPLAYS without holding anyone new; a valid bearer fanned out in
+//     parallel is never throttled by the failure budget;
+//   * the venue keeps working through a flood after a 25 h idle (no
+//     "seen recently" registry to age out) and on a freshly started isolate
+//     without Redis (memory fallback holds only what IT refused);
 //   * an Auth outage charges nothing; shards are shared across isolates
 //     through Redis, fail open when Redis fails, survive a clock step back
 //     and stay bounded in memory without ever holding a credential that was
@@ -83,7 +89,8 @@ interface AuthVerdicts {
   forgedBearers: Set<string>;
   /** bearer → refused as a LIVENESS failure (403 session_not_found). */
   deadBearers: Set<string>;
-  /** refresh token → 400 invalid_grant refresh_token_not_found (credential). */
+  /** refresh token → 400 invalid_grant refresh_token_not_found (liveness: the
+   * session was signed out or revoked; refresh tokens cannot be guessed). */
   unknownRefreshTokens: Set<string>;
   /** refresh token → 400 invalid_grant refresh_token_already_used (liveness). */
   rotatedRefreshTokens: Set<string>;
@@ -172,6 +179,14 @@ async function refresh(h: Harness, ip: string, refreshToken: string): Promise<Re
 }
 
 async function bootstrap(h: Harness, ip: string, idToken: string): Promise<Response> {
+  h.tables.profiles = [
+    {
+      id: VENUE_USER,
+      email: "venue@example.com",
+      provider: "google",
+      onboarding_state: "complete",
+    },
+  ];
   const response = await h.handler(
     userRequest("POST", "/v1/account/bootstrap", { token: idToken, ip, body: {} }),
   );
@@ -238,6 +253,16 @@ Deno.test(
       200,
       "a fresh sign-in from the venue reaches Auth",
     );
+
+    // A co-tenant whose session died must still hear 401 (sign in again), not
+    // a 429 born of someone else's stuffing — twice, so the second look is a
+    // judgment by Auth and not a fast-fail.
+    const dead = fakeSupabaseAccessToken(VENUE_USER, `dead-${tag}`);
+    auth.deadBearers.add(dead);
+    assertEquals((await probe(h, ip, dead)).status, 401);
+    assertEquals((await probe(h, ip, dead)).status, 401, "a dead session is never fast-failed");
+    assertEquals(userCallsFor(h, dead), 2);
+    assertEquals(await egressCharged(ip), AUTH_FAILURE_LIMIT.limit, "…and charged no stuffing");
   },
 );
 
@@ -257,6 +282,13 @@ Deno.test(
     const rotated = `rotated-${tag}`;
     auth.rotatedRefreshTokens.add(rotated);
     assertEquals((await refresh(h, ip, rotated)).status, 401, "an already-rotated refresh → 401");
+    // 29 signed-out handsets + the rotated token above = 30 liveness refresh
+    // refusals, the whole per-IP refresh budget (AUTH_REFRESH_LIMIT 30/min).
+    for (let i = 0; i < AUTH_FAILURE_LIMIT.limit - 1; i += 1) {
+      const signedOut = `signed-out-${tag}-${i}`;
+      auth.unknownRefreshTokens.add(signedOut);
+      assertEquals((await refresh(h, ip, signedOut)).status, 401, `signed-out handset ${i}`);
+    }
     assertEquals(await egressCharged(ip), 0, "liveness refusals are not stuffing");
 
     // The egress is not saturated, so a first AND a second look at one forged
@@ -376,7 +408,127 @@ Deno.test("a refusal decided at the edge (no bearer, expired bearer) is not char
   assertEquals((await probe(h, ip, venueBearer)).status, 200);
 });
 
+Deno.test(
+  "parallel burst: 120 concurrent replays of one refused bearer reach Auth at most 29 more times; 40 concurrent requests with one VALID bearer are all served",
+  async () => {
+    const h = await loadHarness();
+    const auth = installAuth(h);
+    const ip = freshIp();
+    const tag = crypto.randomUUID();
+    const replayed = forgedBearer(`${tag}-burst`);
+    auth.forgedBearers.add(replayed);
+    assertEquals((await probe(h, ip, replayed)).status, 401, "refused once");
+
+    const burst = await Promise.all(
+      Array.from({ length: 120 }, () => probe(h, ip, replayed).then((r) => r.status)),
+    );
+    const judged = userCallsFor(h, replayed);
+    assertEquals(judged, AUTH_FAILURE_LIMIT.limit, "Auth judged the replayed bearer exactly 30×");
+    assertEquals(burst.filter((s) => s === 401).length, judged - 1);
+    assertEquals(burst.filter((s) => s === 429).length, 120 - (judged - 1));
+    assertEquals((await probe(h, ip, replayed)).status, 429, "…and it stays held");
+
+    const venueBearer = fakeSupabaseAccessToken(VENUE_USER, `venue-${tag}`);
+    const fanOut = await Promise.all(
+      Array.from({ length: 40 }, () => probe(h, ip, venueBearer).then((r) => r.status)),
+    );
+    assertEquals(
+      fanOut,
+      new Array(40).fill(200),
+      "a failure budget never throttles a valid bearer",
+    );
+  },
+);
+
+Deno.test(
+  "a handset idle for 25 h refreshes through a co-tenant flood: liveness is Auth's call, not a recency registry's",
+  async () => {
+    const h = await loadHarness();
+    const auth = installAuth(h);
+    const ip = freshIp();
+    const tag = crypto.randomUUID();
+    const realNow = Date.now;
+    try {
+      assertEquals((await bootstrap(h, ip, fakeGoogleIdToken(VENUE_USER))).status, 200);
+      const base = realNow();
+      Date.now = () => base + 25 * 3_600_000;
+      for (let i = 0; i < AUTH_FAILURE_LIMIT.limit; i += 1) {
+        const junk = forgedBearer(`${tag}-${i}`);
+        auth.forgedBearers.add(junk);
+        assertEquals((await probe(h, ip, junk)).status, 401);
+      }
+      assertEquals(await egressCharged(ip), AUTH_FAILURE_LIMIT.limit);
+      assertEquals(
+        (await refresh(h, ip, `idle-weekend-${tag}`)).status,
+        200,
+        "the venue's refresh token, unseen for 25 h, is judged by Auth and rotated",
+      );
+      const venueBearer = fakeSupabaseAccessToken(VENUE_USER, `venue-${tag}`);
+      assertEquals((await probe(h, ip, venueBearer)).status, 200);
+    } finally {
+      Date.now = realNow;
+    }
+  },
+);
+
 // ─── rateLimit.ts module contract ────────────────────────────────────────────
+
+Deno.test(
+  "memory fallback (no Redis): a freshly started isolate holds nothing it did not refuse itself — no venue lockout after a restart",
+  async () => {
+    configureRedis(false);
+    const before = await loadIsolate();
+    const after = await loadIsolate();
+    const ip = freshIp();
+    const tag = crypto.randomUUID();
+    for (let i = 0; i < AUTH_FAILURE_LIMIT.limit; i += 1) {
+      await before.rateLimit.chargeAuthFailure(
+        ip,
+        `forged-${tag}-${i}`,
+        "credential",
+        AUTH_FAILURE_LIMIT,
+      );
+      await after.rateLimit.chargeAuthFailure(
+        ip,
+        `forged-${tag}-${i}`,
+        "credential",
+        AUTH_FAILURE_LIMIT,
+      );
+      await after.rateLimit.chargeAuthFailure(
+        ip,
+        `signed-out-${tag}-${i}`,
+        "liveness",
+        AUTH_FAILURE_LIMIT,
+      );
+    }
+    for (const isolate of [before, after]) {
+      const bearer = await isolate.rateLimit.admitAuthCredential(
+        ip,
+        `venue-bearer-${tag}`,
+        AUTH_FAILURE_LIMIT,
+      );
+      assertEquals(bearer.allowed, true, "a bearer minted before the restart is admitted");
+      const refreshToken = await isolate.rateLimit.admitAuthCredential(
+        ip,
+        `venue-refresh-${tag}`,
+        AUTH_FAILURE_LIMIT,
+      );
+      assertEquals(refreshToken.allowed, true, "…so is its refresh token");
+      const signIn = await isolate.rateLimit.admitAuthCredential(
+        ip,
+        fakeGoogleIdToken(VENUE_USER),
+        AUTH_FAILURE_LIMIT,
+      );
+      assertEquals(signIn.allowed, true, "…and a brand-new sign-in");
+    }
+    assertEquals(
+      (await after.rateLimit.admitAuthCredential(ip, `forged-${tag}-0`, AUTH_FAILURE_LIMIT))
+        .allowed,
+      false,
+      "what an isolate refused under saturation it fast-fails",
+    );
+  },
+);
 
 Deno.test(
   "authRefusalKind: GoTrue verdicts on a dead session are liveness, everything else is a credential failure",
@@ -390,17 +542,17 @@ Deno.test(
       { code: 403, error_code: "user_banned", msg: "User is banned" },
       { error: "invalid_grant", error_code: "refresh_token_already_used" },
       { error: "invalid_grant", error_description: "Invalid Refresh Token: Already Used" },
+      { error: "invalid_grant", error_code: "refresh_token_not_found" },
+      {
+        error: "invalid_grant",
+        error_description: "Invalid Refresh Token: Refresh Token Not Found",
+      },
       { code: 401, msg: "invalid JWT: token is expired by 5m" },
       // supabase-js AuthApiError shape (message + code)
       { name: "AuthApiError", status: 403, code: "session_not_found", message: "Session missing" },
     ];
     const credential: unknown[] = [
       { code: 401, error_code: "bad_jwt", msg: "invalid JWT: unable to parse or verify signature" },
-      { error: "invalid_grant", error_code: "refresh_token_not_found" },
-      {
-        error: "invalid_grant",
-        error_description: "Invalid Refresh Token: Refresh Token Not Found",
-      },
       { error: "invalid_grant", error_code: "bad_id_token", error_description: "Bad ID token" },
       { name: "AuthApiError", status: 400, code: "bad_id_token", message: "Bad ID token" },
       { code: 403, error_code: "not_admin" },
