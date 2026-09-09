@@ -122,6 +122,7 @@ jest.mock('../src/analysis/runCaptureAnalysis', () => ({
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import {
+  PENDING_RECEIPT_READ_CADENCE_MS,
   presentOfflineJourney,
   type OfflineJourneyState,
 } from '../src/components/OfflineAllocationCard';
@@ -163,7 +164,6 @@ import {
   type OfflineWalletStatus,
 } from '../src/data/offlineWallet';
 import {
-  SYNC_RETRY_BASE_MS,
   clearSyncRuntime,
   configureSyncRuntime,
   triggerOutboxSync,
@@ -1301,7 +1301,8 @@ describe('W05-04 the card keeps following the ledger while it stays on screen', 
     jest.restoreAllMocks();
   });
 
-  it('Analyze states READY once the drain the foreground transition started records the result', async () => {
+  it('Analyze states READY within the read cadence once the drain the foreground transition started records the result', async () => {
+    jest.useFakeTimers();
     await holdGrant();
     await spend('op-1');
     // The shipping sync runtime presents the receipt and the connection drops
@@ -1311,7 +1312,7 @@ describe('W05-04 the card keeps following the ledger while it stays on screen', 
     await triggerOutboxSync();
     expect((await ledgerTruth()).wallet.hold).toBe(true);
     const renderer = await render(<AnalyzeScreen />);
-    await settle();
+    await settleFake();
     expect(badgeOf(renderer)).toBe('ON HOLD');
 
     background();
@@ -1319,18 +1320,19 @@ describe('W05-04 the card keeps following the ledger while it stays on screen', 
     await act(async () => {
       foreground();
     });
-    await settle();
+    await settleFake();
     // The runtime's drain re-presented the receipt on the same transition
     // and is still waiting for the server: the HOLD stands, honestly.
     expect(answer.presented()).toBe(1);
     expect(badgeOf(renderer)).toBe('ON HOLD');
 
     answer.release();
-    await settle();
-    await settle();
+    await settleFake();
     const truth = await ledgerTruth();
     expect(truth.wallet.hold).toBe(false);
     expect(truth.pending).toHaveLength(0);
+    // The drain announces nothing; the card catches up by reading again.
+    await advance(PENDING_RECEIPT_READ_CADENCE_MS);
     const copy = textOf(card(renderer));
     expect(badgeOf(renderer)).toBe('READY');
     expect(copy).toContain('Nothing');
@@ -1339,7 +1341,7 @@ describe('W05-04 the card keeps following the ledger while it stays on screen', 
     expectDossierCompliant(copy);
   });
 
-  it('Analyze states READY within the sync cadence after a timer-driven drain resolved the HOLD, with no navigation or foreground event', async () => {
+  it('Analyze states READY within the read cadence after a timer-driven drain resolved the HOLD, with no navigation or foreground event', async () => {
     jest.useFakeTimers();
     await holdGrant();
     await spend('op-1');
@@ -1353,7 +1355,7 @@ describe('W05-04 the card keeps following the ledger while it stays on screen', 
     expect((await ledgerTruth()).wallet.hold).toBe(false);
     handle.calls.length = 0;
 
-    await advance(SYNC_RETRY_BASE_MS);
+    await advance(PENDING_RECEIPT_READ_CADENCE_MS);
     const copy = textOf(card(renderer));
     expect(badgeOf(renderer)).toBe('READY');
     expect(copy).toContain('1 of 2');
