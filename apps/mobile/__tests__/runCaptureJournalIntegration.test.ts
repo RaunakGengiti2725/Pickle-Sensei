@@ -6,6 +6,10 @@ import {
   runCaptureAnalysis,
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 import { runJournal, RunJournalError } from '../src/analysis/runJournal';
 import {
   clearApiSession,
@@ -188,6 +192,8 @@ function server(store: ReturnType<typeof createSqliteTestDb>) {
         });
       }
       if (url.endsWith('/v1/sessions')) return response(200, {});
+      if (isReleasePolicyRequest(url))
+        return response(200, activeReleaseAuthority());
       throw new Error(`Unexpected test request ${url}`);
     },
   );

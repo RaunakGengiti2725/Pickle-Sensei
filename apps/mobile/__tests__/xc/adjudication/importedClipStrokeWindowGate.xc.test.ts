@@ -38,6 +38,10 @@ jest.mock('../../../src/camera/capture', () => {
 });
 
 import { runCaptureAnalysis } from '../../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../../testSupport/releasePolicyFixture';
 
 const OWNER = '33333333-3333-4333-8333-333333333333';
 const API = { baseUrl: 'https://api.test', token: 'bearer-token' };
@@ -150,6 +154,7 @@ function installPermitServer(): Server {
       server.releases.push({ permitId, outcome: body.outcome });
       return json(200, { ok: true });
     }
+    if (isReleasePolicyRequest(url)) return json(200, activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
   return server;

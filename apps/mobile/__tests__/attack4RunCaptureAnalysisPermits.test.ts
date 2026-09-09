@@ -28,6 +28,11 @@ import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../src/data/db';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+  permitCalls,
+} from '../testSupport/releasePolicyFixture';
 import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 jest.mock('../src/camera/capture', () => {
@@ -124,6 +129,8 @@ function permitServer(options: PermitServerOptions = {}) {
           return jsonResponse(finalizeAcknowledgement(url, body));
       }
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalizeUrls, finalizeBodies, reserveBodies };
@@ -543,7 +550,7 @@ describe('extra — reserve failures', () => {
     if (outcome.kind !== 'unavailable') return;
     expect(outcome.cause).toBeUndefined();
     expect(outcome.reason).toBe('HTTP 503');
-    expect(server.fetchMock).toHaveBeenCalledTimes(1);
+    expect(permitCalls(server.fetchMock)).toHaveLength(1);
     expect(captureDbState(db)).toMatchObject({
       shots: 0,
       records: 0,
@@ -623,7 +630,7 @@ describe('extra — reserve failures', () => {
       // Nothing to finalize: an id-less permit cannot be addressed.
       expect(server.reserveBodies).toHaveLength(1);
       expect(server.finalizeUrls).toHaveLength(0);
-      expect(server.fetchMock).toHaveBeenCalledTimes(1);
+      expect(permitCalls(server.fetchMock)).toHaveLength(1);
     } finally {
       analyzeSpy.mockRestore();
     }

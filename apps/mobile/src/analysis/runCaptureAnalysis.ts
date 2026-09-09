@@ -53,9 +53,11 @@ import { createFusionProviders } from '../vision/providers';
 import {
   ApiError,
   createAnalysisPermitClient,
+  createReleasePolicyClient,
   type ApiConfigState,
   type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
+import { requireReleaseAuthority } from './releasePolicyClient';
 import { makeUuid } from '../util/uuid';
 import {
   recordEvaluationTrial,
@@ -620,27 +622,29 @@ function inputSelectionSnapshot(
 }
 
 function permitPort(scope: RunJournalScope) {
+  const config: ApiConfigState = {
+    baseUrl: scope.apiOrigin,
+    get token() {
+      const session = getApiSession();
+      if (!session) return null;
+      try {
+        const current = runJournal.scope({
+          ownerKey: session.canonicalAppUserId,
+          apiOrigin: session.apiBaseUrl,
+        });
+        return current.ownerKey === scope.ownerKey &&
+          current.apiOrigin === scope.apiOrigin
+          ? bearerTokenFor(session.canonicalAppUserId)
+          : null;
+      } catch {
+        return null;
+      }
+    },
+  };
   return {
     ...scope,
-    ...createAnalysisPermitClient({
-      baseUrl: scope.apiOrigin,
-      get token() {
-        const session = getApiSession();
-        if (!session) return null;
-        try {
-          const current = runJournal.scope({
-            ownerKey: session.canonicalAppUserId,
-            apiOrigin: session.apiBaseUrl,
-          });
-          return current.ownerKey === scope.ownerKey &&
-            current.apiOrigin === scope.apiOrigin
-            ? bearerTokenFor(session.canonicalAppUserId)
-            : null;
-        } catch {
-          return null;
-        }
-      },
-    }),
+    ...createAnalysisPermitClient(config),
+    releasePolicy: createReleasePolicyClient(config),
   };
 }
 
@@ -1657,6 +1661,11 @@ async function runCaptureAnalysisCore(
     if (withheld === null) {
       let reserved: ReservedAnalysisPermitWithAccess | null = null;
       try {
+        await requireReleaseAuthority({
+          db: request.db,
+          scope,
+          client: permits.releasePolicy,
+        });
         reserved = await permits.reserve(run.reservationKey);
       } catch (error) {
         const refused = isReleaseNotAuthorized(error);

@@ -183,6 +183,10 @@ import {
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
 import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
+import {
   OriginalAnalysisExecution,
   originalAnalysisOperations,
 } from '../src/analysis/originalAnalysisOperations';
@@ -286,6 +290,8 @@ function scriptedReservationServer(
       if (!answer) throw new Error(`Unscripted reservation #${reservations}`);
       return answer();
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority(), 200);
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, urls };
@@ -316,6 +322,8 @@ function permitServer() {
         finalizeAcknowledgement(url, JSON.parse(String(init?.body))),
         200,
       );
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority(), 200);
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, urls };

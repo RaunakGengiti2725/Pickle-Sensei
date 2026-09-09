@@ -19,6 +19,10 @@ import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../../src/data/db';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../testSupport/releasePolicyFixture';
 import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 jest.mock('../../src/camera/capture', () => {
@@ -93,6 +97,8 @@ function permitServer(): PermitServer {
         });
         return jsonResponse(finalizeAcknowledgement(url, body));
       }
+      if (isReleasePolicyRequest(url))
+        return jsonResponse(activeReleaseAuthority());
       throw new Error(`Unexpected fetch: ${url}`);
     },
   );

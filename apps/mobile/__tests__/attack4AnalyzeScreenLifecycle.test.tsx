@@ -96,6 +96,10 @@ jest.mock('react-native-svg', () => {
 
 import React from 'react';
 import { guidedClipFixture } from '../testSupport/guidedClipFixture';
+import {
+  activeReleaseAuthorityResponse,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 import type {
   RunOriginalCaptureAnalysisRequest,
   RunCaptureAnalysisOutcome,
@@ -714,18 +718,22 @@ describe('S10 — practice set commits with its result before screen publication
           },
         );
       const previousFetch = globalThis.fetch;
-      globalThis.fetch = jest.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({
-          permit: {
-            id: '55555555-5555-4555-8555-555555555555',
-            accessSource: 'free',
-            status: 'reserved',
-            expiresAt: new Date(Date.now() + 86400000).toISOString(),
-          },
-        }),
-      })) as unknown as typeof fetch;
+      globalThis.fetch = jest.fn(async (url: string) =>
+        isReleasePolicyRequest(url)
+          ? activeReleaseAuthorityResponse()
+          : {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                permit: {
+                  id: '55555555-5555-4555-8555-555555555555',
+                  accessSource: 'free',
+                  status: 'reserved',
+                  expiresAt: new Date(Date.now() + 86400000).toISOString(),
+                },
+              }),
+            },
+      ) as unknown as typeof fetch;
       try {
         const renderer = await renderScreen('camera');
         pressByLabel(renderer, 'Forehand Drive');

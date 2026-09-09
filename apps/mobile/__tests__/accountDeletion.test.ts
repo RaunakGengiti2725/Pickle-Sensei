@@ -223,6 +223,7 @@ describe('post-deletion local purge', () => {
       `consistency:${owner}`,
       `practice.set:${owner}`,
       `billing.pending-fulfilment:${owner}`,
+      `analysis.release-policy:${owner}`,
     ]);
     // Every owner-scoped delete is bound to the deleted owner.
     for (const call of calls.slice(1, -1)) {

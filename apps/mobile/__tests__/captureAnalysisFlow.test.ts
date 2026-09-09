@@ -9,6 +9,10 @@ import type { CapturedClip } from '../src/camera/capture';
 import { attemptCaptureEnvelope } from '../src/camera/captureEnvelope';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
+import {
   clearApiSession,
   establishApiSession,
 } from '../src/account/apiSession';
@@ -66,6 +70,8 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       finalized.push(body);
       return jsonResponse(finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalized };
