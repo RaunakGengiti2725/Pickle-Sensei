@@ -99,6 +99,9 @@ export const ACCOUNT_OWNER_NAMESPACES: ReadonlyArray<OwnerNamespace> = Object.fr
   namespace("user_saved_drills", "user_id", "slug"),
   namespace("player_rank_state", "user_id", "user_id"),
   namespace("billing_entitlements", "user_id", "user_id"),
+  namespace("settlement_receipts", "user_id", "shot_id"),
+  namespace("offline_devices", "user_id", "id"),
+  namespace("offline_grants", "user_id", "id"),
 ]);
 
 export type UnreadTableReason = "cascade_only" | "rpc_owned" | "retained";
@@ -110,8 +113,12 @@ export type UnreadTableReason = "cascade_only" | "rpc_owned" | "retained";
  * (challenge row, external credential), cascade the same way, and are
  * reachable only through the fenced RPCs — the route suites pin zero PostgREST
  * reads of them; `retained` rows survive deletion by policy (the free-rating
- * identity hash disclosed in legal.ts §7/§8, the billing audit log, and the
- * deletion operation record that is itself the receipt). */
+ * identity hash disclosed in legal.ts §7/§8, the billing audit logs —
+ * webhook events and the purchase-transfer reconciliation ledger, which marks
+ * a deleted side `user_missing_at` instead of dropping it — the deletion
+ * operation record that is itself the receipt, and the append-only offline
+ * allocation ledger whose holds follow the identity hash the same way the
+ * free-rating ledger does). */
 export const ACCOUNT_DELETION_UNREAD_TABLES: Readonly<Record<string, UnreadTableReason>> =
   Object.freeze({
     account_deletion_requests: "rpc_owned",
@@ -122,6 +129,10 @@ export const ACCOUNT_DELETION_UNREAD_TABLES: Readonly<Record<string, UnreadTable
     free_rating_ledger: "retained",
     webhook_events: "retained",
     "api_private.account_deletion_operations": "retained",
+    offline_allocation_ledger: "retained",
+    offline_allocation_identity_links: "retained",
+    "api_private.billing_transfer_sides": "retained",
+    "api_private.billing_transfer_audit": "retained",
   });
 
 /** Columns a namespace page selects: the owner column (so every row can be
@@ -699,13 +710,21 @@ async function runClaimedDeletion(
       p_owner_id: ownerId,
       p_operation_id: operationId,
     });
-    const result = completionResult(operationId, receipt);
-    if (!result) throw new Error("Account deletion completion is unverified.");
     const residue = ownerNamespaceResidue(
       "completion",
       await verifyOwnerNamespacesEmpty(dependencies, ownerId),
     );
     if (residue) throw residue;
+    // A durable row that records the Auth absence without certifying it is
+    // certified by the worker that verified the sweep — the receipt exists
+    // only once every namespace has been paged to empty.
+    const result =
+      completionResult(operationId, receipt) ??
+      completionResult(
+        operationId,
+        await rpcData(rpc, "certify_account_deletion_completion", binding),
+      );
+    if (!result) throw new Error("Account deletion completion is unverified.");
     return result;
   } catch (error) {
     try {

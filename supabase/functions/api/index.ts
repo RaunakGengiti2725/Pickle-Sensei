@@ -4595,7 +4595,8 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
             before === null ? owned : owned.or(before),
           )
           .limit(limit)
-          .abortSignal(AbortSignal.timeout(10_000));
+          .abortSignal(AbortSignal.timeout(10_000))
+          .retry(false);
       },
       onFailure: (code, status, detail) =>
         console.error("[api] Account deletion:", { code, status, ...detail }),
