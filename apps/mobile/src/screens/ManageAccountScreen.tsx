@@ -43,6 +43,7 @@ import { getDb } from '../data/db';
 import { getApiSession, type ApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
+  ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
   ACCOUNT_DELETION_UNKNOWN_MESSAGE,
   AccountDeletionError,
   type AccountDeletionAttempt,
@@ -634,7 +635,13 @@ function DeleteAccountDialog(props: {
     while (inFlightRef.current) await inFlightRef.current;
     if (presentation !== presentationRef.current) return;
     const resume = (async () => {
-      const state = await flow.resume(context).catch(() => null);
+      const state = await flow
+        .resume(context)
+        .catch((): AccountDeletionState => ({
+          status: 'failed',
+          outcome: 'unknown',
+          message: ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
+        }));
       if (!state || presentation !== presentationRef.current) return;
       applyState(state, context, flow, presentation, DELETE_ARM_DELAY_MS);
     })();

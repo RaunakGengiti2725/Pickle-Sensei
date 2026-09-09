@@ -118,6 +118,12 @@ export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
 export const ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE =
   'A deletion of this account was already confirmed and is being carried out by the server. This attempt requested nothing new — close this dialog and check back later.';
 
+/** The journal that would say whether a confirmation was ever sent cannot
+ * be read. Without it the account is not known to be present, so no new
+ * request is minted over the unreadable record. */
+export const ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE =
+  "This phone's record of an earlier deletion attempt could not be read, so we cannot tell whether a deletion was confirmed. Nothing new was requested — contact support if you still want the account removed.";
+
 export interface AccountDeletionChallenge {
   challenge: string;
   expiresAt: string;
@@ -604,7 +610,7 @@ function confirmIssueMessage(issue: DeletionIssue | null): string {
 }
 
 function terminalMessage(
-  state: 'expired' | 'superseded' | 'blocked',
+  state: 'expired' | 'superseded',
 ): AccountDeletionState {
   switch (state) {
     case 'expired':
@@ -621,32 +627,99 @@ function terminalMessage(
         message:
           'A newer deletion request replaced this one. Start again to continue.',
       };
-    case 'blocked':
-      return {
-        status: 'failed',
-        outcome: 'nothing_deleted',
-        message:
-          'The server declined to delete this account. Nothing was deleted — contact support if you still want it removed.',
-      };
   }
 }
 
+/** The confirmation left this device: the server may have acted on it, so
+ * nothing short of a verified receipt says what became of the account. */
+function confirmationSent(entry: DeletionJournalEntry): boolean {
+  return (
+    entry.operationId !== null &&
+    entry.phase !== 'request_pending' &&
+    entry.phase !== 'request_unknown' &&
+    entry.phase !== 'securing' &&
+    entry.phase !== 'ready'
+  );
+}
+
+/** The server reports `expired`/`superseded` only for an operation it never
+ * confirmed, so both prove the account is still present. `blocked` is the
+ * opposite: it is answered only for a confirmed operation, so it is never a
+ * terminal "nothing happened". */
 function isTerminalServerState(
   entry: DeletionJournalEntry,
 ): entry is DeletionJournalEntry & {
-  readonly serverState: 'expired' | 'superseded' | 'blocked';
+  readonly serverState: 'expired' | 'superseded';
 } {
   return (
     entry.receipt === null &&
-    (entry.serverState === 'expired' ||
-      entry.serverState === 'superseded' ||
-      entry.serverState === 'blocked')
+    (entry.serverState === 'expired' || entry.serverState === 'superseded')
   );
+}
+
+/** A sent confirmation whose status capability has lapsed: the server will
+ * no longer tell this device the outcome, so polling stops here. */
+function statusWindowClosed(
+  entry: DeletionJournalEntry,
+  nowMs: number,
+): boolean {
+  if (!confirmationSent(entry) || entry.receipt !== null) return false;
+  const closesAt = Date.parse(entry.statusExpiresAt ?? '');
+  return Number.isFinite(closesAt) && nowMs >= closesAt;
+}
+
+function statusWindowClosedState(): AccountDeletionState {
+  return {
+    status: 'failed',
+    outcome: 'unknown',
+    message: confirmIssueMessage('status_expired'),
+  };
+}
+
+function recordUnreadableState(): AccountDeletionState {
+  return {
+    status: 'failed',
+    outcome: 'unknown',
+    message: ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
+  };
+}
+
+/** A held result the device cannot get past by asking again: its own
+ * journal or Keychain record is the problem, not the network. */
+function isLocalRecordIssue(issue: DeletionIssue): boolean {
+  switch (issue) {
+    case 'raw_transactional_db_required':
+    case 'journal_schema_invalid':
+    case 'journal_unavailable':
+    case 'journal_invalid':
+    case 'journal_unsupported':
+    case 'journal_capacity':
+    case 'journal_conflict':
+    case 'invalid_binding':
+    case 'capability_missing':
+    case 'capability_unavailable':
+    case 'capability_invalid':
+    case 'capability_unsupported':
+    case 'capability_conflict':
+    case 'capability_write_ambiguous':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** What a sent, unresolved confirmation can honestly say: the server's
+ * `blocked` when it answered that, otherwise the last transport issue. */
+function unresolvedConfirmationMessage(entry: DeletionJournalEntry): string {
+  return entry.serverState === 'blocked'
+    ? confirmIssueMessage('blocked')
+    : confirmIssueMessage(entry.lastIssue);
 }
 
 function durableState(
   entry: DeletionJournalEntry,
   handle: DeletionOperationHandle,
+  nowMs: number,
 ): AccountDeletionState {
   const attempt: AccountDeletionAttempt = {
     kind: 'durable',
@@ -655,6 +728,7 @@ function durableState(
     handle,
   };
   if (isTerminalServerState(entry)) return terminalMessage(entry.serverState);
+  if (statusWindowClosed(entry, nowMs)) return statusWindowClosedState();
   switch (entry.phase) {
     case 'request_pending':
     case 'request_unknown':
@@ -699,7 +773,7 @@ function durableState(
         status: 'confirm_unknown',
         attempt,
         nextAttemptAtMs: entry.nextAttemptAtMs,
-        message: confirmIssueMessage(entry.lastIssue),
+        message: unresolvedConfirmationMessage(entry),
       };
     case 'observing':
       return entry.serverState === 'in_progress'
@@ -712,7 +786,7 @@ function durableState(
             status: 'confirm_unknown',
             attempt,
             nextAttemptAtMs: entry.nextAttemptAtMs,
-            message: confirmIssueMessage(entry.lastIssue),
+            message: unresolvedConfirmationMessage(entry),
           };
     case 'receipt_verified':
     case 'cleanup_pending':
@@ -761,10 +835,14 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     reopened = false,
   ): Promise<AccountDeletionState> {
     if (result.kind === 'available')
-      return durableState(result.entry, result.handle);
+      return durableState(result.entry, result.handle, Date.now());
     // The device clock says the challenge lapsed before anything was sent.
     if (result.kind === 'held' && result.reason === 'confirmation_expired')
       return terminalMessage('expired');
+    // The status capability lapsed over a sent confirmation: reopening the
+    // row would only re-arm the poll that just refused to run.
+    if (result.kind === 'held' && result.reason === 'status_expired')
+      return statusWindowClosedState();
     if (result.kind === 'held' && result.jobId !== undefined && !reopened) {
       const view = await foundation.open(result.jobId);
       if (view.kind === 'available') return settle(view, unresolved, true);
@@ -848,7 +926,9 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     durable: true,
     async resume(context) {
       const listed = await foundation.list();
-      if (listed.kind !== 'entries') return null;
+      // A journal that cannot be read may hold a sent confirmation; it is
+      // never treated as empty.
+      if (listed.kind !== 'entries') return recordUnreadableState();
       const apiOrigin = getRuntimePublicConfig().apiBaseUrl;
       const nowMs = Date.now();
       const candidates = listed.entries
@@ -857,7 +937,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       for (const candidate of candidates) {
         const opened = await foundation.open(candidate.jobId);
         if (opened.kind === 'available') {
-          const state = durableState(opened.entry, opened.handle);
+          const state = durableState(opened.entry, opened.handle, nowMs);
           // A request that never became confirmable is nothing to resume.
           if (state.status === 'failed' && state.outcome === 'nothing_deleted')
             continue;
@@ -868,6 +948,10 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
         if (candidate.operationId === null || candidate.phase === 'securing')
           continue;
         if (candidate.phase === 'ready') return null;
+        if (statusWindowClosed(candidate, nowMs))
+          return statusWindowClosedState();
+        if (opened.kind === 'held' && isLocalRecordIssue(opened.reason))
+          return recordUnreadableState();
         return confirmUnresolved({
           kind: 'durable',
           jobId: candidate.jobId,
