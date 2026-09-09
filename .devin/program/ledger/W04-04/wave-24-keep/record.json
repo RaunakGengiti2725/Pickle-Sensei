@@ -1,0 +1,62 @@
+{
+  "agents": [],
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-04",
+  "requeued_from": {
+    "branch": "devin/pp/w04-04/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w04-04/attack-b214adf5",
+      "adversary_breaks": [
+        {
+          "expected": "Per-receipt verdicts: an already-consumed receipt replays its durable verdict (result_recorded/consumed); a receipt bound to a different approved lineage is judged against THAT lineage; a receipt under a withdrawn lineage is a grant_revoked HOLD; a not_chargeable abstention is recorded. Withdrawal of the active release must never make already-consumed offline receipts unreportable (the device cannot reconcile them and the message 'No rating was counted' is false for a consumed ticket).",
+          "observed": "HTTP 409 {\"error\":{\"code\":\"access.release_not_authorized\",\"message\":\"Validated ratings are not available right now. No rating was counted.\"},\"release\":{\"status\":\"ineligible\",\"reasonCode\":\"withdrawn\"}} for all three cases; settle_offline_receipt is never called (VERIFIED: attack_head_final.log lines 17-27, 498-528). Root cause INFERRED from index.ts reconcileOfflineReceipts: chargeableReleaseAdmission() runs once for the batch and returns releaseNotAuthorized() on 'ineligible' BEFORE per-receipt replay / offlineReceiptReleaseLineage(); the per-grant lineage logic (grant_revoked / evidence_ambiguous holds) is only reachable while the active policy is admitted.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A1'  (tests A1, A1b, A1c; A1 settles a receipt, then withdraws the active release via h.rpcs.read_analysis_release_policy = withdrawnReleasePolicyRow and redelivers the same receipt)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A1 / A1b / A1c)",
+          "title": "Withdrawing the CURRENT active release policy refuses the whole /v1/offline/receipts batch with 409 access.release_not_authorized before any receipt is judged — replays of already-consumed receipts, receipts whose grant names a different still-approved lineage, and not_chargeable abstentions are all turned away with 'No rating was counted' instead of reaching durable reconciliation"
+        },
+        {
+          "expected": "A grant that verifies at the instant it was live (exp-1 precedes the retirement, so the old key was the ACTIVE key then) must verify; the receipt settles and consumes exactly once. Instead the receipt is frozen as a durable hold that keeps the ticket reserved forever (no code path un-holds it), so every user whose device stayed offline across a rotation loses the rating they already executed. Same receipt on the un-rotated ring settles (control), proving the evidence is complete.",
+          "observed": "A3 control: settled. After rotation (previous key still inside its overlap): delivery=held, reconciliation.status=reconciliation_required, reasonCode=evidence_ambiguous, financialDisposition=reserved, and settle_offline_receipt was called with p_hold_reason='evidence_ambiguous' (durable). A3c (grant signed 5 min after retirement, inside the 15-min grace the ring honours, delivered after overlapEndsAt) is likewise held. A3b (old-key grant still inside its lease) settles — so only EXPIRED old-key grants are stranded. VERIFIED: attack_head_final.log lines 54-84, 558-574. Root cause INFERRED: offlineSignature.ts verifyOfflineExecutionGrant L579-585 (retired.retiredAtEpochSeconds > context.nowEpochSeconds + GRACE ⇒ retired_key) combined with index.ts offlineGrantVerificationInstant() (min(now, exp-1)).",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A3'  (A3: grant signed by the old key iat=now-10d exp=now-3d; control run with old key active settles; ring rotated at now-1d with the previous key retained for the full 7-day overlap; same receipt redelivered)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A3, A3c)",
+          "title": "Routine signing-key rotation permanently HOLDs (evidence_ambiguous, durable, ticket reserved) the delayed receipt of an old-key grant that EXPIRED before the rotation — the exact delayed-consumption case the package exists for — because offlineGrantVerificationInstant() back-dates verification to exp-1, and the ring's previous-key check then sees retiredAt > instant + grace and throws retired_key"
+        },
+        {
+          "expected": "delivery=held, status=reconciliation_required with an ambiguity/conflict reason (evidence_ambiguous or operation_conflict), ticket kept reserved — a receipt that says 'nothing to charge' beside an output that says 'scored rating delivered' is ambiguous commitment and must HOLD, not become a permanent 'recorded' verdict that the device treats as reconciled.",
+          "observed": "{\"result\":\"accepted\",\"delivery\":\"settled\",\"status\":\"result_recorded\",\"reason_code\":null,\"financial_disposition\":\"reserved\",...} — a durable result_recorded row that later replays forever; no ticket consumed, no shot written (VERIFIED: attack_head_final.log line 490, 590). Root cause INFERRED from migration 20260909220000: the v_billing='not_chargeable' branch records the result without checking the output's resultKind.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK L4b'  (live SQL: authenticated session, receipt.billingDisposition='not_chargeable', output.resultKind='scored' with a score, p_hold_reason=null)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK L4b (live))",
+          "title": "settle_offline_receipt() records a not_chargeable receipt whose delivered output claims resultKind='scored' as delivery=settled / status=result_recorded (durable) instead of HOLDing contradictory evidence — the mirror case (chargeable receipt + abstention output) is held, so the durable ledger accepts an internally inconsistent receipt/output pair"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Corrupt/unknown SERVER state must not become a durable decision (the implementer's own summary: 'transport failure → 503, never a durable decision on missing data'); an integrity failure of the authority row is a server fault and should answer 503 (or a non-durable pending) so the identical redelivery settles once the row is repaired. The receipt's own evidence is complete — only the server's copy of the release policy is corrupt.",
+          "observed": "HTTP 200, delivery=held, reconciliation_required, evidence_ambiguous, financialDisposition=reserved, durable stand-in holds the receipt (VERIFIED: attack_head_final.log line 28, 543). Root cause INFERRED: index.ts offlineReceiptReleaseLineage catches ReleasePolicyError failure==='integrity' and sets policy=null → evidence_ambiguous, while every other lineage-read failure is thrown → 503.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A2'  (active policy rotated; the grant's named lineage row is served with a tampered canonicalDocument so readVerifiedReleasePolicy throws ReleasePolicyError('integrity'))",
+          "severity": "P2",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A2)",
+          "title": "A release-lineage row that fails integrity verification (server-side corrupt authority state) is converted into a DURABLE evidence_ambiguous hold; repairing the row can never settle the receipt because the hold replays"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "b214adf57f90d6a43de0b344c1ece775f8aee467"
+  },
+  "rounds": [],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-24-keep"
+}

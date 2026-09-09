@@ -1,0 +1,62 @@
+{
+  "agents": [],
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-04",
+  "requeued_from": {
+    "branch": "devin/pp/w05-04/impl-r4",
+    "findings": {
+      "adversary_branch": "devin/pp/w05-04/attack-fda1aeff",
+      "adversary_breaks": [
+        {
+          "expected": "Remaining allocation is stated regardless of a lapsed Pro row: '2 of 2 unspent' with the held-free-tickets allocation-retention note; the wallet is not labelled a Pro pass when the Pro entitlement has lapsed.",
+          "observed": "With a lapsed verified_store grant (issued 14d before, expired 7d before the free allocation) plus the free allocation, both expired under anchored trusted time (ledger: spendableTickets=2, both verdicts 'expired'), Settings renders: 'EXPIRED | Offline pass expired | Allocation: Pro pass | Pass ends: Expired | Waiting to sync: Nothing | The pass end is measured by time confirmed with the server…'. The identical wallet without the lapsed Pro row renders '2 of 2 unspent' + 'stay allocated to this phone … never taken back automatically'. summarizeLease() prefers pro in the expired branch (`expired === null || (pro && !expired.pro)`) and the presenter then treats the whole wallet as a Pro lease (proLease => allocation row 'Pro pass', allocationNote null), so the free-ticket count and retention copy disappear.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A1 '",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Lapsed Pro lease hides the expired free allocation: card says 'Pro pass / Expired' and omits the 2 allocated free tickets and the allocation-retention statement"
+        },
+        {
+          "expected": "The card states the held free allocation ('2 of 2 unspent') and that it stays allocated until sync, in addition to the unconfirmed-time explanation; a Pro lease that cannot be confirmed does not erase the free allocation facts.",
+          "observed": "Free allocation (2 tickets) + a verified_store lease issued one day later; trusted time reading authority 'none' (ledger: spendableTickets=2, both verdicts reconcile_required/no_trusted_time). Settings renders 'CONFIRM ONLINE | Offline pass needs an online check | Allocation: Pro pass | Pass ends: Unconfirmed | Waiting to sync: Nothing | This phone has not confirmed the time…'. The 2 allocated free tickets and the 'stay allocated' statement are absent because the first grant in generation/issued_at DESC order is the Pro lease and summarizeLease() keeps the first reconcile entry, making proLease=true for the whole wallet.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A2 '",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Pro lease issued after the free allocation, under no trusted time, hides the held free tickets (CONFIRM ONLINE shows 'Pro pass' and no allocation count)"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Copy for a hold without a matching pending receipt should not state facts the ledger contradicts, e.g. 'names no receipt that is still waiting on this phone' rather than 'was never recorded on this phone'. Corruption-only path; classified minor.",
+          "observed": "After a receipt is accepted (settlement='accepted'), an in_flight offline_wallet_journal row naming that receipt id (corrupt/partial state) yields wallet.hold=true, pending=[] and the card renders UNIDENTIFIED_HOLD_RULE: 'A result submission is on record, but the receipt it names was never recorded on this phone, so its outcome cannot be read here…'. The receipt is recorded, and its outcome is readable (accepted).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A4 '",
+          "severity": "P3",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Unidentified-hold copy asserts the receipt 'was never recorded on this phone' even when the receipt IS on file (settled accepted)"
+        },
+        {
+          "expected": "Plural agreement: 'The spent analyses stay recorded until the server confirms them.' when more than one receipt is pending.",
+          "observed": "With grant/ticket rows deleted and two receipts (one in-flight journal) remaining, Settings renders 'ON HOLD | 2 results awaiting confirmation | Waiting to sync: 2 on hold | … | The spent analysis stays recorded until the server confirms it.' Count and noun disagree. Partial-state path only (no shipping code deletes offline_grant rows); classified minor.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A6 '",
+          "severity": "P3",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "HOLD with no grant rows and 2 pending receipts: title says '2 results awaiting confirmation' but the note says 'The spent analysis stays recorded…' (singular)"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "fda1aeff47a691028b8db67e2224ab0193bf4ce2"
+  },
+  "rounds": [],
+  "start_round": 5,
+  "status": "RUNNING",
+  "wave_id": "wave-24-keep"
+}

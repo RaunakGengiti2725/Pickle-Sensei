@@ -104,6 +104,32 @@ description = "RevenueCat public SDK keys in the mobile runtime config"
 paths = ['''(?:^|/)apps/mobile/src/config/runtimeConfig\.ts$''']
 regexes = ['''\b(?:appl|goog|test)_[A-Za-z0-9]{20,40}\b''']
 
+[[allowlists]]
+# Program ledger/launcher records quote adversary repro commands that start a
+# disposable local PostgREST with the labeled fixture JWT secret
+# "w0806-attack-jwt-secret-at-least-32-bytes-long"; it signs nothing outside
+# that throwaway container.
+description = "labeled PostgREST JWT fixture in production-program ledger repros"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)\.devin/program/(?:ledger|runs)/''']
+regexes = ['''XC_PGRST_JWT_SECRET=w0806-attack-jwt-secret-at-least-32-bytes-long''']
+
+[[allowlists]]
+# Ledger prose "authenticated session, receipt.billingDisposition='not_chargeable'"
+# is a receipt-field value in an adversary finding, not an assignment of a key.
+description = "receipt billingDisposition value in production-program ledger prose"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)\.devin/program/(?:ledger|runs)/''']
+regexes = ['''receipt\.billingDisposition='not_chargeable''']
+
+[[allowlists]]
+# React Navigation route `key` fixtures ("w01-partial-route") in mounted mobile
+# tests identify a navigation route, not a credential.
+description = "React Navigation route key fixtures in mobile tests"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)apps/mobile/__tests__/''']
+regexes = ['''\bkey: '[a-z0-9]+-[a-z0-9-]*route\b''']
+
 # ─── Custom rules for credential formats this system depends on ──────────────
 # (Legacy Supabase service_role/anon JWTs, Apple .p8 keys, AWS keys, GitHub
 # tokens, and Google API keys are covered by the default rules: jwt,
