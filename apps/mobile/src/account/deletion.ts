@@ -114,6 +114,12 @@ export interface AccountDeletionContext extends DataOwnerContext {
 export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
   'We could not confirm whether your account was deleted. The request may have completed. Check your connection and retry, or contact support if you still cannot confirm.';
 
+/** The server answered a confirmation with HTTP 409
+ * `account.deletion_blocked`: it declines to carry the confirmed operation
+ * out right now. That is never "nothing happened" — the operation exists
+ * server-side and its outcome is unresolved. */
+const CONFIRMATION_BLOCKED_MESSAGE = `The server declined to delete this account right now. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
+
 /** The server refused a request because a confirmed deletion of this
  * account is already being carried out (HTTP 409
  * `account.deletion_in_progress`). Nothing new was requested. */
@@ -220,6 +226,17 @@ async function post(
           'deletion.in_progress',
           ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
           false,
+        );
+      }
+      if (
+        confirming &&
+        response.status === 409 &&
+        error?.['code'] === 'account.deletion_blocked'
+      ) {
+        throw new AccountDeletionError(
+          'deletion.unknown',
+          CONFIRMATION_BLOCKED_MESSAGE,
+          true,
         );
       }
       const message =
@@ -592,6 +609,24 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
   }
 }
 
+/** An unanswered or refused request, worded once: the issue copy that
+ * already says nothing was deleted is not followed by a second sentence
+ * saying so. */
+function requestUnknownMessage(issue: DeletionIssue | null): string {
+  switch (issue) {
+    case null:
+    case 'unknown':
+    case 'invalid_response':
+      return REQUEST_UNKNOWN_MESSAGE;
+    case 'session_required':
+    case 'stale_handler':
+    case 'origin_unavailable':
+      return `${requestIssueMessage(issue)} Nothing has been deleted.`;
+    default:
+      return requestIssueMessage(issue);
+  }
+}
+
 function confirmIssueMessage(issue: DeletionIssue | null): string {
   switch (issue) {
     case 'confirmation_expired':
@@ -607,7 +642,7 @@ function confirmIssueMessage(issue: DeletionIssue | null): string {
     case 'rejected':
       return `The server did not accept the confirmation. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
     case 'blocked':
-      return `The server declined to delete this account right now. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
+      return CONFIRMATION_BLOCKED_MESSAGE;
     case 'status_expired':
       return 'The window for checking this deletion has closed. We could not confirm whether your account was deleted — contact support if you still cannot confirm.';
     default:
@@ -810,12 +845,7 @@ function durableState(
         status: 'request_unknown',
         attempt,
         nextAttemptAtMs: entry.nextAttemptAtMs,
-        message:
-          entry.lastIssue === null ||
-          entry.lastIssue === 'unknown' ||
-          entry.lastIssue === 'invalid_response'
-            ? REQUEST_UNKNOWN_MESSAGE
-            : `${requestIssueMessage(entry.lastIssue)} Nothing has been deleted.`,
+        message: requestUnknownMessage(entry.lastIssue),
       };
     case 'securing':
       // The status capability never reached the Keychain, so this request

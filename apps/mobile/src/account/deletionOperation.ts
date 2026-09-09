@@ -244,11 +244,17 @@ export function createDeletionOperationFoundation(
     requireCurrent(context);
     const reply = await transport.request(context, body);
     if (reply.kind !== 'requested') {
+      // The server's word that a confirmed deletion is being carried out
+      // stands until the server itself answers differently; a re-ask it
+      // did not answer (401, network loss, a refusal unrelated to the
+      // deletion) proves nothing and is paced like any other retry.
+      const standing =
+        entry.lastIssue === 'in_progress' && reply.kind !== 'in_progress';
       const unknown = await update(entry, {
         phase: 'request_unknown',
         serverState: 'unknown',
-        lastIssue: remoteIssue(reply),
-        nextAttemptAtMs: now() + delay(entry, reply, true),
+        lastIssue: standing ? 'in_progress' : remoteIssue(reply),
+        nextAttemptAtMs: now() + delay(entry, reply, !standing),
         retryCount: Math.min(20, entry.retryCount + 1),
       });
       return view(unknown, context);
