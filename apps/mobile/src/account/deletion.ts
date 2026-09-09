@@ -557,6 +557,13 @@ const JOURNAL_FULL_MESSAGE =
  * flow, so nothing was sent and the outcome is known — nothing happened. */
 const CONFIRMATION_UNSENT_MESSAGE =
   'This deletion attempt could not be confirmed from here, so no confirmation was sent. Nothing was deleted — start again.';
+/** The foundation refused to send the confirmation of a challenge that is
+ * still live: the same challenge is offered again. */
+const CONFIRMATION_NOT_SENT_MESSAGE =
+  'The confirmation could not be sent from this phone. Nothing was deleted — try again.';
+const RECORD_UNREAD_MESSAGE =
+  'This phone could not read its record of the deletion request, so no confirmation was sent. Nothing was deleted — try again.';
+const RATE_LIMITED_REASON = 'Too many attempts. Try again in a moment.';
 
 function requestIssueMessage(issue: DeletionIssue | null): string {
   switch (issue) {
@@ -567,7 +574,7 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
       return ACCOUNT_CHANGED_MESSAGE;
     case 'rate_limited':
     case 'retry_later':
-      return 'Too many attempts. Try again in a moment. Nothing was deleted.';
+      return `${RATE_LIMITED_REASON} Nothing was deleted.`;
     case 'raw_transactional_db_required':
     case 'journal_schema_invalid':
     case 'journal_unavailable':
@@ -585,6 +592,49 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
       return JOURNAL_FULL_MESSAGE;
     default:
       return REQUEST_FAILED_MESSAGE;
+  }
+}
+
+/** What an unresolved request can honestly say: the issue, and — once —
+ * that nothing has been deleted. */
+function requestUnknownMessage(issue: DeletionIssue | null): string {
+  switch (issue) {
+    case null:
+    case 'unknown':
+    case 'invalid_response':
+      return REQUEST_UNKNOWN_MESSAGE;
+    case 'rate_limited':
+    case 'retry_later':
+      return `${RATE_LIMITED_REASON} Nothing has been deleted.`;
+    case 'session_required':
+    case 'stale_handler':
+    case 'origin_unavailable':
+      return `${requestIssueMessage(issue)} Nothing has been deleted.`;
+    default:
+      return 'The deletion request could not be completed. Nothing has been deleted.';
+  }
+}
+
+/** Why the confirmation of a still-live challenge could not be sent. */
+function confirmationNotSentMessage(issue: DeletionIssue): string {
+  switch (issue) {
+    case 'session_required':
+      return requestIssueMessage(issue);
+    case 'rate_limited':
+    case 'retry_later':
+      return `${RATE_LIMITED_REASON} Nothing was deleted.`;
+    case 'raw_transactional_db_required':
+    case 'journal_schema_invalid':
+    case 'journal_unavailable':
+    case 'journal_invalid':
+    case 'journal_unsupported':
+    case 'journal_conflict':
+    case 'journal_capacity':
+    case 'capability_unavailable':
+    case 'capability_write_ambiguous':
+      return RECORD_UNREAD_MESSAGE;
+    default:
+      return CONFIRMATION_NOT_SENT_MESSAGE;
   }
 }
 
@@ -772,7 +822,7 @@ function unresolvedConfirmationMessage(entry: DeletionJournalEntry): string {
 
 function durableState(
   entry: DeletionJournalEntry,
-  handle: DeletionOperationHandle,
+  handle: DeletionOperationHandle | null,
   nowMs: number,
 ): AccountDeletionState {
   const attempt: AccountDeletionAttempt = {
@@ -799,12 +849,7 @@ function durableState(
         status: 'request_unknown',
         attempt,
         nextAttemptAtMs: entry.nextAttemptAtMs,
-        message:
-          entry.lastIssue === null ||
-          entry.lastIssue === 'unknown' ||
-          entry.lastIssue === 'invalid_response'
-            ? REQUEST_UNKNOWN_MESSAGE
-            : `${requestIssueMessage(entry.lastIssue)} Nothing has been deleted.`,
+        message: requestUnknownMessage(entry.lastIssue),
       };
     case 'securing':
       // The status capability never reached the Keychain, so this request
@@ -857,6 +902,40 @@ function durableState(
   }
 }
 
+/** The foundation refused to confirm before `confirm_pending` was
+ * journaled, so the confirmation never reached the transport: the row still
+ * says so. `null` when the refusal does not prove that (another job may be
+ * confirming, or the Keychain record contradicts the row). A capability
+ * this phone no longer holds — or holds unreadably — ends the attempt; any
+ * other refusal offers the live challenge again. */
+function unsentConfirmationState(
+  entry: DeletionJournalEntry,
+  reason: DeletionIssue,
+  nowMs: number,
+): AccountDeletionState | null {
+  if (entry.receipt !== null || confirmationSent(entry)) return null;
+  switch (reason) {
+    case 'stale_handler':
+    case 'origin_unavailable':
+    case 'capability_conflict':
+      return null;
+    case 'capability_missing':
+    case 'capability_invalid':
+    case 'capability_unsupported':
+      return {
+        status: 'failed',
+        outcome: 'nothing_deleted',
+        message: CONFIRMATION_UNSENT_MESSAGE,
+      };
+    default: {
+      const state = durableState(entry, null, nowMs);
+      return state.status === 'ready'
+        ? { ...state, message: confirmationNotSentMessage(reason) }
+        : state;
+    }
+  }
+}
+
 function resumable(
   entry: DeletionJournalEntry,
   context: AccountDeletionContext,
@@ -879,7 +958,9 @@ function resumable(
 function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
   async function settle(
     result: DeletionOperationResult,
-    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+    unresolved: (
+      reason: DeletionIssue | null,
+    ) => AccountDeletionState | Promise<AccountDeletionState>,
     reopened = false,
   ): Promise<AccountDeletionState> {
     if (result.kind === 'available')
@@ -913,10 +994,17 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
   async function journaledReceipt(
     jobId: string,
   ): Promise<DeletionReceipt | null> {
+    return (await journaledEntry(jobId))?.receipt ?? null;
+  }
+
+  /** The row journaled under `jobId`, read while the foundation holds the
+   * job: its phase says whether a confirmation ever left this phone. */
+  async function journaledEntry(
+    jobId: string,
+  ): Promise<DeletionJournalEntry | null> {
     const listed = await foundation.list();
     if (listed.kind !== 'entries') return null;
-    const entry = listed.entries.find(candidate => candidate.jobId === jobId);
-    return entry?.receipt ?? null;
+    return listed.entries.find(candidate => candidate.jobId === jobId) ?? null;
   }
 
   function requestFailed(reason: DeletionIssue | null): AccountDeletionState {
@@ -944,13 +1032,31 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     });
   }
 
+  /** A confirmation the foundation refused: unknown only when the journal
+   * cannot rule out that it was sent. */
+  function confirmRefused(
+    attempt: Extract<AccountDeletionAttempt, { kind: 'durable' }>,
+  ) {
+    const unresolved = confirmUnresolved(attempt);
+    return async (reason: DeletionIssue | null) => {
+      if (reason === null) return unresolved(reason);
+      const entry = await journaledEntry(attempt.jobId);
+      return (
+        (entry && unsentConfirmationState(entry, reason, Date.now())) ??
+        unresolved(reason)
+      );
+    };
+  }
+
   /** Runs `operate` on the attempt's handle; a handle the foundation no
    * longer recognises (older revision, or none after a resume that could
    * not open the job) is refreshed once through `open(jobId)`. */
   async function operate(
     attempt: AccountDeletionAttempt,
     run: (handle: DeletionOperationHandle) => Promise<DeletionOperationResult>,
-    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+    unresolved: (
+      reason: DeletionIssue | null,
+    ) => AccountDeletionState | Promise<AccountDeletionState>,
   ): Promise<AccountDeletionState> {
     if (attempt.kind !== 'durable') return unresolved(null);
     let result: DeletionOperationResult | null = attempt.handle
@@ -1024,6 +1130,21 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           if (state.status === 'failed' && state.outcome === 'nothing_deleted')
             continue;
           if (state.status === 'ready') return idle() ?? state;
+          // A refusal because a confirmed deletion was in progress is a
+          // server fact, re-checked once its retry window has passed: the
+          // server answers with a fresh challenge, or refuses again.
+          if (
+            state.status === 'already_in_progress' &&
+            nowMs >= opened.entry.nextAttemptAtMs
+          ) {
+            const held = idle();
+            if (held) return held;
+            const asked = await settle(
+              await foundation.retryRequest(opened.handle),
+              requestFailed,
+            );
+            return asked.status === 'ready' ? (idle() ?? asked) : asked;
+          }
           return state;
         }
         // The row's verified receipt is the proof even when the Keychain
@@ -1039,7 +1160,17 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
         // no confirmation was ever sent, so there is no outcome to report.
         if (candidate.operationId === null || candidate.phase === 'securing')
           continue;
-        if (candidate.phase === 'ready') return idle();
+        if (candidate.phase === 'ready') {
+          // The challenge is live but the foundation cannot open it: the
+          // row proves no confirmation was sent, so the sheet says so — or
+          // offers a fresh start when this phone can no longer confirm it.
+          const unsent =
+            opened.kind === 'held'
+              ? unsentConfirmationState(candidate, opened.reason, nowMs)
+              : null;
+          if (unsent?.status === 'failed') continue;
+          return idle() ?? unsent;
+        }
         if (statusWindowClosed(candidate, nowMs))
           return statusWindowClosedState();
         if (opened.kind === 'held' && isLocalRecordIssue(opened.reason))
@@ -1067,7 +1198,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       return operate(
         attempt,
         handle => foundation.confirm(handle),
-        confirmUnresolved(attempt),
+        confirmRefused(attempt),
       );
     },
     recover(attempt) {

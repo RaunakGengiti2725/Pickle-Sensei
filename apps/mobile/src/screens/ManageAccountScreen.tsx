@@ -171,6 +171,7 @@ type DeleteAccountStep =
   | {
       phase: 'request_unknown';
       attempt: AccountDeletionAttempt;
+      secondsLeft: number;
       context: AccountDeletionContext;
       flow: AccountDeletionFlow;
     }
@@ -416,6 +417,9 @@ function DeleteAccountDialog(props: {
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completionUnknown, setCompletionUnknown] = useState(false);
+  // True while the journal is being read for an unfinished operation: a new
+  // request must wait for that answer, or it would be minted beside one.
+  const [resuming, setResuming] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bumped every time the dialog closes: an async step that started in an
@@ -460,6 +464,7 @@ function DeleteAccountDialog(props: {
       setSurvey(null);
       setError(null);
       setCompletionUnknown(false);
+      setResuming(false);
       directionRef.current = 'none';
       entrance.setValue(0);
     } else if (reduced) {
@@ -533,7 +538,11 @@ function DeleteAccountDialog(props: {
     stopCountdown();
     timerRef.current = setInterval(() => {
       setStep(current => {
-        if (current.phase !== 'armed' && current.phase !== 'confirm_unknown')
+        if (
+          current.phase !== 'armed' &&
+          current.phase !== 'confirm_unknown' &&
+          current.phase !== 'request_unknown'
+        )
           return current;
         if (current.secondsLeft <= 1) {
           stopCountdown();
@@ -578,16 +587,20 @@ function DeleteAccountDialog(props: {
         if (secondsLeft > 0) startCountdown();
         return;
       }
-      case 'request_unknown':
+      case 'request_unknown': {
+        const secondsLeft = secondsUntil(state.nextAttemptAtMs);
         setCompletionUnknown(false);
         setError(state.message);
         setStep({
           phase: 'request_unknown',
           attempt: state.attempt,
+          secondsLeft,
           context,
           flow,
         });
+        if (secondsLeft > 0) startCountdown();
         return;
+      }
       case 'confirm_unknown': {
         const secondsLeft = secondsUntil(state.nextAttemptAtMs);
         setCompletionUnknown(true);
@@ -632,24 +645,29 @@ function DeleteAccountDialog(props: {
     if (!context) return;
     const flow = accountDeletionFlow();
     if (!flow.durable) return;
-    while (inFlightRef.current) await inFlightRef.current;
-    if (presentation !== presentationRef.current) return;
-    const resume = (async () => {
-      const state = await flow
-        .resume(context)
-        .catch((): AccountDeletionState => ({
-          status: 'failed',
-          outcome: 'unknown',
-          message: ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
-        }));
-      if (!state || presentation !== presentationRef.current) return;
-      applyState(state, context, flow, presentation, DELETE_ARM_DELAY_MS);
-    })();
-    inFlightRef.current = resume;
+    setResuming(true);
     try {
-      await resume;
+      while (inFlightRef.current) await inFlightRef.current;
+      if (presentation !== presentationRef.current) return;
+      const resume = (async () => {
+        const state = await flow
+          .resume(context)
+          .catch((): AccountDeletionState => ({
+            status: 'failed',
+            outcome: 'unknown',
+            message: ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
+          }));
+        if (!state || presentation !== presentationRef.current) return;
+        applyState(state, context, flow, presentation, DELETE_ARM_DELAY_MS);
+      })();
+      inFlightRef.current = resume;
+      try {
+        await resume;
+      } finally {
+        if (inFlightRef.current === resume) inFlightRef.current = null;
+      }
     } finally {
-      if (inFlightRef.current === resume) inFlightRef.current = null;
+      if (presentation === presentationRef.current) setResuming(false);
     }
   };
 
@@ -736,7 +754,13 @@ function DeleteAccountDialog(props: {
       flow,
       { phase: 'requesting' },
       () => ({
-        step: { phase: 'request_unknown', attempt, context, flow },
+        step: {
+          phase: 'request_unknown',
+          attempt,
+          secondsLeft: 0,
+          context,
+          flow,
+        },
         message: REQUEST_FAILED_MESSAGE,
       }),
       session => flow.retryRequest(attempt, session, survey),
@@ -1077,16 +1101,24 @@ function DeleteAccountDialog(props: {
                   : 'Continue to delete'
               }
               variant="danger"
-              disabled={busy}
-              onPress={() => void beginRequest()}
+              disabled={busy || resuming}
+              onPress={() => {
+                if (!resuming) void beginRequest();
+              }}
             />
           ) : step.phase === 'request_unknown' ? (
             <Button
-              label="Retry request"
-              variant="danger"
-              onPress={() =>
-                void retryRequest(step.attempt, step.context, step.flow)
+              label={
+                step.secondsLeft > 0
+                  ? `Retry request (${step.secondsLeft})`
+                  : 'Retry request'
               }
+              variant="danger"
+              disabled={step.secondsLeft > 0}
+              onPress={() => {
+                if (step.secondsLeft === 0)
+                  void retryRequest(step.attempt, step.context, step.flow);
+              }}
             />
           ) : step.phase === 'armed' || step.phase === 'deleting' ? (
             <Button
