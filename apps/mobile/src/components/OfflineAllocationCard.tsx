@@ -105,9 +105,9 @@ const SERVER_HOLD_RULE =
   'twice.';
 
 const UNIDENTIFIED_HOLD_RULE =
-  'A result submission is on record, but the receipt it names was never ' +
-  'recorded on this phone, so its outcome cannot be read here. It needs an ' +
-  'online check; this phone charges nothing for it.';
+  'A result submission is on record, but it names no receipt that is still ' +
+  'waiting on this phone, so its outcome cannot be read here. The next ' +
+  'online sync closes it; nothing is charged twice.';
 
 const ALLOCATION_STAYS =
   'stay allocated to this phone until they sync with the server — an ' +
@@ -133,13 +133,13 @@ type LeaseSummary =
   | {
       readonly kind: 'active';
       readonly remainingMs: number;
+      /** The live grant that governs is a Pro lease. */
       readonly pro: boolean;
     }
-  | { readonly kind: 'expired'; readonly pro: boolean }
+  | { readonly kind: 'expired' }
   | {
       readonly kind: 'reconcile_required';
       readonly reason: ReconcileReason;
-      readonly pro: boolean;
     };
 
 function isProGrant(grant: HeldOfflineGrantView): boolean {
@@ -159,19 +159,17 @@ function liveRemainingMs(verdict: TrustedTimeLeaseVerdict): number | null {
  * Pro lease first (it covers every analysis), then the live grant with the
  * most time left; without a live grant, an unconfirmed reading is named
  * before an expiry (a floor reading can prove an expiry, but never that time
- * has run out on an unconfirmed pass). A lapsed grant never lends its
- * entitlement to the copy while another grant is live. */
+ * has run out on an unconfirmed pass). Only a LIVE grant lends its
+ * entitlement to the copy: a lapsed or unconfirmed Pro lease is a row the
+ * ledger keeps, not a pass, and the wallet it sits in is described by the
+ * tickets it holds. */
 function summarizeLease(grants: readonly HeldOfflineGrantView[]): LeaseSummary {
   if (grants.length === 0) return { kind: 'none' };
   let active: {
     readonly remainingMs: number;
     readonly pro: boolean;
   } | null = null;
-  let reconcile: {
-    readonly reason: ReconcileReason;
-    readonly pro: boolean;
-  } | null = null;
-  let expired: { readonly pro: boolean } | null = null;
+  let reconcile: ReconcileReason | null = null;
   for (const grant of grants) {
     const verdict = grant.execution;
     const pro = isProGrant(grant);
@@ -184,16 +182,15 @@ function summarizeLease(grants: readonly HeldOfflineGrantView[]): LeaseSummary {
       )
         active = { remainingMs, pro };
     } else if (verdict.kind === 'active') {
-      if (reconcile === null) reconcile = { reason: 'invalid_lease', pro };
+      if (reconcile === null) reconcile = 'invalid_lease';
     } else if (verdict.kind === 'reconcile_required') {
-      if (reconcile === null) reconcile = { reason: verdict.reason, pro };
-    } else if (expired === null || (pro && !expired.pro)) {
-      expired = { pro };
+      if (reconcile === null) reconcile = verdict.reason;
     }
   }
   if (active) return { kind: 'active', ...active };
-  if (reconcile !== null) return { kind: 'reconcile_required', ...reconcile };
-  return { kind: 'expired', pro: expired?.pro ?? false };
+  if (reconcile !== null)
+    return { kind: 'reconcile_required', reason: reconcile };
+  return { kind: 'expired' };
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -251,10 +248,17 @@ export function presentOfflineJourney(
   const { allocation, wallet } = state;
   const grants = allocation.grants;
   const lease = summarizeLease(grants);
-  const proLease = lease.kind !== 'none' && lease.pro;
   const held = allocation.spendableTickets;
   const spent = allocation.consumedTickets;
   const total = held + spent;
+  // The wallet is a Pro pass when a live Pro lease governs it, or when it
+  // holds nothing but Pro rows (no ticket was ever allocated here). A Pro
+  // row that is not live beside allocated tickets is not what the wallet
+  // is: those tickets are counted exactly as they would be without it.
+  const proLease =
+    lease.kind === 'active'
+      ? lease.pro
+      : lease.kind !== 'none' && total === 0 && grants.some(isProGrant);
   // Only a ticket hosted by a grant that is live under the current reading
   // is one the ledger would spend now; every other held ticket stays
   // allocated but is not ready.
@@ -287,6 +291,14 @@ export function presentOfflineJourney(
       label: 'Allocation',
       value: proLease ? 'Pro pass' : `${held} of ${total} unspent`,
     });
+    // Free tickets this phone holds beside a live Pro pass are a fact of the
+    // wallet too: counted, never dropped behind the pass.
+    if (proLease && total > 0) {
+      rows.push({
+        label: 'Free analyses',
+        value: `${held} of ${total} unspent`,
+      });
+    }
     rows.push({
       label: 'Pass ends',
       value:
@@ -316,12 +328,24 @@ export function presentOfflineJourney(
     : `${plural(onHold, 'result', 'results')} awaiting confirmation`;
 
   if (lease.kind === 'none') {
-    notes.push(
-      hold
-        ? 'The spent analysis stays recorded until the server confirms it.'
-        : 'Offline analyses are issued while you are online and signed in; ' +
-            'the ones this phone holds appear here.',
-    );
+    // With no grant row left, the receipts are the only record of what was
+    // spent: one sentence per fact, agreeing in number, and none when the
+    // HOLD names no receipt at all.
+    const pendingCount = wallet.pending.length;
+    if (!hold) {
+      notes.push(
+        'Offline analyses are issued while you are online and signed in; ' +
+          'the ones this phone holds appear here.',
+      );
+    } else if (pendingCount === 1) {
+      notes.push(
+        'The spent analysis stays recorded until the server confirms it.',
+      );
+    } else if (pendingCount > 1) {
+      notes.push(
+        'The spent analyses stay recorded until the server confirms them.',
+      );
+    }
     return {
       badge: hold ? 'ON HOLD' : 'NONE HELD',
       badgeTone: hold ? 'warn' : 'neutral',
