@@ -17,6 +17,8 @@ import type {
   DeletionHttpRequest,
   DeletionIssue,
   DeletionJournalEntry,
+  DeletionPhase,
+  DeletionReceipt,
   DeletionRuntimePort,
 } from './deletionOperationContracts';
 
@@ -635,13 +637,63 @@ function terminalMessage(
 function confirmationSent(
   entry: Pick<DeletionJournalEntry, 'operationId' | 'phase'>,
 ): boolean {
+  return entry.operationId !== null && phaseAfterConfirmation(entry.phase);
+}
+
+function phaseAfterConfirmation(phase: DeletionPhase): boolean {
   return (
-    entry.operationId !== null &&
-    entry.phase !== 'request_pending' &&
-    entry.phase !== 'request_unknown' &&
-    entry.phase !== 'securing' &&
-    entry.phase !== 'ready'
+    phase !== 'request_pending' &&
+    phase !== 'request_unknown' &&
+    phase !== 'securing' &&
+    phase !== 'ready'
   );
+}
+
+/** A row with damaged identifying columns is this owner's history only when
+ * its owner and origin columns still say so; a phase column that cannot be
+ * read may lie past a sent confirmation, so it counts as one. */
+function damagedRowMayHoldConfirmation(
+  row: {
+    ownerId: string | null;
+    apiOrigin: string | null;
+    phase: DeletionPhase | null;
+  },
+  ownerKey: string,
+  apiOrigin: string | null,
+): boolean {
+  return (
+    apiOrigin !== null &&
+    row.ownerId === ownerKey &&
+    row.apiOrigin === apiOrigin &&
+    (row.phase === null || phaseAfterConfirmation(row.phase))
+  );
+}
+
+/** A receipt the transport verified against the operation is the deletion
+ * proof; the Keychain record beside it authorizes cleanup, not the verdict. */
+function completedState(receipt: DeletionReceipt): AccountDeletionState {
+  return {
+    status: 'completed',
+    result: {
+      appleAuthorizationRevocation: receipt.appleAuthorizationRevocation,
+    },
+  };
+}
+
+/** The Keychain could not answer for the record beside a journal row: no
+ * item, an item it cannot read, or a Keychain that is not available right
+ * now. A record that contradicts the row is NOT this. */
+function isKeychainUnanswered(issue: DeletionIssue): boolean {
+  switch (issue) {
+    case 'capability_missing':
+    case 'capability_unavailable':
+    case 'capability_invalid':
+    case 'capability_unsupported':
+    case 'capability_write_ambiguous':
+      return true;
+    default:
+      return false;
+  }
 }
 
 /** The server reports `expired`/`superseded` only for an operation it never
@@ -732,15 +784,7 @@ function durableState(
   if (isTerminalServerState(entry)) return terminalMessage(entry.serverState);
   // A receipt the transport verified against the operation is the deletion
   // proof, whether or not the Keychain has sealed it yet.
-  if (entry.receipt !== null) {
-    return {
-      status: 'completed',
-      result: {
-        appleAuthorizationRevocation:
-          entry.receipt.appleAuthorizationRevocation,
-      },
-    };
-  }
+  if (entry.receipt !== null) return completedState(entry.receipt);
   if (statusWindowClosed(entry, nowMs)) return statusWindowClosedState();
   switch (entry.phase) {
     case 'request_pending':
@@ -847,11 +891,32 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     // row would only re-arm the poll that just refused to run.
     if (result.kind === 'held' && result.reason === 'status_expired')
       return statusWindowClosedState();
-    if (result.kind === 'held' && result.jobId !== undefined && !reopened) {
-      const view = await foundation.open(result.jobId);
-      if (view.kind === 'available') return settle(view, unresolved, true);
+    if (result.kind === 'held' && result.jobId !== undefined) {
+      let held: DeletionIssue = result.reason;
+      if (!reopened) {
+        const view = await foundation.open(result.jobId);
+        if (view.kind === 'available') return settle(view, unresolved, true);
+        if (view.kind === 'held') held = view.reason;
+      }
+      if (isKeychainUnanswered(held)) {
+        const receipt = await journaledReceipt(result.jobId);
+        if (receipt) return completedState(receipt);
+      }
     }
     return unresolved(result.kind === 'held' ? result.reason : null);
+  }
+
+  /** The verified receipt journaled under `jobId`, when the foundation holds
+   * the job behind a Keychain record it cannot read: the row itself is
+   * readable and the receipt in it was verified against the operation, so
+   * the deletion is complete even though cleanup stays held. */
+  async function journaledReceipt(
+    jobId: string,
+  ): Promise<DeletionReceipt | null> {
+    const listed = await foundation.list();
+    if (listed.kind !== 'entries') return null;
+    const entry = listed.entries.find(candidate => candidate.jobId === jobId);
+    return entry?.receipt ?? null;
   }
 
   function requestFailed(reason: DeletionIssue | null): AccountDeletionState {
@@ -937,12 +1002,16 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       const nowMs = Date.now();
       // An unreadable row is this owner's history only when it is this
       // owner's row; one that never carried a confirmation has no outcome.
-      const unreadable = listed.unreadable.some(
-        row =>
-          row.ownerId === context.ownerKey &&
-          row.apiOrigin === apiOrigin &&
-          confirmationSent(row),
-      );
+      const unreadable =
+        listed.unreadable.some(
+          row =>
+            row.ownerId === context.ownerKey &&
+            row.apiOrigin === apiOrigin &&
+            confirmationSent(row),
+        ) ||
+        listed.damaged.some(row =>
+          damagedRowMayHoldConfirmation(row, context.ownerKey, apiOrigin),
+        );
       const idle = () => (unreadable ? recordUnreadableState() : null);
       const candidates = listed.entries
         .filter(entry => resumable(entry, context, apiOrigin, nowMs))
@@ -957,6 +1026,15 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           if (state.status === 'ready') return idle() ?? state;
           return state;
         }
+        // The row's verified receipt is the proof even when the Keychain
+        // cannot answer for the record beside it (item gone after a restore,
+        // Keychain unavailable); only a contradicting record holds it.
+        if (
+          candidate.receipt !== null &&
+          opened.kind === 'held' &&
+          isKeychainUnanswered(opened.reason)
+        )
+          return completedState(candidate.receipt);
         // No operation, or one whose capability never reached the Keychain:
         // no confirmation was ever sent, so there is no outcome to report.
         if (candidate.operationId === null || candidate.phase === 'securing')
