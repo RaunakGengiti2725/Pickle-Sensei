@@ -30,7 +30,7 @@
 // at import, so the route answers 503 and spends nothing.
 
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { exportJWK, generateKeyPair } from "jose";
+import { base64url, exportJWK, generateKeyPair } from "jose";
 import {
   OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
   OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
@@ -865,5 +865,35 @@ Deno.test(
     assertEquals(ok.status, 200);
     assertEquals(((await ok.json()) as { keyId: string }).keyId, ACTIVE_KID);
     assertEquals(h.callsTo(GRANT_RPC).length, 1);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Runbook / code consistency
+// ---------------------------------------------------------------------------
+
+Deno.test(
+  "runbook: allowedKeyIds is verifier-side binding context — the signed payload carries no key list and the runbook does not claim it does",
+  async () => {
+    const rotation = await loadRotation();
+    const ring = await rotation.importOfflineGrantKeyRing(ringDocument({}));
+    const grant = await signOfflineExecutionGrant(
+      moduleClaims(NOW),
+      ring.signingKey,
+      moduleContext(ring.allowedKeyIds, NOW),
+    );
+    const [, payloadSegment] = grant.compactJws.split(".");
+    const payload = JSON.parse(
+      new TextDecoder().decode(base64url.decode(payloadSegment)),
+    ) as Record<string, unknown>;
+    assertEquals("allowedKeyIds" in payload, false);
+    assertEquals(ring.allowedKeyIds, [ACTIVE_KID, PREVIOUS_KID]);
+
+    const runbook = await Deno.readTextFile(
+      new URL("../../../../docs/runbooks/offline-key-rotation.md", import.meta.url),
+    );
+    assertEquals(/grants?\s+embeds?\s+`?allowedKeyIds/i.test(runbook), false);
+    assert(/verifier-side binding context/.test(runbook));
+    assert(/d\/\(x,\s*y\)|belongs? to (that|its) `?d`?/.test(runbook));
   },
 );
