@@ -17,21 +17,32 @@ import Foundation
 ///   wallet or the new one is on disk, never a mix, and a concurrent writer
 ///   (another `OfflineWallet` instance, another process) gets
 ///   `revision_conflict` instead of silently overwriting unsent receipts.
+///   `clear` does not delete the item: it leaves a *cleared* envelope at the
+///   same revision, so the slot is never empty once history exists and the
+///   removed envelope can only ever read as a rollback.
 /// - `integrity-key.v1.<owner>` — a random per-owner key for the HMAC that
 ///   seals the wallet and the fence. A corrupt key affects one owner only and
 ///   leaves through `discardCorrupt` like any other corruption.
-/// - `fence.v1.<owner>` — the highest revision ever committed for the owner.
-///   A wallet whose revision is behind its fence was rolled back to an older
-///   (authentic) envelope and is reported `tampered`; the fence survives
-///   `clear`, so revisions never restart for an owner on this installation.
+/// - `fence.v1.<owner>` — the highest revision ever committed for the owner,
+///   whether that revision was cleared, and the owner's *history epoch*, a
+///   random token every envelope of that history carries. A wallet whose
+///   revision is behind its fence — or at a fence revision the fence records
+///   as cleared — was rolled back to an older (authentic) envelope and is
+///   reported `tampered`; the fence survives `clear`, so revisions never
+///   restart for an owner on this installation. Whenever the fence is
+///   (re)created or the owner recovers through `discardCorrupt` the epoch
+///   changes, so every envelope issued under the previous history stops
+///   verifying — revisions cannot be restarted underneath already-issued
+///   envelopes by losing the fence.
 ///
 /// Flipped bytes, a wallet copied between owners, a payload whose key is
-/// gone, an unsupported envelope version and a rolled-back wallet are typed
-/// failures — never an empty wallet, and never overwritten without an
-/// explicit `discardCorrupt` after reconciliation. Signature and policy
-/// verification of the grant itself is the caller's job; the wallet only
-/// guarantees shape, integrity, monotonicity and isolation of what it was
-/// asked to keep.
+/// gone, an unsupported envelope version, a rolled-back wallet, a wallet
+/// from a retired history and a wallet item missing while its fence records
+/// committed history are typed failures — never an empty wallet, and never
+/// overwritten without an explicit `discardCorrupt` after reconciliation.
+/// Signature and policy verification of the grant itself is the caller's
+/// job; the wallet only guarantees shape, integrity, monotonicity and
+/// isolation of what it was asked to keep.
 public enum OfflineWalletFailure: String, CaseIterable, Codable, Sendable {
   case invalidOwner = "invalid_owner"
   case invalidGrant = "invalid_grant"
@@ -187,17 +198,19 @@ public final class OfflineWallet {
     self.store = store
   }
 
-  /// `nil` means no wallet item is stored for this owner. Stored bytes that do
-  /// not verify are a thrown failure, never `nil`.
+  /// `nil` means no wallet is stored for this owner: no item at all, or the
+  /// cleared envelope `clear` leaves behind. Stored bytes that do not verify,
+  /// and a wallet item missing while the fence records committed history, are
+  /// a thrown failure, never `nil`.
   public func load(ownerId: String) throws -> OfflineWalletSnapshot? {
     try OfflineWallet.validateOwner(ownerId)
     let state = try readState(ownerId: ownerId)
+    if let fault = state.fault, state.walletBytes != nil || state.walletVanished { throw fault }
     guard state.walletBytes != nil else { return nil }
-    if let fault = state.fault { throw fault }
     guard let wallet = state.wallet else {
       throw OfflineWalletError(failure: .storageFailure, detail: "wallet state is inconsistent")
     }
-    return wallet.snapshot
+    return wallet.cleared ? nil : wallet.snapshot
   }
 
   /// Replaces the whole wallet in one compare-and-swap item write.
@@ -214,7 +227,7 @@ public final class OfflineWallet {
     try OfflineWallet.validate(contents)
     let state = try readState(ownerId: ownerId)
     if let fault = state.fault { throw fault }
-    let currentRevision = state.wallet?.revision ?? 0
+    let currentRevision = state.currentRevision
     guard currentRevision == expectedRevision else {
       throw OfflineWalletError(
         failure: .revisionConflict,
@@ -222,32 +235,39 @@ public final class OfflineWallet {
       )
     }
 
+    // A key is only reused together with the fence it sealed. A key with no
+    // fence (a first write that stopped early, or a fence that was lost)
+    // belongs to no history and is replaced, so nothing sealed under it can
+    // ever be placed in the history this write starts.
     let key: Data
-    if let existing = state.key {
+    if let existing = state.key, state.fence != nil {
       key = existing
     } else {
       key = OfflineWallet.mintIntegrityKey()
-      guard try storeWrite(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId), data: key, previous: nil) else {
+      guard try storeWrite(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId), data: key, previous: state.keyBytes)
+      else {
         throw OfflineWalletError(failure: .revisionConflict, detail: "integrity key was created concurrently")
       }
     }
 
     var fenceBytes = state.fenceBytes
-    if fenceBytes == nil {
-      let initial = try OfflineWallet.sealFence(ownerId: ownerId, revision: 0, key: key)
+    let fence: FenceState
+    if let existing = state.fence {
+      fence = existing
+    } else {
+      fence = FenceState(revision: 0, epoch: OfflineWallet.mintEpoch(), cleared: false)
+      let initial = try OfflineWallet.sealFence(ownerId: ownerId, fence: fence, key: key)
       guard try storeWrite(account: OfflineWallet.fenceAccount(ownerId: ownerId), data: initial, previous: nil) else {
         throw OfflineWalletError(failure: .revisionConflict, detail: "revision fence was created concurrently")
       }
       fenceBytes = initial
     }
 
-    let base = max(currentRevision, state.fence ?? 0)
-    guard base < OfflineWallet.maxRevision else {
-      throw OfflineWalletError(failure: .capacityExceeded, detail: "revision space exhausted for this owner")
-    }
     let payload = WalletPayload(
       ownerId: ownerId,
-      revision: base + 1,
+      revision: try OfflineWallet.nextRevision(after: state.storedRevision, fence: fence.revision),
+      epoch: fence.epoch,
+      cleared: false,
       grants: contents.grants,
       receipts: contents.receipts
     )
@@ -256,43 +276,55 @@ public final class OfflineWallet {
     guard try storeWrite(account: account, data: bytes, previous: state.walletBytes) else {
       throw OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this replace was prepared")
     }
-    try commitFence(ownerId: ownerId, revision: payload.revision, previous: fenceBytes, key: key)
+    try commitFence(
+      ownerId: ownerId, fence: FenceState(revision: payload.revision, epoch: fence.epoch, cleared: false), previous: fenceBytes, key: key)
     return payload.snapshot
   }
 
-  /// Removes a readable wallet whose revision matches; the fence stays so the
-  /// next wallet continues the owner's revision sequence. Corrupt state is
-  /// refused here so it can only leave through `discardCorrupt`.
+  /// Removes a readable wallet whose revision matches. The fence is first
+  /// committed to that revision marked *cleared*, then the wallet is replaced
+  /// by a cleared envelope at the same revision; the next wallet continues the
+  /// owner's revision sequence. From the fence commit on, the removed envelope
+  /// reads as a rollback if it ever reappears — also when this call is
+  /// interrupted between its two writes, in which case the wallet it was
+  /// removing reads `tampered` and leaves through `discardCorrupt`. Corrupt
+  /// state is refused here so it can only leave through `discardCorrupt`.
   public func clear(ownerId: String, expectedRevision: UInt64) throws {
     try OfflineWallet.validateOwner(ownerId)
     let state = try readState(ownerId: ownerId)
     if let fault = state.fault { throw fault }
-    let currentRevision = state.wallet?.revision ?? 0
+    let currentRevision = state.currentRevision
     guard currentRevision == expectedRevision else {
       throw OfflineWalletError(
         failure: .revisionConflict,
         detail: "stored revision \(currentRevision) != expected \(expectedRevision)"
       )
     }
-    guard let walletBytes = state.walletBytes, let wallet = state.wallet, let key = state.key else { return }
-    // A wallet ahead of its fence (crash between a replace's wallet write and
-    // its fence commit) is committed to the fence before the wallet goes, so
-    // the revision it carried is never handed out again and the deleted
-    // envelope reads as a rollback if it ever reappears.
-    if (state.fence ?? 0) < wallet.revision {
-      try commitFence(ownerId: ownerId, revision: wallet.revision, previous: state.fenceBytes, key: key)
+    guard let walletBytes = state.walletBytes, let wallet = state.wallet, !wallet.cleared,
+      let key = state.key, let fence = state.fence, let fenceBytes = state.fenceBytes
+    else { return }
+    let conflict = OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this clear was prepared")
+    let retired = FenceState(revision: wallet.revision, epoch: fence.epoch, cleared: true)
+    let sealedFence = try OfflineWallet.sealFence(ownerId: ownerId, fence: retired, key: key)
+    guard try storeWrite(account: OfflineWallet.fenceAccount(ownerId: ownerId), data: sealedFence, previous: fenceBytes) else {
+      throw conflict
     }
-    guard try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId), previous: walletBytes) else {
-      throw OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this clear was prepared")
-    }
+    let account = OfflineWallet.walletAccount(ownerId: ownerId)
+    let tombstone = OfflineWallet.clearedPayload(ownerId: ownerId, fence: retired)
+    let bytes = try OfflineWallet.sealWallet(payload: tombstone, account: account, key: key)
+    guard try storeWrite(account: account, data: bytes, previous: walletBytes) else { throw conflict }
   }
 
-  /// Deletes exactly the owner's unreadable items — the wallet when it fails
-  /// verification, the integrity key when it is unusable, the fence when it is
-  /// corrupt or can no longer be verified — and returns the failure the owner
-  /// had. A verified fence is kept so revisions stay monotonic. Healthy (or
-  /// absent) state is left alone with `.notCorrupt`. Callers invoke this only
-  /// after the server has reconciled the owner.
+  /// Retires the owner's unreadable state and returns the failure the owner
+  /// had. A fence that is corrupt or can no longer be verified leaves with the
+  /// wallet and the integrity key, since nothing sealed under that key can be
+  /// placed in the owner's history any more. A verified fence is kept so revisions stay monotonic, but it is re-sealed under a
+  /// fresh history epoch, marked cleared, and the wallet slot is filled with a
+  /// cleared envelope at its revision — so every envelope issued before this
+  /// call (including ones the fence never recorded) stops verifying, and the
+  /// slot is never left empty above committed history. Healthy (or absent)
+  /// state is left alone with `.notCorrupt`. Callers invoke this only after
+  /// the server has reconciled the owner.
   @discardableResult
   public func discardCorrupt(ownerId: String) throws -> OfflineWalletFailure {
     try OfflineWallet.validateOwner(ownerId)
@@ -301,18 +333,35 @@ public final class OfflineWallet {
       throw OfflineWalletError(failure: .notCorrupt, detail: "wallet verifies; use clear")
     }
     let conflict = OfflineWalletError(failure: .revisionConflict, detail: "state changed while corrupt items were discarded")
-    if let walletBytes = state.walletBytes {
-      guard try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId), previous: walletBytes) else {
+    let account = OfflineWallet.walletAccount(ownerId: ownerId)
+    if let key = state.key, let fence = state.fence, let fenceBytes = state.fenceBytes {
+      // The fence verifies: keep its revision, retire its history. Writing the
+      // fence first keeps every interruption recoverable by another discard.
+      let retired = FenceState(revision: fence.revision, epoch: OfflineWallet.mintEpoch(), cleared: fence.revision >= 1)
+      let sealedFence = try OfflineWallet.sealFence(ownerId: ownerId, fence: retired, key: key)
+      guard try storeWrite(account: OfflineWallet.fenceAccount(ownerId: ownerId), data: sealedFence, previous: fenceBytes) else {
         throw conflict
       }
+      if retired.cleared {
+        let tombstone = OfflineWallet.clearedPayload(ownerId: ownerId, fence: retired)
+        let bytes = try OfflineWallet.sealWallet(payload: tombstone, account: account, key: key)
+        guard try storeWrite(account: account, data: bytes, previous: state.walletBytes) else { throw conflict }
+      } else if let walletBytes = state.walletBytes {
+        guard try storeDelete(account: account, previous: walletBytes) else { throw conflict }
+      }
+      return fault.failure
     }
-    let keyUnusable = state.keyBytes != nil && state.key == nil
-    if keyUnusable, let keyBytes = state.keyBytes {
+    // No verifiable fence: the history cannot be carried forward, so the key
+    // that sealed it is retired too and nothing it ever sealed verifies again.
+    if let walletBytes = state.walletBytes {
+      guard try storeDelete(account: account, previous: walletBytes) else { throw conflict }
+    }
+    if let keyBytes = state.keyBytes {
       guard try storeDelete(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId), previous: keyBytes) else {
         throw conflict
       }
     }
-    if let fenceBytes = state.fenceBytes, state.fence == nil || keyUnusable {
+    if let fenceBytes = state.fenceBytes {
       guard try storeDelete(account: OfflineWallet.fenceAccount(ownerId: ownerId), previous: fenceBytes) else {
         throw conflict
       }
@@ -335,9 +384,14 @@ public final class OfflineWallet {
 
   // MARK: - Verification
 
+  /// Sealed wallet payload. `cleared` marks the envelope `clear` (or
+  /// `discardCorrupt`) leaves in the slot: it carries no contents, reads as
+  /// "no wallet" and exists only to occupy the cleared revision.
   private struct WalletPayload: Codable {
     let ownerId: String
     let revision: UInt64
+    let epoch: String
+    let cleared: Bool
     let grants: [OfflineStoredGrant]
     let receipts: [OfflineStoredReceipt]
 
@@ -353,6 +407,21 @@ public final class OfflineWallet {
   private struct FencePayload: Codable {
     let ownerId: String
     let revision: UInt64
+    let epoch: String
+    let cleared: Bool
+  }
+
+  /// Verified fence: the highest committed revision, whether the wallet at
+  /// that revision was cleared (so only a cleared envelope may occupy it), and
+  /// the history epoch every envelope of the owner's current history carries.
+  struct FenceState: Equatable {
+    let revision: UInt64
+    let epoch: String
+    let cleared: Bool
+  }
+
+  private static func clearedPayload(ownerId: String, fence: FenceState) -> WalletPayload {
+    WalletPayload(ownerId: ownerId, revision: fence.revision, epoch: fence.epoch, cleared: true, grants: [], receipts: [])
   }
 
   /// Everything read for one owner in one pass. `fault` is the corruption
@@ -364,11 +433,34 @@ public final class OfflineWallet {
     let fenceBytes: Data?
     /// Usable integrity key (exactly `integrityKeyBytes`), else `nil`.
     let key: Data?
-    /// Verified committed revision; `nil` when absent or unverifiable.
-    let fence: UInt64?
-    /// Verified wallet; `nil` when absent or unreadable.
+    /// Verified fence; `nil` when absent or unverifiable.
+    let fence: FenceState?
+    /// Verified wallet (possibly cleared); `nil` when absent or unreadable.
     let wallet: WalletPayload?
+    /// The wallet item is absent although the verified fence records
+    /// committed history: the wallet was lost, not cleared.
+    let walletVanished: Bool
     let fault: OfflineWalletError?
+
+    /// Revision the caller must present as `expectedRevision`: 0 when no
+    /// wallet is stored or the stored envelope is cleared.
+    var currentRevision: UInt64 {
+      guard let wallet, !wallet.cleared else { return 0 }
+      return wallet.revision
+    }
+
+    /// Revision of whatever envelope occupies the slot, cleared or not.
+    var storedRevision: UInt64 { wallet?.revision ?? 0 }
+  }
+
+  /// The revision a new envelope takes: one above both the envelope in the
+  /// slot and the committed fence.
+  private static func nextRevision(after stored: UInt64, fence: UInt64) throws -> UInt64 {
+    let base = max(stored, fence)
+    guard base < maxRevision else {
+      throw OfflineWalletError(failure: .capacityExceeded, detail: "revision space exhausted for this owner")
+    }
+    return base + 1
   }
 
   /// Raw bytes of an owner's three items from one pass over the store.
@@ -434,12 +526,12 @@ public final class OfflineWallet {
       }
     }
 
-    var fence: UInt64?
+    var fence: FenceState?
     var fenceFault: OfflineWalletError?
     if let fenceBytes {
       if let key {
         do {
-          fence = try OfflineWallet.openFence(fenceBytes, ownerId: ownerId, key: key)
+          fence = try OfflineWallet.openFenceState(fenceBytes, ownerId: ownerId, key: key)
         } catch let error as OfflineWalletError {
           fenceFault = error
         }
@@ -451,6 +543,7 @@ public final class OfflineWallet {
 
     var wallet: WalletPayload?
     var walletFault: OfflineWalletError?
+    var walletVanished = false
     if let walletBytes {
       if keyBytes == nil {
         walletFault = OfflineWalletError(failure: .integrityKeyMissing, detail: "wallet present without its integrity key")
@@ -463,10 +556,19 @@ public final class OfflineWallet {
           guard let fence else {
             throw OfflineWalletError(failure: .tampered, detail: "wallet present without its revision fence")
           }
-          guard payload.revision >= fence else {
+          guard payload.epoch == fence.epoch else {
+            throw OfflineWalletError(failure: .tampered, detail: "wallet belongs to a retired revision history")
+          }
+          guard payload.revision >= fence.revision else {
             throw OfflineWalletError(
               failure: .tampered,
-              detail: "wallet revision \(payload.revision) is behind committed revision \(fence) (rolled back)"
+              detail: "wallet revision \(payload.revision) is behind committed revision \(fence.revision) (rolled back)"
+            )
+          }
+          guard payload.cleared || !fence.cleared || payload.revision > fence.revision else {
+            throw OfflineWalletError(
+              failure: .tampered,
+              detail: "wallet revision \(payload.revision) was cleared but its envelope is back (rolled back)"
             )
           }
           wallet = payload
@@ -474,6 +576,15 @@ public final class OfflineWallet {
           walletFault = error
         }
       }
+    } else if let fence, fence.revision >= 1 {
+      // Once a revision is committed the slot always holds an envelope
+      // (`clear` leaves a cleared one), so an empty slot means the wallet
+      // was lost, not that the owner has nothing stored.
+      walletVanished = true
+      walletFault = OfflineWalletError(
+        failure: .tampered,
+        detail: "wallet item is missing while revision \(fence.revision) is committed (lost, not cleared)"
+      )
     }
 
     let fault = walletFault ?? keyFault ?? fenceFault
@@ -484,22 +595,26 @@ public final class OfflineWallet {
       key: key,
       fence: fence,
       wallet: fault == nil ? wallet : nil,
+      walletVanished: walletVanished,
       fault: fault
     )
   }
 
-  private func commitFence(ownerId: String, revision: UInt64, previous: Data?, key: Data) throws {
+  private func commitFence(ownerId: String, fence: FenceState, previous: Data?, key: Data) throws {
     let account = OfflineWallet.fenceAccount(ownerId: ownerId)
-    let bytes = try OfflineWallet.sealFence(ownerId: ownerId, revision: revision, key: key)
+    let bytes = try OfflineWallet.sealFence(ownerId: ownerId, fence: fence, key: key)
     if try storeWrite(account: account, data: bytes, previous: previous) { return }
     // Another writer moved the fence meanwhile; the wallet write above is the
     // commit point, so the replace succeeded as long as the fence is not
-    // behind it.
+    // behind it and still describes the same history. A fence of the same
+    // history that is still behind (the other writer's own commit lagged) is
+    // advanced once more from what is there now.
     if let current = try storeRead(account: account),
-      let committed = try? OfflineWallet.openFence(current, ownerId: ownerId, key: key),
-      committed >= revision
+      let committed = try? OfflineWallet.openFenceState(current, ownerId: ownerId, key: key),
+      committed.epoch == fence.epoch
     {
-      return
+      if committed.revision >= fence.revision { return }
+      if try storeWrite(account: account, data: bytes, previous: current) { return }
     }
     throw OfflineWalletError(failure: .storageFailure, detail: "revision fence could not be committed")
   }
@@ -507,6 +622,19 @@ public final class OfflineWallet {
   private static func mintIntegrityKey() -> Data {
     var generator = SystemRandomNumberGenerator()
     return Data((0..<integrityKeyBytes).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
+  }
+
+  static let epochBytes = 16
+
+  /// A fresh history epoch: `epochBytes` random bytes as lowercase hex.
+  static func mintEpoch() -> String {
+    var generator = SystemRandomNumberGenerator()
+    return (0..<epochBytes).map { _ in String(format: "%02x", UInt8.random(in: .min ... .max, using: &generator)) }.joined()
+  }
+
+  static func isEpoch(_ value: String) -> Bool {
+    value.utf8.count == epochBytes * 2
+      && value.utf8.allSatisfy { ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x61 && $0 <= 0x66) }
   }
 
   private static func openWallet(_ bytes: Data, ownerId: String, account: String, key: Data) throws -> WalletPayload {
@@ -520,6 +648,15 @@ public final class OfflineWallet {
     guard payload.revision >= 1, payload.revision <= maxRevision else {
       throw OfflineWalletError(failure: .tampered, detail: "wallet revision is outside the supported range")
     }
+    guard isEpoch(payload.epoch) else {
+      throw OfflineWalletError(failure: .tampered, detail: "wallet history epoch is malformed")
+    }
+    if payload.cleared {
+      guard payload.grants.isEmpty, payload.receipts.isEmpty else {
+        throw OfflineWalletError(failure: .tampered, detail: "cleared wallet envelope carries contents")
+      }
+      return payload
+    }
     do {
       try validate(OfflineWalletContents(grants: payload.grants, receipts: payload.receipts))
     } catch {
@@ -528,7 +665,7 @@ public final class OfflineWallet {
     return payload
   }
 
-  static func openFence(_ bytes: Data, ownerId: String, key: Data) throws -> UInt64 {
+  static func openFenceState(_ bytes: Data, ownerId: String, key: Data) throws -> FenceState {
     let payloadBytes = try open(bytes, account: fenceAccount(ownerId: ownerId), key: key)
     guard let payload = try? JSONDecoder().decode(FencePayload.self, from: payloadBytes) else {
       throw OfflineWalletError(failure: .tampered, detail: "revision fence is not decodable")
@@ -539,7 +676,18 @@ public final class OfflineWallet {
     guard payload.revision <= maxRevision else {
       throw OfflineWalletError(failure: .tampered, detail: "revision fence is outside the supported range")
     }
-    return payload.revision
+    guard isEpoch(payload.epoch) else {
+      throw OfflineWalletError(failure: .tampered, detail: "revision fence history epoch is malformed")
+    }
+    guard payload.revision >= 1 || !payload.cleared else {
+      throw OfflineWalletError(failure: .tampered, detail: "revision fence marks a revision that never existed as cleared")
+    }
+    return FenceState(revision: payload.revision, epoch: payload.epoch, cleared: payload.cleared)
+  }
+
+  /// Committed revision recorded by a verified fence.
+  static func openFence(_ bytes: Data, ownerId: String, key: Data) throws -> UInt64 {
+    try openFenceState(bytes, ownerId: ownerId, key: key).revision
   }
 
   private static func sealWallet(payload: WalletPayload, account: String, key: Data) throws -> Data {
@@ -555,10 +703,11 @@ public final class OfflineWallet {
     return bytes
   }
 
-  private static func sealFence(ownerId: String, revision: UInt64, key: Data) throws -> Data {
+  private static func sealFence(ownerId: String, fence: FenceState, key: Data) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    guard let payloadBytes = try? encoder.encode(FencePayload(ownerId: ownerId, revision: revision)) else {
+    let payload = FencePayload(ownerId: ownerId, revision: fence.revision, epoch: fence.epoch, cleared: fence.cleared)
+    guard let payloadBytes = try? encoder.encode(payload) else {
       throw OfflineWalletError(failure: .storageFailure, detail: "revision fence could not be encoded")
     }
     return seal(payload: payloadBytes, account: fenceAccount(ownerId: ownerId), key: key)
