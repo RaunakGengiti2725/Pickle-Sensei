@@ -1015,7 +1015,7 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     await spend('op-1');
     await presentAndLoseConnection();
     await visitSettings();
-    const outcome = await presentAndReceive('accepted');
+    const outcome = await presentAndReceive('result_recorded');
     expect(outcome.accepted).toBe(1);
     const truth = await ledgerTruth();
     expect(truth.wallet.hold).toBe(false);
