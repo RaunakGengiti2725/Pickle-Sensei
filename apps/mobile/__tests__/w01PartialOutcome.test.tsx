@@ -55,10 +55,7 @@ import {
   seedCaptureRequest,
   fixtureUuid,
 } from '../testSupport/captureAnalysisHarness';
-import {
-  createSqliteTestDb,
-  seedSqliteCapture,
-} from '../testSupport/sqlite';
+import { createSqliteTestDb, seedSqliteCapture } from '../testSupport/sqlite';
 import { guidedClipFixture as guidedClip } from '../testSupport/guidedClipFixture';
 
 let mockReadArtifact: (uri: string) => Promise<string> = async () => {
@@ -266,7 +263,9 @@ function refusalBody(message: unknown = SERVER_MESSAGE) {
 
 /** Release authority refuses admission: a settled verdict, not an outage. */
 function releaseNotAuthorizedServer(message: unknown = SERVER_MESSAGE) {
-  return scriptedReservationServer(() => jsonResponse(refusalBody(message), 409));
+  return scriptedReservationServer(() =>
+    jsonResponse(refusalBody(message), 409),
+  );
 }
 
 /** Any other answer on the reservation: the run keeps its existing meaning.
@@ -1063,7 +1062,8 @@ describe('W01-05 — mechanics-only partial outcome (plain path)', () => {
   );
 
   it('a failed record write after the settled refusal delivers nothing, keeps the capture unanalyzed, and lets the same operation retry without a second reservation', async () => {
-    const { db, native, calls, failNext, req } = prepareRun('w01-write-failure');
+    const { db, native, calls, failNext, req } =
+      prepareRun('w01-write-failure');
     const server = releaseNotAuthorizedServer();
     setFetch(server.fetchMock);
     const before = snapshotAccess();
@@ -1562,7 +1562,10 @@ describe('W01-05 — original-operation (shipping) path', () => {
       failNext: store.failStatementOnce,
     };
     const { clip } = swingClipWithSidecar();
-    seedSqliteCapture(store.db, owner, LEGACY_OPERATION.captureId, clip);
+    seedSqliteCapture(store.db, owner, LEGACY_OPERATION.captureId, {
+      ...clip,
+      uri: 'file:///captures/legacy-w01.mov',
+    });
     const tableSql = String(
       (
         store.native
@@ -1830,7 +1833,9 @@ describe('W01-05 — durable rows: purge and forgery', () => {
     const journal = captureDbState(db).journal[0] as {
       operation_id: string;
     };
-    await expect(insert(journal.operation_id, partial.analysisId)).rejects.toThrow();
+    await expect(
+      insert(journal.operation_id, partial.analysisId),
+    ).rejects.toThrow();
     // Tampering with the durable statement.
     await expect(
       db.execute(

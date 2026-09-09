@@ -1,4 +1,11 @@
 import type { LocalDb } from '../data/db';
+import { withTransaction } from '../data/transactions';
+import {
+  isReleaseNotAuthorized,
+  isSettledRefusalRun,
+  partialOutcomeMarker,
+  saveReservationRefusal,
+} from './partialOutcome';
 import {
   RUN_JOURNAL_RELEASE_OUTCOMES,
   RUN_JOURNAL_STATES,
@@ -642,6 +649,28 @@ function createJournal(
     );
   }
 
+  /**
+   * A reserve failure during recovery. The authority's typed, settled refusal
+   * is durable in the same transaction that makes the run terminal, so the
+   * same run can later deliver its mechanics as the non-chargeable partial
+   * instead of holding forever; every other failure is recorded as before.
+   */
+  async function recordReservationRefusal(
+    db: LocalDb,
+    run: RunJournalIdentity,
+    error: unknown,
+    now: number,
+  ): Promise<RunJournalEntry | null> {
+    if (!isReleaseNotAuthorized(error))
+      return recordFailure(db, run, error, 'reserve', now);
+    return withTransaction(db, async tx => {
+      const entry = await recordFailure(tx, run, error, 'reserve', now);
+      if (entry !== null && isSettledRefusalRun(entry))
+        await saveReservationRefusal(tx, run, partialOutcomeMarker(), now);
+      return entry;
+    });
+  }
+
   async function reservationFailed(
     db: LocalDb,
     identity: RunJournalIdentity,
@@ -709,7 +738,7 @@ function createJournal(
           assertPort(run, port);
           return recoveryItem(
             run,
-            await recordFailure(db, run, error, 'reserve', integer(now())),
+            await recordReservationRefusal(db, run, error, integer(now())),
           );
         }
         assertPort(run, port);

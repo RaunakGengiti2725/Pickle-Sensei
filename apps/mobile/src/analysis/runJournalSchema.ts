@@ -256,4 +256,94 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
           AND ((NEW.completion_kind = 'scored' AND a.state = 'committed' AND a.result_id = NEW.analysis_id) OR
             (NEW.completion_kind <> 'scored' AND a.state = 'release_pending' AND a.release_outcome = 'low_confidence'))))
     BEGIN SELECT RAISE(ABORT, 'Original analysis is immutable'); END`,
+  // The release authority's settled, permit-less refusal of one run (either
+  // journal storage version). It is bound to that terminal row on insert,
+  // immutable afterwards, and leaves with its run so an owner purge removes it.
+  `CREATE TABLE IF NOT EXISTS analysis_reservation_refusal (
+    owner_key TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    analysis_id TEXT NOT NULL,
+    capture_id TEXT NOT NULL,
+    reason_code TEXT NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 128),
+    message TEXT NOT NULL CHECK (length(message) BETWEEN 1 AND 512),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    PRIMARY KEY (owner_key, operation_id)
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_reservation_refusal_settled
+    BEFORE INSERT ON analysis_reservation_refusal
+    WHEN NOT EXISTS (
+        SELECT 1 FROM analysis_run_journal j WHERE j.owner_key = NEW.owner_key AND j.operation_id = NEW.operation_id
+          AND j.analysis_id = NEW.analysis_id AND j.capture_id = NEW.capture_id AND j.state = 'terminal'
+          AND j.terminal_reason = 'reservation_rejected' AND j.permit_id IS NULL AND j.result_id IS NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM analysis_execution_attempts a WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.operation_id
+          AND a.analysis_id = NEW.analysis_id AND a.capture_id = NEW.capture_id AND a.state = 'terminal'
+          AND a.terminal_reason = 'reservation_rejected' AND a.permit_id IS NULL AND a.result_id IS NULL)
+    BEGIN SELECT RAISE(ABORT, 'Reservation refusal requires a settled permit-less run'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_reservation_refusal_immutable
+    BEFORE UPDATE ON analysis_reservation_refusal
+    BEGIN SELECT RAISE(ABORT, 'Reservation refusal is immutable'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_run_journal_refusal_cascade
+    AFTER DELETE ON analysis_run_journal
+    BEGIN
+      DELETE FROM analysis_reservation_refusal WHERE owner_key = OLD.owner_key AND operation_id = OLD.operation_id;
+    END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_execution_attempts_refusal_cascade
+    AFTER DELETE ON analysis_execution_attempts
+    BEGIN
+      DELETE FROM analysis_reservation_refusal WHERE owner_key = OLD.owner_key AND operation_id = OLD.operation_id;
+    END`,
+  // PARTIAL completion of an original operation: the settled refusal above
+  // plus the delivered mechanics record, kept beside the operation row. The
+  // operation row itself is not touched (its CHECK/immutability contract and
+  // any install that created it under an earlier build stay exactly as they
+  // are); readers join this table to see the completion. Admission proves the
+  // whole chain in one statement; once present the operation can neither take
+  // a successor attempt nor complete a second time.
+  `CREATE TABLE IF NOT EXISTS analysis_partial_completion (
+    owner_key TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    analysis_id TEXT NOT NULL,
+    capture_id TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    PRIMARY KEY (owner_key, operation_id),
+    UNIQUE (owner_key, attempt_id),
+    UNIQUE (owner_key, analysis_id),
+    UNIQUE (owner_key, capture_id)
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_partial_completion_admission
+    BEFORE INSERT ON analysis_partial_completion
+    WHEN NOT EXISTS (
+        SELECT 1 FROM analysis_logical_operations p WHERE p.owner_key = NEW.owner_key AND p.operation_id = NEW.operation_id
+          AND p.analysis_id = NEW.analysis_id AND p.capture_id = NEW.capture_id AND p.current_attempt_id = NEW.attempt_id
+          AND p.final_record_id IS NULL AND p.winning_attempt_id IS NULL AND p.completion_kind IS NULL)
+      OR NOT EXISTS (
+        SELECT 1 FROM analysis_execution_attempts a WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.attempt_id
+          AND a.analysis_id = NEW.analysis_id AND a.capture_id = NEW.capture_id AND a.state = 'terminal'
+          AND a.terminal_reason = 'reservation_rejected' AND a.permit_id IS NULL AND a.result_id IS NULL)
+      OR NOT EXISTS (
+        SELECT 1 FROM analysis_reservation_refusal f WHERE f.owner_key = NEW.owner_key AND f.operation_id = NEW.attempt_id
+          AND f.analysis_id = NEW.analysis_id AND f.capture_id = NEW.capture_id)
+      OR NOT EXISTS (
+        SELECT 1 FROM local_analysis_record r WHERE r.owner_key = NEW.owner_key AND r.id = NEW.analysis_id
+          AND r.capture_id = NEW.capture_id AND r.scoring_model_version = 'abstained')
+      OR EXISTS (SELECT 1 FROM local_shot WHERE owner_key = NEW.owner_key AND id = NEW.analysis_id)
+      OR EXISTS (SELECT 1 FROM outbox WHERE owner_key = NEW.owner_key AND kind = 'shot.sync'
+        AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') = NEW.analysis_id ELSE 1 END)
+    BEGIN SELECT RAISE(ABORT, 'Partial completion requires a settled refusal and its mechanics record'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_partial_completion_immutable
+    BEFORE UPDATE ON analysis_partial_completion
+    BEGIN SELECT RAISE(ABORT, 'Partial completion is immutable'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_logical_operations_partial_settled
+    BEFORE UPDATE ON analysis_logical_operations
+    WHEN (NEW.current_attempt_id IS NOT OLD.current_attempt_id OR NEW.final_record_id IS NOT NULL
+        OR NEW.winning_attempt_id IS NOT NULL OR NEW.completion_kind IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM analysis_partial_completion c WHERE c.owner_key = OLD.owner_key AND c.operation_id = OLD.operation_id)
+    BEGIN SELECT RAISE(ABORT, 'Original analysis settled as partial'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_logical_operations_partial_cascade
+    AFTER DELETE ON analysis_logical_operations
+    BEGIN
+      DELETE FROM analysis_partial_completion WHERE owner_key = OLD.owner_key AND operation_id = OLD.operation_id;
+    END`,
 ];
