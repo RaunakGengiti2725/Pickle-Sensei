@@ -27,7 +27,7 @@ final class PickleOfflineWallet: NSObject {
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
     perform("load", resolve: resolve, reject: reject) {
-      guard let snapshot = try wallet.load(ownerId: ownerId) else { return NSNull() }
+      guard let snapshot = try self.wallet.load(ownerId: ownerId) else { return NSNull() }
       return snapshot.bridgePayload()
     }
   }
@@ -42,7 +42,7 @@ final class PickleOfflineWallet: NSObject {
     perform("replace", resolve: resolve, reject: reject) {
       let revision = try OfflineWallet.revision(fromBridge: expectedRevision.doubleValue)
       let parsed = try OfflineWalletContents(bridgePayload: (contents as? [String: Any]) ?? [:])
-      return try wallet.replace(ownerId: ownerId, expectedRevision: revision, contents: parsed).bridgePayload()
+      return try self.wallet.replace(ownerId: ownerId, expectedRevision: revision, contents: parsed).bridgePayload()
     }
   }
 
@@ -54,7 +54,7 @@ final class PickleOfflineWallet: NSObject {
   ) {
     perform("clear", resolve: resolve, reject: reject) {
       let revision = try OfflineWallet.revision(fromBridge: expectedRevision.doubleValue)
-      try wallet.clear(ownerId: ownerId, expectedRevision: revision)
+      try self.wallet.clear(ownerId: ownerId, expectedRevision: revision)
       return NSNull()
     }
   }
@@ -65,7 +65,7 @@ final class PickleOfflineWallet: NSObject {
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
     perform("discard_corrupt", resolve: resolve, reject: reject) {
-      try wallet.discardCorrupt(ownerId: ownerId).rawValue
+      try self.wallet.discardCorrupt(ownerId: ownerId).rawValue
     }
   }
 
