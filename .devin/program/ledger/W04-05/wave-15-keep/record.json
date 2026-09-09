@@ -1,0 +1,544 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W04-05-r1",
+      "phase": "implement",
+      "prompt_sha256": "bab2b88eaa50852fb34c95a5e92860c17e25889df9522dabeea309988e5960a8",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-05-r1",
+      "phase": "review",
+      "prompt_sha256": "b197de3a5a98bba091aa421551d13e427e4e83af83b056de5ea2a10624524f39",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-05-r1",
+      "phase": "adversary",
+      "prompt_sha256": "ac462c20b3f8df36e8845a50387833578e850564899595405db31b89464c24ff",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W04-05-r2",
+      "phase": "implement",
+      "prompt_sha256": "d3a9f10bbef8a4498d75def22267572d896c6b52cea773f0615aca177784102e",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-05-r2",
+      "phase": "review",
+      "prompt_sha256": "26557808a2c66ca04bad483d35b188a96b7cbbab30fe3ffc4c4af286efb931ed",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-05-r2",
+      "phase": "adversary",
+      "prompt_sha256": "b031b5c42c9ad4831bee4037411ed431703ac2514644f992badee7b9a6fad4d2",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "674bcacca4b58fef3864b25c0802be1954a54a83",
+  "candidate": {
+    "branch": "devin/pp/w04-05/impl-r2",
+    "head_sha": "7ec8d097716ec08a6472462771be2d10d4821dd9",
+    "lane": 1,
+    "round": 2
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-05",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/df74e28e-dad1-4b31-ad96-dd56fd12ff37/attack-suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04259312-72c7-41db-b207-8f131ae51c37/ac1-candidate-suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cbddebf7-c098-4cbb-a515-cb9fc2404636/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5ca0bc29-3f50-46d7-b7d1-7bb10ed2037d/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cffc2b1-e1f5-4e75-8109-e48e72fa0a05/ac4-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w04-05/attack-5e07095a",
+        "attack_branch_sha": "f9e18531302c576c1aefcfa2f958da90789eb342",
+        "attacked_sha": "5e07095a76327e9b6f1d1f58d39256e8fbc0add1",
+        "attacks_tried": 44,
+        "breaks": [
+          {
+            "expected": "Restated ticket ids are the SAME allocation: a ticket already consumed on this device (settled or unsettled) must not become remaining again in a newer generation, a ticket present in two generations must be spendable at most once, and the snapshot must never report more spendable tickets than distinct unconsumed ticket ids (<= 2 lifetime).",
+            "observed": "VERIFIED: hold gen-1 grant {T1,T2}; consume T1 (op-1, receipt unsynced); hold gen-2 grant restating ticketIds [T1,T2] (exactly what issue_offline_grant returns via `ticket_ids := v_outstanding || v_new` — an allocated ticket whose receipt has not settled is still outstanding server-side, supabase/migrations/20260908160000_offline_device_grants.sql:1588-1644). C3: readOfflineAllocation reports 3 spendable tickets for an identity whose lifetime budget is 2 with 1 already spent (`Expected: <= 1, Received: 3`). C1: op-2, op-3, op-4 all succeed; 4 pending receipts name only 2 distinct ticket ids (`Expected: 4, Received: 2` on distinct-count) — T1 and T2 each consumed twice. C2: after op-1 (T1) is settled 'accepted' and gen-2 restates [T2], op-2 AND op-3 both succeed (`Expected: 'offline.allocation_exhausted', Received: null`) — T2 spent twice, three receipts for a two-ticket identity. Root cause (INFERRED from apps/mobile/src/data/offlineCapabilities.ts:706-707, 826-852, 1000-1010): grant rows are keyed per grant_id; holdOfflineGrant never intersects a new generation's ticketIds with tickets already consumed/remaining in older generations, and consumeOfflineAllocation falls back to any executable grant (ORDER BY generation DESC) so the older generation's copy of a ticket stays spendable beside the newer one's.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'C1|C2|C3' (tests C1, C2, C3 in describe 'generations and free-rating conservation'); exit 1",
+            "severity": "P0",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Cross-generation ticket restatement lets the device spend the same lifetime ticket twice (fabricated capacity)"
+          },
+          {
+            "expected": "HOLD/recover semantics: 'held' (mirrors shared-types reconciliation_required/support_review_required with financialDisposition 'reserved') must keep the receipt pending/reconcilable — still returned by pendingOfflineReceipts (or a distinct held view) and still accepting a later terminal accepted/refused verdict; only accepted/refused are terminal.",
+            "observed": "VERIFIED: settleOfflineReceipt(db, id, 'held', ACTIVE) writes settled_at, so pendingOfflineReceipts() returns [] (`Expected [receiptId], Received []`) and a later settleOfflineReceipt(..., 'accepted'|'refused') throws offline.receipt_settled (offlineCapabilities.ts:1108-1120). The device stops re-presenting an ambiguous receipt and cannot record the server's eventual verdict.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'B1' ; exit 1",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "A 'held' settlement is terminal: the receipt leaves the pending queue and can never be settled again"
+          },
+          {
+            "expected": "A replayed operationId whose result binding (resultId/fullOutputSha256/grantId) disagrees with the stored receipt must be refused with a typed OfflineGrantError (e.g. offline.result_invalid / conflicting receipt) and must not be reported as a paid replay — mirrors the server's 'conflicting_receipt' reconciliation reason.",
+            "observed": "VERIFIED: consume op-1 with resultId 'result-A'/sha A; resubmit op-1 with resultId 'result-B' and a different fullOutputSha256 → resolves `replayed: true` with receipt.resultId 'result-A' (`Expected: 'result-B', Received: 'result-A'`). The caller delivering result-B gets a receipt that vouches for a different output; no error, no conflict signal.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'A3' ; exit 1",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Replay with a conflicting result payload is acknowledged as paid with the ORIGINAL receipt"
+          },
+          {
+            "expected": "evaluateLease/consumeOfflineAllocation must validate Number.isFinite(nowMs) && Number.isFinite(wallClockMs) and refuse with offline.time_reconcile_required; never spend, never leak a native RangeError.",
+            "observed": "VERIFIED: with authority 'anchored'/continuity 'measured' and nowMs=NaN the lease check passes (all comparisons against NaN are false) and consumeOfflineAllocation consumes ticket aaaaaaaa-…0001; -Infinity → offline.time_reconcile_required (ok); +Infinity → offline.grant_expired (acceptable); wallClockMs=NaN → `RangeError: Invalid time value` from Date#toISOString instead of an OfflineGrantError. INFERRED: production trustedTime.reading() only produces finite numbers (Math.max of finite values / 0), so this is reachable only through a caller-constructed reading; hence P2 not P0.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'D1' ; exit 1",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Non-finite trusted-time readings: NaN nowMs SPENDS a ticket; NaN wallClockMs throws an untyped RangeError"
+          }
+        ],
+        "package_id": "W04-05",
+        "summary": "Attacked W04-05 candidate 5e07095a (branch devin/pp/w04-05/impl-r1) with 44 executable Jest attacks on branch devin/pp/w04-05/attack-5e07095a @ f9e18531 (2 new test files; no production code and no candidate-owned test touched; no PR opened). VERIFIED run: `cd apps/mobile && npx jest --ci --verbose __tests__/w04OfflineGrantsAttack.test.ts __tests__/w04OfflineGrantsApiAttack.test.ts` → exit 1, 44 executed / 38 passed / 6 failed / 0 skipped (attack-suites.log). The 6 failures are 4 confirmed breaks: [P0] cross-generation ticket restatement double-spend / fabricated capacity (C1, C2, C3 — the server's issue_offline_grant restates every outstanding ticket in each new generation, and the wallet treats each grant row's ticket list as independent capacity, so one lifetime ticket is spendable twice and the snapshot shows 3 spendable of a 2-ticket budget); [P1] 'held' settlement is terminal — receipt drops out of pending and refuses any later accepted/refused verdict (B1, violates HOLD/recover); [P1] replay of an operationId with a conflicting resultId/sha returns the original receipt as a paid replay (A3); [P2] NaN nowMs consumes a ticket and NaN wallClockMs surfaces a native RangeError instead of a typed error (D1; INFERRED unreachable via production trustedTime.reading()). Attack classes that did NOT break the candidate (38 passing): concurrent double-submit of the last ticket, concurrent identical replay, account switch interleaved between decrement and receipt insert (spend rolled back), account switch between issuance and hold, commit-ack loss and pre-commit crash (exactly one durable spend, retry replays), process death after lost ack, concurrent settlement, exact-expiry boundary (exp exclusive), far-past/far-future/rollback/floor-only/unmeasured/no-authority clocks, malformed consumption inputs, 7-day lease bound (+1s refused), Pro lease vs entitlement expiry, non-integer/out-of-range response fields, 5 wallet-corruption shapes (verdict without settled_at, index/body disagreement, vanished grant row, duplicated/refilled/resequenced ticket ledgers, Pro lease carrying tickets), corrupt row blocks pending count, cross-owner spend/replay/settle by id, guest and signed-out owners, foreign issuer/kid, lifetime Pro lease, prohibited store-copy terms in error messages; transport: 20s timeout with abort (fake timers), 429 with/without Retry-After envelope, generic 502 and structured 503, 302 redirect refused with redirect:'manual', 200 grant for another account, 200 with 3-ticket allocation, empty/array/error-envelope/204 bodies, 401 and missing bearer (no network call), register 409 and shape-only device answer, transport TypeError — all left the wallet empty with typed errors. Regression checks on the candidate with attack files present (VERIFIED): AC1 `npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts` exit 0, 2 suites / 31 passed / 0 failed / 0 skipped; AC3 `npx tsc --noEmit` exit 0 (after `npm ci` in apps/mobile — the checkout was missing @sentry/react-native; first run exit 2 was environmental, log overwritten by the clean run); AC4 root `npx eslint <2 attack files>` exit 0 and `npx prettier --check <2 attack files>` exit 0. UNKNOWN / not attempted: Deno/SQL attacks on the Edge or RLS surfaces (outside this package's write_paths, which are mobile-only), Apple-runtime behaviour. Verdict: candidate should be REJECTED/requeued for the P0 generation-restatement double-spend and the two P1s."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6923dcb-3143-4527-955f-43bde42ba14f/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts",
+            "executed": 31,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC1",
+            "note": "VERIFIED on HEAD 5e07095a. 2 suites (w04OfflineGrants 18 tests, offlineNetwork 13 tests). Local copy: artifacts/w04-05/ac1-jest.log (gitignored).",
+            "passed": 31,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21dad283-008f-4d3a-a734-7fbf73f7d136/ac2-head-run.log",
+            "command": "git worktree add /tmp/w04base 674bcacca4b58fef3864b25c0802be1954a54a83 && cp apps/mobile/__tests__/w04OfflineGrants.test.ts /tmp/w04base/apps/mobile/__tests__/ && (cd /tmp/w04base/apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts) ; (cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts)",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC2",
+            "note": "VERIFIED. BASE_SHA run (only the new test file copied over, node_modules symlinked): exit_code=1, executed=18, passed=0, failed=18, skipped=0 — every test fails because createOfflineGrantClient/parseIssuedOfflineGrant/holdOfflineGrant/consumeOfflineAllocation/etc. do not exist on BASE (TypeError: ... is not a function). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5ef68d4-d423-4733-abe7-adc73cd80f30/ac2-base-run.log . HEAD run: exit 0, 18/18 pass. PROOF outcome = 0.",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f4ad3885-1dbd-4986-a17e-d4634ec845da/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC3",
+            "note": "VERIFIED on HEAD after `cd apps/mobile && npm ci --no-audit --no-fund`. Empty output, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a460504c-c10f-4ee4-bc3c-fe29f3565f9d/ac4-lint.log",
+            "command": "npx eslint apps/mobile/src/data/api.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/db.ts apps/mobile/__tests__/w04OfflineGrants.test.ts && npx prettier --check apps/mobile/src/data/api.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/db.ts apps/mobile/__tests__/w04OfflineGrants.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC4",
+            "note": "VERIFIED from repo root on HEAD. Also `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/45865029-baf1-4033-ab40-47d846894100/format-check.log) and `git diff --check` exit 0 (no output).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: wrote apps/mobile/__tests__/w04OfflineGrants.test.ts against a fake in-memory LocalDb + mocked fetch, proved 18/18 fail on BASE_SHA, committed separately. Then implemented inside write_paths using existing primitives only (captureDataOwnerContext/forDataOwner/withTransaction, evaluateLease/TrustedTimeReading, shared-types offline grant validators, sha256Hex, makeUuid); no new dependencies, no changes to existing symbols in api.ts, no migration/RLS/edge changes, no tokens persisted (the client takes a bearer per construction like existing helpers and stores nothing).",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6923dcb-3143-4527-955f-43bde42ba14f/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5ef68d4-d423-4733-abe7-adc73cd80f30/ac2-base-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21dad283-008f-4d3a-a734-7fbf73f7d136/ac2-head-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f4ad3885-1dbd-4986-a17e-d4634ec845da/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a460504c-c10f-4ee4-bc3c-fe29f3565f9d/ac4-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/45865029-baf1-4033-ab40-47d846894100/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e1899b9e-5718-4ce7-beb5-59a306027eee/mobile-jest-full.log"
+        ],
+        "base_sha": "674bcacca4b58fef3864b25c0802be1954a54a83",
+        "baseline_failures_observed": [
+          "APP_STORE_SUBMISSION.md listed in READ FIRST is absent at BASE_SHA (`wc: APP_STORE_SUBMISSION.md: No such file or directory`); no user-facing copy was added by this package so nothing depended on it. Not fabricated or substituted."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w04-05/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w04OfflineGrants.test.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/src/data/offlineCapabilities.ts",
+          "apps/mobile/src/data/db.ts"
+        ],
+        "head_sha": "5e07095a76327e9b6f1d1f58d39256e8fbc0add1",
+        "out_of_scope_files": [
+          "apps/mobile/src/data/db.ts — 2 additive lines (import + `...OFFLINE_WALLET_DDL` in LOCAL_MIGRATIONS) so the offline_grant/offline_receipt tables are created by the shipping openLocalDb() migration runner; under serial group mobile-data, which this package holds. No runtime import cycle: offlineCapabilities.ts imports only `type LocalDb` from db.ts."
+        ],
+        "package_id": "W04-05",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w04OfflineGrants.test.ts (18 tests: hold without consuming, idempotent re-hold never refills, signed-claim/owner/device binding, malformed responses, per-operation decrement + receipt in one transaction, replay returns same receipt, atomic rollback, Pro lease without ticket + lease bound, no trusted time => no execution, receipts pending until explicit settlement, owner isolation, guest/signed-out refused, corrupt row is an error, API request+hold, disconnected device keeps allocation across process death and lease expiry, newer generation does not release older)"
+        ],
+        "residual_risks": [
+          "Wiring depth: the wallet is wired into the shipping data layer (tables created by openLocalDb migrations; API client on the shared request path) but the scoring flow itself (apps/mobile/src/analysis/, serial group mobile-analysis, NOT held by this package) does not yet call requestOfflineGrant/consumeOfflineAllocation — a follow-up package holding mobile-analysis must route offline scoring through consumeOfflineAllocation and a sync worker must drain pendingOfflineReceipts to the server settlement route.",
+          "JWS signature is NOT verified on device (no public-key distribution exists in the mobile app yet); the wallet binds response fields to the signed claims and to owner/installation/kid, and the server remains the authority at settlement. This matches the existing offlineAuthorization.ts model (server-verified receipts).",
+          "Receipt ticket/settlement model: settlement kinds 'accepted' | 'held' | 'refused' are local bookkeeping; the server settlement route (W05) must map onto them when it lands.",
+          "Test realm note: the plainJson() re-materialisation in parseIssuedOfflineGrant exists because Jest's Response.json() returns cross-realm objects that the shared-types isRecord() rejects; production React Native fetch returns same-realm objects and behaves identically either way."
+        ],
+        "summary": "Defect on BASE_SHA (VERIFIED by reading + by the failing regression suite): apps/mobile/src/data/offlineCapabilities.ts was a static capability map only (OFFLINE_CAPABILITY_MAP_V1, describeOfflineCapability, outboxDegradation) — no notion of a server-issued grant, no local allocation, no consumption, no receipts; apps/mobile/src/data/api.ts had no client for POST /v1/devices/register or POST /v1/offline/grants although the Edge function (W04-02) already issues signed grants. Nothing in the app could hold a grant, and no state existed to be preserved or reclaimed across disconnect. Fix (HEAD 5e07095a, 2 commits: be2cef52 test-first, 5e07095a implementation): (1) api.ts additive-only — OfflineGrantClient (createOfflineGrantClient: registerDevice/issueGrant over the existing bounded-timeout request() path) + parseIssuedOfflineGrant with strict shape checks; the signed grant is re-materialised as plain JSON before the shared-types validator (which requires Object.prototype/null-prototype records) so a fetch body from another realm is not misread as malformed while genuinely malformed bodies are still refused. (2) offlineCapabilities.ts — OFFLINE_WALLET_DDL (offline_grant, offline_receipt tables, per-owner, UNIQUE(owner_key, operation_id)); holdOfflineGrant decodes the compact JWS, validates via validateOfflineExecutionGrantMetadata, and refuses any disagreement between response fields and signed claims (grant id, issuer, sub=owner, installationKeyId, kid, iat/exp, entitlementSource, allocation generation/ticketIds, Pro lease <= 7d and <= entitlement expiry); holding is idempotent per grant id and never refills consumed tickets; consumeOfflineAllocation pops one remaining ticket (or none for a verified_store lease), increments lifecycle_sequence and inserts the OfflineConsumptionReceipt in the SAME withTransaction — replayed operationIds return the stored receipt with no second decrement; execution is gated by evaluateLease over TrustedTimeReading (no trusted time => reconcile_required, no spend); readOfflineAllocation/pendingOfflineReceipts/settleOfflineReceipt keep remaining tickets and pending receipts untouched across process death, disconnect, lease expiry and newer generations — allocation is only ever reduced by consumption or by explicit server settlement, never reclaimed locally; guest/signed-out owners are refused; corrupt rows throw OfflineGrantError('corrupt_state') rather than becoming empty/refilled state; capability map gains analysis.offlineGrant (hybrid). (3) db.ts: 2-line wiring of OFFLINE_WALLET_DDL into LOCAL_MIGRATIONS so the shipping openLocalDb() creates the tables. Full mobile suite also VERIFIED green: `cd apps/mobile && npx jest --ci --silent` exit 0, 6419 passed / 1 skipped (the documented environmental skip importedRealFootageAnalysis.test.ts per docs/devin/TEST_MATRIX.md; not in any acceptance suite) https://la-hacks-rttothemoon.devinenterprise.com/attachments/e1899b9e-5718-4ce7-beb5-59a306027eee/mobile-jest-full.log"
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9680fc0e-99e6-4fef-bbf3-6ec955838eca/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts",
+            "executed": 31,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC1",
+            "note": "VERIFIED by reviewer on HEAD 5e07095a after `cd apps/mobile && npm ci --no-audit --no-fund` (fresh install; the pre-existing node_modules on this VM was stale). 2 suites: w04OfflineGrants.test.ts (18) + offlineNetwork.test.ts (13). Ran twice (before and after npm ci), both 31/31 exit 0.",
+            "passed": 31,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7953ee8d-d63f-45bd-a847-f7ec53958c0f/ac2-head-run.log",
+            "command": "git worktree add /home/ubuntu/review-w04-05/base 674bcacca4b58fef3864b25c0802be1954a54a83 && cp apps/mobile/__tests__/w04OfflineGrants.test.ts /home/ubuntu/review-w04-05/base/apps/mobile/__tests__/ && (cd /home/ubuntu/review-w04-05/base/apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts) ; (cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts)",
+            "executed": 18,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC2",
+            "note": "PROOF holds (exit_code=0 is the proof outcome). BASE_SHA run in a clean worktree at 674bcacc with ONLY apps/mobile/__tests__/w04OfflineGrants.test.ts copied over (git status showed only that file untracked; node_modules symlinked from the candidate checkout): exit_code=1, executed=18, passed=0, failed=18, skipped=0 — every test fails including 'disconnect does not reclaim allocation › a disconnected device keeps its allocation and receipts across process death and lease expiry' and '› a newer grant generation does not release the older generation locally'. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/94bf6058-6df5-443b-9427-a0073e14bee4/ac2-base-run.log . HEAD run: exit 0, 18/18 passed. Worktree removed afterwards.",
+            "passed": 18,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a97e36ff-af2d-465f-985a-0c150fdd2ff0/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC3",
+            "note": "VERIFIED on HEAD after `npm ci` in apps/mobile (npm only; no pnpm). Empty output, exit 0. A first run before npm ci failed only with 'Cannot find module @sentry/react-native' — a stale-node_modules artefact of this VM, unrelated to the candidate.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2f6a1f11-0705-42c7-beca-07984c92363c/ac4-lint.log",
+            "command": "npx eslint apps/mobile/src/data/api.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/db.ts apps/mobile/__tests__/w04OfflineGrants.test.ts && npx prettier --check apps/mobile/src/data/api.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/db.ts apps/mobile/__tests__/w04OfflineGrants.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC4",
+            "note": "VERIFIED from repo root on HEAD with the root ESLint/Prettier binaries over all 4 changed files (the exact `git diff --stat` set). ESLint exit 0 (no output); Prettier 'All matched files use Prettier code style!' exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9680fc0e-99e6-4fef-bbf3-6ec955838eca/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/94bf6058-6df5-443b-9427-a0073e14bee4/ac2-base-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7953ee8d-d63f-45bd-a847-f7ec53958c0f/ac2-head-run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a97e36ff-af2d-465f-985a-0c150fdd2ff0/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2f6a1f11-0705-42c7-beca-07984c92363c/ac4-lint.log"
+        ],
+        "blocking_issues": [
+          "Objective not met as shipped behaviour (procedure step 1b): no shipping code path calls the new wallet. `grep -rln 'requestOfflineGrant\\|consumeOfflineAllocation\\|holdOfflineGrant\\|readOfflineAllocation\\|pendingOfflineReceipts\\|settleOfflineReceipt\\|createOfflineGrantClient' apps/mobile/src apps/mobile/App.tsx` returns only apps/mobile/src/data/offlineCapabilities.ts and apps/mobile/src/data/api.ts (definitions). The only import of offlineCapabilities.ts from shipping code is apps/mobile/src/data/db.ts:3 (`OFFLINE_WALLET_DDL` — table creation only). The shipping scoring path apps/mobile/src/analysis/runCaptureAnalysis.ts (permitPort() at :594, reserve-before-inference at :1316-1519) still authorises solely through the online createAnalysisPermitClient; a device that is offline therefore never holds a grant, never decrements an allocation and never queues a receipt — the 'hold a server-issued grant, decrement local allocation on consumption, queue receipts durably' behaviour exists only under Jest. The implementer's own residual_risks concedes this ('the scoring flow itself … does not yet call requestOfflineGrant/consumeOfflineAllocation'). Fix: route the offline branch of the scoring flow (and a sync drain for pendingOfflineReceipts) through the wallet — this needs the mobile-analysis serial group, so either this package must be granted that group for a minimal wiring edit or the manifest must make W04-05 explicitly a data-layer-only package with a named follow-up; as frozen, the behavioural objective is unmet."
+        ],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED: the compact JWS signature is not verified on device (no public-key distribution in the app); holdOfflineGrant binds response fields to the decoded claims and owner/installationKeyId/kid via shared-types validateOfflineExecutionGrantMetadata, and the server remains authority at settlement. Acceptable for a server-settled receipt model but should be stated in the capability description or a follow-up package.",
+          "INFERRED: parseIssuedOfflineGrant re-materialises the fetch body via JSON.parse(JSON.stringify()) (`plainJson`) because shared-types isRecord() requires Object.prototype/null-prototype records and Jest's Response.json() is cross-realm. Behaviourally safe (malformed bodies still refused, verified by the 'malformed grant response' tests) but it is a test-realm accommodation living in production code.",
+          "INFERRED: OfflineGrantClient takes ApiConfigState by reference like createAnalysisPermitClient; any future long-lived caller must pass a `get token()` getter that resolves via bearerTokenFor() per AGENTS.md (never capture the bearer at construction). Not violated here because no shipping caller exists yet.",
+          "Receipt settlement kinds 'accepted' | 'held' | 'refused' are local-only bookkeeping; no server settlement route exists yet, so pendingOfflineReceipts can never drain in this revision."
+        ],
+        "package_id": "W04-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "5e07095a76327e9b6f1d1f58d39256e8fbc0add1",
+        "scope_violation": false,
+        "summary": "Independent review of W04-05 candidate devin/pp/w04-05/impl-r1 @ 5e07095a76327e9b6f1d1f58d39256e8fbc0add1 vs BASE 674bcacc. SCOPE (VERIFIED): `git diff --stat` = 4 files, 1772 insertions, 0 deletions: the three write_paths plus apps/mobile/src/data/db.ts (2 additive lines: import + `...OFFLINE_WALLET_DDL` in LOCAL_MIGRATIONS). db.ts is under serial group mobile-data which this package holds, is the minimum wiring for the tables to exist in the shipping openLocalDb(), and is listed in out_of_scope_files → scope_violation=false. api.ts change is purely additive (no removed lines). ACCEPTANCE (all re-executed by me, none copied): AC1 jest 31/31 exit 0; AC2 regression proof holds — new suite 18/18 FAIL on a clean BASE worktree with only the test file copied, 18/18 PASS on HEAD; AC3 tsc exit 0 (after npm ci in apps/mobile); AC4 root eslint + prettier exit 0 on all 4 changed files. skipped=0 everywhere. DIFF READ (VERIFIED by grep + reading): no removed/edited existing lines or comments; no @ts-ignore/@ts-expect-error/eslint-disable/any/|| true/passWithNoTests/forceExit/jest.setTimeout/.skip/.only; no migrations, RLS, grants, edge or session-check changes; no tokens persisted (SQLite stores the signed grant JWS + receipts only; bearer resolved through ApiConfigState like existing helpers); owner isolation via captureDataOwnerContext/forDataOwner with owner_key in every PK/UNIQUE and guest/signed-out refused; corrupt rows throw OfflineGrantError('offline.corrupt_state') rather than becoming empty/refilled state; consumption + receipt insert share one withTransaction with an optimistic lifecycle_sequence check; replayed operationId returns the stored receipt without a second decrement; allocation is only reduced by consumption or explicit settleOfflineReceipt — nothing on disconnect/expiry/newer generation deletes or refills rows; lease bounds (≤7d, ≤ verified entitlement expiry) enforced by shared-types isProLease via validateOfflineExecutionGrantMetadata and re-checked in bindIssuedGrant; no trusted time → evaluateLease 'reconcile_required' → no spend. Server contract cross-checked: edge OFFLINE_GRANT_ISSUER = `${SUPABASE_URL}/functions/v1/api` matches mobile API_BASE_URL used as `issuer`, and the /v1/offline/grants + /v1/devices/register response shapes match parseIssuedOfflineGrant/parseRegisteredOfflineDevice. No invariant violations found. BLOCKING: the objective is phrased as behaviour and procedure step 1b makes an uncalled module blocking — nothing in the shipping app calls requestOfflineGrant/consumeOfflineAllocation/pendingOfflineReceipts/settleOfflineReceipt (only db.ts imports the DDL); runCaptureAnalysis.ts still authorises exclusively via the online permit client, so as shipped no device ever holds a grant or decrements an allocation. The implementer acknowledges this. The data-layer implementation itself is sound and well-tested, so this is fixable wiring, not a wrong approach → verdict request_changes (not reject). No PR opened, nothing pushed, no production systems touched.",
+        "verdict": "request_changes"
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/99be859d-85e3-4c15-bbc3-75e4722960ba/attack-head-e8258378.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93be69d1-8b4c-4ef2-8154-719d10f08cb1/attack-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/623df5a3-1fb1-4ee4-89b6-5caccda16f7f/ac1-attack-branch.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f9e0ad84-89ce-4bd7-ac3e-2b908a06165c/ac2-candidate-tests-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46a92c48-2911-4dd9-8bf7-9f50b55e6934/ac3-tsc-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6b632024-d113-46ac-80d3-4dc04a10ee32/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ba8be16a-34c2-43a9-af07-fd973483374d/ac4-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w04-05/attack-7ec8d097",
+        "attack_branch_sha": "e8258378bfb5f10a7946bca925e6b54df35b16b9",
+        "attacked_sha": "7ec8d097716ec08a6472462771be2d10d4821dd9",
+        "attacks_tried": 15,
+        "breaks": [
+          {
+            "expected": "A ticket whose receipt the server terminally refused and then restates in a strictly newer generation is outstanding server allocation; the wallet should follow the newer signed allocation (spendable=2) or at minimum surface a reconcile-required state rather than silently under-reporting the user's free ratings. INFERRED (server restatement semantics from the candidate's own 'restates every outstanding ticket' comment and rejected code 'unused_ticket_returned'). Not money loss (conservative direction), but incorrect allocation on a supported path.",
+            "observed": "VERIFIED: restated {allocated:2, remaining:1, consumed:0}; readOfflineAllocation().spendableTickets=1 (consumedTickets=1); only one further consumption succeeds, then offline.allocation_exhausted. holdOfflineGrant() moves only tickets in state 'remaining' (`AND state = 'remaining'`) and never re-opens a ticket whose receipt reached a terminal 'refused' verdict, so T1 can never be spent on this device even though the server's newer signed allocation lists it as outstanding.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'A9' (test at __tests__/w04OfflineGrantsAttack.test.ts:661). Sequence: holdOfflineGrant(gen1 [T1,T2]) -> consumeOfflineAllocation(op-1) spends T1 -> settleOfflineReceipt(receipt,'refused') (terminal server verdict, e.g. unused_ticket_returned) -> holdOfflineGrant(gen2 restating [T1,T2]).",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Refused (returned) ticket restated by a newer server generation is stranded forever: device reports fewer spendable tickets than the server allocated"
+          },
+          {
+            "expected": "A non-finite nowMs is not trusted time: offline.time_reconcile_required, no ticket spent, no receipt. The reading is produced by app code (trustedTime.read), so this is a defensive gap on the consumption path rather than an externally reachable input; evaluateLease lives outside write_paths.",
+            "observed": "VERIFIED: consumption succeeds; grant.execution = {kind:'active', remainingMs:null (NaN serialised)}, ticket T1 consumed, remaining=1, receipt queued. Every comparison against NaN in trustedTime.evaluateLease() is false, so an unmeasurable clock falls through to 'active'; selectExecutableGrant()/consumeOfflineAllocation() add no guard of their own.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'A8' (test at :638). holdOfflineGrant(); consumeOfflineAllocation(db, op-1, {authority:'anchored', continuity:'measured', nowMs: NaN, wallClockMs: valid, rollbackDetected:false, storage:'loaded'}).",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "NaN trusted-time reading authorises consumption (evaluateLease returns {kind:'active', remainingMs:NaN}); a ticket is spent and a receipt queued"
+          },
+          {
+            "expected": "offline.wallet_corrupt on read and on every consume; 0 receipts. Requires local DB write access (device compromise), and the device never verifies the ES256 signature anyway, so the server would refuse the forged receipt — hence P3 (tamper-evidence gap, not a spend against the server), but the stated invariant 'unknown/corrupt state never becomes authorization' is not held for this row shape.",
+            "observed": "VERIFIED: readOfflineAllocation() returns spendableTickets=3, grants[0]={allocated:3, remaining:3}; three consumptions succeed spending T1, T2 and FORGED; 3 receipts queued. parseGrantRow() only checks sha256(compact_jws)==grant_jws_sha256 and loadLedger() checks tickets against the clear-text allocated_ticket_ids column, not against the signed allocation.ticketIds inside compact_jws (which is stored precisely so it can be re-read). The candidate's own test/comment claims 'a remaining ticket that the signed allocation never listed is tampering, not authorization' but only covers the case where the clear column is left intact.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'A12' (test at :773). holdOfflineGrant([T1,T2]); UPDATE offline_grant SET allocated_ticket_ids='[T1,T2,FORGED]'; INSERT offline_ticket(FORGED,'remaining'); readOfflineAllocation(); consume x3.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Stored clear-text grant columns are never re-bound to the stored signed JWS: a tampered allocated_ticket_ids + forged offline_ticket row becomes spendable authorization"
+          },
+          {
+            "expected": "offline.wallet_corrupt (column disagrees with the signed claim) or offline.grant_expired; nothing spent. Same root cause and same trust-boundary caveat as the allocated_ticket_ids break (local tampering, no device-side signature verification).",
+            "observed": "VERIFIED: consumption succeeds with execution {kind:'active', remainingMs:86340000}, grant.expiresAt=1800604800 while the signed exp is 1800518400; ticket T1 spent, receipt queued.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts -t 'A13' (test at :805). holdOfflineGrant(exp=EXPIRES_AT); UPDATE offline_grant SET expires_at = EXPIRES_AT+86400; consumeOfflineAllocation at trusted time EXPIRES_AT+60s.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts",
+            "title": "Tampered offline_grant.expires_at extends offline execution past the signed exp"
+          }
+        ],
+        "package_id": "W04-05",
+        "summary": "ADVERSARIAL REPORT W04-05 — attacked_sha 7ec8d097716ec08a6472462771be2d10d4821dd9 (branch devin/pp/w04-05/impl-r2). Attack branch devin/pp/w04-05/attack-7ec8d097 @ e8258378bfb5f10a7946bca925e6b54df35b16b9 (one commit on top of the candidate; adds ONLY apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts, 854 lines; no production code, no candidate test, no migration, no Edge change; pushed without force).\n\nATTACKS TRIED: 15 (A1–A15), 11 survived, 4 reproduced breaks.\n- Survived (VERIFIED, test passes on candidate): A1 3-way concurrent consumption spends exactly 2 distinct tickets, 3rd gets offline.allocation_exhausted; A2 same operationId submitted twice concurrently → 1 receipt, 1 decrement, one replayed=true; A3 account switch between the ticket UPDATE and the receipt INSERT → DataOwnerChangedError, full rollback (2 spendable, 0 receipts, 0 consumed rows), other owner sees empty wallet; A4 account switch while receipts are in flight → offline.receipt_unknown, nothing settled for either owner, receipt still pending with settlement NULL; A5 crash between two verdict writes → first accepted, second stays queued and is the ONLY receipt re-presented on the next drain, tickets never returned; A6 receipts route answering 429+Retry-After, 503, 302 redirect, 401, and a hung request aborted at API_REQUEST_TIMEOUT_MS (network.timeout) → typed ApiError, every receipt stays queued, allocation unchanged; A15 six malformed verdict batches (duplicate id, missing id, extra id, receipt both recorded and rejected, unknown status, numeric status / null id) → network.invalid_response, zero settlements; A7 lease bound exactly 7d accepted / 7d+1s offline.grant_invalid, consumption at exp*1000-1 active and at exp*1000 offline.grant_expired, far-past (0), far-future (MAX_SAFE_INTEGER), rollbackDetected and floor-authority readings all refuse without spending; A10 newer generation arriving before the older one → older holds 0, spendable 2 (not 4), both spends land on gen2, every grantId variant then exhausted, 2 receipts; A11 replay of an operation whose receipt was refused returns the refused receipt (replayed=true) and spends nothing; A14 one unreadable receipt row → offline.wallet_corrupt from pendingOfflineReceipts and reconcile with fetch never called, consumed ticket not resurrected, replay of that operation refused as corrupt.\n- Breaks (test FAILS on candidate): A9 (P2) refused+restated ticket stranded (spendable 1 vs 2); A8 (P3) NaN nowMs → active/consumed; A12 (P3) tampered allocated_ticket_ids + forged ticket row → spendable 3, forged ticket consumed; A13 (P3) tampered expires_at extends execution past signed exp. No P0/P1: no double-spend, no over-charge, no cross-owner leak, no fabricated empty state found. A9 is INFERRED on server restatement semantics (server issue_offline_grant not in this package); the tampering breaks require local DB write access and the device does not verify the grant signature at all (documented residual), so they are tamper-evidence gaps rather than a spend the server would honour.\n\nEVIDENCE (all VERIFIED on Linux, Node v24.19.0, mobile Jest; no Apple runtime claims):\n- Attack suite on attack HEAD e8258378: `cd apps/mobile && npx jest --ci __tests__/w04OfflineGrantsAttack.test.ts` → exit 1, 15 total / 11 passed / 4 failed / 0 skipped (A8, A9, A12, A13). Artifact /home/ubuntu/attack-artifacts/attack-head-e8258378.log (uploaded).\n- Attack suite on BASE 674bcacc (worktree, only the new file copied): same command → exit 1, 15 total / 0 passed / 15 failed (TypeError: parseIssuedOfflineGrant is not a function — the wallet/API does not exist on base). Artifact attack-base.log (uploaded).\n- W04-05-AC1 on attack branch (candidate suites unchanged): `cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts` → exit 0, 2 suites / 41 passed / 0 failed / 0 skipped. Artifact ac1-attack-branch.log (uploaded); identical result on 7ec8d097 in ac1-baseline-head.log.\n- W04-05-AC2 independently reproduced: candidate's own __tests__/w04OfflineGrants.test.ts copied onto BASE 674bcacc → `npx jest --ci --silent __tests__/w04OfflineGrants.test.ts` exit 1, 28 total / 28 failed; on HEAD the same 28 pass (within the 41 of AC1). Artifact ac2-candidate-tests-on-base.log (uploaded).\n- W04-05-AC3: `cd apps/mobile && npx tsc --noEmit` → exit 0 with the attack file present (after `npm ci` — the pre-provisioned node_modules lacked @sentry/react-native 8.24.0, which is an environment gap unrelated to the candidate; the first tsc run failed only in src/diagnostics for that reason). Artifact ac3-tsc-attack.log (uploaded).\n- W04-05-AC4 on the only changed file: `npx eslint apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts` exit 0; `npx prettier --check apps/mobile/__tests__/w04OfflineGrantsAttack.test.ts` exit 0 (root toolchain). Artifacts ac4-eslint.log, ac4-prettier.log (uploaded).\n\nNOT DONE / UNKNOWN: Edge/SQL/RLS attacks — the package adds no Edge route or migration (POST /v1/offline/receipts does not exist; the candidate documents that the client keeps receipts queued on the 404 envelope, and A6/A15 confirm nothing is settled from non-verdict answers). Full mobile Jest suite and Apple runtime not re-run by the adversary (implementer's 6429-pass claim UNVERIFIED here). Retry-After is not consumed by the client (429 handled as a generic transient ApiError; syncRuntime uses its own backoff) — observed, not a break under the stated invariants."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/95bc2a40-1d56-4f3d-8244-1d53c990d09d/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts",
+            "executed": 41,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC1",
+            "note": "VERIFIED on HEAD 7ec8d097. Test Suites: 2 passed, 2 total (w04OfflineGrants.test.ts + offlineNetwork.test.ts). Tests: 41 passed, 41 total. Repo path: artifacts/w04-05/ac1-jest.log (artifacts/ is gitignored).",
+            "passed": 41,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2a49649-0a34-4357-bba3-40f928ffd8ee/ac2-candidate.log",
+            "command": "git checkout 674bcacca4b58fef3864b25c0802be1954a54a83 && git checkout f30ad1e2 -- apps/mobile/__tests__/w04OfflineGrants.test.ts && cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts  # then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts",
+            "executed": 28,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC2",
+            "note": "VERIFIED proof: BASE run (only the new test file copied onto 674bcacc) exit_code=1, Test Suites: 1 failed, 1 total; Tests: 28 failed, 28 total (TypeError: createOfflineGrantClient is not a function — the base has no wallet/grant client); base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/fac15575-cf20-413d-8a0a-6cca418f7d16/ac2-base-674bcac.log (repo path artifacts/w04-05/ac2-base-674bcac.log). Candidate run on HEAD 7ec8d097: exit 0, 28 passed / 28 total (repo path artifacts/w04-05/ac2-candidate.log). Suite includes 'disconnect does not reclaim allocation' cases: lost connection, process death mid-consumption (transaction rollback leaves capacity untouched, no receipt), restated generation, lease expiry, and held/ambiguous settlement never return a ticket.",
+            "passed": 28,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/092796af-b657-4bce-b3cb-77329806b81c/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC3",
+            "note": "VERIFIED on HEAD 7ec8d097 after `cd apps/mobile && npm ci` (exit 0). No diagnostics. Repo path artifacts/w04-05/ac3-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c0a2453-62ac-49ee-b406-de2b70be83bf/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/__tests__/w04OfflineGrants.test.ts apps/mobile/src/data/api.ts apps/mobile/src/data/db.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/syncRuntime.ts && npx prettier --check apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/__tests__/w04OfflineGrants.test.ts apps/mobile/src/data/api.ts apps/mobile/src/data/db.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/syncRuntime.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC4",
+            "note": "VERIFIED from repo root on HEAD 7ec8d097: eslint exit 0 (no findings), prettier --check exit 0 ('All matched files use Prettier code style!'). Also VERIFIED root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/4850301a-4591-403a-9207-2e43acfa0e11/format-check.log) and `git diff --check` exit 0. Repo path artifacts/w04-05/ac4-eslint-prettier.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression suite first (commit f30ad1e2), then implementation (commit 7ec8d097). offlineCapabilities.ts replaces the static capability map with an active wallet: OFFLINE_WALLET_DDL (offline_grant, offline_ticket, offline_receipt), holdOfflineGrant() validating the compact JWS claims against the owner/installation binding and de-duplicating ticket ids through a per-owner global offline_ticket ledger keyed (owner_key, ticket_id) — a restated generation moves a still-remaining ticket forward and never resurrects a consumed one; consumeOfflineAllocation() evaluates the lease with evaluateLease() under TrustedTimeReading, flips exactly one ticket remaining→consumed and inserts the receipt in the same BEGIN IMMEDIATE transaction, and checks operationId replay before selecting a ticket (identical binding → idempotent original receipt; different resultId/fullOutputSha256/grant binding → OfflineGrantError offline.receipt_conflict, nothing spent); settleOfflineReceipt() treats 'held' as non-terminal (settled_at NULL, still in pendingOfflineReceipts(), later accepted/refused recorded); readOfflineAllocation() reports remaining = distinct unconsumed tickets; corrupt/unknown rows throw offline.wallet_corrupt rather than reading as an empty wallet; nothing ever re-adds capacity on disconnect, restart, reinstall, expiry or ambiguous settlement. api.ts (additive only, no existing symbol changed — verified `git diff` has zero removed lines) adds OfflineGrantClient with registerDevice/requestGrant on the actual Edge routes POST /v1/devices/register and POST /v1/offline/grants, plus submitReceipts() for POST /v1/offline/receipts with an all-or-nothing verdict parser (every submitted id exactly once, no unknown ids, malformed/un-coded answers → 502 network.invalid_response, nothing settled). reconcileOfflineReceipts() settles receipts only from a complete verdict set. Shipping wiring stays inside the mobile-data group: db.ts applies the DDL, syncRuntime.ts drains queued receipts after every outbox drain and backs off while any receipt is pending. apps/mobile/src/analysis/runCaptureAnalysis.ts (mobile-analysis group, not held) was NOT edited; the capability map states explicitly that the rated-run flow still authorises through the online permit and does not yet spend from the held wallet.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/95bc2a40-1d56-4f3d-8244-1d53c990d09d/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fac15575-cf20-413d-8a0a-6cca418f7d16/ac2-base-674bcac.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2a49649-0a34-4357-bba3-40f928ffd8ee/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/092796af-b657-4bce-b3cb-77329806b81c/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c0a2453-62ac-49ee-b406-de2b70be83bf/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4850301a-4591-403a-9207-2e43acfa0e11/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b6cccab0-f160-4f59-b853-e3d52285c25a/full-jest.log"
+        ],
+        "base_sha": "674bcacca4b58fef3864b25c0802be1954a54a83",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w04-05/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/w04OfflineGrants.test.ts",
+          "apps/mobile/src/data/offlineCapabilities.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/src/data/db.ts",
+          "apps/mobile/src/data/syncRuntime.ts",
+          "apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts"
+        ],
+        "head_sha": "7ec8d097716ec08a6472462771be2d10d4821dd9",
+        "out_of_scope_files": [
+          "apps/mobile/src/data/db.ts — additive: import OFFLINE_WALLET_DDL and spread it into LOCAL_MIGRATIONS so the wallet tables exist in the shipping SQLite database (2 lines; under the mobile-data serial group this package holds).",
+          "apps/mobile/src/data/syncRuntime.ts — additive wiring: build createOfflineGrantClient(apiConfig) and call reconcileOfflineReceipts(db, offlineGrants, await trustedTime.read()) after each drainOutbox, counting pending receipts toward the retry backoff (under the mobile-data serial group this package holds). This is the shipping code path that presents durably queued receipts.",
+          "apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts — 1 line: the in-memory outbox fake (test-only harness, not under any serial group) answers `SELECT * FROM offline_receipt` with no rows, exactly as it already does for analysis_run_journal/analysis_execution_attempts reads, because syncRuntime now reads the wallet after every drain. No test assertion changed; without it __tests__/wf/be-mobile-sync-outbox.test.ts throws `unhandled sql` and its cadence assertions fail."
+        ],
+        "package_id": "W04-05",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w04OfflineGrants.test.ts (28 tests; committed first as f30ad1e2 — 28/28 fail on BASE_SHA)"
+        ],
+        "residual_risks": [
+          "UNKNOWN/INFERRED: the production Edge function (supabase/functions/api/index.ts, edge-index serial group — forbidden for this package) does not serve POST /v1/offline/receipts; its `default:` branch returns a 404 envelope without a verdict code. The mobile client treats that as an unreadable answer (502 network.invalid_response), settles nothing, and keeps every receipt queued (pinned by the test 'reconciliation refuses unreadable answers and a missing route'). Until the receipts route ships, a device that has consumed a wallet ticket will re-present its receipts on every drain and the sync timer will back off (max backoff) while receipts stay pending. Follow-up package needed on the Edge side.",
+          "INFERRED: the rated-run flow in apps/mobile/src/analysis/runCaptureAnalysis.ts (mobile-analysis serial group, not held by W04-05) still authorises solely through the online analysis permit client and does not yet call requestOfflineGrant/holdOfflineGrant/consumeOfflineAllocation. This package delivers the wallet, its durability semantics, and the shipping receipt drain inside mobile-data; the capability map states this limitation explicitly. A follow-up in mobile-analysis must route the offline branch of the scoring flow through the wallet — that group was not granted to this package and I did not edit it.",
+          "VERIFIED: full mobile Jest run on HEAD (cd apps/mobile && npx jest --ci --silent): Test Suites 1 skipped, 322 passed, 322 of 323 total; Tests 1 skipped, 6429 passed, 6430 total; exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/b6cccab0-f160-4f59-b853-e3d52285c25a/full-jest.log). The single skipped suite/test is pre-existing and outside this package's acceptance commands (not counted anywhere as a pass).",
+          "Trusted-time source for settlement timestamps and lease evaluation is trustedTime.read() in the sync runtime; if the device has no anchored trusted time, consumeOfflineAllocation refuses with offline.time_reconcile_required and receipts already queued still drain (reconciliation does not require an anchored reading to present receipts)."
+        ],
+        "summary": "Defect on BASE_SHA 674bcacc: apps/mobile/src/data/offlineCapabilities.ts is a static capability map only (no grant storage, no consumption, no receipts) and apps/mobile/src/data/api.ts has no offline grant/receipt client, so nothing on the device can hold a server-issued grant, decrement allocation on consumption or queue a receipt — the 28-test regression suite fails 28/28 there (createOfflineGrantClient is not a function). Round-2 candidate (branch devin/pp/w04-05/impl-r2, head 7ec8d097716ec08a6472462771be2d10d4821dd9, two commits: f30ad1e2 tests, 7ec8d097 implementation) reuses the sound parts of impl-r1 and resolves every prior finding: (1) P0 cross-generation restatement — offline_ticket is a per-owner global ledger keyed by ticket id, restated generations move remaining copies forward and never resurrect consumed tickets, readOfflineAllocation() never reports more spendable tickets than distinct unconsumed ids, and consumption cannot spend a ticket twice across generations (tests 'ticket ids are conserved across grant generations'); (2) P1 'held' is non-terminal — settled_at stays NULL, the receipt remains in pendingOfflineReceipts() and later accepted/refused is recorded; (3) P1 conflicting replay — a reused operationId with a different resultId/fullOutputSha256/grant binding throws OfflineGrantError offline.receipt_conflict and spends nothing, identical replay stays idempotent; (4) reviewer blocking 'no shipping path calls the wallet' — within the held mobile-data group, db.ts applies OFFLINE_WALLET_DDL and syncRuntime.ts drains queued receipts after every outbox drain through the additive OfflineGrantClient.submitReceipts() with an all-or-nothing verdict parser, backing off while receipts stay pending. The rated-run flow itself (apps/mobile/src/analysis, mobile-analysis group not granted) is intentionally untouched and the capability map states it still authorises via the online permit; the Edge function does not yet serve POST /v1/offline/receipts (edge-index group forbidden), and the client keeps every receipt queued when that route answers 404 — both recorded as residual risks / follow-ups. All four acceptance commands VERIFIED exit 0 on HEAD (AC1 41/41, AC2 proof base 28 failed → HEAD 28 passed, AC3 tsc clean, AC4 eslint+prettier clean) plus pnpm format:check and git diff --check exit 0, and the full mobile Jest suite passes (6429 passed, 1 pre-existing skip). No PR opened; no force-push; no migration or Edge edits."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0837e63f-3256-48fc-8196-cebe5d2b6541/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts __tests__/offline*.test.ts",
+            "executed": 41,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC1",
+            "note": "VERIFIED by reviewer on 7ec8d097 after `cd apps/mobile && npm ci` (exit 0). Test Suites: 2 passed, 2 total (w04OfflineGrants.test.ts, offlineNetwork.test.ts). Tests: 41 passed, 41 total.",
+            "passed": 41,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/faa2376e-1161-47ca-bf04-548a1c108dcd/ac2-candidate.log",
+            "command": "git worktree add /home/ubuntu/repos/ps-base 674bcacca4b58fef3864b25c0802be1954a54a83 && cp apps/mobile/__tests__/w04OfflineGrants.test.ts /home/ubuntu/repos/ps-base/apps/mobile/__tests__/ && (cd /home/ubuntu/repos/ps-base/apps/mobile && npm ci && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts) ; (cd apps/mobile && npx jest --ci --silent __tests__/w04OfflineGrants.test.ts)",
+            "executed": 28,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC2",
+            "note": "VERIFIED proof. BASE run (only apps/mobile/__tests__/w04OfflineGrants.test.ts copied onto a clean worktree at 674bcacca4b58fef3864b25c0802be1954a54a83; `git status --short` shows it as the only source change): exit_code=1, Test Suites: 1 failed, 1 total; Tests: 28 failed, 28 total (TypeError: (0 , _api.parseIssuedOfflineGrant) is not a function / createOfflineGrantClient is not a function); log artifacts/w04-05-review/ac2-base-674bcac.log. HEAD run on 7ec8d097: exit 0, Tests: 28 passed, 28 total. The 'disconnect does not reclaim allocation' describe block (test lines 509-633) covers process death mid-consumption, lease expiry and a newer generation not releasing the older one; tests run against a real SQLite (testSupport/sqlite) with only getDb mocked. Base log URL: https://la-hacks-rttothemoon.devinenterprise.com/attachments/162ce86a-599d-4433-b110-011d94f30dde/ac2-base-674bcac.log",
+            "passed": 28,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/beb135b7-e447-4a36-bbe8-753ab0d7f34b/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC3",
+            "note": "VERIFIED by reviewer on 7ec8d097: no diagnostics, exit 0 (non-test check, counts 0).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea2f9661-83fd-4ad5-b294-c9c9d5b8e2e4/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/__tests__/w04OfflineGrants.test.ts apps/mobile/src/data/api.ts apps/mobile/src/data/db.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/syncRuntime.ts && npx prettier --check apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/__tests__/w04OfflineGrants.test.ts apps/mobile/src/data/api.ts apps/mobile/src/data/db.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/syncRuntime.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-05-AC4",
+            "note": "VERIFIED from repo root on 7ec8d097 over all 6 files in `git diff --stat BASE..HEAD`: eslint exit 0 (no findings); prettier --check exit 0 ('All matched files use Prettier code style!'). Non-test check, counts 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0837e63f-3256-48fc-8196-cebe5d2b6541/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/162ce86a-599d-4433-b110-011d94f30dde/ac2-base-674bcac.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/faa2376e-1161-47ca-bf04-548a1c108dcd/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/beb135b7-e447-4a36-bbe8-753ab0d7f34b/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea2f9661-83fd-4ad5-b294-c9c9d5b8e2e4/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fba34d09-42c2-477e-8250-fd9d6173c454/full-jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (grep apps/mobile/src): holdOfflineGrant/requestOfflineGrant/consumeOfflineAllocation/readOfflineAllocation have no caller outside offlineCapabilities.ts; only OFFLINE_WALLET_DDL (db.ts:3,101) and reconcileOfflineReceipts (syncRuntime.ts:15,131) are reached by shipping code. The rated-run flow (apps/mobile/src/analysis/runCaptureAnalysis.ts, serial group mobile-analysis, NOT held by W04-05) still authorises via the online permit only; the candidate's capability map (offlineCapabilities.ts:144-162) states this explicitly. Because the analysis group was not granted to this package and the manifest assigns the offline journey wiring to W05-04, this is recorded as a required follow-up rather than a blocker; the judge may weigh rule 1b differently.",
+          "VERIFIED (grep supabase/functions/api/index.ts): the Edge function serves POST /v1/devices/register and POST /v1/offline/grants (index.ts:5033,5039 route limits; handlers at ~4785 and ~4884) but NO POST /v1/offline/receipts route. The client therefore receives the default 404 envelope, parseOfflineReceiptVerdicts returns null -> ApiError 502 network.invalid_response, nothing settles, receipts stay queued and syncRuntime backs off (pinned by test 'a lost connection or an unreadable answer settles nothing and keeps every receipt queued'). Edge-side follow-up (W04-04, edge-index group) required before any consumed ticket can ever settle in production.",
+          "INFERRED (packages/shared-types/src/offlineAuthorization.ts:304-315, 805-816): the wire shape the client presents (api.ts OfflineReceiptSubmission: receiptId, ownerId, installationKeyId, grantId, grantJwsSha256, lifecycleSequence, ticket, operationId, resultId, fullOutputSha256, billingDisposition, queuedAt) lacks schemaVersion, nativeTime and attestation required by validateOfflineResultReceiptShape. The receipts route (W04-04) and the native wallet (W05-01) must agree the contract; the current client payload would not satisfy the shared-types receipt validator as written.",
+          "INFERRED (offlineCapabilities.ts:608-611,617-630): the device validates JWS shape, protected header, issuer/kid/sub/installation binding, restatement, the 7-day bound (OFFLINE_PRO_LEASE_MAX_SECONDS) and, via shared-types isLeaseClaims, exp <= verifiedEntitlementExpiresAt, but does not verify the ES256 signature (no public key on device); the grant arrives over the authenticated TLS API and the server re-verifies on settlement. Acceptable for this package; noted for W04-03 key-publication follow-up.",
+          "VERIFIED: full mobile Jest on HEAD (cd apps/mobile && npx jest --ci --silent) exit 0: Test Suites 1 skipped, 322 passed, 322 of 323 total; Tests 1 skipped, 6429 passed, 6430 total (artifacts/w04-05-review/full-jest.log). The single skip is pre-existing __tests__/importedRealFootageAnalysis.test.ts (describe.skip when real-footage artifacts are absent, line 103), unchanged vs BASE (git diff --quiet exit 0). Not part of any acceptance command. URL: https://la-hacks-rttothemoon.devinenterprise.com/attachments/fba34d09-42c2-477e-8250-fd9d6173c454/full-jest.log"
+        ],
+        "package_id": "W04-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "7ec8d097716ec08a6472462771be2d10d4821dd9",
+        "scope_violation": false,
+        "summary": "VERIFIED scope: `git diff --stat 674bcacc..7ec8d097` = 6 files / +2779 -2. offlineCapabilities.ts, api.ts, w04OfflineGrants.test.ts are write_paths; db.ts (+2, DDL spread into LOCAL_MIGRATIONS) and syncRuntime.ts (+26 -2, client + receipt drain after each drainOutbox) are inside apps/mobile/src/data/ = serial group mobile-data, which W04-05 holds; __harness__/serverResponseMatrix/outboxFakeDb.ts (+1 empty read for `SELECT * FROM offline_receipt`) is a test-only fake under no serial group, listed in out_of_scope_files; no file under any unheld group. api.ts is additive (git diff shows zero removed lines in api.ts; the only two removed lines in the whole src diff are the replaced import line and the replaced consecutiveFailures expression in syncRuntime.ts). scope_violation=false. VERIFIED acceptance on HEAD: AC1 jest exit 0, 41/41 (2 suites); AC3 tsc exit 0; AC4 eslint+prettier exit 0 on all 6 changed files; AC2 proof: new test file alone on a clean BASE worktree exit 1, 28 failed/28 (missing parseIssuedOfflineGrant/createOfflineGrantClient), on HEAD exit 0, 28 passed/28. Full mobile Jest exit 0 (6429 passed, 1 pre-existing unchanged skip). INFERRED from the diff: allocation != consumption is enforced — offline_ticket is a per-owner ledger keyed (owner_key, ticket_id); consumeOfflineAllocation flips exactly one ticket remaining->consumed and inserts the receipt in one transaction, checks operationId replay before selecting a ticket (identical -> original receipt, different result/hash/binding -> offline.receipt_conflict, nothing spent); nothing re-adds capacity on disconnect, restart, restated generation, lease expiry or a held verdict; settle 'held' leaves settled_at NULL and the receipt pending; reconcile applies verdicts only from a complete all-or-nothing verdict set (every submitted id exactly once, no extras) and 404/unreadable settles nothing; corrupt rows throw offline.wallet_corrupt rather than reading as empty; grants are bound to owner UUID (sub), installation, issuer (config.baseUrl == OFFLINE_GRANT_ISSUER `${SUPABASE_URL}/functions/v1/api`), kid, jti/iat/exp/entitlementSource/ticketIds/generation restatement, 7-day bound and exp <= verified entitlement expiry via shared-types; owner scoping via forDataOwner/captureDataOwnerContext and signed-out/guest owners refused; request/response field names match the Edge handlers registerOfflineDevice/issueOfflineGrant. No test weakened/skipped/reordered, no forbidden patterns (|| true, passWithNoTests, @ts-ignore, any, eslint-disable, .skip/.only, timeouts), no migration/RLS/grant/Edge edits, no existing comment edits, no user-facing copy added beyond error messages that follow copy rules, no tokens persisted (bearer resolved per request via existing apiConfig getter). Non-blocking follow-ups recorded: rated-run flow (mobile-analysis, not held) does not yet spend from the wallet; Edge has no POST /v1/offline/receipts route so receipts remain queued in production until W04-04 lands; client receipt payload lacks the schemaVersion/nativeTime/attestation fields that shared-types validateOfflineResultReceiptShape requires; device does not verify the grant's ES256 signature (documented, server-verified on settlement). No PR opened, no pushes, no Mac runner use, no production access.",
+        "verdict": "approve"
+      },
+      "round": 2,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-15-keep"
+}

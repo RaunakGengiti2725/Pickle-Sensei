@@ -1,0 +1,18 @@
+{
+  "base_sha": "4cc2d69fea8090c64fa57a41a5f3c892e3b382fd",
+  "integration_order": {},
+  "packages": {
+    "W08-06": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-18-keep"
+}

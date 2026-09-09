@@ -1,0 +1,564 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W08-06-r4",
+      "phase": "implement",
+      "prompt_sha256": "94eef3c605abb46d33b0c3addbb404d12ab98470e0f6217a073c0278553f8a1e",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W08-06-r4",
+      "phase": "review",
+      "prompt_sha256": "c44d589e8b640b6f0263d61976e0774f4ce96a082c7c1c14655c8552272857e6",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W08-06-r4",
+      "phase": "adversary",
+      "prompt_sha256": "08bda682333eed1fa94dacbc7f7fbaccffaf38bc56eb9d64fd6cf857cb38a06f",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W08-06-r5",
+      "phase": "implement",
+      "prompt_sha256": "c1ce5ef8e89117671333c2db5a05ea4fc3fddfcf098435c182015e8f0fada9ef",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W08-06-r5",
+      "phase": "review",
+      "prompt_sha256": "d894dc8235cfd27d515dc37167d5e72e192d6dc9ca9756c6b37424c8d37715f8",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W08-06-r5",
+      "phase": "adversary",
+      "prompt_sha256": "880d092a3edbadf8a4276e20ad72fd7c4f0e940fae00e2cd14c9577377d81fa3",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "4cc2d69fea8090c64fa57a41a5f3c892e3b382fd",
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W08-06",
+  "requeued_from": {
+    "branch": "devin/pp/w08-06/impl-r3",
+    "findings": {
+      "judge": [],
+      "later_blocked_rounds_reuse_their_verified_work": [
+        {
+          "blocked_reason": "The r2 P1 (residue found after Auth deletion → confirm 503 without receipt, but api_private.account_deletion_operations already phase=completed with completed_at set and /delete-status hands out a receipt) is rooted in SQL owned by the `sql` serial group, which W08-06 does not hold: the auth.users AFTER DELETE trigger api_private.record_account_deletion_auth_absence() (supabase/migrations/20260907001500_account_deletion_operations.sql) seals completed_at/phase='completed' and clears lease_token in the same transaction as the identity delete, so public.fail_account_deletion_operation(…,'completion_unverified') returns stale_lease (api_private.lock_account_deletion_lease rejects auth_deleted_at is not null) and no other service-role RPC can record the verdict; the owner holds no DELETE grant on shots/consent_records/player_rank_state etc. (revoked in 20260831160000_defense_in_depth.sql), so the Edge cannot clear residue itself either. VERIFIED on the real wire (p1-e2e-candidate-baseSQL.log). No Edge-only change can make the durable row/`/delete-status` honest. The Edge half is implemented and verified: runClaimedDeletion() now (1) reads the receipt, (2) pages every owner namespace to empty AFTER the Auth delete, (3) throws residue → fail_account_deletion_operation(completion_unverified) with the lease binding, and (4) only when the sweep is empty and the durable row is not yet certified calls public.certify_account_deletion_completion(p_owner_id,p_operation_id,p_lease_token). On today's migrations that RPC does not exist; it is reached only when the trigger did NOT seal (intent not ready), where the PostgREST function-not-found error degrades to the same generic 503 the base code returned (`Account deletion completion is unverified.`) — verified: the full suite, the r2 clean-deletion/concurrency/redirect real-wire attacks (#1/#7/#8) and the live cascade test pass on the repo migrations. DEPENDENCY: a new sql-group migration (draft written, applied to a disposable DB and validated end to end, NOT committed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/b819cbcc-2b75-4286-acc8-4b85eea076d8/20260909120000_account_deletion_certified_completion.sql): the trigger records auth_deleted_at and KEEPS the worker's lease token when the intent was ready (still marks auth_absent_without_ready_intent and clears the lease otherwise); public.certify_account_deletion_completion(uuid,uuid,uuid) (service_role EXECUTE only) sets completed_at/phase under the same advisory lock only when Auth is absent with a ready intent and the lease token matches; fail_account_deletion_operation accepts completion_unverified post-Auth against the retained lease token. The status view already reads auth_deleted_at set + completed_at null as `blocked` with no receipt, and acquire answers `blocked`. With the draft: supabase/tests/security_regression.sql passes (exit 0), but supabase/tests/account_deletion_operations.sql:195-227 pins the old atomic-seal semantics ('W08 Auth transaction must see both cascade and completion receipt', 'real Auth deletion atomically seals durable receipt') and fails at line 206 (exit 3, https://la-hacks-rttothemoon.devinenterprise.com/attachments/68e9b96b-dfb1-49b1-bfcc-9979e9a0e1ab/sql-tests-account_deletion_operations-draftSQL.log) — those sql-group tests must be updated by the sql-group holder together with the migration (I may not edit supabase/tests/). Alternative smaller SQL design if the seal pin must stay: keep the trigger, let fail_(…,'completion_unverified') mark the sealed row and have account_deletion_view/read_account_deletion_receipt/claim_account_deletion_work treat completed_at+last_error_code='completion_unverified' as `blocked` without a receipt; the Edge code on this branch is compatible with either design.",
+          "branch": "devin/pp/w08-06/impl-r3",
+          "head_sha": "b31144282c71c23c35059dc2fb9a4abb1e0f337b",
+          "round": 3,
+          "summary": "W08-06 r3 on devin/pp/w08-06/impl-r3 @ b31144282c71c23c35059dc2fb9a4abb1e0f337b (base 0e7f18ede164ed1f7331cde775f1e382bc94cf73; pushed with `git push origin devin/pp/w08-06/impl-r3`, no PR, no force-push). DEFECTS ON BASE (file:line): (a) supabase/functions/api/accountDeletionOperations.ts BASE runClaimedDeletion() (≈L640-700) deletes the Auth user and returns the trigger-sealed receipt without ever reading a single owner namespace — no inventory, no pagination; (b) supabase/functions/api/index.ts BASE confirmAccountDeletion() (≈L4560-4590) supplies no owner-namespace reader, and any SDK GET retried 503s ×3 backoff (postgrest-js 2.112.4 fetchWithRetry) — a degraded table costs 12 wire reads/~21 s, past the mobile 15 s deadline; (c) supabase/functions/api/legal.ts §7 BASE (≈L118-150) disclosed only the free-rating ledger and webhook audit while the deletion operation record (7-day retention), offline allocation ledger/identity links, and billing transfer reconciliation records also survive deletion; (d) SQL P1 (not in my scope): 20260907001500_account_deletion_operations.sql record_account_deletion_auth_absence() seals completed_at in the Auth-delete transaction and clears the lease, so a worker that finds residue afterwards cannot record completion_unverified and /delete-status hands out a receipt. RESOLVED IN-SCOPE (VERIFIED): full owner inventory with W07-06 descending keyset pagination, read as the owner, before (pre-flight) and after Auth deletion; `.retry(false)` bounds each namespace to exactly INVENTORY_READ_ATTEMPTS=3 wire reads (route test with the real supabase-js client); registry extended (settlement_receipts, offline_devices, offline_grants) with a live information_schema drift check; every `retained` table disclosed in Privacy §7 with what/how long, free-rating wording parity across Privacy/Terms/support/in-app pinned, prohibited-term scan; Apple revoke → RevenueCat delete → Auth delete order unchanged; worker-side certification path (certify only after an empty post-Auth sweep, completion_unverified with the lease otherwise). AC1 PASS (exit 0). AC2 PASS: 934 passed / 0 failed / 0 ignored with the disposable DB exported as both XC_PG_URL and PICKLE_AUDIT_PG_URL (manifest env alone → 12 W06-01 tests ignored, recorded). pnpm format:check exit 0; git diff --check exit 0; root eslint on changed files exit 0. Regression proof: HEAD test file fails on BASE (exit 1, does not typecheck) and on the r2 candidate (13 passed/8 failed), passes on HEAD (21/21). BLOCKED (external serial-group dependency): the P1 needs the attached sql-group migration draft (validated on a disposable DB: real-wire P1 e2e 2/2 pass, r2 clean/concurrency/redirect attacks pass, security_regression.sql passes; supabase/tests/account_deletion_operations.sql:195-227 pins the old atomic seal and must be revised by the sql holder). Until it lands the durable row/`/delete-status` inconsistency persists at runtime exactly as on BASE; the Edge never fabricates success (503 without receipt)."
+        }
+      ]
+    },
+    "head_sha": "b31144282c71c23c35059dc2fb9a4abb1e0f337b"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9269df11-dc95-4f33-80a4-db5fb68eb7ed/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc8a0504-b355-4366-8154-03d5bedc6b13/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c8f5536-27b6-4621-9827-0588421ae6f1/ac3-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0cdf9c65-521a-4cc2-90cb-606d36bcbcf5/attack-deno-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/815b1003-b09e-4f4b-beea-419dde9a1247/attack-sql-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37b47acb-4d36-41c8-83f2-9750346b1045/attack-deno-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3c470f0-ffa4-4957-bade-7fe56f9dbdc6/attack-sql-base.log"
+        ],
+        "attack_branch": "devin/pp/w08-06/attack-750da77d",
+        "attack_branch_sha": "3a5ba775eae805975ca0648f50ae42cc658a6f1b",
+        "attacked_sha": "750da77dace02ebe4c56cbd5b2c0442f9722b34e",
+        "attacks_tried": 14,
+        "breaks": [
+          {
+            "expected": "A transient failure between the Auth delete and certification must stay retryable (fail closed but keep the operation re-acquirable, or keep the retained lease); a subsequent clean sweep certifies completion exactly once and /delete-status reports completed with a receipt.",
+            "observed": "Auth user deleted, every owner namespace empty; the first read_account_deletion_receipt throws once -> worker calls fail_account_deletion_operation('completion_unverified'). Durable row afterwards: {phase:'auth_delete_intent', completed_at:null, lease_token:null, last_error_code:'completion_unverified'}. Retry via resumeConfirmedAccountDeletionOperation -> {outcome:'rejected', code:'blocked'}; /delete-status -> {state:'blocked', completionReceipt:null}. certify_account_deletion_completion with any lease -> stale_lease. No path (worker or service) can ever record the receipt although the account is gone.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json w08_06_attack.test.ts --filter 'transient failure of the post-Auth receipt read'  (exit 1 on 750da77d; the file does not load on BASE 4cc2d69f: missing export ACCOUNT_OWNER_NAMESPACES)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/w08_06_attack.test.ts",
+            "title": "One transient RPC failure after the Auth delete (receipt read) records completion_unverified, releases the lease, and makes a CLEAN deletion permanently uncertifiable"
+          },
+          {
+            "expected": "After Auth absence, an expired retained lease must be re-acquirable by a worker (service role) so the sweep can run again and certify exactly once; status must never be a permanent 'blocked' for a clean deletion.",
+            "observed": "After the Auth delete landed with no worker alive (process death) or with the deleteUser response lost, the durable row is {phase:'auth_delete_intent', completed_at:null, lease_token:<retained>, lease_expired:true, last_error_code:null}. claim/resume -> {outcome:'blocked'}; certify with the retained lease -> stale_lease once expired; /delete-status -> blocked, completionReceipt:null. The app renders 'The server declined to delete this account right now' for an account that no longer exists.",
+            "repro": "Deno: same command with --filter 'worker crash after the Auth delete' and --filter 'deleteUser succeeds server-side but the response is lost' (both FAIL on 750da77d). SQL: docker cp supabase/tests/w08_06_attack.sql pickle-xc-pg:/tmp/ && docker exec pickle-xc-pg psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/w08_06_attack.sql  (attack S1; exit 3, 'W08-06 ATTACK BREAK: S1 ... certify={\"outcome\":\"stale_lease\"} claim={\"outcome\":\"blocked\"}')",
+            "severity": "P1",
+            "test_file": "supabase/tests/w08_06_attack.sql (S1) and supabase/functions/api/__wf__/w08_06_attack.test.ts",
+            "title": "Worker crash / lost Auth-delete response after the Auth delete: the retained lease expires and nothing can re-acquire (lock rejects auth_deleted_at not null) -> clean deletion stuck 'blocked' forever"
+          },
+          {
+            "expected": "While a live lease is held the status is in_progress (or an equivalent honest pending state); 'blocked' only once the worker recorded a verdict.",
+            "observed": "auth.users row gone, completed_at null, lease_token set with lease_expires_at in the future (sweep running): read_account_deletion_status / accountDeletionStatusResponse return {state:'blocked', completionReceipt:null, appleAuthorizationRevocation:null}. apps/mobile/src/account/deletion.ts maps 'blocked' to CONFIRMATION_BLOCKED_MESSAGE ('The server declined to delete this account right now').",
+            "repro": "Deno: --filter 'still holds its live lease after the Auth delete' (FAIL on 750da77d). SQL: attack S3 in the same psql command ('W08-06 ATTACK BREAK: S3 status during the live sweep reads {\"state\":\"blocked\",...} instead of in_progress').",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/w08_06_attack.test.ts and supabase/tests/w08_06_attack.sql (S3)",
+            "title": "/delete-status answers `blocked` while the sweeping worker still holds a LIVE lease after the Auth delete (in-flight sweep is reported as declined)"
+          },
+          {
+            "expected": "Honour a bounded Retry-After (or defer the retry) so a paced source that then answers an empty page is read as `empty`; a 429 during the post-Auth sweep must not become a permanent completion_unverified.",
+            "observed": "verdict {table:'shots', outcome:'unread', reason:'page_error', code:'PGRST429', httpStatus:429, pages:1}; 3 reads all at 0 ms.",
+            "repro": "Deno: --filter '429 + Retry-After' (FAIL on 750da77d, pure unit test, no DB).",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/w08_06_attack.test.ts",
+            "title": "verifyOwnerNamespacesEmpty retries a 429 + Retry-After page error INVENTORY_READ_ATTEMPTS times within 0 ms (Retry-After ignored); a paced namespace reads `unread` and feeds break #1 (completion_unverified)"
+          }
+        ],
+        "package_id": "W08-06",
+        "summary": "Attacked W08-06 r4 @ 750da77dace02ebe4c56cbd5b2c0442f9722b34e (base 4cc2d69f). Candidate baseline VERIFIED: AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1.log); AC2 `deno task test` with disposable postgres:16 (XC_PG_URL+PICKLE_AUDIT_PG_URL) 937 passed / 0 failed / 0 ignored (ac2-candidate.log); AC3 `./supabase/tests/run_rls_tests.sh` exit 0 (ac3-candidate.log). 14 attacks written as real tests on devin/pp/w08-06/attack-750da77d @ 3a5ba775 (pushed, no force, no PR; only two new files, no production/candidate-test change): 11 Deno (`w08_06_attack.test.ts`) -> 6 passed / 5 failed (exit 1), 3 SQL attacks / 31 assertions (`w08_06_attack.sql`) -> 29 passed / 2 breaks (exit 3). HELD (no break): concurrent double certification with the same retained lease certifies exactly once and a racing residue verdict cannot unwind it; replayed identity (same auth.users id re-created) + other owner's lease never certify; owner/anon denied and service allowed on fail/claim/intent/certify (Edge + SQL, allowed and denied paths); cross-account status/receipt/certify/fail with wrong owner or lease -> stale_lease/denied and the genuine lease certifies once then stale_lease; free_rating_ledger byte-identical across Auth delete, residue verdict and certification; legal/support copy free of forbidden claims and §7 retention durations match schema constraints. BROKEN (4, all on the post-Auth-delete path): (1) P1 one transient receipt-read failure -> completion_unverified + lease released -> clean deletion permanently uncertifiable, /delete-status 'blocked' with no receipt though the account is gone; (2) P1 worker crash or lost deleteUser response -> retained lease expires -> lock_account_deletion_lease rejects (auth_deleted_at not null), acquire 'blocked', certify stale_lease, permanently stuck; (3) P1 /delete-status reports 'blocked' while the live lease is still held mid-sweep (app renders 'The server declined to delete this account right now'); (4) P2 Retry-After on 429 ignored: INVENTORY_READ_ATTEMPTS immediate retries within 0 ms -> `unread` -> feeds (1). None create a false receipt, leak data, or restore free ratings (the candidate's AC4 property holds); they are liveness/honesty defects on a supported path. BASE comparison: both attack files fail to load/run on 4cc2d69f (Deno: missing export ACCOUNT_OWNER_NAMESPACES; SQL: certify_account_deletion_completion(uuid,uuid,uuid) does not exist, and S1 shows base seals a receipt via the trigger with no sweep) — attack-deno-base.log, attack-sql-base.log. Note: on the attack branch `deno task test` in __wf__ will include the intentionally failing attack file. Formatting: prettier --check on the new test file passes; deno lint passes; deno check passes; git diff --check clean."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cc76dfd7-732c-428d-8367-e2e3689c343d/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED on HEAD 750da77d. Local log path artifacts/w08-06-r4/ac1-deno-check.log (artifacts/ is gitignored, hence the uploaded copy).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e2225bc-bc04-4a50-896e-24845d9e7b37/ac2-edge-suite.log",
+            "command": "export PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55435/postgres && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55435/postgres deno task test",
+            "executed": 937,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED: `ok | 937 passed (31 steps) | 0 failed`, ignored == 0 (no `ignored` count in the summary). Disposable postgres:16 container (pickle-xc-pg-ac2) built from shim_auth.sql + every migration on HEAD incl. 20260909120000. The disposable URL was exported as BOTH XC_PG_URL (manifest) and PICKLE_AUDIT_PG_URL because the pre-existing W06-01 live tests read PICKLE_AUDIT_PG_URL (same finding as r3: with XC_PG_URL alone 12 tests are ignored). Local log artifacts/w08-06-r4/ac2-edge-suite.log.",
+            "passed": 937,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ca04d7ca-6916-4732-84ca-4cd506d39fd2/ac3-run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC3",
+            "note": "VERIFIED on HEAD: 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 SQL matrices (security_regression.sql, account_deletion_operations.sql, analysis_release_policy.sql) = 12 psql runs, all ON_ERROR_STOP clean; `W07 concurrent billing scenarios passed: 14` and `W08 concurrent deletion scenarios passed: 5` in every history. Local log artifacts/w08-06-r4/ac3-run_rls_tests.log. (A first run failed at security_regression.sql:7339 because my new M2 block cast `api_private....::regprocedure` while running as service_role, which has no USAGE on api_private — fixed by resolving the helper via pg_proc/pg_namespace; the re-run above is the recorded result.)",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ddbaf98-84e7-459c-9464-906e6a902be7/ac4-head-edge-test.log",
+            "command": "BASE: git worktree add /home/ubuntu/repos/ps-base 4cc2d69fea8090c64fa57a41a5f3c892e3b382fd; cp <HEAD>/supabase/functions/api/__wf__/account_deletion_complete.test.ts <base worktree>/supabase/functions/api/__wf__/ (only file copied; `git status` showed just that untracked file); fresh postgres:16 with shim + BASE migrations (…55436); cd <base>/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55436/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts. HEAD: fresh postgres:16 with shim + HEAD migrations (…55437); cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55437/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts",
+            "executed": 24,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC4",
+            "note": "PROOF exit 0: BASE run exit 1 — `FAILED | 0 passed | 1 failed` (module load fails: BASE accountDeletionOperations.ts has no ACCOUNT_DELETION_UNREAD_TABLES/inventory exports) https://la-hacks-rttothemoon.devinenterprise.com/attachments/c41a5482-bcc3-4be2-b63b-c130878509e9/ac4-base-edge-test.log. Behavioural isolation of the SQL defect: the HEAD test + HEAD Edge code against the BASE-migrated DB → exit 1, `21 passed | 3 failed`, the three failing being exactly the live residue-never-certified, clean-sweep-certifies-once and certification-RPC-hardening tests https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d2bb126-afdd-42ea-b084-48cbbec4f777/ac4-head-edge-test-on-base-sql.log. HEAD's revised SQL matrices on the BASE-migrated DB also fail: account_deletion_operations.sql exit 3 at line 137 (`all twelve service deletion RPCs are present`) https://la-hacks-rttothemoon.devinenterprise.com/attachments/2b5dcaa4-1bee-4969-9ce5-63db434b8110/ac4-base-sql-account_deletion_operations.log; security_regression.sql exit 3 at line 7308 (`certify_account_deletion_completion does not exist`) https://la-hacks-rttothemoon.devinenterprise.com/attachments/e39f01ad-eb1b-4966-b521-d1db563eec0d/ac4-base-sql-security_regression.log. HEAD run: exit 0, `ok | 24 passed | 0 failed`, 0 ignored (both HEAD SQL matrices pass on HEAD via AC3). The base worktree was removed afterwards; nothing was committed to BASE.",
+            "passed": 24,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE 4cc2d69f on devin/pp/w08-06/impl-r4 and cherry-picked the verified r3 Edge work (a0a87737, 3a91dd98, 3f2aa465, 9d2ef269: complete owner-namespace inventory read AS the owner with W07-06 descending keyset pagination, `.retry(false)` wire bounds, Apple revoke → RevenueCat delete → Auth delete, post-Auth sweep, residue → fail_account_deletion_operation(completion_unverified), clean sweep → certify_account_deletion_completion, Privacy §7/Terms/support retention parity). Now holding the `sql` serial group, resolved the r3 P1 at its root: (1) regression test first — supabase/functions/api/__wf__/account_deletion_complete.test.ts drives the shipping worker (confirmAccountDeletionOperation / resumeConfirmedAccountDeletionOperation / the /delete-status route) against a real PostgreSQL through the RPC wire and asserts on api_private.account_deletion_operations directly (commit 310f41bd, harness precision fix 6a3cb2c2); (2) append-only migration 20260909120000_account_deletion_certified_completion.sql (commit 750da77d): the auth.users AFTER DELETE trigger records auth_deleted_at and keeps the ready worker's lease instead of sealing completed_at/phase='completed'; new service-only public.certify_account_deletion_completion(p_owner_id,p_operation_id,p_lease_token) certifies under the per-owner advisory lock only when Auth is absent, the intent is ready and the retained lease matches; fail_account_deletion_operation accepts completion_unverified post-Auth against the retained lease; private api_private.lock_account_deletion_certification helper with no grants. account_deletion_view already renders auth_deleted_at set + completed_at null as `blocked` with no receipt and claim_account_deletion_work answers `blocked`, so /delete-status and the receipt read are honest without further change. Updated the two SQL matrices to pin the new lifecycle (replacing the obsolete atomic-seal assertions) and the certification boundary.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cc76dfd7-732c-428d-8367-e2e3689c343d/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e2225bc-bc04-4a50-896e-24845d9e7b37/ac2-edge-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ca04d7ca-6916-4732-84ca-4cd506d39fd2/ac3-run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c41a5482-bcc3-4be2-b63b-c130878509e9/ac4-base-edge-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d2bb126-afdd-42ea-b084-48cbbec4f777/ac4-head-edge-test-on-base-sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ddbaf98-84e7-459c-9464-906e6a902be7/ac4-head-edge-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2b5dcaa4-1bee-4969-9ce5-63db434b8110/ac4-base-sql-account_deletion_operations.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e39f01ad-eb1b-4966-b521-d1db563eec0d/ac4-base-sql-security_regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ad139d1-4cd9-4b40-992d-0f5f38e6b000/format-check.log"
+        ],
+        "base_sha": "4cc2d69fea8090c64fa57a41a5f3c892e3b382fd",
+        "baseline_failures_observed": [
+          "None on BASE_SHA outside the package objective. With the manifest env alone (XC_PG_URL only) the pre-existing W06-01 live tests in supabase/functions/api/__wf__ read PICKLE_AUDIT_PG_URL and are ignored (12 ignored, as recorded in r3); AC2 was therefore run with the disposable URL exported under both names so ignored == 0."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w08-06/impl-r4",
+        "files_changed": [
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts",
+          "supabase/functions/api/__wf__/account_routes.test.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts",
+          "supabase/functions/api/accountDeletionOperations.ts",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/legal.ts",
+          "supabase/migrations/20260909120000_account_deletion_certified_completion.sql",
+          "supabase/tests/account_deletion_operations.sql",
+          "supabase/tests/security_regression.sql"
+        ],
+        "head_sha": "750da77dace02ebe4c56cbd5b2c0442f9722b34e",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — held serial group `edge-index`; minimal wiring hunk (inherited from r3 9d2ef269) supplying `readOwnerNamespacePage` (owner-scoped, keyset-paged, `.retry(false)`) and the failure-detail logger to `confirmAccountDeletion()` so the shipping route performs the inventory sweep; no other behaviour touched",
+          "supabase/functions/api/__wf__/routesHarness.ts — test harness only (inherited from r3): adds the `/delete-status` + confirm route driver used by account_routes.test.ts and account_deletion_complete.test.ts",
+          "supabase/functions/api/__wf__/account_routes.test.ts — test only (inherited from r3): route assertions for the wire-bounded page reads and no-receipt 503",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts — test only (inherited from r3): fixture gains the `readOwnerNamespacePage` dependency required by the new `DeletionDependencies` shape (+2 lines)"
+        ],
+        "package_id": "W08-06",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts (new; 24 tests, 5 of them live PostgreSQL: namespace registry drift, owner read path after Auth deletion, residue-after-Auth-delete never certified + /delete-status blocked without receipt, clean sweep certifies exactly once after the Auth delete, certification RPC is service-only)",
+          "supabase/tests/account_deletion_operations.sql (revised: retained ready lease across Auth delete, blocked/no-receipt status + owner receipt read + acquire→blocked before certification, stale/forged/cross-owner leases cannot certify, only completion_unverified accepted post-Auth, certify exactly once with completed_at > auth_deleted_at, certified row immutable to later verdicts, residue path on owner 8, legacy manual Apple outcome withheld until certification, free-rating ledger untouched)",
+          "supabase/tests/security_regression.sql (M2: certification refused while identity present with no receipt left behind; service role cannot reach the private lock helper or forge completed_at/phase by direct DML; certify RPC service-only, no anon/authenticated/PUBLIC, definer + empty search_path; private helper invoker + empty search_path + no execute for any role)"
+        ],
+        "residual_risks": [
+          "Design choice (same as the r3 draft): a residue verdict after the Auth delete releases the retained lease permanently; the durable row stays `blocked` with last_error_code='completion_unverified' and no later worker can certify it (acquire answers `blocked` once Auth is absent). Operator remediation of such rows is out of this package's scope.",
+          "Trigger-retained lease still expires on its normal schedule; a worker that survives the Auth delete but returns after lease expiry cannot certify or record residue (stale_lease) — the row remains honestly `blocked` without a receipt, never falsely completed.",
+          "AC2 requires PICKLE_AUDIT_PG_URL in addition to XC_PG_URL for ignored == 0 (pre-existing W06-01 live tests); documented in the acceptance note.",
+          "Artifacts live under the gitignored artifacts/w08-06-r4/ directory in this checkout; uploaded copies are linked in each acceptance object."
+        ],
+        "summary": "W08-06 r4 on devin/pp/w08-06/impl-r4 @ 750da77dace02ebe4c56cbd5b2c0442f9722b34e (base 4cc2d69fea8090c64fa57a41a5f3c892e3b382fd; pushed with `git push origin devin/pp/w08-06/impl-r4`; no PR, no force-push, no production/App Store/Mac touch). DEFECTS ON BASE (file:line): (a) supabase/migrations/20260907001500_account_deletion_operations.sql:427-449 record_account_deletion_auth_absence() sets completed_at/phase='completed' and clears lease_token inside the Auth-delete transaction, so a worker finding residue afterwards gets stale_lease from fail_account_deletion_operation (lock_account_deletion_lease :271-302 rejects auth_deleted_at is not null) and read_account_deletion_status/read_account_deletion_receipt (:464-491) hand out a completion receipt for an unverified deletion; (b) supabase/functions/api/accountDeletionOperations.ts BASE runClaimedDeletion() (~L640-700) deletes the Auth user and returns the trigger-sealed receipt without inventorying any owner namespace; (c) index.ts BASE confirmAccountDeletion() (~L4560-4590) supplied no owner-namespace reader and SDK GETs retried 503s x3; (d) legal.ts §7 (~L118-150) disclosed only the free-rating ledger + webhook audit. RESOLVED (VERIFIED): new migration 20260909120000 — trigger records Auth absence and retains the ready lease (marks auth_absent_without_ready_intent + clears the lease otherwise), service-only certify_account_deletion_completion(uuid,uuid,uuid) is the ONLY writer of completed_at/phase='completed' (definer, empty search_path, advisory-locked, lease-bound, stale_lease otherwise), fail_(…,'completion_unverified') records residue post-Auth and releases the lease so nothing can certify later; Edge worker (r3, unchanged) sweeps every namespace to empty after the Auth delete and certifies only then; /delete-status stays `blocked` with completionReceipt=null until certification and acquire answers `blocked`. AC1 exit 0. AC2 937 passed / 0 failed / 0 ignored (disposable PG exported as XC_PG_URL and PICKLE_AUDIT_PG_URL). AC3 exit 0 (4 histories x 3 matrices). AC4 proof: new Edge test file on BASE exit 1 (0/1, module load), HEAD test + HEAD Edge on BASE SQL 21 passed/3 failed (exactly the three P1 tests), on HEAD 24/24; HEAD SQL matrices fail on BASE migrations (exit 3) and pass on HEAD. pnpm format:check exit 0; git diff --check exit 0. The already-applied 20260907001500 migration is untouched. Edge behaviour is wired through the shipping route (index.ts confirmAccountDeletion → confirmAccountDeletionOperation) and exercised by the live tests."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e042eb61-26ed-453a-ac88-04a8b0db6314/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED on 750da77d. `Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts` then EXIT=0. Local copy artifacts/review-w08-06/ac1-deno-check.log (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fef9d630-ed30-4e73-9cd9-2d85959aea6f/ac2-edge-suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55445/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55445/postgres deno task test",
+            "executed": 937,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED: `ok | 937 passed (31 steps) | 0 failed`, grep -c '... ignored' == 0, EXIT=0. Disposable postgres:16 container (pickle-review-head, port 55445) built by __wf__/xc_pg_up.sh from shim_auth.sql + every HEAD migration incl. 20260909120000. Manifest-literal run with XC_PG_URL only: `925 passed (31 steps) | 0 failed | 12 ignored`, EXIT=0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8038c99c-5b32-4cc9-8211-8588d4804223/ac2-edge-suite-xc-only.log) — the 12 ignored are all pre-existing W06-01 golden tests (w06_01_golden_parity.test.ts, present on BASE) gated on PICKLE_AUDIT_PG_URL; exporting the same disposable URL under that name too removes every ignore. All 24 tests of the new account_deletion_complete.test.ts ran ok inside this suite. Local copy artifacts/review-w08-06/ac2-edge-suite.log.",
+            "passed": 937,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3082ba7b-8302-4037-833a-5478ec7d83d0/ac3-run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC3",
+            "note": "VERIFIED on 750da77d: 4 migration histories (`Security migration history` x4) x 3 matrices = 12 ON_ERROR_STOP psql runs; log shows 4x `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, 4x `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED` (14 scenarios each), 4x `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, 4x `Analysis release policy authority: PASS`; EXIT=0. Local copy artifacts/review-w08-06/ac3-run_rls_tests.log.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/24fe5873-cbaa-4afe-b68a-cea91793f1fa/ac4-head-edge-test.log",
+            "command": "BASE: git worktree add /home/ubuntu/repos/ps-base-review 4cc2d69f; cp HEAD supabase/functions/api/__wf__/account_deletion_complete.test.ts into it (git status: only that untracked file); fresh postgres:16 via xc_pg_up.sh with BASE migrations (port 55446); cd <base>/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55446/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts. HEAD: fresh postgres:16 with HEAD migrations (port 55447); cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55447/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts",
+            "executed": 24,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC4",
+            "note": "PROOF exit 0. BASE run: exit 1, `FAILED | 0 passed | 1 failed` (SyntaxError: BASE accountDeletionOperations.ts has no export ACCOUNT_DELETION_UNREAD_TABLES) https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f371a34-5a46-4831-9818-d13e988ce8f6/ac4-base-edge-test.log. Behavioural isolation (reviewer re-run): HEAD test + HEAD Edge code against the BASE-migrated DB -> exit 1, `FAILED | 21 passed | 3 failed`, failing exactly: 'live PG: residue after the Auth delete never yields a completion receipt…', 'live PG: a clean post-Auth sweep certifies completion exactly once…', 'live PG: certification is a hardened service-only RPC…' https://la-hacks-rttothemoon.devinenterprise.com/attachments/d34d68f0-ddb4-4c1a-9d3e-e37d9554f3f0/ac4-head-test-on-base-sql.log. Changed SQL matrices on BASE migrations: account_deletion_operations.sql exit 3 at :137 ('all twelve service deletion RPCs are present') https://la-hacks-rttothemoon.devinenterprise.com/attachments/7cea6870-e42c-4500-a1ba-eae0496964d1/ac4-base-sql-account_deletion_operations.log; security_regression.sql exit 3 at :7308 ('function public.certify_account_deletion_completion(uuid, uuid, uuid) does not exist') https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ec9022d-6286-4a88-acf1-3648549e5069/ac4-base-sql-security_regression.log. HEAD run: exit 0, `ok | 24 passed | 0 failed`, 0 ignored (HEAD SQL matrices pass on HEAD via AC3). Base worktree removed afterwards; nothing committed to BASE; all disposable containers removed.",
+            "passed": 24,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e042eb61-26ed-453a-ac88-04a8b0db6314/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fef9d630-ed30-4e73-9cd9-2d85959aea6f/ac2-edge-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8038c99c-5b32-4cc9-8211-8588d4804223/ac2-edge-suite-xc-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3082ba7b-8302-4037-833a-5478ec7d83d0/ac3-run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f371a34-5a46-4831-9818-d13e988ce8f6/ac4-base-edge-test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d34d68f0-ddb4-4c1a-9d3e-e37d9554f3f0/ac4-head-test-on-base-sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7cea6870-e42c-4500-a1ba-eae0496964d1/ac4-base-sql-account_deletion_operations.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ec9022d-6286-4a88-acf1-3648549e5069/ac4-base-sql-security_regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/24fe5873-cbaa-4afe-b68a-cea91793f1fa/ac4-head-edge-test.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AC2 manifest-literal command (XC_PG_URL only) leaves 12 PRE-EXISTING W06-01 golden tests ignored (`925 passed | 0 failed | 12 ignored`, artifacts/review-w08-06/ac2-edge-suite-xc-only.log): w06_01_golden_parity.test.ts and 8 other BASE-era files read PICKLE_AUDIT_PG_URL (the env name docs/devin/TEST_MATRIX.md documents). ignored==0 is reached by exporting the same disposable URL under both names; the manifest command or the pre-existing tests should be harmonised on one env var in a later package.",
+          "Design note (also disclosed by the implementer): fail_account_deletion_operation(...,'completion_unverified') after the Auth delete releases the retained lease permanently; the row stays honestly `blocked` (no receipt) and claim_account_deletion_work answers `blocked`, so nothing can ever certify it. Operator remediation of such rows is outside this package.",
+          "The BASE run of the new Edge test file fails at module load (BASE accountDeletionOperations.ts lacks the new exports). Behavioural isolation re-run by the reviewer: HEAD test + HEAD Edge code against a BASE-migrated DB -> exit 1, `21 passed | 3 failed`, the 3 failures being exactly the live residue-never-certified, clean-sweep-certifies-once and certification-RPC-hardening tests; HEAD SQL matrices on BASE migrations exit 3 (account_deletion_operations.sql:137, security_regression.sql:7308)."
+        ],
+        "package_id": "W08-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "750da77dace02ebe4c56cbd5b2c0442f9722b34e",
+        "scope_violation": false,
+        "summary": "APPROVE W08-06 candidate devin/pp/w08-06/impl-r4 @ 750da77dace02ebe4c56cbd5b2c0442f9722b34e (base 4cc2d69f). SCOPE (VERIFIED, `git diff --stat`: 10 files, +2435/-40): accountDeletionOperations.ts, legal.ts, __wf__/account_deletion_complete.test.ts, migrations/20260909120000_account_deletion_certified_completion.sql, tests/account_deletion_operations.sql, tests/security_regression.sql are write_paths; index.ts (22 changed lines: supplies owner-scoped keyset-paged `readOwnerNamespacePage` with `.retry(false)` + 10s abort matching the file's existing timeouts, and the failure-detail logger) is under `edge-index`, which this package holds — justified minimal wiring that makes the objective shipped behaviour (confirmAccountDeletion -> confirmAccountDeletionOperation runs the sweep; pinned by the route test); routesHarness.ts / account_routes.test.ts / account_deletion_operations.test.ts are test-only files under no serial group. supabase/tests is under `sql`, held. scope_violation=false. INVARIANTS (VERIFIED by diff + live matrices): applied migration 20260907001500 untouched; new migration timestamp 20260909120000 is later than every existing file; grants only `revoke all … from public, anon, authenticated, service_role` + `grant execute … to service_role` on certify/fail RPCs, private lock helper has no execute for any role, definer + `search_path=''` (asserted live in security_regression M2 and account_deletion_operations.sql); trigger now records auth_deleted_at and retains the ready lease instead of sealing completed_at; certify_account_deletion_completion is the only writer of completed_at/phase='completed', under the per-owner advisory lock, lease-bound, stale_lease otherwise; residue -> fail(...,'completion_unverified') leaves the row blocked with completionReceipt=null and the Edge answers a generic 503 (test asserts no upstream detail / 'deleted' / 'completionReceipt' in body); DeletionFailureDetail carries only stage, table names, counts, error code and HTTP status — no row contents or tokens; free_rating_ledger asserted byte-for-byte unchanged across cascade/certification/residue; no session check weakened. Test integrity: no test removed or ignored; the 3 obsolete SQL assertions ('atomically seals durable receipt' etc.) were deliberately replaced by stricter blocked/no-receipt/retained-lease assertions describing the new lifecycle; added lines contain no `|| true`, `@ts-ignore`, `any`, `eslint-disable`, `.only`, `ignore: true` or sanitizer opt-outs; no existing comment lines were removed or modified (all 40 removed lines are code, obsolete assertion text or replaced legal copy). Copy: legal.ts additions (one-way identity hash + scored count, 7-day deletion-operation record, RevenueCat transfer reconciliation record, offline allocation ledger, 'free ratings already used are not restored') match the SQL (retain_until = created_at + 7 days, status_expires_at + 24 hours, sha256 identity hashes) and docs/APP_STORE_SUBMISSION.md's data table; no Android/Google Play/guest/Live Court/DUPR/competitor/accuracy-%/superlative language. ACCEPTANCE (all reviewer re-executed): AC1 exit 0; AC2 937 passed / 0 failed / 0 ignored, exit 0 (disposable postgres:16; XC_PG_URL alone leaves 12 pre-existing W06-01 tests ignored because they read PICKLE_AUDIT_PG_URL, so the same URL was exported under both names — noted non-blocking); AC3 exit 0, 4 histories x 3 matrices = 12 clean runs; AC4 proof exit 0 — new test file on BASE exit 1 (0/1, module load), HEAD test + HEAD Edge on BASE SQL 21 passed / 3 failed (exactly the three P1 live tests), HEAD SQL matrices on BASE migrations exit 3, HEAD run 24 passed / 0 failed / 0 ignored. Zero blocking issues.",
+        "verdict": "approve"
+      },
+      "round": 4
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8bffb408-4dd1-4336-983c-5e563af3f8db/attack_sql_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e95f0d14-7c61-40e9-aaee-575319b59535/attack_deno_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2247136d-a0d7-4d12-ace6-65e86c2dd729/ac2_both_env.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12114175-771c-4abe-81b1-2e1cdc28eb4d/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6438aae-782a-4864-be11-54a73cacbf35/ac3.log"
+        ],
+        "attack_branch": "devin/pp/w08-06/attack-4c1e3256",
+        "attack_branch_sha": "977e2bd3922d289276f7f5c030b5f1c3f8471e34",
+        "attacked_sha": "4c1e3256da5d18197a0499350b3c666153665a31",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "AC4 / implementer BREAK 2 claim: 'the expired retained lease is re-acquired ... and certification happens exactly once'. For that to hold on a supported path, some shipping surface (a service worker route, pg_cron job, or a confirm/status path that tolerates the deleted session for an auth_deleted_at row) must invoke the re-acquisition. As shipped, a clean deletion whose worker died after deleteUser is permanently uncertifiable and the client never receives a completion receipt (fail-closed, no receipt is issued for unswept residue — so this is P1 incorrect behaviour on a supported path, not a P0 false receipt).",
+            "observed": "VERIFIED (candidate 4c1e3256): D1 — index.ts contains neither 'resumeConfirmedAccountDeletionOperation' nor 'claim_account_deletion_work'; the only shipping caller of the recovery claim is the owner's own POST /v1/me/delete-confirm retry, and /delete-status is documented and implemented as 'never resumes work'. D2 — driving confirmAccountDeletionOperation with the SHIPPING verifyLiveSession (owner-session `select public.is_api_session_active()`), a lost deleteUser response leaves {phase:'auth_delete_intent', auth_deleted_at set, completed_at null, last_error_code:'auth_delete_unavailable'}; the app's retried confirm returns {outcome:'rejected', code:'session_invalid'} (→ HTTP 401 'The session is no longer valid' + auth-cache eviction), claim_account_deletion_work is called 0 times, /delete-status answers {state:'blocked', completionReceipt:null}. D3 — after the 24 h window the row is still uncertified, status 404/blocked, 0 certify calls. The candidate's own recovery tests pass only because they stub verifyLiveSession: async () => true, which the shipping route does not do (it re-runs is_api_session_active() as the deleting user, whose auth.sessions row was cascaded away by the Auth delete).",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w0806_post_auth_reachability.test.ts  (exit 1: D1 FAILED, D2 FAILED, D3 ok). Also SQL S1 in supabase/tests/attack_w0806_post_auth_recovery.sql: is_api_session_active() = false for the deleting session after the Auth delete (auth.sessions cascades from auth.users).",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w0806_post_auth_reachability.test.ts (D1, D2, D3) + supabase/tests/attack_w0806_post_auth_recovery.sql (S1)",
+            "title": "Post-Auth recovery (migration 20260909180000 claim_account_deletion_work / resumeConfirmedAccountDeletionOperation) has NO caller on any shipping Edge surface: after a worker death or lost deleteUser response the deletion can never certify, and the user is told 'in_progress'/'blocked' for an account that is already gone"
+          },
+          {
+            "expected": "A state nothing can ever certify should read 'blocked' (no receipt), matching the claim RPC's verdict. Severity P3 because Supabase Auth assigns a fresh uuid on re-sign-up, so same-uuid recreation is not a supported production path; no receipt is ever issued (fail-closed).",
+            "observed": "VERIFIED: read_account_deletion_status → {\"state\":\"in_progress\",\"completionReceipt\":null,\"appleAuthorizationRevocation\":null} while, in the same state, claim_account_deletion_work → 'blocked' and certify_account_deletion_completion → 'stale_lease'. account_deletion_view's in_progress/blocked decision (20260909180000) checks phase/last_error_code/status_expires_at/attempts/lease but not auth.users presence, which the claim RPC does check.",
+            "repro": "docker exec -i pickle-xc-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < supabase/tests/attack_w0806_post_auth_recovery.sql  (exit 3; FAIL line 'S2 /delete-status is honest for a recreated identity')",
+            "severity": "P3",
+            "test_file": "supabase/tests/attack_w0806_post_auth_recovery.sql (S2)",
+            "title": "/delete-status reports 'in_progress' for an orphaned post-Auth phase whose auth identity has been recreated under the same uuid, although claim_account_deletion_work permanently answers 'blocked' and certification answers 'stale_lease' for it"
+          }
+        ],
+        "package_id": "W08-06",
+        "summary": "W08-06 adversary on candidate 4c1e3256 (branch devin/pp/w08-06/impl-r5). Attack branch devin/pp/w08-06/attack-4c1e3256 @ 977e2bd3922d289276f7f5c030b5f1c3f8471e34 adds ONLY two files (git diff --stat 4c1e3256 HEAD: 2 files, 841 insertions; no candidate production code, candidate tests or migrations touched; no PR opened; nothing deployed; production project untouched; Mac runner untouched).\n\nCANDIDATE BASELINE (VERIFIED, Linux, disposable PostgreSQL 127.0.0.1:55433 via __wf__/xc_pg_up.sh): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1.log). AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=... deno task test` = 933 passed / 0 failed / 12 ignored exit 0 (single-env; the 12 are PICKLE_AUDIT_PG_URL-gated W06-01 golden tests) and with both XC_PG_URL+PICKLE_AUDIT_PG_URL = 945 passed (31 steps) / 0 failed / 0 ignored, 1m50s (ac2_both_env.log). AC3 `./supabase/tests/run_rls_tests.sh` exit 0 (ac3.log).\n\nATTACKS (11 executable probes, 2 files):\nSQL matrix supabase/tests/attack_w0806_post_auth_recovery.sql — run `docker exec -i pickle-xc-pg psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f - < supabase/tests/attack_w0806_post_auth_recovery.sql` → 57 probes: 56 ok / 1 FAIL, exit 3 (attack_sql_candidate.log):\n S1 process death after the Auth delete (retained lease expires; is_api_session_active()=false for the deleting session; re-acquisition only via service claim; exact owner/operation binding; certifies once) — held (except reachability, see BREAK 1).\n S2 corrupt/partial state — recreated identity under the same uuid: claim blocked, certify stale_lease (held); status honesty FAILED (BREAK 2, P3).\n S3 boundary values — attempts exactly 7/8, status window at its edge, lease clamped to status_expires_at — held.\n S4 replay / exact-once — a second certify with the consumed lease → stale_lease; double claim → busy; the receipt is issued exactly once — held.\n S5 cross-owner / cross-operation binding — forged owner, forged operation, forged/stale/expired lease tokens all refused — held.\n S6 unauthorised roles — claim_account_deletion_work / certify_account_deletion_completion / read_account_deletion_receipt not executable by anon or authenticated (42501), executable by service_role; owner namespace reads stay RLS-scoped — allowed AND denied paths held.\n S7 lost Auth-delete response — fail(auth_delete_unavailable) against the retained lease → released; auth_deleted_at retained; no receipt; re-acquire after verdict — held.\n S8 genuine concurrency (dblink, two sessions racing claim + certify on an expired post-Auth lease) — exactly one claimed, the other busy/stale; exactly one certification — held.\nDeno probes supabase/functions/api/__wf__/attack_w0806_post_auth_reachability.test.ts — run `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w0806_post_auth_reachability.test.ts` → 1 passed / 2 failed, exit 1 (attack_deno_candidate.log):\n D1 static wiring: shipping index.ts has no caller of the recovery path — FAILED (BREAK 1).\n D2 live PG, shipping-faithful verifyLiveSession (owner session runs is_api_session_active()): retried confirm → rejected/session_invalid, 0 recovery claims, status blocked, row uncertified — FAILED (BREAK 1).\n D3 live PG, orphaned phase after the 24 h window: blocked/404, no receipt, 0 certify calls — passed (fail-closed; documents the permanent orphan).\n\nNOT BROKEN / HELD (VERIFIED): residue after the Auth delete never yields a receipt; free-rating ledger untouched by every path exercised (candidate suite + S-matrix); service-only RPCs denied to anon/authenticated; concurrency exact-once; lease/attempt/window boundaries; 429 pacing bounded (candidate tests; INFERRED from inventoryRetryDelayMs: NaN/negative/undefined Retry-After → 1 s default, cap 2 s).\n\nOBSERVATIONS (INFERRED, not counted as breaks): (a) the shipping readOwnerNamespacePage (index.ts ~4583) never populates InventoryPage.retryAfterMs, so the 'relayed Retry-After' path is dead in production and every 429 is paced at the 1 s default — behaviour stays bounded, so not a defect. (b) The candidate's post-Auth recovery tests stub verifyLiveSession to true; they therefore do not exercise the shipping route's live-session recheck, which is exactly where BREAK 1 lives.\n\nAC4 note: the attack tests were not run on BASE 4cc2d69f — they import candidate-only symbols/RPCs (claim_account_deletion_work, resumeConfirmedAccountDeletionOperation) and would fail on module load / missing function, which proves nothing about behaviour; AC4 is a reviewer duty on the candidate's own new tests, not on these attack files.\n\nUNKNOWN: whether an out-of-repo service worker (cron/scheduler) is intended to call claim_account_deletion_work in production; nothing in supabase/ (functions, migrations incl. pg_cron jobs) or docs references one, so BREAK 1 stands as a supported-path defect unless the coordinator confirms such a worker exists."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7ed007a-061e-4256-bab3-4ccdb6b99684/ac1.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED on HEAD 4c1e3256 (repo-local copy: artifacts/w08-06/head/ac1.log). `Check file:///…/supabase/functions/api/index.ts`, exit 0, frozen lockfile untouched (supabase-js pinned at 2.112.4).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f8f4d7b-3e48-4cd5-8c09-758b6a1bcfed/ac2_audit_url.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 945,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED on HEAD 4c1e3256: `ok | 945 passed (31 steps) | 0 failed` with ZERO ignored — the disposable postgres:16 (pickle-xc-pg, all migrations through 20260909180000 applied via __wf__/xc_pg_up.sh) was passed as BOTH XC_PG_URL and PICKLE_AUDIT_PG_URL because the 12 W06-01 golden SQL-plane tests self-ignore without PICKLE_AUDIT_PG_URL. The literal manifest form with only XC_PG_URL was also run on HEAD: `ok | 933 passed (31 steps) | 0 failed | 12 ignored` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a55f664-e3e1-42ee-8349-0e35b0839d9f/ac2.log; the 12 ignored are exactly the W06-01 golden tests gated on PICKLE_AUDIT_PG_URL, same 12 as the BASE_SHA baseline 901 passed / 0 failed / 12 ignored, artifacts/w08-06/base/ac2.log). Deno on PATH is 2.9.6 (`deno task test` = `deno test -A --no-check --config deno.json .`).",
+            "passed": 945,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2ed34c25-189d-4652-8164-7f22b4c9afb1/ac3.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC3",
+            "note": "VERIFIED on HEAD 4c1e3256 (Docker postgres:16). All four migration histories — fresh, production_20260906, upstream_20260906, ordered_20260907 — each print `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `Analysis release policy authority: PASS`; the executed/passed count is the 4 histories (each history runs the whole psql assertion matrix with ON_ERROR_STOP; any failed assertion aborts with a non-zero exit).",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/166201b3-1913-490f-a2c9-8c54b199a543/ac4_edge.log",
+            "command": "BASE: git worktree at 4cc2d69f, copy ONLY supabase/functions/api/__wf__/account_deletion_complete.test.ts and supabase/tests/account_deletion_operations.sql; cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts ; docker exec pickle-xc-pg-base psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/adops.sql. HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts ; psql -v ON_ERROR_STOP=1 -f supabase/tests/account_deletion_operations.sql against a DB migrated through 20260909180000",
+            "executed": 32,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC4",
+            "note": "PROOF exit 0: new tests FAIL on BASE_SHA and PASS on HEAD. BASE 4cc2d69f (pickle-xc-pg-base, base migrations only): Edge file exit 1, `FAILED | 0 passed | 1 failed` — module load error `does not provide an export named 'ACCOUNT_DELETION_UNREAD_TABLES'` (https://la-hacks-rttothemoon.devinenterprise.com/attachments/71a992c8-723b-4d10-a2e3-9c4b2aece0c7/ac4_edge.log); SQL matrix exit 3 at the certification-RPC presence assertion (base has no certify_account_deletion_completion) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8e4ecd24-7f64-41d1-833e-b552e77e19a3/ac4_sql.log). ADDITIONALLY red on the r4 candidate content (454fbff2 = r4 work on BASE, DB migrated through 20260909120000): Edge exit 1 `0 passed | 1 failed` (missing export INVENTORY_RETRY_AFTER_DEFAULT_MS) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d911418-104a-404b-a517-6dfc11b7da27/ac4_edge_r4.log); SQL exit 3 with the BEHAVIOURAL failure `W08 Auth transaction must see the cascade, the Auth absence and the retained lease but no receipt` — the live post-Auth lease read `blocked` instead of `in_progress` (adversary break #3) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf4177d1-408b-46e3-81ad-eaaf4a19d8cc/ac4_sql_r4.log). HEAD 4c1e3256: Edge `ok | 32 passed | 0 failed` exit 0; SQL `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` exit 0 on a DB upgraded 20260909120000 → 20260909180000 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/9fce7dbe-4bdf-4728-a09c-88e81731b9c2/ac4_sql.log) and in all four AC3 histories. Observation (not a defect of this package): running account_deletion_operations.sql directly against the SHARED xc DB after the full Edge suite fails at the pre-existing global assertion `count(*) from public.free_rating_ledger where scored_count = 2 = 1` (line 397, from 5e2e0052 on BASE) because the Edge suites leave 22 such rows — the matrix is designed for the fresh DBs run_rls_tests.sh provisions, where it passes.",
+            "passed": 32,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA 4cc2d69f with the sound r4 commits re-applied (4a5341aa, 35024414, 454fbff2), then two round-5 commits: a60f978e (regression tests: Edge account_deletion_complete.test.ts + SQL account_deletion_operations.sql — red on BASE and on the r4 candidate) and 4c1e3256 (fix). Fix: (1) accountDeletionOperations.ts — the post-Auth stage (receipt read → paged owner sweep → certification) is extracted into certifyVerifiedSweep and retries a transient DeletionStorageUnavailable in-process up to POST_AUTH_VERIFY_ATTEMPTS=3 under the same lease; OwnerNamespaceResidue is never retried there and never certifies; a certification whose response was lost is found by the next receipt read, never repeated. A claim with authDeleted=true (parseLease accepts the flag only when Apple and RevenueCat checkpoints are complete; absent flag → false for pre-r5 claims) skips preflight and every external step — Apple revocation, RevenueCat deletion, checkpoints, Auth-delete intent and deleteUser are never repeated — and runs only the verified sweep. verifyOwnerNamespacesEmpty waits inventoryRetryDelayMs before re-reading a 429 page: the relayed retryAfterMs bounded by INVENTORY_RETRY_AFTER_MAX_MS=2000, default INVENTORY_RETRY_AFTER_DEFAULT_MS=1000 when absent/invalid; other page errors retry at once. InventoryPage/IncompleteInventory carry a typed optional retryAfterMs. (2) Additive migration 20260909180000_account_deletion_post_auth_recovery.sql — api_private.acquire_account_deletion_lease re-acquires an operation whose Auth identity is absent only when auth_deleted_at is set, the identity has not been recreated, phase = auth_delete_intent, Apple/RevenueCat/external/intent checkpoints are durable, no live lease, status window open, attempts < 8, exact owner+operation binding, not completed; the claim carries authDeleted=true and a fresh lease. account_deletion_view reports in_progress while a live post-Auth lease is held (or budget remains without a verdict) and blocked only after a recorded verdict / exhausted budget. fail_account_deletion_operation routes completion_unverified and auth_delete_unavailable through the private certification lock so a post-Auth verdict is recorded against the retained lease and the row stays re-acquirable. Certification stays service-only; the private lock stays revoked from PUBLIC/anon/authenticated/service_role; free_rating_ledger untouched. legal.ts and security_regression.sql needed no round-5 change (retention disclosure parity and service-only certification were verified by the existing pins).",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7ed007a-061e-4256-bab3-4ccdb6b99684/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a55f664-e3e1-42ee-8349-0e35b0839d9f/ac2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f8f4d7b-3e48-4cd5-8c09-758b6a1bcfed/ac2_audit_url.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2ed34c25-189d-4652-8164-7f22b4c9afb1/ac3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/166201b3-1913-490f-a2c9-8c54b199a543/ac4_edge.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9fce7dbe-4bdf-4728-a09c-88e81731b9c2/ac4_sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/71a992c8-723b-4d10-a2e3-9c4b2aece0c7/ac4_edge.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8e4ecd24-7f64-41d1-833e-b552e77e19a3/ac4_sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d911418-104a-404b-a517-6dfc11b7da27/ac4_edge_r4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf4177d1-408b-46e3-81ad-eaaf4a19d8cc/ac4_sql_r4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7cea838-441e-4540-ae3b-b1a3df167ce8/format_check.log"
+        ],
+        "base_sha": "4cc2d69fea8090c64fa57a41a5f3c892e3b382fd",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w08-06/impl-r5",
+        "files_changed": [
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts",
+          "supabase/functions/api/accountDeletionOperations.ts",
+          "supabase/migrations/20260909180000_account_deletion_post_auth_recovery.sql",
+          "supabase/tests/account_deletion_operations.sql",
+          "supabase/functions/api/legal.ts",
+          "supabase/migrations/20260909120000_account_deletion_certified_completion.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts",
+          "supabase/functions/api/__wf__/account_routes.test.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts"
+        ],
+        "head_sha": "4c1e3256da5d18197a0499350b3c666153665a31",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — carried from r4 (454fbff2, serial group edge-index which W08-06 holds): the smallest wiring hunk that hands the shipping worker its owner-scoped page reader (`.retry(false)`, RLS-authenticated client) and the certification dependencies; no round-5 edit (r5 adds no new hunk to index.ts).",
+          "supabase/functions/api/__wf__/routesHarness.ts — carried from r4: the shared fake-Supabase harness now serves paged owner-namespace selects under the grant model so the existing route suites keep exercising the REAL deletion sweep (no test weakened; +79/-2 additive).",
+          "supabase/functions/api/__wf__/account_routes.test.ts — carried from r4: the fake table routing needed once the shipping worker pages EVERY owner namespace (existing assertions kept, none removed).",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts — carried from r4: 2 additive lines (the new namespaces in the registry pin)."
+        ],
+        "package_id": "W08-06",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts (32 tests on HEAD; round 5 adds: transient post-Auth receipt-read/certification failure retried in-process and certified exactly once; worker death after the Auth delete → expired retained lease re-acquired under the exact owner/operation binding, nothing external repeated, certified once; lost deleteUser response recovered the same way; /delete-status in_progress while a live post-Auth lease is held, blocked only after a recorded verdict, completed with the receipt once; residue and unreadable namespace never certify, later clean sweep certifies exactly once; 429 + Retry-After honoured (bounded, default pacing when absent) and a paced-then-empty namespace reads empty; forged/stale/expired/cross-owner/cross-operation lease tokens rejected by certification via direct probes that do not pollute the worker call log; free-rating ledger byte-identical across the lifecycle)",
+          "supabase/tests/account_deletion_operations.sql (SQL matrix: live post-Auth lease → status in_progress and claim busy; residue verdict → blocked without receipt; later post-Auth re-acquisition; stale/forged lease rejected; exact owner/operation binding; lost Auth-delete response recovery; attempt exhaustion → blocked; recreated Auth identity → blocked; free-rating ledger unchanged)"
+        ],
+        "residual_risks": [
+          "The shipping page reader in index.ts returns the supabase-js PostgrestBuilder result, which does not expose response headers, so a real PostgREST 429 arrives WITHOUT retryAfterMs and the sweep uses the bounded default pacing (INVENTORY_RETRY_AFTER_DEFAULT_MS = 1 s, max 2 s if a reader relays a header). INFERRED from index.ts:4583-4599 + the SDK builder shape; the Retry-After relay path is exercised by the unit tests through the typed InventoryPage.retryAfterMs.",
+          "Post-Auth re-acquisition is bounded by the existing attempt budget (attempts < 8) and the status window (status_expires_at); a clean deletion whose sweep keeps failing transiently past 8 attempts or past the status window reads `blocked` without a receipt (fail closed, no receipt is ever fabricated) and needs a fresh confirmation path or operator attention — same budget semantics as the pre-Auth phases.",
+          "The Edge red-on-BASE proof for the new test file is a module-load failure (the file imports exports that do not exist on BASE/r4); the behavioural red is carried by the SQL matrix on the r4 candidate (live post-Auth lease read blocked) and by the r4→r5 adversary test scenarios the new tests reproduce (transient post-Auth failure, worker death, lost deleteUser response, 429 pacing) — VERIFIED green on HEAD, not separately run red on r4 at the Edge layer because the file cannot load there.",
+          "AC2 with ignored == 0 requires PICKLE_AUDIT_PG_URL in addition to XC_PG_URL (both pointing at the same disposable DB); with only XC_PG_URL the 12 W06-01 golden SQL-plane tests self-ignore (documented in w06_01_golden_parity.test.ts header), identical to the BASE baseline."
+        ],
+        "summary": "W08-06 round 5 (branch devin/pp/w08-06/impl-r5, HEAD 4c1e3256da5d18197a0499350b3c666153665a31 on BASE 4cc2d69f). Defects found on the r4 candidate and resolved (all three adversary breaks + the P2): BREAK 1 — accountDeletionOperations.ts runClaimedDeletion (r4 lines ~709-728): one throw from read_account_deletion_receipt / certify after deleteUser → fail_account_deletion_operation('completion_unverified') released the lease and 20260909120000 acquire_account_deletion_lease returned 'blocked' for any row with auth_deleted_at set → a clean deletion was uncertifiable forever. Now: in-process retry under the same lease (certifyVerifiedSweep) and, after a recorded verdict, re-acquisition by the service worker (migration 20260909180000). BREAK 2 — worker death / lost deleteUser response left a retained lease that expired with nothing able to re-acquire (same acquire branch). Now: the expired retained lease is re-acquired under the exact owner/operation binding, the claim carries authDeleted=true so nothing external is repeated, and certification happens exactly once (pinned: 1 worker certify call across the whole lifecycle; direct forged/stale/cross-owner/cross-operation certification probes → stale_lease). BREAK 3 — account_deletion_view (20260909120000 lines ~40-60) returned 'blocked' whenever auth_deleted_at was set and completed_at null, even with a live lease → now 'in_progress' while the sweep is live / budget remains without a verdict, 'blocked' only after a recorded verdict or exhausted budget, 'completed' with the receipt once certified. P2 — verifyOwnerNamespacesEmpty retried a 429 page INVENTORY_READ_ATTEMPTS times at 0 ms; now the relayed Retry-After (bounded to 2 s, default 1 s when absent) paces the re-read, a paced-then-empty namespace reads `empty`, other page errors still retry at once. Residue and unreadable inventory still never certify (fail closed); a later clean sweep certifies exactly once. Ordering unchanged: Apple revocation → RevenueCat → Auth delete → verified sweep → service-only certification. VERIFIED: AC1 exit 0; AC2 945 passed / 0 failed / 0 ignored (exit 0; literal single-env form 933 passed / 0 failed / 12 ignored, the same 12 PICKLE_AUDIT_PG_URL-gated W06-01 golden tests as the BASE baseline); AC3 exit 0, all four migration histories pass; AC4 proof exit 0 — new Edge test file 0 passed/1 failed on BASE (module load) and on the r4 candidate, new SQL matrix exit 3 on BASE and BEHAVIOURALLY red on the r4 candidate (live post-Auth lease read blocked), 32/32 Edge + SQL ALL CASES PASSED on HEAD. pnpm format:check exit 0; git diff --check exit 0. No PR opened, nothing deployed, no production project touched, no test weakened/skipped/reordered, no applied migration edited (new file 20260909180000 is later than every existing migration), supabase-js pin 2.112.4 preserved. Two round-5 commits: a60f978e (tests) then 4c1e3256 (fix); pushed with `git push origin HEAD:devin/pp/w08-06/impl-r5`."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/68f75767-627f-47ba-8afa-f82d986bb7bd/ac1.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED on 4c1e3256 (repo copy artifacts/review-w08-06/head/ac1.log): `Check file:///…/supabase/functions/api/index.ts`, exit 0; frozen lockfile untouched. Deno 2.5.6 prints warnings that `lock`/`nodeModulesDir` belong in a workspace-root deno.json — warnings only.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18fb6f6c-10b1-4fe4-9465-41394c6d4192/ac2_both.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 945,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED on 4c1e3256 against a fresh disposable postgres:16 (container rev-xc-head via __wf__/xc_pg_up.sh, all migrations through 20260909180000): `ok | 945 passed (31 steps) | 0 failed`, grep -c ' ... ignored' = 0 (repo copy artifacts/review-w08-06/head/ac2_both.log). Literal manifest form with XC_PG_URL only: exit 0, `933 passed (31 steps) | 0 failed | 12 ignored` — the 12 are the W06-01 golden tests gated on PICKLE_AUDIT_PG_URL (artifacts/review-w08-06/head/ac2_literal.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/0baec575-2481-4c82-a88f-8e1673427fc8/ac2_literal.log). account_deletion_complete.test.ts ran 32 tests inside the suite.",
+            "passed": 945,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/817c51e0-4b0b-4969-9eeb-f8706197f056/ac3.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC3",
+            "note": "VERIFIED on 4c1e3256 (Docker postgres:16; repo copy artifacts/review-w08-06/head/ac3.log). Four migration histories — fresh, production_20260906, upstream_20260906, ordered_20260907 — each print `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `Analysis release policy authority: PASS`; exit 0. Counts are the 4 histories (each is a psql ON_ERROR_STOP assertion matrix).",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/233d8c1b-e5e7-4fcf-8025-359419360d8c/ac4_edge.log",
+            "command": "BASE: git worktree at 4cc2d69f (/home/ubuntu/repos/pickle-base), copied ONLY supabase/functions/api/__wf__/account_deletion_complete.test.ts and supabase/tests/account_deletion_operations.sql from 4c1e3256; fresh postgres:16 with BASE migrations only (rev-xc-base:55434); `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json account_deletion_complete.test.ts`; `docker exec rev-xc-base psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/adops.sql`. HEAD: fresh postgres:16 through 20260909180000 (rev-xc-head:55433 / rev-xc-head-sql:55435); same deno test command with XC_PG_URL=…:55433; same psql command on rev-xc-head-sql.",
+            "executed": 32,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC4",
+            "note": "PROOF exit 0: new tests FAIL on BASE and PASS on HEAD. BASE 4cc2d69f — Edge: exit 1, `FAILED | 0 passed | 1 failed` (uncaught module-load error at account_deletion_complete.test.ts:40, missing exports on BASE) https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6374c9f-ee6e-450f-bf55-b0c26f992b05/ac4_edge.log (repo artifacts/review-w08-06/base/ac4_edge.log); SQL: exit 3 at 'all twelve service deletion RPCs are present for ACL inspection' (BASE has no certify_account_deletion_completion) https://la-hacks-rttothemoon.devinenterprise.com/attachments/4364bc64-1c2a-424a-a595-9e47710549e0/ac4_sql.log (repo artifacts/review-w08-06/base/ac4_sql.log). HEAD 4c1e3256 — Edge: exit 0, `ok | 32 passed | 0 failed` with the live-PG section active (repo artifacts/review-w08-06/head/ac4_edge.log); SQL: exit 0, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` https://la-hacks-rttothemoon.devinenterprise.com/attachments/ba35094a-7ca0-4376-8d96-bb181a54e5f8/ac4_sql.log (repo artifacts/review-w08-06/head/ac4_sql.log), and in all four AC3 histories. Criterion behaviours pinned on HEAD: residue after Auth delete → completion_unverified recorded, no receipt, status blocked; /delete-status in_progress while live post-Auth lease, blocked after verdict, completed only with receipt; clean sweep certifies exactly once (1 certify call; forged/stale/cross-owner/cross-operation leases → stale_lease); free_rating_ledger byte-identical.",
+            "passed": 32,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/68f75767-627f-47ba-8afa-f82d986bb7bd/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18fb6f6c-10b1-4fe4-9465-41394c6d4192/ac2_both.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0baec575-2481-4c82-a88f-8e1673427fc8/ac2_literal.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/817c51e0-4b0b-4969-9eeb-f8706197f056/ac3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/233d8c1b-e5e7-4fcf-8025-359419360d8c/ac4_edge.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ba35094a-7ca0-4376-8d96-bb181a54e5f8/ac4_sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6374c9f-ee6e-450f-bf55-b0c26f992b05/ac4_edge.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4364bc64-1c2a-424a-a595-9e47710549e0/ac4_sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/687dd3b2-745a-4dde-b0fb-8e4ebc0da402/format_check.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AC2 literal manifest form (XC_PG_URL only) yields `ok | 933 passed (31 steps) | 0 failed | 12 ignored` (artifacts/review-w08-06/head/ac2_literal.log): the 12 ignored are exactly the W06-01 golden SQL-plane tests self-gated on PICKLE_AUDIT_PG_URL (identical on BASE per implementer). ignored == 0 is reached only by also pointing PICKLE_AUDIT_PG_URL at the same disposable DB (945 passed / 0 failed / 0 ignored). The manifest lists no documented_skips for AC2; I treated the both-env run as the intended 'disposable postgres so no live-DB test is ignored' form. Recommend the manifest command spell out both env vars.",
+          "AC4 red-on-BASE is structural, not behavioural: the Edge file fails at module load (BASE has no export ACCOUNT_DELETION_UNREAD_TABLES) and the SQL matrix fails at the certify_account_deletion_completion presence assertion. The behavioural red (live post-Auth lease read `blocked`) was claimed by the implementer on the r4 candidate; I did not re-run it against r4 (INFERRED from the implementer's log, not VERIFIED by me).",
+          "Post-Auth recovery (migration 20260909180000 acquire branch) is driven only by a retried POST /v1/me/delete-confirm, which still requires authenticate() to accept the deleting user's bearer; after the ~10 min auth cache window a deleted Auth user cannot re-authenticate, so a sweep that keeps failing transiently past that window stays `blocked` without a receipt (fail closed, never fabricated) until the status window closes. /delete-status uses the status capability and stays honest regardless. Pre-existing design limit, not introduced here.",
+          "supabase/tests/account_deletion_operations.sql deliberately replaces two BASE assertions ('Auth transaction must see both cascade and completion receipt', 'real Auth deletion atomically seals durable receipt') with the new contract (Auth delete records auth_deleted_at, receipt only after certified sweep) — this is the behaviour the objective requires (certify only after every namespace pages to empty), so it is a deliberate pin change, not a weakening; noting it for the judge."
+        ],
+        "package_id": "W08-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4c1e3256da5d18197a0499350b3c666153665a31",
+        "scope_violation": false,
+        "summary": "APPROVE W08-06 candidate devin/pp/w08-06/impl-r5 @ 4c1e3256da5d18197a0499350b3c666153665a31 (BASE 4cc2d69f). SCOPE (VERIFIED, git diff --stat: 11 files, +3705/-48): 6 files inside write_paths (accountDeletionOperations.ts, legal.ts, account_deletion_complete.test.ts, two NEW migrations 20260909120000 + 20260909180000 under supabase/migrations/, account_deletion_operations.sql, security_regression.sql); supabase/functions/api/index.ts (+21/-1) is the justified wiring hunk — serial group edge-index is HELD by W08-06 — that hands the shipping worker its owner-scoped `readOwnerNamespacePage` (authed RLS client, `.retry(false)`, 10 s abort) and bounded failure diagnostics, so the objective is met as shipped behaviour (confirmAccountDeletionOperation is called from the /v1/me/delete-confirm route); routesHarness.ts (+79/-2), account_routes.test.ts (+38 net, fake-table routing generalised, no assertion removed), account_deletion_operations.test.ts (+2 registry pins) are test-harness files under no serial-group prefix. scope_violation=false. ACCEPTANCE (all re-run by me): AC1 exit 0; AC2 945 passed/0 failed/0 ignored with XC_PG_URL+PICKLE_AUDIT_PG_URL on a fresh disposable DB (literal single-env form: 933/0/12 ignored, the PICKLE_AUDIT_PG_URL-gated W06-01 golden tests); AC3 exit 0, all four migration histories green; AC4 proof exit 0 — Edge file 0 passed/1 failed (module load) and SQL matrix exit 3 on BASE; 32/32 Edge and `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` on HEAD. regression_fails_on_base=true. DIFF REVIEW vs REVIEW.md/invariants (VERIFIED by reading the full diff + grep): no `any`/@ts-ignore/eslint-disable/`|| true`/passWithNoTests/.only/inflated timeouts; no existing code comment lines removed (grep of `-` comment lines in ts diff = 0); no applied migration edited, both new timestamps later than 20260908160000; new functions: certify_account_deletion_completion is security definer, search_path='', revoked from PUBLIC/anon/authenticated/service_role then granted ONLY to service_role; lock_account_deletion_certification / acquire_account_deletion_lease / account_deletion_view / record_account_deletion_auth_absence are api_private with all direct grants revoked; fail_account_deletion_operation keeps its BASE grant set (service_role only); no RLS policy/table grant widened; free_rating_ledger untouched (retained, pinned byte-identical in Edge + SQL tests); post-Auth re-acquire requires exact owner+operation binding, Auth identity absent and not recreated, all external checkpoints durable, attempts<8, status window open, no live lease; unknown/residue/unreadable inventory never certifies (fail closed) and no receipt is ever fabricated; keyset cursors are PostgREST-quoted (postgrestFilterValue) and column names regex-validated; 5xx bodies stay generic (detail only in console.error); legal.ts additions (deletion-operation record 7 d, transfer reconciliation record, offline allocation record, free allowance per sign-in identity) match the migrations' retention (retain_until = created_at + 7 days, status 24 h) and contain no Android/Google Play/guest/Live Court/DUPR/competitor/accuracy-%/superlative language; pnpm format:check exit 0; git diff --check exit 0. Apple/M4 not applicable (no native paths changed). Non-blocking notes recorded (AC2 env-var form, structural rather than behavioural red on BASE, post-Auth recovery bounded by the auth-cache window, deliberate SQL pin change). No PR opened, nothing pushed, no production resource touched, candidate not modified.",
+        "verdict": "approve"
+      },
+      "round": 5
+    }
+  ],
+  "start_round": 4,
+  "status": "REQUEUE",
+  "wave_id": "wave-18-keep"
+}
