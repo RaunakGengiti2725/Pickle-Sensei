@@ -81,8 +81,10 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.1
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import {
+  admitChargeableRelease,
   readChargeableReleaseAdmission,
   readVerifiedReleasePolicy,
+  ReleasePolicyError,
   type ChargeableReleaseAdmission,
   type ReleaseIneligibilityReason,
   type VerifiedReleasePolicy,
@@ -5059,7 +5061,7 @@ type OfflineReceiptHoldReason =
   | "account_deleted"
   | "grant_revoked";
 
-type OfflineReceiptDelivery = "settled" | "replayed" | "held" | "rejected";
+type OfflineReceiptDelivery = "settled" | "replayed" | "held" | "pending" | "rejected";
 
 interface OfflineReceiptEntry {
   readonly receipt: OfflineResultReceipt;
@@ -5079,6 +5081,7 @@ function emitOfflineReceiptAudit(entry: {
   settled: number;
   replayed: number;
   held: number;
+  pending: number;
   rejected: number;
   holdReasons: string[];
 }): void {
@@ -5143,6 +5146,83 @@ function offlineGrantVerificationInstant(
   return Math.min(nowEpochSeconds, exp - 1);
 }
 
+type OfflineReceiptReleaseLineage =
+  | { readonly release: OfflineReleasedArtifacts; readonly hold: null }
+  | { readonly release: null; readonly hold: OfflineReceiptHoldReason };
+
+/** The release a delayed receipt's grant must verify against: the artifacts
+ * of the policy the grant was issued under (`release.policy.sha256` in its
+ * payload) — the active one without a read, otherwise the installed lineage
+ * read by digest as the service role (once per distinct release per batch);
+ * or the HOLD the lineage decides. A withdrawn release revokes every grant
+ * issued under it; an unknown, unverifiable or never-eligible lineage is
+ * ambiguous evidence. Only a storage failure throws (answered 503). The
+ * digest is taken from the still-unverified payload: it merely selects
+ * which installed authority the signature is then verified against, and a
+ * grant that names a release it was not signed over fails that check. */
+async function offlineReceiptReleaseLineage(
+  grant: OfflineSignedExecutionGrant,
+  active: { readonly sha256: string; readonly release: OfflineReleasedArtifacts },
+  lineages: Map<string, OfflineReceiptReleaseLineage>,
+  nowEpochSeconds: number,
+): Promise<OfflineReceiptReleaseLineage> {
+  const payload = decodeJwtPayload(grant.compactJws);
+  const release = payload === null ? null : payload.release;
+  const named = isRecord(release) && isRecord(release.policy) ? release.policy.sha256 : null;
+  if (typeof named !== "string" || !/^[0-9a-f]{64}$/.test(named)) {
+    return { release: null, hold: "evidence_ambiguous" };
+  }
+  if (named === active.sha256) return { release: active.release, hold: null };
+  const known = lineages.get(named);
+  if (known) return known;
+  const admin = billingAdminDb();
+  if (!admin) throw new ReleasePolicyError("storage", { name: "MissingConfiguration" });
+  let policy: VerifiedReleasePolicy | null;
+  try {
+    policy = await readVerifiedReleasePolicy(() =>
+      admin.rpc("read_analysis_release_policy_lineage", { p_policy_sha256: named }),
+    );
+  } catch (error) {
+    if (error instanceof ReleasePolicyError && error.failure === "integrity") {
+      policy = null;
+    } else {
+      throw error;
+    }
+  }
+  let lineage: OfflineReceiptReleaseLineage;
+  if (!policy) {
+    lineage = { release: null, hold: "evidence_ambiguous" };
+  } else if (
+    policy.approval.denyNewAuthorizations ||
+    (typeof policy.approval.withdrawnAt === "number" &&
+      policy.approval.withdrawnAt <= nowEpochSeconds)
+  ) {
+    lineage = { release: null, hold: "grant_revoked" };
+  } else {
+    // Eligible when the grant was issued (the instant the issuer judged it),
+    // never later than the last instant the grant was live.
+    const iat = payload?.iat;
+    const admission = admitChargeableRelease(
+      policy,
+      typeof iat === "number" && Number.isSafeInteger(iat)
+        ? Math.min(iat, offlineGrantVerificationInstant(grant, nowEpochSeconds))
+        : offlineGrantVerificationInstant(grant, nowEpochSeconds),
+    );
+    lineage =
+      admission.status === "active"
+        ? { release: offlineReleaseArtifacts(admission.policy), hold: null }
+        : {
+            release: null,
+            hold:
+              admission.status === "ineligible" && admission.reasonCode === "withdrawn"
+                ? "grant_revoked"
+                : "evidence_ambiguous",
+          };
+  }
+  lineages.set(named, lineage);
+  return lineage;
+}
+
 /** Why this receipt must be HELD instead of settled, or null when its
  * evidence is complete and bound: the grant verifies for this owner, the
  * receipt names that grant and one of its tickets (or none for a lease),
@@ -5151,7 +5231,7 @@ function offlineGrantVerificationInstant(
 async function offlineReceiptHoldReason(
   authed: AuthedUser,
   keyRing: OfflineGrantKeyRing,
-  release: OfflineReleasedArtifacts,
+  lineage: OfflineReceiptReleaseLineage,
   nowEpochSeconds: number,
   entry: OfflineReceiptEntry,
 ): Promise<OfflineReceiptHoldReason | null> {
@@ -5160,6 +5240,8 @@ async function offlineReceiptHoldReason(
   if ((await digestOfflineGrantTransport(grant)) !== receipt.grantJwsSha256) {
     return "evidence_ambiguous";
   }
+  if (lineage.release === null) return lineage.hold;
+  const release = lineage.release;
   let verified;
   try {
     verified = await verifyOfflineExecutionGrant(grant, keyRing, {
@@ -5224,7 +5306,9 @@ function offlineReconciliationFromRow(
   const candidate =
     row.status === "result_recorded"
       ? { ...base, resultId: row.result_id }
-      : { ...base, reasonCode: row.reason_code };
+      : row.status === "pending"
+        ? base
+        : { ...base, reasonCode: row.reason_code };
   const status = validateOfflineReconciliationStatus(candidate, receipt);
   return status.ok ? candidate : null;
 }
@@ -5234,6 +5318,8 @@ function offlineReconciliationFromRow(
  *   settled  — the ticket is consumed (or the no-ticket result recorded) now
  *   replayed — this exact receipt was settled earlier; the same verdict again
  *   held     — recorded as reconciliation_required, ticket still reserved
+ *   pending  — nothing recorded: the session the rating names has not synced
+ *              yet; the ticket stays reserved and the same receipt is redelivered
  *   rejected — malformed, or a DIFFERENT receipt already holds this id
  * The route is idempotent under redelivery and order-independent because
  * every entry is decided inside settle_offline_receipt() under the owner's
@@ -5263,11 +5349,15 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     return serviceUnavailable("Offline receipt settlement", release.error);
   }
   if (release.status === "ineligible") return releaseNotAuthorized(release.reasonCode);
-  const releaseArtifacts = offlineReleaseArtifacts(release.policy);
+  const activeRelease = {
+    sha256: release.policy.approval.policy.sha256,
+    release: offlineReleaseArtifacts(release.policy),
+  };
+  const lineages = new Map<string, OfflineReceiptReleaseLineage>();
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
 
   const results: OfflineReceiptResult[] = [];
-  const tally = { settled: 0, replayed: 0, held: 0, rejected: 0 };
+  const tally = { settled: 0, replayed: 0, held: 0, pending: 0, rejected: 0 };
   const holdReasons: string[] = [];
   for (const raw of receipts) {
     const parsed = parseOfflineReceiptEntry(raw);
@@ -5283,7 +5373,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       holdReason = await offlineReceiptHoldReason(
         authed,
         keyRing,
-        releaseArtifacts,
+        await offlineReceiptReleaseLineage(parsed.grant, activeRelease, lineages, nowEpochSeconds),
         nowEpochSeconds,
         parsed,
       );
@@ -5330,7 +5420,10 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     const delivery = row.delivery;
     if (
       row.result !== "accepted" ||
-      (delivery !== "settled" && delivery !== "replayed" && delivery !== "held")
+      (delivery !== "settled" &&
+        delivery !== "replayed" &&
+        delivery !== "held" &&
+        delivery !== "pending")
     ) {
       return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcResult" });
     }

@@ -88,7 +88,6 @@ const INSTALLATION_KEY = "ios-installation-w04-04";
 const GRANT_ID = "64444444-4444-4444-8444-444444444444";
 const TICKET_A = "65555555-5555-4555-8555-555555555551";
 const TICKET_B = "65555555-5555-4555-8555-555555555552";
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const DAY = 86_400;
 
