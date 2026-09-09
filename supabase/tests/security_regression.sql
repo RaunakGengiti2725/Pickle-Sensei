@@ -7348,6 +7348,75 @@ begin
   end if;
 end $$;
 
+-- M2 (round 6): the post-Auth service sweep is the one shipping caller of the
+-- recovery claim that needs no owner session; it is service-only, a definer
+-- with a fixed empty search_path, bounded, and its residue helper is reachable
+-- by no role directly.
+do $$
+declare f oid; r text;
+begin
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'sweep_account_deletion_operations'
+      and pg_get_function_identity_arguments(p.oid) = 'p_limit integer';
+  if f is null then
+    raise exception 'M2: the post-Auth deletion sweep RPC must exist with a batch bound';
+  end if;
+  if not has_function_privilege('service_role', f, 'EXECUTE') then
+    raise exception 'M2: the deletion sweep requires an explicit service-role execution grant';
+  end if;
+  foreach r in array array['anon','authenticated'] loop
+    if has_function_privilege(r, f, 'EXECUTE') then
+      raise exception 'M2: clients cannot run the deletion sweep (%)', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+    raise exception 'M2: PUBLIC must not run the deletion sweep';
+  end if;
+  if not exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']) then
+    raise exception 'M2: the deletion sweep must be a definer with a fixed empty search_path';
+  end if;
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'api_private' and p.proname = 'account_deletion_owner_residue'
+      and pg_get_function_identity_arguments(p.oid) = 'p_owner_id uuid';
+  if f is null then
+    raise exception 'M2: the private owner-residue helper must exist with the owner binding';
+  end if;
+  foreach r in array array['anon','authenticated','service_role'] loop
+    if has_function_privilege(r, f, 'EXECUTE') then
+      raise exception 'M2: the private owner-residue helper must not be executable by %', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE')
+    or not exists (select 1 from pg_proc p where p.oid = f and not p.prosecdef and p.proconfig @> array['search_path=""']) then
+    raise exception 'M2: the private owner-residue helper must be an invoker with a fixed empty search_path and no PUBLIC execute';
+  end if;
+end $$;
+do $$
+declare v_role text;
+begin
+  foreach v_role in array array['anon', 'authenticated'] loop
+    execute format('set local role %I', v_role);
+    begin
+      perform public.sweep_account_deletion_operations(1);
+      raise exception 'M2: % must not run the deletion sweep', v_role;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  set local role service_role;
+  begin
+    perform public.sweep_account_deletion_operations(0);
+    raise exception 'M2: the deletion sweep must refuse an empty batch';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.sweep_account_deletion_operations(501);
+    raise exception 'M2: the deletion sweep must refuse an oversized batch';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+
 do $$
 begin
   if not exists (select 1 from public.billing_entitlements

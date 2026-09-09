@@ -566,6 +566,127 @@ reset role;
 select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
   union all (table w08_ledger_before except table public.free_rating_ledger)), 'post-Auth recovery does not alter the free-rating ledger');
 
+-- Round 6: post-Auth recovery has a shipping caller that needs no owner
+-- session. The deleting session is cascaded away with auth.users, so the
+-- owner's retry of the confirm route is refused; the service-only
+-- sweep_account_deletion_operations() (pg_cron) re-acquires every post-Auth
+-- phase whose lease is not live and certifies it — exactly once, only after the
+-- database itself has counted zero owner rows. Clients cannot call it.
+insert into auth.users (id, email, raw_app_meta_data)
+  select pg_temp.w08_id(n), 'w08-test-' || n || '@example.test', '{"provider":"google"}'::jsonb from (values (12), (13)) s(n);
+insert into auth.identities (provider, provider_id, user_id)
+  select 'google', 'w08-test-identity-' || n, pg_temp.w08_id(n) from (values (12), (13)) s(n);
+insert into auth.sessions (id, user_id) values (pg_temp.w08_id(9012), pg_temp.w08_id(12));
+set local role service_role;
+select public.begin_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), pg_temp.w08_challenge(12,2012), pg_temp.w08_cap(12));
+select public.begin_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), pg_temp.w08_challenge(13,2013), pg_temp.w08_cap(13));
+reset role;
+update api_private.account_deletion_operations
+  set created_at = created_at - interval '10 seconds', challenge_expires_at = challenge_expires_at - interval '10 seconds',
+    status_expires_at = status_expires_at - interval '10 seconds', retain_until = retain_until - interval '10 seconds'
+  where owner_id in (pg_temp.w08_id(12), pg_temp.w08_id(13));
+set local role service_role;
+insert into w08_results values ('death', public.confirm_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_challenge(12,2012), pg_temp.w08_id(1012)));
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='death'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='death'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='death'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='death'));
+insert into w08_results values ('orphan', public.confirm_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_challenge(13,2013), pg_temp.w08_id(1013)));
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan'));
+reset role;
+-- the shipping confirm route re-checks the deleting session; the Auth delete
+-- cascades it, so the owner can never drive recovery
+select set_config('request.headers', jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text, true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', pg_temp.w08_id(12)::text, true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', pg_temp.w08_id(12), 'session_id', pg_temp.w08_id(9012))::text, true);
+select pg_temp.w08_assert(public.is_api_session_active() = true, 'the deleting session is live before the Auth delete');
+reset role;
+delete from auth.users where id in (pg_temp.w08_id(12), pg_temp.w08_id(13));
+select set_config('request.headers', jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text, true);
+set local role authenticated;
+select set_config('request.jwt.claim.sub', pg_temp.w08_id(12)::text, true);
+select set_config('request.jwt.claims', jsonb_build_object('sub', pg_temp.w08_id(12), 'session_id', pg_temp.w08_id(9012))::text, true);
+select pg_temp.w08_assert(public.is_api_session_active() = false, 'the Auth delete cascades the deleting session: the owner cannot retry the confirm route');
+select pg_temp.w08_throws('select public.sweep_account_deletion_operations(50)', '42501', 'authenticated cannot run the deletion sweep');
+reset role;
+set local role anon;
+select pg_temp.w08_throws('select public.sweep_account_deletion_operations(50)', '42501', 'anon cannot run the deletion sweep');
+reset role;
+-- rows a cascade "missed" for owner 13: written past the FK and append-only
+-- triggers so the database sees durable owner residue after the Auth delete
+alter table public.account_deletion_feedback disable trigger all;
+insert into public.account_deletion_feedback (user_id, reason) values (pg_temp.w08_id(13), 'other');
+alter table public.account_deletion_feedback enable trigger all;
+set local role service_role;
+select pg_temp.w08_throws('select public.sweep_account_deletion_operations(0)', '22023', 'the sweep refuses an empty batch');
+select pg_temp.w08_throws('select public.sweep_account_deletion_operations(501)', '22023', 'the sweep refuses an oversized batch');
+insert into w08_results values ('sweep_live', public.sweep_account_deletion_operations(50));
+select pg_temp.w08_assert((select (data->>'scanned')::int = 0 and (data->>'certified')::int = 0 and (data->>'claimed')::int = 0 and data->'operations' = '[]'::jsonb
+  from w08_results where name='sweep_live'), 'a live retained post-Auth lease is work in flight: the sweep leaves it alone');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'the untouched live post-Auth lease still reads in_progress');
+reset role;
+update api_private.account_deletion_operations set lease_expires_at = clock_timestamp() - interval '1 second' where id in (pg_temp.w08_id(1012), pg_temp.w08_id(1013));
+set local role service_role;
+insert into w08_results values ('sweep_recover', public.sweep_account_deletion_operations(50));
+select pg_temp.w08_assert((select (data->>'scanned')::int = 2 and (data->>'claimed')::int = 2 and (data->>'certified')::int = 1 and (data->>'residue')::int = 1
+  and (data->>'failed')::int = 0 and (data->>'skipped')::int = 0 from w08_results where name='sweep_recover'), 'the sweep re-acquires every expired post-Auth phase and certifies only the clean one');
+select pg_temp.w08_assert((select exists (select 1 from jsonb_array_elements(data->'operations') op
+    where op->>'operationId' = pg_temp.w08_id(1012)::text and op->>'outcome' = 'certified' and op->>'completedAt' is not null)
+  and exists (select 1 from jsonb_array_elements(data->'operations') op
+    where op->>'operationId' = pg_temp.w08_id(1013)::text and op->>'outcome' = 'residue'
+      and op->'namespaces' = '[{"table":"account_deletion_feedback","rows":1}]'::jsonb)
+  from w08_results where name='sweep_recover'), 'the sweep reports the certified operation and the residue by table and count, never row contents');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'state' = 'completed'
+  and public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->'completionReceipt'->>'completedAt' is not null
+  and public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'appleAuthorizationRevocation' = 'not_applicable', 'the swept clean deletion hands out its receipt without any owner involvement');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'residue after the Auth delete reads blocked with no receipt');
+insert into w08_results values ('sweep_idle', public.sweep_account_deletion_operations(50));
+select pg_temp.w08_assert((select (data->>'certified')::int = 0 and (data->>'residue')::int = 1 from w08_results where name='sweep_idle'), 'a certified deletion is never swept twice; residue is re-checked every sweep');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='death'))->>'outcome' = 'stale_lease', 'the dead worker''s lease cannot certify after the sweep');
+-- a worker holding a valid lease is refused by the same database gate
+insert into w08_results values ('orphan_claim', public.claim_account_deletion_work(pg_temp.w08_id(13), pg_temp.w08_id(1013)));
+select pg_temp.w08_assert((select data->>'outcome' = 'claimed' from w08_results where name='orphan_claim'), 'the residue phase stays re-acquirable');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan_claim'))
+  = '{"outcome":"residue","namespaces":[{"table":"account_deletion_feedback","rows":1}]}'::jsonb, 'certification with a valid lease is refused while owner rows remain');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='orphan_claim'), 'completion_unverified')->>'outcome' = 'released', 'a refused certification keeps the lease for the caller''s verdict');
+reset role;
+select pg_temp.w08_assert((select completed_at is null and phase = 'auth_delete_intent' and lease_token is null and last_error_code = 'completion_unverified'
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1013)), 'residue never yields a receipt');
+select pg_temp.w08_assert((select phase = 'completed' and completed_at > auth_deleted_at and lease_token is null and attempts = 2 and last_error_code is null
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1012)), 'the swept receipt follows the Auth delete under the sweep''s own lease');
+-- an orphaned phase whose identity is recreated under the same uuid: the
+-- status agrees with the claim RPC (blocked), the sweep does not touch it
+insert into auth.users (id, email, raw_app_meta_data) values (pg_temp.w08_id(13), 'w08-test-13@example.test', '{"provider":"google"}');
+update api_private.account_deletion_operations set last_error_code = null where id = pg_temp.w08_id(1013);
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(13), pg_temp.w08_id(1013))->>'outcome' = 'blocked', 'a recreated identity cannot re-acquire the orphaned phase');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'status is honest for a recreated identity: blocked, exactly as the claim RPC answers');
+insert into w08_results values ('sweep_recreated', public.sweep_account_deletion_operations(50));
+select pg_temp.w08_assert((select (data->>'scanned')::int = 0 and data->'operations' = '[]'::jsonb from w08_results where name='sweep_recreated'), 'the sweep never touches a phase whose identity exists');
+reset role;
+delete from auth.users where id = pg_temp.w08_id(13);
+set local role service_role;
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))->>'state' = 'in_progress', 'once the identity is gone again the phase is recoverable');
+reset role;
+alter table public.account_deletion_feedback disable trigger all;
+delete from public.account_deletion_feedback where user_id = pg_temp.w08_id(13);
+alter table public.account_deletion_feedback enable trigger all;
+set local role service_role;
+insert into w08_results values ('sweep_repaired', public.sweep_account_deletion_operations(50));
+select pg_temp.w08_assert((select (data->>'certified')::int = 1 and (data->>'residue')::int = 0 from w08_results where name='sweep_repaired'), 'once the residue is gone the sweep certifies the phase');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))->>'state' = 'completed', 'the repaired deletion hands out its receipt');
+select pg_temp.w08_assert((select (data->>'certified')::int = 0 and (data->>'scanned')::int = 0 from (select public.sweep_account_deletion_operations(50) as data) s), 'nothing is left to sweep');
+reset role;
+select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
+  union all (table w08_ledger_before except table public.free_rating_ledger)), 'the service sweep does not alter the free-rating ledger');
+
 select 'W08 SQL assertions passed: ' || count(*) from w08_assertions;
 rollback;
 
