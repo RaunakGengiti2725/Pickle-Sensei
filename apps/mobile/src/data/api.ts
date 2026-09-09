@@ -2,6 +2,12 @@ import type {
   AnalysisFeedbackCategory,
   AnalysisFeedbackRating,
 } from '@pickle/shared-types';
+import {
+  validateOfflineSignedGrantShape,
+  type OfflineFreeTicketReference,
+  type OfflineReconciliationStatus,
+  type OfflineSignedExecutionGrant,
+} from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
 import { reportApiUnauthorized } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
@@ -502,3 +508,285 @@ export async function submitAnalysisFeedback(
 }
 
 export const api = { request };
+
+export type OfflineAttestationEnvironment = 'production' | 'development';
+
+export interface RegisteredOfflineDevice {
+  readonly deviceId: string;
+  readonly installationKeyId: string;
+  readonly attestationEnvironment: OfflineAttestationEnvironment;
+  readonly attestationState: 'unattested' | 'attested';
+}
+
+/** `POST /v1/offline/grants` as the server answers it: the signed grant plus
+ * the same facts restated in the clear so the wallet can bind the two before
+ * it holds anything. `ticketIds` is empty for a Pro lease. */
+export interface IssuedOfflineGrant {
+  readonly grantId: string;
+  readonly generation: number;
+  readonly entitlementSource: 'identity_lifetime_free' | 'verified_store';
+  readonly issuedAt: number;
+  readonly expiresAt: number;
+  readonly entitlementExpiresAt: number | null;
+  readonly ticketIds: readonly string[];
+  readonly keyId: string;
+  readonly grant: OfflineSignedExecutionGrant;
+}
+
+/** One queued consumption receipt as the device presents it to the server:
+ * the grant binding, the ticket it spent (null for a Pro lease) and the
+ * durably delivered result it paid for. */
+export interface OfflineReceiptSubmission {
+  readonly receiptId: string;
+  readonly ownerId: string;
+  readonly installationKeyId: string;
+  readonly grantId: string;
+  readonly grantJwsSha256: string;
+  readonly lifecycleSequence: number;
+  readonly ticket: OfflineFreeTicketReference | null;
+  readonly operationId: string;
+  readonly resultId: string;
+  readonly fullOutputSha256: string;
+  readonly billingDisposition: 'joint_verification_required';
+  readonly queuedAt: string;
+}
+
+/** The device-side reading of one server verdict on a submitted receipt.
+ * `held` mirrors the reconciliation states that keep the financial
+ * disposition reserved (pending, reconciliation_required,
+ * support_review_required): the receipt stays queued and is re-presented. */
+export type OfflineReceiptVerdictKind = 'accepted' | 'held' | 'refused';
+
+export interface OfflineReceiptVerdict {
+  readonly receiptId: string;
+  readonly verdict: OfflineReceiptVerdictKind;
+  /** The server's own status or refusal code, kept for diagnostics. */
+  readonly code: string;
+}
+
+export interface OfflineGrantClient {
+  /** The grant issuer the wallet must find in every signed grant's `iss`. */
+  readonly issuer: string;
+  registerDevice(input: {
+    installationKeyId: string;
+    attestationEnvironment: OfflineAttestationEnvironment;
+  }): Promise<RegisteredOfflineDevice>;
+  issueGrant(input: {
+    installationKeyId: string;
+    requestedTickets: 0 | 1 | 2;
+  }): Promise<IssuedOfflineGrant>;
+  /** Present queued receipts. Resolves only with a verdict for EVERY
+   * submitted receipt (each exactly once, nothing extra); any other answer
+   * is unreadable and settles nothing. */
+  submitReceipts(
+    receipts: readonly OfflineReceiptSubmission[],
+  ): Promise<readonly OfflineReceiptVerdict[]>;
+}
+
+function isUnixSecondsValue(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/** The shared validators accept only plain data objects. A parsed response
+ * body may carry a foreign prototype, so it is re-materialised as JSON first. */
+function plainJson(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Shape-only: a response missing any field, or whose signed grant is not a
+ * compact JWS, is not a grant. Binding the clear fields to the signed claims
+ * is the wallet's job (`holdOfflineGrant`). */
+export function parseIssuedOfflineGrant(
+  value: unknown,
+): IssuedOfflineGrant | null {
+  if (!isJsonObject(value)) return null;
+  const {
+    grantId,
+    generation,
+    entitlementSource,
+    issuedAt,
+    expiresAt,
+    entitlementExpiresAt,
+    ticketIds,
+    keyId,
+    grant,
+  } = value;
+  if (
+    !isNonEmptyString(grantId) ||
+    typeof generation !== 'number' ||
+    !Number.isInteger(generation) ||
+    generation < 1 ||
+    (entitlementSource !== 'identity_lifetime_free' &&
+      entitlementSource !== 'verified_store') ||
+    !isUnixSecondsValue(issuedAt) ||
+    !isUnixSecondsValue(expiresAt) ||
+    expiresAt <= issuedAt ||
+    (entitlementExpiresAt !== null &&
+      !isUnixSecondsValue(entitlementExpiresAt)) ||
+    !Array.isArray(ticketIds) ||
+    !ticketIds.every(isNonEmptyString) ||
+    !isNonEmptyString(keyId)
+  ) {
+    return null;
+  }
+  const signed = validateOfflineSignedGrantShape(plainJson(grant));
+  if (!signed.ok) return null;
+  return {
+    grantId,
+    generation,
+    entitlementSource,
+    issuedAt,
+    expiresAt,
+    entitlementExpiresAt: entitlementExpiresAt ?? null,
+    ticketIds: [...ticketIds],
+    keyId,
+    grant: signed.value,
+  };
+}
+
+function parseRegisteredOfflineDevice(
+  value: unknown,
+): RegisteredOfflineDevice | null {
+  if (!isJsonObject(value)) return null;
+  const device = value['device'];
+  if (!isJsonObject(device)) return null;
+  const { deviceId, installationKeyId, attestationEnvironment } = device;
+  const attestationState = device['attestationState'];
+  if (
+    !isNonEmptyString(deviceId) ||
+    !isNonEmptyString(installationKeyId) ||
+    (attestationEnvironment !== 'production' &&
+      attestationEnvironment !== 'development') ||
+    (attestationState !== 'unattested' && attestationState !== 'attested')
+  ) {
+    return null;
+  }
+  return {
+    deviceId,
+    installationKeyId,
+    attestationEnvironment,
+    attestationState,
+  };
+}
+
+const OFFLINE_RECEIPT_STATUS_VERDICTS: ReadonlyMap<
+  string,
+  OfflineReceiptVerdictKind
+> = new Map<OfflineReconciliationStatus['status'], OfflineReceiptVerdictKind>([
+  ['result_recorded', 'accepted'],
+  ['unused_ticket_returned', 'refused'],
+  ['pending', 'held'],
+  ['reconciliation_required', 'held'],
+  ['support_review_required', 'held'],
+]);
+
+/** Validate the whole batch before any verdict can settle a receipt: every
+ * submitted receipt named exactly once, as a status or a refusal, and no
+ * receipt the device did not submit. */
+function parseOfflineReceiptVerdicts(
+  value: unknown,
+  submittedIds: readonly string[],
+): readonly OfflineReceiptVerdict[] | null {
+  if (!isJsonObject(value)) return null;
+  const receipts = value['receipts'];
+  const rejected = value['rejected'] ?? [];
+  if (!Array.isArray(receipts) || !Array.isArray(rejected)) return null;
+  const verdicts = new Map<string, OfflineReceiptVerdict>();
+  const record = (verdict: OfflineReceiptVerdict): boolean => {
+    if (verdicts.has(verdict.receiptId)) return false;
+    verdicts.set(verdict.receiptId, verdict);
+    return true;
+  };
+  for (const entry of receipts) {
+    if (!isJsonObject(entry)) return null;
+    const { receiptId, status } = entry;
+    if (!isNonEmptyString(receiptId) || !isNonEmptyString(status)) return null;
+    const verdict = OFFLINE_RECEIPT_STATUS_VERDICTS.get(status);
+    if (verdict === undefined) return null;
+    if (!record({ receiptId, verdict, code: status })) return null;
+  }
+  for (const entry of rejected) {
+    if (!isJsonObject(entry)) return null;
+    const { receiptId, code } = entry;
+    if (!isNonEmptyString(receiptId) || !isNonEmptyString(code)) return null;
+    if (!record({ receiptId, verdict: 'refused', code })) return null;
+  }
+  if (verdicts.size !== submittedIds.length) return null;
+  const ordered: OfflineReceiptVerdict[] = [];
+  for (const id of submittedIds) {
+    const verdict = verdicts.get(id);
+    if (verdict === undefined) return null;
+    ordered.push(verdict);
+  }
+  return ordered;
+}
+
+/** Device registration, offline grant issuance and receipt reconciliation.
+ * Every route requires the account bearer; the answer is checked for shape
+ * here and bound to the signed claims by the wallet before anything is
+ * held or settled. */
+export function createOfflineGrantClient(
+  config: ApiConfigState,
+): OfflineGrantClient {
+  const requireSignedIn = () => {
+    if (!config.token?.trim()) {
+      throw new ApiError(
+        401,
+        'auth.required',
+        'Sign in before requesting offline ratings.',
+      );
+    }
+  };
+  return {
+    issuer: config.baseUrl,
+    async registerDevice(input) {
+      requireSignedIn();
+      const device = parseRegisteredOfflineDevice(
+        await request<unknown>(config, 'POST', '/v1/devices/register', {
+          installationKeyId: input.installationKeyId,
+          attestationEnvironment: input.attestationEnvironment,
+        }),
+      );
+      if (device === null) throw unreadableAnswer();
+      return device;
+    },
+    async issueGrant(input) {
+      requireSignedIn();
+      const issued = parseIssuedOfflineGrant(
+        await request<unknown>(config, 'POST', '/v1/offline/grants', {
+          installationKeyId: input.installationKeyId,
+          requestedTickets: input.requestedTickets,
+        }),
+      );
+      if (issued === null) throw unreadableAnswer();
+      return issued;
+    },
+    async submitReceipts(receipts) {
+      requireSignedIn();
+      const ids = receipts.map(receipt => receipt.receiptId);
+      if (new Set(ids).size !== ids.length) {
+        throw new ApiError(
+          400,
+          'offline.receipt_duplicate',
+          'The same receipt cannot be presented twice in one batch.',
+        );
+      }
+      const verdicts = parseOfflineReceiptVerdicts(
+        await request<unknown>(config, 'POST', '/v1/offline/receipts', {
+          receipts,
+        }),
+        ids,
+      );
+      if (verdicts === null) throw unreadableAnswer();
+      return verdicts;
+    },
+  };
+}

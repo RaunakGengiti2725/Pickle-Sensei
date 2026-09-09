@@ -78,7 +78,7 @@ const EXPIRES_AT = ISSUED_AT + 6 * 24 * 60 * 60;
 const TICKETS = [
   'aaaaaaaa-0000-4000-8000-000000000001',
   'aaaaaaaa-0000-4000-8000-000000000002',
-];
+] as const;
 const GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
 const GRANT_ID_2 = 'bbbbbbbb-0000-4000-8000-000000000002';
 const RESULT_SHA = 'c'.repeat(64);
@@ -1126,22 +1126,31 @@ describe('W04-05 offline grants: allocation ≠ consumption', () => {
       expect((unreadable as ApiError).code).toBe('network.invalid_response');
       expect(await pendingOfflineReceipts(db)).toEqual([consumed.receipt]);
 
-      // A route the server does not serve yet is a typed failure, not a
-      // verdict.
+      // A route the server does not serve yet answers exactly like the Edge
+      // function's `default:` branch — a 404 envelope without a verdict code.
+      // The client treats that as an unreadable answer, not a verdict.
       route.spy.mockRestore();
       route = mockReceiptsRoute(
         () =>
-          new Response(JSON.stringify({ error: 'not_found' }), {
-            status: 404,
-            headers: { 'content-type': 'application/json' },
-          }),
+          new Response(
+            JSON.stringify({
+              error: {
+                message: 'Unknown endpoint: POST /v1/offline/receipts.',
+              },
+            }),
+            {
+              status: 404,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
       );
       const missing = await reconcileOfflineReceipts(db, client(), ACTIVE).then(
         () => null,
         (thrown: unknown) => thrown,
       );
       expect(missing).toBeInstanceOf(ApiError);
-      expect((missing as ApiError).status).toBe(404);
+      expect((missing as ApiError).status).toBe(502);
+      expect((missing as ApiError).code).toBe('network.invalid_response');
       expect(await pendingOfflineReceipts(db)).toEqual([consumed.receipt]);
       expect((await readOfflineAllocation(db, ACTIVE)).grants[0]).toMatchObject(
         { remaining: 1, consumed: 1 },

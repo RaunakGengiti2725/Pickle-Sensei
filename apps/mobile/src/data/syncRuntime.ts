@@ -5,10 +5,16 @@ import {
   type ApiSession,
 } from '../account/apiSession';
 import { canonicalDataOwner, getActiveDataOwner } from './accountScope';
-import { createAnalysisPermitClient, createTransport } from './api';
+import {
+  createAnalysisPermitClient,
+  createOfflineGrantClient,
+  createTransport,
+} from './api';
 import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
 import { getDb } from './db';
+import { reconcileOfflineReceipts } from './offlineCapabilities';
 import { drainOutbox } from './sync';
+import { trustedTime } from './trustedTime';
 
 /** Cadence while the outbox is healthy or empty. */
 export const SYNC_RETRY_BASE_MS = 30_000;
@@ -82,6 +88,7 @@ export function configureSyncRuntime(session: ApiSession): void {
   };
   const transport = createTransport(apiConfig);
   const permits = { ...scope, ...createAnalysisPermitClient(apiConfig) };
+  const offlineGrants = createOfflineGrantClient(apiConfig);
   let consecutiveFailures = 0;
 
   const schedule = () => {
@@ -113,13 +120,28 @@ export function configureSyncRuntime(session: ApiSession): void {
         )
           return;
         const result = await drainOutbox(db, transport);
+        if (
+          configuredGeneration !== generation ||
+          getActiveDataOwner() !== owner
+        )
+          return;
+        // Offline consumption receipts are presented after the results they
+        // paid for. A verdict the server withholds keeps the receipt queued
+        // and this drain counts as unfinished, so the timer backs off.
+        const receipts = await reconcileOfflineReceipts(
+          db,
+          offlineGrants,
+          await trustedTime.read(),
+        );
         const pendingRecovery =
           recovered.unknownStorage ||
           recovered.items.some(
             item => item.kind === 'pending' || item.kind === 'held',
           );
         consecutiveFailures =
-          result.failed > 0 || pendingRecovery ? consecutiveFailures + 1 : 0;
+          result.failed > 0 || pendingRecovery || receipts.pending > 0
+            ? consecutiveFailures + 1
+            : 0;
       } catch {
         // Outbox rows remain durable with their attempt history. The foreground
         // event or the backed-off timer retries without inventing a receipt.

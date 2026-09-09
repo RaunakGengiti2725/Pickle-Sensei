@@ -1,5 +1,6 @@
 import { open, type DB } from '@op-engineering/op-sqlite';
 import { GUEST_DATA_OWNER, type DataOwnerContext } from './accountScope';
+import { OFFLINE_WALLET_DDL } from './offlineCapabilities';
 import { createTransactionalDb } from './transactions';
 import {
   ORIGINAL_ANALYSIS_DDL,
@@ -97,6 +98,7 @@ const LOCAL_MIGRATIONS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_local_analysis_capture
      ON local_analysis_record (owner_key, capture_id, created_at DESC)`,
   ...RUN_JOURNAL_DDL,
+  ...OFFLINE_WALLET_DDL,
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
   // into history, scores, trends, session summaries, or sync. A payload that
