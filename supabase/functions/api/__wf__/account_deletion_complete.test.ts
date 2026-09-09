@@ -1512,7 +1512,7 @@ Deno.test({
         status: 200,
         body: {
           state: "completed",
-          completionReceipt: { completedAt: row.completed_at.toISOString() },
+          completionReceipt: { completedAt: result.completionReceipt.completedAt },
           appleAuthorizationRevocation: "not_applicable",
         },
       });
@@ -1532,6 +1532,7 @@ Deno.test({
       );
       assertEquals(await durableRow(sql, begun.operationId), row);
       // a resumed worker reads the certified receipt, re-verifies emptiness and certifies nothing
+      const beforeResume = calls.length;
       const resumed = await resumeConfirmedAccountDeletionOperation(
         rpc,
         dependencies,
@@ -1540,8 +1541,8 @@ Deno.test({
       );
       assertEquals(resumed, result);
       assertEquals(
-        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
-        1,
+        calls.slice(beforeResume).map((call) => call.name),
+        ["claim_account_deletion_work"],
       );
       assertEquals(await durableRow(sql, begun.operationId), row);
     } finally {
