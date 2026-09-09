@@ -304,7 +304,10 @@ describe('offline wallet native bridge', () => {
     }
     for (const outcome of ['', null, undefined, 1, { failure: 'tampered' }]) {
       mockDiscardCorruptWallet.mockResolvedValueOnce(outcome);
-      await expectFailure(discardCorruptOfflineWallet(OWNER), 'bridge_contract');
+      await expectFailure(
+        discardCorruptOfflineWallet(OWNER),
+        'bridge_contract',
+      );
     }
   });
 
