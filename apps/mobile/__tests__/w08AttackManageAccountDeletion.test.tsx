@@ -191,7 +191,13 @@ function journalRows(): JournalRow[] {
     .prepare(
       'SELECT owner_id, operation_id, phase, document FROM device_account_deletion_journal ORDER BY rowid',
     )
-    .all() as JournalRow[];
+    .all()
+    .map(row => ({
+      owner_id: String(row.owner_id),
+      operation_id: row.operation_id === null ? null : String(row.operation_id),
+      phase: String(row.phase),
+      document: String(row.document),
+    }));
 }
 
 function journalDocument(row: JournalRow): Record<string, unknown> {
