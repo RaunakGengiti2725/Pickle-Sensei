@@ -10853,6 +10853,521 @@ end $$;
 reset role;
 rollback;
 
+-- ============================================================================
+-- V. (W11-03, 20260910110300_cron_offline_allocation_safe) the hourly pg_cron
+-- stale-permit sweep is a named, owner-only function —
+-- api_private.sweep_stale_analysis_permits() — and the matrix runs THAT
+-- function (not a hand-copied UPDATE) against every offline artefact. The
+-- sweep writes exactly one thing: reserved online permits older than 24 h
+-- become released/expired. It never touches an offline device, grant, ticket,
+-- ledger event or settled receipt, it never waits on (or blocks) a settlement
+-- that is in flight, and no client or service role can invoke it.
+-- Users: Vera (free, Google: tickets + offline receipts), Vic (Pro, expires
+-- in 3 days: an expired Pro lease), Vito (free, Google: online permits and
+-- their settlement receipts), Vlad (free, created by a second connection so a
+-- committed permit can be row-locked while the sweep runs).
+-- V1  the sweep function exists with the pinned shape: SECURITY DEFINER,
+--     search_path pinned, EXECUTE absent for anon / authenticated /
+--     service_role; when pg_cron is installed the scheduled job runs it
+-- V2  precondition snapshot: Vera holds 2 tickets (one consumed through a
+--     recorded receipt, one outstanding under a HELD receipt), Vic holds an
+--     expired Pro lease, Vito holds a settled permit with its settlement
+--     receipt, two stale reserved permits, a fresh reservation and a released
+--     abstention — the offline tables are digested
+-- V3  the sweep: exactly the two stale reserved permits are released/expired
+--     (the returned count says so); every other permit is byte-identical; the
+--     offline device / grant / ledger / receipt digests are unchanged, Vera's
+--     hold is still 1, the held ticket is still reserved, Vic's expired lease
+--     is still there, offline_hold_count() and access_state() agree
+-- V4  the swept permit still backs the rating it was reserved for: Vito's
+--     late sync WITH its settlement receipt is accepted after the sweep and
+--     writes a second receipt; both receipts survive a further sweep
+-- V5  concurrency: a stale permit row-locked by another connection (a late
+--     sync in flight, as apply_synced_shot() locks it) is SKIPPED, not
+--     waited for — the sweep returns within the statement timeout without
+--     it; the other connection settles it finalized/scored and a further
+--     sweep leaves it alone
+-- V6  the sweep is idempotent (a second run returns 0 and moves nothing), a
+--     malformed batch bound is refused, and every client role is 42501
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000071', 'vera@example.com',
+   '{"full_name":"Vera"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000072', 'vic@example.com',
+   '{"full_name":"Vic"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000073', 'vito@example.com',
+   '{"full_name":"Vito"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-vera', '00000000-0000-4000-8000-000000000071',
+   '{"sub":"google-sub-vera","email":"vera@example.com"}'),
+  ('apple', 'apple-sub-vic', '00000000-0000-4000-8000-000000000072',
+   '{"sub":"apple-sub-vic","email":"vic@example.com"}'),
+  ('google', 'google-sub-vito', '00000000-0000-4000-8000-000000000073',
+   '{"sub":"google-sub-vito","email":"vito@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000007101', '00000000-0000-4000-8000-000000000071'),
+  ('00000000-0000-4000-8000-000000007201', '00000000-0000-4000-8000-000000000072'),
+  ('00000000-0000-4000-8000-000000007301', '00000000-0000-4000-8000-000000000073');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000072', true, now() + interval '3 days');
+
+-- Vito's online permits, as the shipping app leaves them behind:
+--   ...0731 settled 3 days ago (finalized/scored with its receipt, below)
+--   ...0732 reserved 2 days ago, never finalized — the device went offline
+--   ...0733 reserved just now — a live reservation
+--   ...0734 released/low_confidence 2 days ago — a settled abstention
+--   ...0735 reserved 2 days ago on a second device that never came back
+insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+values
+  ('00000000-0000-4000-8000-000000000731', '00000000-0000-4000-8000-000000000073', 'w1103-settled', now() - interval '3 days'),
+  ('00000000-0000-4000-8000-000000000732', '00000000-0000-4000-8000-000000000073', 'w1103-stale', now() - interval '2 days'),
+  ('00000000-0000-4000-8000-000000000733', '00000000-0000-4000-8000-000000000073', 'w1103-live', now()),
+  ('00000000-0000-4000-8000-000000000734', '00000000-0000-4000-8000-000000000073', 'w1103-abstained', now() - interval '2 days'),
+  ('00000000-0000-4000-8000-000000000735', '00000000-0000-4000-8000-000000000073', 'w1103-stale-2', now() - interval '2 days');
+update public.analysis_permits set status = 'released', outcome = 'low_confidence'
+where id = '00000000-0000-4000-8000-000000000734';
+
+-- Vic's expired Pro lease: issued 10 days ago for 7 days (≤ the verified
+-- entitlement expiry), never refreshed. No ticket rides on a Pro lease; the
+-- row itself is the artefact the sweep must leave alone.
+insert into public.offline_devices (id, user_id, installation_key_id, attestation_environment, attestation_state, attested_at)
+values ('00000000-0000-4000-8000-000000000720', '00000000-0000-4000-8000-000000000072', 'vic-key-1', 'production', 'attested', now() - interval '10 days');
+insert into public.offline_grants (id, user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+values ('00000000-0000-4000-8000-000000000721', '00000000-0000-4000-8000-000000000072', '00000000-0000-4000-8000-000000000720',
+        'verified_store', 1, now() - interval '10 days', now() - interval '3 days',
+        (select expires_at from public.billing_entitlements where user_id = '00000000-0000-4000-8000-000000000072'));
+
+create temporary table v_state (key text primary key, id uuid);
+grant select, insert on v_state to authenticated;
+create temporary table v_digest (key text primary key, digest text);
+create schema v_probe;
+create extension dblink with schema v_probe;
+-- Test-only builders: the shot payload the edge sends to the RPCs, the
+-- settlement receipt transport apply_synced_shot() verifies, and the signed
+-- offline receipt settle_offline_receipt() settles (as in sections T and U).
+create function v_probe.shot(p_id uuid, p_permit uuid, p_kind text) returns jsonb
+language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', p_permit,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-10T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+create function v_probe.settle(p_owner uuid, p_shot jsonb, p_operation text)
+returns jsonb language sql immutable set search_path = '' as $$
+  with binding as (
+    select jsonb_build_object(
+      'ownerId', p_owner,
+      'shotId', p_shot ->> 'id',
+      'analysisPermitId', p_shot ->> 'analysisPermitId',
+      'resultKind', p_shot ->> 'resultKind',
+      'installationKeyId', 'ik_vito_phone',
+      'grant', null,
+      'ticket', null,
+      'operationId', p_operation,
+      'payloadSha256', encode(pg_catalog.sha256(convert_to(p_shot::text, 'UTF8')), 'hex')
+    ) as b
+  ), receipt as (
+    select jsonb_build_object(
+      'schemaVersion', 1,
+      'kind', 'settlement_receipt',
+      'binding', b,
+      'bindingSha256', encode(pg_catalog.sha256(convert_to(b::text, 'UTF8')), 'hex'),
+      'policy', jsonb_build_object('version', 'policy-2026-09-08', 'sha256', repeat('b', 64))
+    ) as r
+    from binding
+  )
+  select p_shot || jsonb_build_object('settlementReceipt', jsonb_build_object(
+    'canonical', r::text,
+    'sha256', encode(pg_catalog.sha256(convert_to(r::text, 'UTF8')), 'hex')))
+  from receipt
+$$;
+create function v_probe.receipt(
+  p_receipt_id text, p_owner uuid, p_key text, p_grant uuid, p_ticket uuid,
+  p_operation text, p_result uuid
+) returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'schemaVersion', 'offline-result-receipt-v1',
+    'receiptId', p_receipt_id,
+    'ownerId', p_owner,
+    'installationKeyId', p_key,
+    'grantId', p_grant,
+    'grantJwsSha256', repeat('a', 64),
+    'lifecycleSequence', 1,
+    'nativeTime', jsonb_build_object('monotonicMs', 1000, 'wallClockIso', '2026-09-10T10:00:00Z'),
+    'ticket', jsonb_build_object('allocationId', p_grant, 'generation', 1, 'ticketId', p_ticket),
+    'operationId', p_operation,
+    'resultId', p_result,
+    'fullOutputSha256', repeat('c', 64),
+    'billingDisposition', 'joint_verification_required')
+$$;
+create function v_probe.settle_receipt(p_receipt jsonb, p_output jsonb, p_hold text)
+returns table (result text, delivery text, status text, reason_code text, financial_disposition text, result_id text)
+language sql set search_path = '' as $$
+  select * from public.settle_offline_receipt(
+    p_receipt, encode(pg_catalog.sha256(convert_to(p_receipt::text, 'UTF8')), 'hex'), p_output, p_hold)
+$$;
+-- The reviewer's ruler: one digest per offline table over EVERY row (all
+-- users), so "the sweep touched nothing offline" is a byte comparison.
+create function v_probe.digest(p_table text) returns text
+language plpgsql security definer set search_path = '' as $$
+declare v text;
+begin
+  execute format(
+    'select coalesce(md5(string_agg(t::text, %L order by t::text)), %L) from %s t',
+    '|', 'empty', p_table) into v;
+  return v;
+end $$;
+create function v_probe.permits(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(string_agg(right(p.id::text, 4) || '=' || p.status || '/' || coalesce(p.outcome, '-'), ',' order by p.id), '')
+  from public.analysis_permits p where p.user_id = p_uid;
+$$;
+create function v_probe.events(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(e.event || ':' || e.n, ',' order by e.event)
+     from (select event, count(*) n from public.offline_allocation_ledger
+           where user_id = p_uid group by event) e), '');
+$$;
+create function v_probe.snapshot() returns void
+language plpgsql security definer set search_path = '' as $$
+declare t text;
+begin
+  delete from v_digest;
+  foreach t in array array[
+    'public.offline_devices', 'public.offline_grants', 'public.offline_allocation_ledger',
+    'public.settlement_receipts', 'public.offline_receipt_settlements'] loop
+    insert into v_digest values (t, v_probe.digest(t));
+  end loop;
+end $$;
+create function v_probe.changed() returns text
+language plpgsql security definer set search_path = '' as $$
+declare v text;
+begin
+  select string_agg(d.key, ',' order by d.key) into v
+  from v_digest d where d.digest <> v_probe.digest(d.key);
+  return coalesce(v, '');
+end $$;
+grant usage on schema v_probe to authenticated;
+grant execute on all functions in schema v_probe to authenticated;
+
+-- V1: the sweep is a pinned, owner-only definer; when pg_cron is present the
+-- scheduled job runs exactly it.
+do $$
+declare f record; r text;
+begin
+  select p.prosecdef, p.proconfig, p.provolatile, pg_get_function_result(p.oid) as result
+    into f
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'api_private' and p.proname = 'sweep_stale_analysis_permits';
+  if not found then
+    raise exception 'V1: the stale-permit sweep must be a named function, api_private.sweep_stale_analysis_permits(), not an anonymous cron statement';
+  end if;
+  if not f.prosecdef or f.result <> 'integer'
+     or not (f.proconfig @> array['search_path=""']::text[]) then
+    raise exception 'V1: the sweep is SECURITY DEFINER with a pinned search_path and returns the swept count (got %, %, %)',
+      f.prosecdef, f.proconfig, f.result;
+  end if;
+  foreach r in array array['anon', 'authenticated', 'service_role'] loop
+    if has_function_privilege(r, 'api_private.sweep_stale_analysis_permits(integer)', 'execute') then
+      raise exception 'V1: % must not hold EXECUTE on the sweep', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    if (select count(*) from cron.job where jobname = 'expire-stale-analysis-permits'
+          and command = 'select api_private.sweep_stale_analysis_permits()') <> 1
+       or exists (select 1 from cron.job
+                  where command ilike '%analysis_permits%'
+                    and command <> 'select api_private.sweep_stale_analysis_permits()') then
+      raise exception 'V1: the scheduled sweep must be exactly select api_private.sweep_stale_analysis_permits()';
+    end if;
+  else
+    raise notice 'V1: pg_cron is not installed here; the schedule itself is proven on a pg_cron-capable image';
+  end if;
+end $$;
+
+-- V2: preconditions. Vera: two tickets, one consumed through a recorded
+-- receipt, one still held under a HELD receipt. Vito: a settled permit with
+-- its receipt beside the stale, live and abstained ones.
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare
+  vera uuid := (select auth.uid());
+  r record; g record; v record;
+begin
+  select * into r from public.register_offline_device('vera-key-1', 'production', true);
+  if r.result <> 'accepted' then
+    raise exception 'V2 precondition: registration (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('vera-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'V2 precondition: two free tickets (got %, %)', g.result, g.ticket_ids;
+  end if;
+  insert into v_state values ('vera-grant', g.grant_id), ('vera-t1', g.ticket_ids[1]), ('vera-t2', g.ticket_ids[2]);
+  select * into v from v_probe.settle_receipt(
+    v_probe.receipt('w1103-rcpt-1', vera, 'vera-key-1', g.grant_id, g.ticket_ids[1], 'w1103-op-1',
+                    '00000000-0000-4000-8000-000000000711'),
+    v_probe.shot('00000000-0000-4000-8000-000000000711', null, 'scored'), null);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded'
+     or v.financial_disposition <> 'consumed' then
+    raise exception 'V2 precondition: the first ticket settles through its receipt (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  -- the second receipt could not be verified by the edge: HELD, ticket kept
+  select * into v from v_probe.settle_receipt(
+    v_probe.receipt('w1103-rcpt-2', vera, 'vera-key-1', g.grant_id, g.ticket_ids[2], 'w1103-op-2',
+                    '00000000-0000-4000-8000-000000000712'),
+    v_probe.shot('00000000-0000-4000-8000-000000000712', null, 'scored'), 'evidence_ambiguous');
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.status <> 'reconciliation_required'
+     or v.financial_disposition <> 'reserved' then
+    raise exception 'V2 precondition: the second receipt is held with its ticket reserved (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  if v_probe.events(vera) <> 'allocated:2,consumed:1' or public.offline_hold_count() <> 1
+     or public.lifetime_scored_count() <> 1 then
+    raise exception 'V2 precondition: one consumed, one outstanding (got %, hold %, scored %)',
+      v_probe.events(vera), public.offline_hold_count(), public.lifetime_scored_count();
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007301"}';
+do $$
+declare
+  vito uuid := (select auth.uid());
+  v text;
+begin
+  v := public.apply_synced_shot(v_probe.settle(vito,
+    v_probe.shot('00000000-0000-4000-8000-000000000741', '00000000-0000-4000-8000-000000000731', 'scored'),
+    'w1103-op-settled'));
+  if v <> 'accepted' then
+    raise exception 'V2 precondition: the settled permit''s sync with its receipt is accepted (got %)', v;
+  end if;
+  if (select count(*) from public.settlement_receipts where user_id = vito) <> 1 then
+    raise exception 'V2 precondition: the settlement receipt is durable';
+  end if;
+  if v_probe.permits(vito) <> '0731=finalized/scored,0732=reserved/-,0733=reserved/-,0734=released/low_confidence,0735=reserved/-' then
+    raise exception 'V2 precondition: permit shapes (got %)', v_probe.permits(vito);
+  end if;
+  if public.online_reservation_count() <> 1 then
+    raise exception 'V2 precondition: only the fresh permit is a live reservation (got %)', public.online_reservation_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+select v_probe.snapshot();
+
+-- V3: the sweep. Exactly the two stale reserved permits move; nothing offline
+-- moves by a single byte.
+set local statement_timeout = '5s';
+do $$
+declare n integer; rec record;
+begin
+  n := api_private.sweep_stale_analysis_permits();
+  if n <> 2 then
+    raise exception 'V3: exactly the two stale reserved permits are swept (got %)', n;
+  end if;
+  if v_probe.permits('00000000-0000-4000-8000-000000000073')
+     <> '0731=finalized/scored,0732=released/expired,0733=reserved/-,0734=released/low_confidence,0735=released/expired' then
+    raise exception 'V3: the settled, live and abstained permits are untouched (got %)',
+      v_probe.permits('00000000-0000-4000-8000-000000000073');
+  end if;
+  if v_probe.changed() <> '' then
+    raise exception 'V3: the sweep must not touch an offline device, grant, ledger event or receipt (changed: %)', v_probe.changed();
+  end if;
+  if not exists (select 1 from public.offline_grants where id = '00000000-0000-4000-8000-000000000721'
+                 and expires_at < now()) then
+    raise exception 'V3: an expired Pro lease is retained, never reclaimed by the sweep';
+  end if;
+  if (select count(*) from public.offline_receipt_settlements where user_id = '00000000-0000-4000-8000-000000000071'
+        and status = 'reconciliation_required' and financial_disposition = 'reserved'
+        and ticket_id = (select id from v_state where key = 'vera-t2')) <> 1
+     or exists (select 1 from public.offline_allocation_ledger
+                where ticket_id = (select id from v_state where key = 'vera-t2') and event <> 'allocated') then
+    raise exception 'V3: the held receipt keeps its ticket reserved through the sweep';
+  end if;
+end $$;
+reset statement_timeout;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare rec record; g record;
+begin
+  if public.offline_hold_count() <> 1 or v_probe.events((select auth.uid())) <> 'allocated:2,consumed:1' then
+    raise exception 'V3: Vera''s outstanding ticket is still held after the sweep (got %, %)',
+      public.offline_hold_count(), v_probe.events((select auth.uid()));
+  end if;
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
+    raise exception 'V3: access_state still counts the hold (got %, %, %)', rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into g from public.issue_offline_grant('vera-key-1', 2);
+  if g.result <> 'accepted' or g.ticket_ids <> array[(select id from v_state where key = 'vera-t2')] then
+    raise exception 'V3: the device re-obtains exactly its outstanding ticket after the sweep (got %, %)', g.result, g.ticket_ids;
+  end if;
+end $$;
+
+-- V4: the swept permit still backs the late rating it was reserved for, with
+-- its receipt; both of Vito's receipts survive a further sweep.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007301"}';
+do $$
+declare vito uuid := (select auth.uid()); v text;
+begin
+  v := public.apply_synced_shot(v_probe.settle(vito,
+    v_probe.shot('00000000-0000-4000-8000-000000000742', '00000000-0000-4000-8000-000000000732', 'scored'),
+    'w1103-op-late'));
+  if v <> 'accepted' then
+    raise exception 'V4: the swept permit''s late sync with its receipt is accepted (got %)', v;
+  end if;
+  if (select count(*) from public.settlement_receipts where user_id = vito) <> 2
+     or public.lifetime_scored_count() <> 2 then
+    raise exception 'V4: the late settlement writes its receipt and counts once (got %, %)',
+      (select count(*) from public.settlement_receipts where user_id = vito), public.lifetime_scored_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+select v_probe.snapshot();
+set local statement_timeout = '5s';
+do $$
+declare n integer;
+begin
+  n := api_private.sweep_stale_analysis_permits();
+  if n <> 0 or v_probe.changed() <> '' then
+    raise exception 'V4: a further sweep finds nothing stale and retains every receipt (got %, changed %)', n, v_probe.changed();
+  end if;
+  if v_probe.permits('00000000-0000-4000-8000-000000000073')
+     <> '0731=finalized/scored,0732=finalized/scored,0733=reserved/-,0734=released/low_confidence,0735=released/expired' then
+    raise exception 'V4: settled permits are terminal to the sweep (got %)', v_probe.permits('00000000-0000-4000-8000-000000000073');
+  end if;
+end $$;
+reset statement_timeout;
+
+-- V5: a stale permit another connection holds FOR UPDATE (a late sync in
+-- flight) is skipped, never waited for; once that settlement commits the
+-- sweep has nothing to do with it. Vlad and his permit are created and
+-- removed by the second connection so they are committed and visible to it.
+-- lock_timeout is the proof the sweep never waits: a blocked sweep fails
+-- here instead of hanging the matrix.
+set local lock_timeout = '5s';
+do $$
+declare
+  connection text := format('host=%s port=%s dbname=%s user=postgres',
+    split_part(current_setting('unix_socket_directories'), ',', 1), current_setting('port'), current_database());
+  n integer;
+  locked record;
+begin
+  perform v_probe.dblink_connect('w1103_sync', connection || ' application_name=w1103_sync');
+  perform v_probe.dblink_exec('w1103_sync', 'set statement_timeout = ''5s''');
+  perform v_probe.dblink_exec('w1103_sync', $sql$
+    delete from auth.users where id = '00000000-0000-4000-8000-000000000074';
+    insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+    values ('00000000-0000-4000-8000-000000000074', 'vlad@example.com', '{"full_name":"Vlad"}', '{"provider":"google"}');
+    insert into public.analysis_permits (id, user_id, idempotency_key, created_at)
+    values ('00000000-0000-4000-8000-000000000751', '00000000-0000-4000-8000-000000000074', 'w1103-inflight', now() - interval '2 days');
+  $sql$);
+  perform v_probe.dblink_exec('w1103_sync', 'begin');
+  perform 1 from v_probe.dblink('w1103_sync',
+    'select id from public.analysis_permits where id = ''00000000-0000-4000-8000-000000000751'' for update') as t(id uuid);
+  n := api_private.sweep_stale_analysis_permits();
+  select status, outcome into locked from public.analysis_permits where id = '00000000-0000-4000-8000-000000000751';
+  if n <> 0 or locked.status <> 'reserved' or locked.outcome is not null then
+    raise exception 'V5: a permit locked by an in-flight settlement is skipped, not swept or waited for (got %, %/%)',
+      n, locked.status, locked.outcome;
+  end if;
+  perform v_probe.dblink_exec('w1103_sync',
+    'update public.analysis_permits set status = ''finalized'', outcome = ''scored'' where id = ''00000000-0000-4000-8000-000000000751''');
+  perform v_probe.dblink_exec('w1103_sync', 'commit');
+  n := api_private.sweep_stale_analysis_permits();
+  select status, outcome into locked from public.analysis_permits where id = '00000000-0000-4000-8000-000000000751';
+  if n <> 0 or locked.status <> 'finalized' or locked.outcome <> 'scored' then
+    raise exception 'V5: the settlement that was in flight stands after the sweep (got %, %/%)',
+      n, locked.status, locked.outcome;
+  end if;
+  perform v_probe.dblink_exec('w1103_sync', 'delete from auth.users where id = ''00000000-0000-4000-8000-000000000074''');
+  perform v_probe.dblink_disconnect('w1103_sync');
+  if exists (select 1 from public.analysis_permits where id = '00000000-0000-4000-8000-000000000751') then
+    raise exception 'V5: the second connection must have removed its own rows';
+  end if;
+end $$;
+reset lock_timeout;
+
+-- V6: a malformed batch bound is refused; every client role is 42501.
+do $$
+begin
+  begin
+    perform api_private.sweep_stale_analysis_permits(0);
+    raise exception 'V6: a zero batch bound must be refused';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform api_private.sweep_stale_analysis_permits(10001);
+    raise exception 'V6: an oversized batch bound must be refused';
+  exception when invalid_parameter_value then null;
+  end;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007301"}';
+do $$
+begin
+  begin
+    perform api_private.sweep_stale_analysis_permits();
+    raise exception 'V6: a signed-in API caller must not run the sweep';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform api_private.sweep_stale_analysis_permits(10);
+    raise exception 'V6: a signed-in API caller must not run a bounded sweep either';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local role service_role;
+do $$
+begin
+  begin
+    perform api_private.sweep_stale_analysis_permits();
+    raise exception 'V6: service_role must not run the sweep';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local role anon;
+do $$
+begin
+  begin
+    perform api_private.sweep_stale_analysis_permits();
+    raise exception 'V6: anon must not run the sweep';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+rollback;
+
 create schema w07_probe;
 create extension dblink with schema w07_probe;
 
