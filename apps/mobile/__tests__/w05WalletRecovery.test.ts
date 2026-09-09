@@ -54,7 +54,6 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 import {
-  ApiError,
   createOfflineGrantClient,
   parseIssuedOfflineGrant,
   type IssuedOfflineGrant,
@@ -205,10 +204,7 @@ interface ReceiptsRouteCall {
 }
 
 type RouteAnswer =
-  | Record<string, unknown>
-  | Response
-  | Error
-  | Promise<Record<string, unknown>>;
+  Record<string, unknown> | Response | Error | Promise<Record<string, unknown>>;
 
 /** Serves the receipts route from a verdict function; every other route
  * answers 404 so nothing else can be mistaken for settlement. */
@@ -446,9 +442,7 @@ describe('W05-03 wallet crash recovery', () => {
     );
     expect(route.calls).toHaveLength(1);
     const pending = await pendingOfflineReceipts(db);
-    expect(pending.map(entry => entry.receiptId)).toEqual([
-      receipt!.receiptId,
-    ]);
+    expect(pending.map(entry => entry.receiptId)).toEqual([receipt!.receiptId]);
     expect((await readOfflineWalletStatus(db)).hold).toBe(true);
     expect((await readOfflineWalletJournal(db)).map(e => e.state)).toEqual([
       'in_flight',
@@ -685,7 +679,12 @@ describe('W05-03 wallet crash recovery', () => {
 /* Process death: a real SQLite file, SIGKILL at each step, relaunch.        */
 /* ------------------------------------------------------------------------ */
 
-const HARNESS_DIR = path.resolve(__dirname, '..', '__harness__', 'processDeath');
+const HARNESS_DIR = path.resolve(
+  __dirname,
+  '..',
+  '__harness__',
+  'processDeath',
+);
 const MOBILE_ROOT = path.resolve(__dirname, '..');
 const MOUNT_PATH = '/functions/v1/api';
 const OPERATION_ID = '44444444-4444-4444-8444-000000000001';
@@ -878,8 +877,7 @@ async function runWalletLaunches(
   const dbPath = path.join(dir, 'pickle-sensei.db');
   const service = await startReceiptService(options);
   try {
-    const nowMs = Date.now();
-    const issuedAt = Math.floor(nowMs / 1000) - 60;
+    const issuedAt = Math.floor(Date.now() / 1000) - 60;
     const fixture: WalletFixtureFile = {
       issued: grantResponse({
         issuer: service.baseUrl,
@@ -890,7 +888,6 @@ async function runWalletLaunches(
       operationId: OPERATION_ID,
       resultId: RESULT_ID,
       fullOutputSha256: RESULT_SHA,
-      nowMs,
     };
     const fixturePath = path.join(dir, 'wallet-fixture.json');
     writeFileSync(fixturePath, JSON.stringify(fixture));
@@ -1124,117 +1121,112 @@ describe('W05-03 process death: receipts survive SIGKILL and are never double-su
     expect(server.unauthorized).toEqual([]);
   });
 
-  it.each(WALLET_KILL_POINTS)(
-    'SIGKILL at $id: $step',
-    async point => {
-      const { launches, server } = await runWalletLaunches([
-        { launch: '1', kill: { id: point.id, trigger: point.trigger } },
-        { launch: '2' },
-      ]);
-      const [first, second] = launches;
+  it.each(WALLET_KILL_POINTS)('SIGKILL at $id: $step', async point => {
+    const { launches, server } = await runWalletLaunches([
+      { launch: '1', kill: { id: point.id, trigger: point.trigger } },
+      { launch: '2' },
+    ]);
+    const [first, second] = launches;
 
-      // The first launch died exactly where intended, by SIGKILL.
-      expect(first!.signal).toBe('SIGKILL');
-      expect(first!.killMarker?.startsWith(point.id)).toBe(true);
-      expect(first!.report).toBeNull();
-      expect(receiptsRouteRequests(first!.serverAfter)).toHaveLength(
-        point.asFound.presentations,
-      );
+    // The first launch died exactly where intended, by SIGKILL.
+    expect(first!.signal).toBe('SIGKILL');
+    expect(first!.killMarker?.startsWith(point.id)).toBe(true);
+    expect(first!.report).toBeNull();
+    expect(receiptsRouteRequests(first!.serverAfter)).toHaveLength(
+      point.asFound.presentations,
+    );
 
-      // What the relaunch found on disk before any recovery ran.
-      const report = requireReport(second!);
-      expect(second!.exitCode).toBe(0);
-      expect(second!.stderr).toBe('');
-      const asFound = report.asFound;
-      expect(asFound.grants).toHaveLength(point.asFound.grants);
-      expect(
-        asFound.tickets.filter(ticket => ticket.state === 'consumed'),
-      ).toHaveLength(point.asFound.consumedTickets);
-      expect(asFound.receipts).toHaveLength(point.asFound.receipts);
-      expect(asFound.receipts.every(r => r.settlement === null)).toBe(true);
-      expect(asFound.journal.map(entry => entry.state)).toEqual(
-        point.asFound.journal,
-      );
-      // An in-flight presentation with no recorded answer is a HOLD, never a
-      // refund and never a fresh receipt: the wallet says so before draining.
-      const unanswered = point.asFound.journal.filter(
-        state => state === 'in_flight',
-      ).length;
-      expect(report.asFoundStatus.hold).toBe(unanswered > 0);
-      expect(report.asFoundStatus.unansweredPresentations).toBe(unanswered);
-      if (point.asFound.receipts === 1) {
-        expect(report.asFoundStatus.pending).toEqual([
-          {
-            receiptId: asFound.receipts[0]!.receiptId,
-            operationId: OPERATION_ID,
-            settlement: null,
-            presentations: unanswered,
-            phase: unanswered > 0 ? 'presented_unanswered' : 'queued',
-          },
-        ]);
-      }
-
-      // The relaunch keeps the ORIGINAL receipt when one survived, and
-      // consumes exactly one ticket in total either way.
-      expect(report.consumption.replayed).toBe(point.asFound.receipts === 1);
-      if (point.asFound.receipts === 1) {
-        expect(report.consumption.receiptId).toBe(
-          asFound.receipts[0]!.receiptId,
-        );
-      }
-      const receiptId = report.consumption.receiptId;
-      const final = report.final;
-      expect(final.grants).toHaveLength(1);
-      expect(final.grants[0]!.lifecycleSequence).toBe(1);
-      expect(final.tickets).toHaveLength(TICKETS.length);
-      expect(final.tickets.filter(t => t.state === 'consumed')).toEqual([
-        expect.objectContaining({ state: 'consumed', receiptId }),
-      ]);
-      expect(final.receipts).toEqual([
-        expect.objectContaining({
-          ownerKey: OWNER,
-          receiptId,
+    // What the relaunch found on disk before any recovery ran.
+    const report = requireReport(second!);
+    expect(second!.exitCode).toBe(0);
+    expect(second!.stderr).toBe('');
+    const asFound = report.asFound;
+    expect(asFound.grants).toHaveLength(point.asFound.grants);
+    expect(
+      asFound.tickets.filter(ticket => ticket.state === 'consumed'),
+    ).toHaveLength(point.asFound.consumedTickets);
+    expect(asFound.receipts).toHaveLength(point.asFound.receipts);
+    expect(asFound.receipts.every(r => r.settlement === null)).toBe(true);
+    expect(asFound.journal.map(entry => entry.state)).toEqual(
+      point.asFound.journal,
+    );
+    // An in-flight presentation with no recorded answer is a HOLD, never a
+    // refund and never a fresh receipt: the wallet says so before draining.
+    const unanswered = point.asFound.journal.filter(
+      state => state === 'in_flight',
+    ).length;
+    expect(report.asFoundStatus.hold).toBe(unanswered > 0);
+    expect(report.asFoundStatus.unansweredPresentations).toBe(unanswered);
+    if (point.asFound.receipts === 1) {
+      expect(report.asFoundStatus.pending).toEqual([
+        {
+          receiptId: asFound.receipts[0]!.receiptId,
           operationId: OPERATION_ID,
-          settlement: 'accepted',
-        }),
+          settlement: null,
+          presentations: unanswered,
+          phase: unanswered > 0 ? 'presented_unanswered' : 'queued',
+        },
       ]);
-      expect(final.receipts[0]!.settledAt).not.toBeNull();
-      // Every journalled presentation names the same single receipt; the
-      // orphaned entry (if any) is closed as superseded, the new one applied.
-      expect(final.journal.map(entry => entry.state)).toEqual([
-        ...point.asFound.journal.map(() => 'superseded' as const),
-        'applied',
-      ]);
-      expect(
-        final.journal.every(
-          entry =>
-            entry.ownerKey === OWNER &&
-            entry.receiptIds.length === 1 &&
-            entry.receiptIds[0] === receiptId,
-        ),
-      ).toBe(true);
-      expect(report.finalStatus).toEqual({
-        hold: false,
-        unansweredPresentations: 0,
-        pending: [],
-      });
+    }
 
-      // Server view: the relaunch presented exactly once, always the same
-      // receipt id, and the server holds exactly one recorded receipt.
-      const requests = receiptsRouteRequests(server);
-      expect(requests).toHaveLength(point.asFound.presentations + 1);
-      expect(requests.every(r => r.status === 200)).toBe(true);
-      expect(requests.map(r => r.receiptIds)).toEqual(
-        requests.map(() => [receiptId]),
-      );
-      expect(server.recorded).toEqual([receiptId]);
-      expect(server.presentations).toEqual({
-        [receiptId]: point.asFound.presentations + 1,
-      });
-      expect(server.unrouted).toEqual([]);
-      expect(server.unauthorized).toEqual([]);
-    },
-  );
+    // The relaunch keeps the ORIGINAL receipt when one survived, and
+    // consumes exactly one ticket in total either way.
+    expect(report.consumption.replayed).toBe(point.asFound.receipts === 1);
+    if (point.asFound.receipts === 1) {
+      expect(report.consumption.receiptId).toBe(asFound.receipts[0]!.receiptId);
+    }
+    const receiptId = report.consumption.receiptId;
+    const final = report.final;
+    expect(final.grants).toHaveLength(1);
+    expect(final.grants[0]!.lifecycleSequence).toBe(1);
+    expect(final.tickets).toHaveLength(TICKETS.length);
+    expect(final.tickets.filter(t => t.state === 'consumed')).toEqual([
+      expect.objectContaining({ state: 'consumed', receiptId }),
+    ]);
+    expect(final.receipts).toEqual([
+      expect.objectContaining({
+        ownerKey: OWNER,
+        receiptId,
+        operationId: OPERATION_ID,
+        settlement: 'accepted',
+      }),
+    ]);
+    expect(final.receipts[0]!.settledAt).not.toBeNull();
+    // Every journalled presentation names the same single receipt; the
+    // orphaned entry (if any) is closed as superseded, the new one applied.
+    expect(final.journal.map(entry => entry.state)).toEqual([
+      ...point.asFound.journal.map(() => 'superseded' as const),
+      'applied',
+    ]);
+    expect(
+      final.journal.every(
+        entry =>
+          entry.ownerKey === OWNER &&
+          entry.receiptIds.length === 1 &&
+          entry.receiptIds[0] === receiptId,
+      ),
+    ).toBe(true);
+    expect(report.finalStatus).toEqual({
+      hold: false,
+      unansweredPresentations: 0,
+      pending: [],
+    });
+
+    // Server view: the relaunch presented exactly once, always the same
+    // receipt id, and the server holds exactly one recorded receipt.
+    const requests = receiptsRouteRequests(server);
+    expect(requests).toHaveLength(point.asFound.presentations + 1);
+    expect(requests.every(r => r.status === 200)).toBe(true);
+    expect(requests.map(r => r.receiptIds)).toEqual(
+      requests.map(() => [receiptId]),
+    );
+    expect(server.recorded).toEqual([receiptId]);
+    expect(server.presentations).toEqual({
+      [receiptId]: point.asFound.presentations + 1,
+    });
+    expect(server.unrouted).toEqual([]);
+    expect(server.unauthorized).toEqual([]);
+  });
 
   it('a HELD verdict survives the relaunch and the same receipt id is re-presented until accepted', async () => {
     const { launches, server } = await runWalletLaunches(
@@ -1246,7 +1238,11 @@ describe('W05-03 process death: receipts survive SIGKILL and are never double-su
     expect(first!.exitCode).toBe(0);
     const receiptId = firstReport.consumption.receiptId;
     expect(firstReport.final.receipts).toEqual([
-      expect.objectContaining({ receiptId, settlement: 'held', settledAt: null }),
+      expect.objectContaining({
+        receiptId,
+        settlement: 'held',
+        settledAt: null,
+      }),
     ]);
     expect(firstReport.final.journal.map(entry => entry.state)).toEqual([
       'applied',
