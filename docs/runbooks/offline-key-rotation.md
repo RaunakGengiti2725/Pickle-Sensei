@@ -40,6 +40,20 @@ wiring: `offlineGrantKeyRing()` and `POST /v1/offline/grants` in
   `invalid_key` and the route answers a generic **503** (`SigningKeyUnavailable`)
   without spending a grant. Nothing is signed with a half-configured ring.
 
+- **Key-material consistency** (checked at import, before any grant is
+  issued; each failure is `invalid_key` → generic 503, no `issue_offline_grant`
+  call):
+  - `active.d` must be a valid P-256 scalar (`0 < d < n`) and `active.x/y`
+    must be the public point that belongs to that `d` — the importer signs a
+    probe with `d` and verifies it under `(x, y)`. A private JWK whose
+    coordinates were copied from another key is refused, in both the bare
+    single-JWK form and the ring form.
+  - Every `x/y` pair (active and previous) must be a point on P-256 (32-byte
+    base64url coordinates that satisfy the curve equation). Off-curve
+    material is refused at import rather than failing every verification.
+  - `previous.jwk.x/y` must differ from the active key's point: repeating the
+    active material under an old `kid` is not a rotation and is refused.
+
 - **Window**: `retiredAtEpochSeconds ≤ overlapEndsAtEpochSeconds ≤
 retiredAtEpochSeconds + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`
   (7 days = the longest Pro lease). Instants are non-negative integer epoch
@@ -53,9 +67,13 @@ retiredAtEpochSeconds + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`
   - After the previous entry is dropped (`previous: null`) → `invalid_key`.
     `now` is the server's trusted clock, never a value from the token.
 - **Issuance** always uses `active`; the response `keyId` and the
-  `offline_grant_audit` log line show which key signed. Grants embed
-  `allowedKeyIds = [active kid, previous kid]` from the ring, so a client
-  binding never allowlists a key the server does not hold.
+  `offline_grant_audit` log line show which key signed. The signed claims do
+  **not** carry the key list. `ring.allowedKeyIds = [active kid, previous kid]`
+  is verifier-side binding context: the server derives it from the ring it
+  holds and passes it as `binding.allowedKeyIds` when signing and verifying,
+  so the allowlist can only name keys the server actually holds. A binding
+  may narrow the ring further (for example to the active `kid` only); it can
+  never add a key the ring does not hold.
 - Rotation is a **new secret value**: the isolate re-imports the ring on the
   first request after the value changes (cache keyed by the raw value). No
   remote key discovery, no clock fallback, no state writes.
@@ -80,11 +98,14 @@ material into chat, tickets, commits, logs or this repository.
    old public JWK + window) and check it locally before touching production:
 
    ```bash
-   cd supabase/functions/api/__wf__ && deno task test  # all Edge tests, no live DB needed for the rotation file
+   cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts
    ```
 
-   Then dry-import the exact document you are about to set (reads the file,
-   prints only the kids and window — never the keys):
+   Then dry-import the exact document you are about to set, from the
+   repository root (reads the file, prints only the kids and window — never
+   the keys). The dry-import runs the same importer as the route, including
+   the key-material consistency checks above, so a document it accepts is one
+   the route will sign with, and one it refuses is one the route would 503 on:
 
    ```bash
    deno eval --config supabase/functions/api/deno.json \
@@ -92,8 +113,11 @@ material into chat, tickets, commits, logs or this repository.
      /path/to/ring.json
    ```
 
-   An `invalid_key` here means the document would 503 in production — fix it
-   first.
+   An `OfflineGrantCryptoError: invalid_key` here means the document would
+   503 in production — fix it first. Typical causes: `d` and `x/y` from
+   different keys (re-export the new key pair together), an `x/y` that is not
+   a P-256 point, a previous entry that still carries `d`, a previous entry
+   whose `x/y` equals the active key's, or a window past the 7-day bound.
 
 5. **Set the secret** (coordinated rollout only; requires an explicit
    human go-ahead per `AGENTS.md`):
