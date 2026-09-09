@@ -502,10 +502,28 @@ export function isIntendedRevenueCatCustomerNotFound(value: unknown): boolean {
   );
 }
 
+/** Diagnostics sink for a failure the status route settles: the same
+ * `(code, status, detail)` the confirm route's worker reports. The verdict
+ * itself is durable (`last_error_code`) whether or not a sink is given. */
+export type DeletionFailureSink = NonNullable<AccountDeletionWorkerDependencies["onFailure"]>;
+
+/** `POST /v1/me/delete-status`: the minimal durable view for the holder of the
+ * status capability. A confirmed operation whose Auth identity is already gone
+ * is the one state the app can no longer drive through its session — the
+ * deleting user's `auth.sessions` row cascaded away with `auth.users` — so
+ * before answering, the route settles such a phase under the capability the
+ * app is polling with: the durable operation's original owner and id are
+ * re-acquired (`claim_account_deletion_status_work`, never a new operation),
+ * every owner namespace is counted by the database, and the verdict is
+ * recorded through the same certify/fail RPCs the worker uses. Residue leaves
+ * the row blocked without a receipt; a clean sweep certifies exactly once. No
+ * session is authenticated and nothing external is repeated: while the Auth
+ * identity exists the claim answers `blocked` and the view is returned as read. */
 export async function accountDeletionStatusResponse(
   rpc: DeletionOperationRpc,
   request: Request,
   body: unknown,
+  onFailure?: DeletionFailureSink,
 ): Promise<Response> {
   const unavailable = () => accountDeletionStatusUnavailableResponse();
   const url = new URL(request.url);
@@ -522,17 +540,168 @@ export async function accountDeletionStatusResponse(
     return unavailable();
   }
   try {
-    const data = await rpcData(rpc, "read_account_deletion_status", {
+    const parameters = {
       p_operation_id: body.operationId.toLowerCase(),
       p_status_capability_hash: await deletionStatusCapabilityHash(body.operationId, capability),
-    });
+    };
+    let data = await rpcData(rpc, "read_account_deletion_status", parameters);
     if (data === null) return unavailable();
-    const status = parseDeletionOperationStatus(data);
+    let status = parseDeletionOperationStatus(data);
+    if (
+      status &&
+      (status.state === "in_progress" || status.state === "blocked") &&
+      (await settleAccountDeletionAfterAuth(rpc, parameters, onFailure))
+    ) {
+      data = await rpcData(rpc, "read_account_deletion_status", parameters);
+      if (data === null) return unavailable();
+      status = parseDeletionOperationStatus(data);
+    }
     if (status) return statusJson(200, status);
   } catch {
     return statusJson(503, { error: { code: "account.deletion_status_unavailable" } });
   }
   return statusJson(503, { error: { code: "account.deletion_status_unavailable" } });
+}
+
+/** Settles the post-Auth certification phase for the status capability's
+ * operation when the database hands it out. Returns whether a lease was taken
+ * (so the caller re-reads the view). A claim the Edge cannot bind to the
+ * operation is left to expire unused; a settlement RPC that did not answer is
+ * reported and leaves the view as read — the next poll tries again. */
+async function settleAccountDeletionAfterAuth(
+  rpc: DeletionOperationRpc,
+  parameters: { p_operation_id: string; p_status_capability_hash: string },
+  onFailure: DeletionFailureSink | undefined,
+): Promise<boolean> {
+  let claim: unknown;
+  try {
+    claim = await rpcData(rpc, "claim_account_deletion_status_work", parameters);
+  } catch (error) {
+    reportDeletionFailure(onFailure, "checkpoint_unavailable", error);
+    return false;
+  }
+  if (!isRecord(claim) || claim.outcome !== "claimed") return false;
+  const lease = parseLease(claim);
+  if (
+    !lease ||
+    !lease.authDeleted ||
+    lease.operationId !== parameters.p_operation_id ||
+    !isUuid(claim.ownerId)
+  ) {
+    return false;
+  }
+  const ownerId = canonicalOwner(claim.ownerId);
+  const binding = {
+    p_owner_id: ownerId,
+    p_operation_id: lease.operationId,
+    p_lease_token: lease.leaseToken,
+  };
+  try {
+    await certifyVerifiedSweep(
+      rpc,
+      () => countOwnerNamespaceResidue(rpc, binding),
+      ownerId,
+      lease.operationId,
+      binding,
+    );
+  } catch (error) {
+    await recordDeletionFailure(rpc, binding, "completion_unverified", error, onFailure);
+  }
+  return true;
+}
+
+function reportDeletionFailure(
+  onFailure: DeletionFailureSink | undefined,
+  code: DeletionFailureCode,
+  error: unknown,
+): void {
+  try {
+    if (error instanceof OwnerNamespaceResidue) onFailure?.(code, error.status, error.detail);
+    else onFailure?.(code, boundedFailureStatus(error));
+  } catch {
+    // Diagnostics cannot change the worker's outcome or lease release.
+  }
+}
+
+/** Records `code` against the lease (releasing it) after reporting the
+ * failure; a release that did not answer leaves the lease to expire and the
+ * next poll re-acquires the phase. */
+async function recordDeletionFailure(
+  rpc: DeletionOperationRpc,
+  binding: { p_owner_id: string; p_operation_id: string; p_lease_token: string },
+  code: DeletionFailureCode,
+  error: unknown,
+  onFailure: DeletionFailureSink | undefined,
+): Promise<void> {
+  reportDeletionFailure(onFailure, code, error);
+  try {
+    await rpcData(rpc, "fail_account_deletion_operation", { ...binding, p_error_code: code });
+  } catch {
+    // The lease expires on its own; the phase is re-acquired afterwards.
+  }
+}
+
+/** The post-Auth sweep the status route certifies by: the database counts,
+ * under the lease, the rows still referencing the owner in every table whose
+ * owner column cascades from the identity (`read_account_deletion_owner_
+ * residue`). Every `ACCOUNT_OWNER_NAMESPACES` entry must be counted — one the
+ * database did not list is `unread`, never `empty` — and a count in a table
+ * the Edge does not list is residue all the same. A refused (`stale_lease`) or
+ * malformed answer leaves every namespace unread. */
+async function countOwnerNamespaceResidue(
+  rpc: DeletionOperationRpc,
+  binding: { p_owner_id: string; p_operation_id: string; p_lease_token: string },
+): Promise<OwnerNamespaceVerdict[]> {
+  const counted = await rpcData(rpc, "read_account_deletion_owner_residue", binding);
+  const unread = (
+    table: string,
+    reason: "page_error" | "malformed_page",
+    code: string,
+  ): OwnerNamespaceVerdict => ({
+    table,
+    outcome: "unread",
+    reason,
+    code,
+    httpStatus: null,
+    pages: 1,
+  });
+  const allUnread = (reason: "page_error" | "malformed_page", code: string) =>
+    ACCOUNT_OWNER_NAMESPACES.map((namespace) => unread(namespace.table, reason, code));
+  if (isRecord(counted) && counted.outcome === "stale_lease") {
+    return allUnread("page_error", "stale_lease");
+  }
+  if (!isRecord(counted) || counted.outcome !== "counted" || !Array.isArray(counted.namespaces)) {
+    return allUnread("malformed_page", INVENTORY_INCOMPLETE_CODES.malformed_page);
+  }
+  const counts = new Map<string, number>();
+  for (const entry of counted.namespaces) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.schema !== "string" ||
+      typeof entry.table !== "string" ||
+      typeof entry.rows !== "number" ||
+      !Number.isSafeInteger(entry.rows) ||
+      entry.rows < 0
+    ) {
+      return allUnread("malformed_page", INVENTORY_INCOMPLETE_CODES.malformed_page);
+    }
+    const table = entry.schema === "public" ? entry.table : `${entry.schema}.${entry.table}`;
+    counts.set(table, (counts.get(table) ?? 0) + entry.rows);
+  }
+  const verdicts: OwnerNamespaceVerdict[] = ACCOUNT_OWNER_NAMESPACES.map((namespace) => {
+    const rows = counts.get(namespace.table);
+    counts.delete(namespace.table);
+    if (rows === undefined) {
+      return unread(namespace.table, "malformed_page", INVENTORY_INCOMPLETE_CODES.malformed_page);
+    }
+    return rows > 0
+      ? { table: namespace.table, outcome: "residue", rows, pages: 1 }
+      : { table: namespace.table, outcome: "empty", pages: 1 };
+  });
+  for (const [table, rows] of counts) {
+    if (rows > 0) verdicts.push({ table, outcome: "residue", rows, pages: 1 });
+  }
+  return verdicts;
 }
 
 export function isIntendedAuthUserNotFound(error: unknown): boolean {
@@ -669,10 +838,11 @@ async function runClaimedDeletion(
     if (!isRecord(result) || result.outcome !== "checkpointed")
       throw new Error("Deletion lease is unavailable.");
   };
+  const sweep = () => verifyOwnerNamespacesEmpty(dependencies, ownerId);
   try {
     if (lease.authDeleted) {
       failureCode = "completion_unverified";
-      return await certifyVerifiedSweep(rpc, dependencies, ownerId, operationId, binding);
+      return await certifyVerifiedSweep(rpc, sweep, ownerId, operationId, binding);
     }
     // Every namespace must be readable by its actor BEFORE anything
     // irreversible: a read the actor is not granted, or rows the source cannot
@@ -728,7 +898,7 @@ async function runClaimedDeletion(
     if (deleted.error && !isIntendedAuthUserNotFound(deleted.error))
       throw new Error("Auth deletion is unavailable.");
     failureCode = "completion_unverified";
-    return await certifyVerifiedSweep(rpc, dependencies, ownerId, operationId, binding);
+    return await certifyVerifiedSweep(rpc, sweep, ownerId, operationId, binding);
   } catch (error) {
     try {
       if (error instanceof OwnerNamespaceResidue) {
@@ -759,7 +929,7 @@ async function runClaimedDeletion(
  * certifies. */
 async function certifyVerifiedSweep(
   rpc: DeletionOperationRpc,
-  dependencies: AccountDeletionWorkerDependencies,
+  sweep: () => Promise<ReadonlyArray<OwnerNamespaceVerdict>>,
   ownerId: string,
   operationId: string,
   binding: { p_owner_id: string; p_operation_id: string; p_lease_token: string },
@@ -770,10 +940,7 @@ async function certifyVerifiedSweep(
         p_owner_id: ownerId,
         p_operation_id: operationId,
       });
-      const residue = ownerNamespaceResidue(
-        "completion",
-        await verifyOwnerNamespacesEmpty(dependencies, ownerId),
-      );
+      const residue = ownerNamespaceResidue("completion", await sweep());
       if (residue) throw residue;
       // A durable row that records the Auth absence without certifying it is
       // certified by the worker that verified the sweep — the receipt exists
