@@ -455,9 +455,18 @@ def prior_from_record(record: dict) -> tuple[dict | None, int]:
     """
     rounds = record.get("rounds") or []
     next_round = max([int(r.get("round", 0)) for r in rounds] + [0]) + 1
+    blocked_notes: list[dict] = []
     for rnd in reversed(rounds):
         impl = rnd.get("implement")
         if not impl or impl.get("blocked"):
+            if impl:
+                blocked_notes.append({
+                    "round": rnd.get("round"),
+                    "branch": impl.get("branch", ""),
+                    "head_sha": impl.get("head_sha", ""),
+                    "blocked_reason": impl.get("blocked_reason", ""),
+                    "summary": impl.get("summary", ""),
+                })
             continue
         decision = rnd.get("decision") or {}
         rev = rnd.get("review") or {}
@@ -470,7 +479,11 @@ def prior_from_record(record: dict) -> tuple[dict | None, int]:
             findings["adversary_breaks"] = blocking_breaks(adv)
             findings["adversary_nonblocking_fix_if_crash_or_cheap"] = nonblocking_breaks(adv)
             findings["adversary_branch"] = adv.get("attack_branch", "") or adv.get("attack_branch_sha", "")
+        if blocked_notes:
+            findings["later_blocked_rounds_reuse_their_verified_work"] = blocked_notes
         return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}, next_round
+    if blocked_notes:
+        return {"branch": blocked_notes[0]["branch"], "head_sha": blocked_notes[0]["head_sha"], "findings": {"judge": [], "later_blocked_rounds_reuse_their_verified_work": blocked_notes}}, next_round
     return None, next_round
 
 

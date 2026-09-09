@@ -1,7 +1,7 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
   "manifest_version": "2026-09-08.4",
   "packages": [
     {
@@ -3594,6 +3594,18 @@
           "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
           "id": "W08-06-AC2",
           "kind": "test"
+        },
+        {
+          "command": "./supabase/tests/run_rls_tests.sh",
+          "criterion": "fresh-install + all historical-upgrade SQL security matrices pass",
+          "id": "W08-06-AC3",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "residue after the Auth delete never yields a completion receipt: durable row stays blocked without a receipt, /delete-status is honest, and a clean sweep certifies completion exactly once",
+          "id": "W08-06-AC4",
+          "kind": "regress"
         }
       ],
       "additive_shared_paths": [],
@@ -3610,7 +3622,8 @@
       "parent": "W08",
       "plane": "cloud",
       "serial_groups": [
-        "edge-index"
+        "edge-index",
+        "sql"
       ],
       "severity": "P0",
       "source_ids": [
@@ -3620,7 +3633,10 @@
       "write_paths": [
         "supabase/functions/api/accountDeletionOperations.ts",
         "supabase/functions/api/legal.ts",
-        "supabase/functions/api/__wf__/account_deletion_complete.test.ts"
+        "supabase/functions/api/__wf__/account_deletion_complete.test.ts",
+        "supabase/migrations/",
+        "supabase/tests/account_deletion_operations.sql",
+        "supabase/tests/security_regression.sql"
       ]
     },
     {

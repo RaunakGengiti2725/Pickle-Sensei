@@ -579,9 +579,9 @@ pkg(
     "W08-06", "W08", "Edge account deletion: complete owner inventory + external revocation + retention disclosure parity",
     "Ensure the Edge deletion operation completes all namespaces (with W07-06 pagination), revokes Apple token, and legal.ts/support copy match the retained free-rating ledger behaviour.",
     severity="P0", source_ids=["W08"], plane="cloud", deps=["W07-06"],
-    write_paths=["supabase/functions/api/accountDeletionOperations.ts", "supabase/functions/api/legal.ts", "supabase/functions/api/__wf__/account_deletion_complete.test.ts"],
-    serial_groups=["edge-index"],
-    acceptance=[EDGE_CHECK, EDGE_TESTS],
+    write_paths=["supabase/functions/api/accountDeletionOperations.ts", "supabase/functions/api/legal.ts", "supabase/functions/api/__wf__/account_deletion_complete.test.ts", "supabase/migrations/", "supabase/tests/account_deletion_operations.sql", "supabase/tests/security_regression.sql"],
+    serial_groups=["edge-index", "sql"],
+    acceptance=[EDGE_CHECK, EDGE_TESTS, RLS, regress("residue after the Auth delete never yields a completion receipt: durable row stays blocked without a receipt, /delete-status is honest, and a clean sweep certifies completion exactly once")],
 )
 
 # ---------------------------------------------------------------------------

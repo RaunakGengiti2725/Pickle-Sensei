@@ -1,0 +1,18 @@
+{
+  "base_sha": "0e7f18ede164ed1f7331cde775f1e382bc94cf73",
+  "integration_order": {},
+  "packages": {
+    "W08-06": {
+      "agent_counts": {
+        "completed": 1,
+        "failed": 0,
+        "launched": 1,
+        "requested": 1
+      },
+      "candidate": null,
+      "status": "BLOCKED_EXTERNAL"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-17-keep"
+}
