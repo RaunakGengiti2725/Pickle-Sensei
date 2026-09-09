@@ -591,6 +591,36 @@
       "workflow_run_ids": []
     },
     {
+      "label": "implement-W01-05-r1",
+      "package_id": "W01-05",
+      "phase": "implement",
+      "prompt_sha256": "a003718b7bd0495c6dea59f39d8af78e39b929626f04e5515de55054d61def1a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W01-05-r1",
+      "package_id": "W01-05",
+      "phase": "review",
+      "prompt_sha256": "d41713f1cc6838ddab43f4a64d3c5e280104cc18e19d65dfe6e73411c0302ead",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W01-05-r1",
+      "package_id": "W01-05",
+      "phase": "adversary",
+      "prompt_sha256": "f86b95ff5aef69b5aa2992549dc6012dd80e3d619b41683787b947378ba9f760",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
       "label": "implement-W02-01-r3",
       "package_id": "W02-01",
       "phase": "implement",
@@ -731,41 +761,141 @@
       "workflow_run_ids": []
     },
     {
-      "label": "implement-W03-01-r7",
-      "package_id": "W03-01",
+      "label": "implement-W04-01-r5",
+      "package_id": "W04-01",
       "phase": "implement",
-      "prompt_sha256": "88c84400fcc872909f29f55e4bd49094feab009a1bfc7d6249c32572ed9184b9",
+      "prompt_sha256": "7fc4deafec75f5d0c0b13f9aeb2bac785b703cd864a24505ec2b75698ec6f445",
       "role": "implementer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "review-W03-01-r7",
-      "package_id": "W03-01",
+      "label": "implement-W04-01-r5-c2",
+      "package_id": "W04-01",
+      "phase": "implement",
+      "prompt_sha256": "ef9429a9f980490f7d009700914ca4f1505b203a2a342e77ba550446c42307b5",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W04-01-r5",
+      "package_id": "W04-01",
       "phase": "review",
-      "prompt_sha256": "ca71664da9a16ffb84277032558c4faf0d75d0897dee5355a59edf586fada37a",
+      "prompt_sha256": "f519105bd13015328cef1593d226ba6ca908327ebe7a52c6438123d4dd03ada3",
       "role": "reviewer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "adversary-W03-01-r7",
-      "package_id": "W03-01",
+      "label": "adversary-W04-01-r5",
+      "package_id": "W04-01",
       "phase": "adversary",
-      "prompt_sha256": "0449f9573b767b581eb5027354ab0e4563abf914fb681e2b5bd99761d04b307a",
+      "prompt_sha256": "6651eb5c44562bc8f921a6fb35ca23b24ab2986c1d91cc228cadd3201d1c11b6",
       "role": "adversary",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "implement-W03-01-r8",
-      "package_id": "W03-01",
+      "label": "review-W04-01-r5-c2",
+      "package_id": "W04-01",
+      "phase": "review",
+      "prompt_sha256": "528440a78b859260fff6997e53a9af6710069dae32f5451a914f610a5c584053",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W04-01-r5-c2",
+      "package_id": "W04-01",
+      "phase": "adversary",
+      "prompt_sha256": "282d7b7dd7a8aac8781f113b48db35ee3b45d48313cdb4ff76f7a726380851e4",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W05-01-r1",
+      "package_id": "W05-01",
       "phase": "implement",
-      "prompt_sha256": "a673dbe8a00d195e3b73d5b54e0dfb07a265232a7a4b65f7cd2cef6de7664f14",
+      "prompt_sha256": "a3771e76963d04ec2211c72831137f8750b75d03ac664741191c3c6aa32b2e89",
       "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W05-01-r2",
+      "package_id": "W05-01",
+      "phase": "implement",
+      "prompt_sha256": "8eb05e95a5076cab4842572980eb8f1f61f2741e5f27b0dc8196ca634cc7ddcf",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W05-02-r3",
+      "package_id": "W05-02",
+      "phase": "implement",
+      "prompt_sha256": "7ecdd41a02c485f2e439a1ef877e1f0ba9e46bb5e84bc965079c24cc6c44bd26",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W05-02-r3",
+      "package_id": "W05-02",
+      "phase": "review",
+      "prompt_sha256": "f5c3e2e8300355e06f0866b904c0845a3c69bd716ccf5580e4e3f09111228200",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W05-02-r3",
+      "package_id": "W05-02",
+      "phase": "adversary",
+      "prompt_sha256": "29f486ba364d457abff971896e26ad88036518df6daed7d15719ad2a0c8d40b1",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W05-02-r4",
+      "package_id": "W05-02",
+      "phase": "implement",
+      "prompt_sha256": "fb981583dd79b1cd10446705cdd45dd055e298a33570f8cfa92cef3cb8b6439a",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W05-02-r4",
+      "package_id": "W05-02",
+      "phase": "review",
+      "prompt_sha256": "22230830768c8766cac27a16638087a2acfad73dd945d9052911f0f3b022f3ec",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W05-02-r4",
+      "package_id": "W05-02",
+      "phase": "adversary",
+      "prompt_sha256": "bf78ed5e5bc1c127d8633f907b7d3e5bc7a8c391559741cbff911bfc4a678d6f",
+      "role": "adversary",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
@@ -931,6 +1061,36 @@
       "workflow_run_ids": []
     },
     {
+      "label": "implement-W07-03-r3",
+      "package_id": "W07-03",
+      "phase": "implement",
+      "prompt_sha256": "0e7f1b3bbd295efea003c8705346f3bc0668c73dd8ef455ac7f3f8b0172285e4",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W07-03-r3",
+      "package_id": "W07-03",
+      "phase": "review",
+      "prompt_sha256": "079c3061e7198f33b29670580d9c8179779dc2585108049dbe4da49eef313242",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W07-03-r3",
+      "package_id": "W07-03",
+      "phase": "adversary",
+      "prompt_sha256": "87363ab66911998ce8324f903d6a5cabde8a78ceb828b7ab253e8125b3690ced",
+      "role": "adversary",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
       "label": "implement-W07-05-r3",
       "package_id": "W07-05",
       "phase": "implement",
@@ -1051,41 +1211,81 @@
       "workflow_run_ids": []
     },
     {
-      "label": "implement-W08-01-r3",
-      "package_id": "W08-01",
+      "label": "implement-W07-07-r1",
+      "package_id": "W07-07",
       "phase": "implement",
-      "prompt_sha256": "b63e4985941211484ae721db6c212a3c065f1dddd59c446603d45ecf5d295c2a",
+      "prompt_sha256": "824e7b2093ab010ab698a8e87219af64207f7b3bbe0ac391a14afd519a426f89",
       "role": "implementer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "review-W08-01-r3",
-      "package_id": "W08-01",
+      "label": "review-W07-07-r1",
+      "package_id": "W07-07",
       "phase": "review",
-      "prompt_sha256": "cb23f3ae54876b03939a1d08d70d36c39c45503a09d1fa8f41603ff149529dca",
+      "prompt_sha256": "c4a63e2c5586b753080e213065820e98df860673ec3c59b94e52465412f930ef",
       "role": "reviewer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "adversary-W08-01-r3",
-      "package_id": "W08-01",
+      "label": "adversary-W07-07-r1",
+      "package_id": "W07-07",
       "phase": "adversary",
-      "prompt_sha256": "7abbb06427c6f54d578c1b0e057de2fb752f0961733064444121c2f3bb15e9ff",
+      "prompt_sha256": "07be8abf5dc83b07d9f20de80c7ee411be7c4c20022e889e945285c38c5e195d",
       "role": "adversary",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "implement-W08-01-r4",
+      "label": "implement-W08-01-r5",
       "package_id": "W08-01",
       "phase": "implement",
-      "prompt_sha256": "8ac9350367fe02577b00c4d0eb6852d87bf4f4ee6c9982b4506e3f0d582d66f9",
+      "prompt_sha256": "1b175676bcacca991afeec79fb11f06a751417f1769d8aea66e842a09d499836",
       "role": "implementer",
+      "session_id": null,
+      "status": "launched",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W08-01-r5-c2",
+      "package_id": "W08-01",
+      "phase": "implement",
+      "prompt_sha256": "9bce2a7f0395b059cad0fab811419cfbcc9f0f1aad79443d9c9625f3b56d0242",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "implement-W08-06-r1",
+      "package_id": "W08-06",
+      "phase": "implement",
+      "prompt_sha256": "1112dce4d0c47f0bbe7fbd8d2d66061d9d7c9ec15ff5d43022205bd52dcb6397",
+      "role": "implementer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "review-W08-06-r1",
+      "package_id": "W08-06",
+      "phase": "review",
+      "prompt_sha256": "c3bc92838df81a39526462ac43cf0ad440a7b1c8c8c2e2a71064ecf1291eed33",
+      "role": "reviewer",
+      "session_id": null,
+      "status": "completed",
+      "workflow_run_ids": []
+    },
+    {
+      "label": "adversary-W08-06-r1",
+      "package_id": "W08-06",
+      "phase": "adversary",
+      "prompt_sha256": "ad73ff66e7000d384ef57996ac92601478c4ebae2cff91a93ce7e04427477233",
+      "role": "adversary",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
@@ -1241,60 +1441,30 @@
       "workflow_run_ids": []
     },
     {
-      "label": "implement-W11-01-r1",
+      "label": "implement-W11-01-r3",
       "package_id": "W11-01",
       "phase": "implement",
-      "prompt_sha256": "32a932986ce27e0d4a2ea902aa58398d5d2f3bfcbfc32ebb9c443a23c25bc4ad",
+      "prompt_sha256": "6c82346ccbd088256e9013b3e8ad655d358cdfcbcc514dadc84ffb46d3982671",
       "role": "implementer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "review-W11-01-r1",
+      "label": "review-W11-01-r3",
       "package_id": "W11-01",
       "phase": "review",
-      "prompt_sha256": "65ed941d28d5c6d644b7addab1fee6f96ac96bf8ee1e99c20da1531c0c8fadc5",
+      "prompt_sha256": "0553abcd81aa17d21f549c4e500ead1301648896e4c2dcb927859122a9d02750",
       "role": "reviewer",
       "session_id": null,
       "status": "completed",
       "workflow_run_ids": []
     },
     {
-      "label": "adversary-W11-01-r1",
+      "label": "adversary-W11-01-r3",
       "package_id": "W11-01",
       "phase": "adversary",
-      "prompt_sha256": "55eb7f697e51d7b18f5c3165424a543d3d59dd6a25bc2c6acb20e174840aea6e",
-      "role": "adversary",
-      "session_id": null,
-      "status": "completed",
-      "workflow_run_ids": []
-    },
-    {
-      "label": "implement-W11-01-r2",
-      "package_id": "W11-01",
-      "phase": "implement",
-      "prompt_sha256": "de59b409c040419a0726c42996e948ece47a3130fce1bff5b19019f1cef89e43",
-      "role": "implementer",
-      "session_id": null,
-      "status": "completed",
-      "workflow_run_ids": []
-    },
-    {
-      "label": "review-W11-01-r2",
-      "package_id": "W11-01",
-      "phase": "review",
-      "prompt_sha256": "a7976481b9d013467c2587393bf41bda5316207315a3f6383b4e64271387d8b8",
-      "role": "reviewer",
-      "session_id": null,
-      "status": "completed",
-      "workflow_run_ids": []
-    },
-    {
-      "label": "adversary-W11-01-r2",
-      "package_id": "W11-01",
-      "phase": "adversary",
-      "prompt_sha256": "fa30c9c317cbd487d0080baaa5cb79851dc2b577f72afb6dd2627588d3990cd6",
+      "prompt_sha256": "8af4c098c7d81c5198ca440f85aef45275e53f1f7215ed590d0eb1d71713780f",
       "role": "adversary",
       "session_id": null,
       "status": "completed",
@@ -1363,19 +1533,19 @@
   ],
   "counts": {
     "agents": {
-      "completed": 136,
+      "completed": 152,
       "failed": 0,
-      "launched": 136,
-      "requested": 136,
+      "launched": 153,
+      "requested": 153,
       "with_session_id": 0
     },
     "packages": {
-      "ACCEPTED": 27,
-      "BLOCKED_EXTERNAL": 6,
-      "DEFERRED_V1_1": 48,
+      "ACCEPTED": 30,
+      "BLOCKED_EXTERNAL": 7,
+      "DEFERRED_V1_1": 49,
       "NOT_STARTED": 11,
-      "REQUEUE": 2,
-      "RUNNING": 9
+      "REQUEUE": 1,
+      "RUNNING": 5
     },
     "sessions": 0,
     "workflow_runs": 0
@@ -1904,7 +2074,7 @@
       "parent": "W03",
       "plane": "cloud",
       "severity": "P0",
-      "status": "RUNNING",
+      "status": "DEFERRED_V1_1",
       "workflow_run_ids": []
     },
     {
@@ -1994,17 +2164,22 @@
       "parent": "W05",
       "plane": "mac",
       "severity": "P0",
-      "status": "RUNNING",
+      "status": "BLOCKED_EXTERNAL",
       "workflow_run_ids": []
     },
     {
-      "candidate": null,
+      "candidate": {
+        "branch": "devin/pp/w05-02/impl-r4",
+        "head_sha": "473ae596339d1e63b29aa4a124fbdeab27e4ccc8",
+        "lane": 1,
+        "round": 4
+      },
       "external_blocker": null,
       "id": "W05-02",
       "parent": "W05",
       "plane": "cloud",
       "severity": "P0",
-      "status": "RUNNING",
+      "status": "ACCEPTED",
       "workflow_run_ids": []
     },
     {
@@ -2130,13 +2305,18 @@
       "workflow_run_ids": []
     },
     {
-      "candidate": null,
+      "candidate": {
+        "branch": "devin/pp/w07-03/impl-r3",
+        "head_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+        "lane": 1,
+        "round": 3
+      },
       "external_blocker": null,
       "id": "W07-03",
       "parent": "W07",
       "plane": "cloud",
       "severity": "P0",
-      "status": "RUNNING",
+      "status": "ACCEPTED",
       "workflow_run_ids": []
     },
     {
@@ -2178,13 +2358,18 @@
       "workflow_run_ids": []
     },
     {
-      "candidate": null,
+      "candidate": {
+        "branch": "devin/pp/w07-07/impl-r1",
+        "head_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+        "lane": 1,
+        "round": 1
+      },
       "external_blocker": null,
       "id": "W07-07",
       "parent": "W07",
       "plane": "cloud",
       "severity": "P0",
-      "status": "RUNNING",
+      "status": "ACCEPTED",
       "workflow_run_ids": []
     },
     {
@@ -2414,7 +2599,7 @@
       "parent": "W11",
       "plane": "cloud",
       "severity": "P0",
-      "status": "REQUEUE",
+      "status": "RUNNING",
       "workflow_run_ids": []
     },
     {

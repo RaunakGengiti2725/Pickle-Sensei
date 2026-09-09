@@ -1,5 +1,20 @@
 {
-  "agents": [],
+  "agents": [
+    {
+      "label": "implement-W08-01-r5",
+      "phase": "implement",
+      "prompt_sha256": "1b175676bcacca991afeec79fb11f06a751417f1769d8aea66e842a09d499836",
+      "role": "implementer",
+      "status": "launched"
+    },
+    {
+      "label": "implement-W08-01-r5-c2",
+      "phase": "implement",
+      "prompt_sha256": "9bce2a7f0395b059cad0fab811419cfbcc9f0f1aad79443d9c9625f3b56d0242",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
   "base_sha": "5632e1e3940904a5200c54b472227d78076f1453",
   "competing": 2,
   "integration_branch": "devin/1788854799-production-program-integration",
@@ -53,7 +68,11 @@
     },
     "head_sha": "8dab3b85c5708ae73864f0ad448d655c571f1b21"
   },
-  "rounds": [],
+  "rounds": [
+    {
+      "round": 5
+    }
+  ],
   "start_round": 5,
   "status": "RUNNING",
   "wave_id": "wave-9-keep"
