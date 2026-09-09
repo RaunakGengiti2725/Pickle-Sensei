@@ -332,11 +332,14 @@ function permitServer() {
   return { fetchMock, urls };
 }
 
-function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
+function swingClipWithSidecar(name = 'w01-partial'): {
+  clip: CapturedClip;
+  sidecarJson: string;
+} {
   const { sequence, window } = generateSwingSequence({});
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
-    uri: 'file:///captures/w01-partial.mov',
+    uri: `file:///captures/${name}.mov`,
     durationMs: window.endMs,
     fps: sequence.video.fps,
     width: sequence.video.width,
@@ -388,7 +391,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
     poseSequence: {
       schemaVersion: 1,
       format: 'pickle.pose-sequence.v1',
-      uri: 'file:///captures/w01-partial.pose.json',
+      uri: `file:///captures/${name}.pose.json`,
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
@@ -557,12 +560,14 @@ async function prepareOriginal(
   options: {
     store?: CaptureStore;
     server?: { fetchMock: unknown; urls: string[] };
+    clipName?: string;
   } = {},
 ) {
   const { db, native, calls, failNext } =
     options.store ?? createCaptureAnalysisDb();
   mockCurrentDb = () => db;
-  const { clip: bare, sidecarJson } = swingClipWithSidecar();
+  const clipName = options.clipName ?? 'w01-partial';
+  const { clip: bare, sidecarJson } = swingClipWithSidecar(clipName);
   const clip: CapturedClip = {
     ...bare,
     byteSize: 25,
@@ -573,7 +578,7 @@ async function prepareOriginal(
       operationId: fixtureUuid(`${label}-native-op`),
       origin: 'native_export',
       algorithm: 'sha256',
-      videoFileName: 'w01-partial.mov',
+      videoFileName: `${clipName}.mov`,
       byteSize: 25,
       sha256: sha256Hex('synthetic partial movie bytes'),
     },
@@ -1148,7 +1153,7 @@ describe('W01-05 — mechanics-only partial outcome', () => {
     [
       'forbidden terms, invented numbers, a percentage and an approximation',
       'Your DUPR is about 4.5 ≈ 87% confidence; rating was counted.',
-      ['DUPR', '4.5', '87%', '≈', 'rating was counted'],
+      ['DUPR', '4.5', '87%', '≈', 'confidence; rating was counted'],
     ],
     [
       'a fabricated score and range',
@@ -1247,7 +1252,7 @@ describe('W01-05 — mechanics-only partial outcome', () => {
     expect(copy).not.toContain('DUPR');
     expect(copy).not.toContain('4.5');
     expect(copy).not.toMatch(/\d+\s*%|≈/);
-    expect(copy).not.toContain('rating was counted');
+    expect(copy).not.toContain('confidence; rating was counted');
 
     let replay: RunCaptureAnalysisOutcome | null = null;
     try {
@@ -1720,7 +1725,9 @@ describe('W01-05 — the typed refusal arriving through a recovery re-reserve', 
       expect(delivered.operation.completionKind).toBe('partial');
       expect(delivered.operation.finalRecordId).toBe(partial.analysisId);
       expect(delivered.attempt.run.permitId).toBeNull();
-      expect(delivered.attempt.technicalFailure).toBeNull();
+      // The transport failure of the first reservation try is durable history
+      // on the same attempt; the settled refusal does not erase it.
+      expect(delivered.attempt.technicalFailure).toBe('reservation_transport');
 
       const replay = expectPartialMarker(await run());
       expect(replay.replayed).toBe(true);
@@ -1961,7 +1968,7 @@ describe('W01-05 — the mounted AnalyzeScreen delivers the partial', () => {
 });
 
 describe('W01-05 — an existing install created by the previous schema', () => {
-  it('is upgraded in place on open: rows, history, indexes, foreign-key enforcement and immutability survive, and the partial completion is accepted', async () => {
+  it('is upgraded in place before the first original analysis: rows, history, indexes, foreign-key enforcement and immutability survive, and the partial completion is accepted', async () => {
     const path = join(
       tmpdir(),
       `w01-partial-upgrade-${process.pid}-${Date.now()}.sqlite`,
@@ -2023,8 +2030,28 @@ describe('W01-05 — an existing install created by the previous schema', () => 
     mockNavigation.replace.mockClear();
     mockTriggerOutboxSync.mockClear();
 
-    // 2. The app updates and opens the same database file.
+    // 2. The app updates and opens the same database file: opening alone
+    // rewrites no data.
     const upgraded = createSqliteTestDb(path);
+    expect(
+      schemaSql(upgraded.native, 'table', 'analysis_reservation_refusal'),
+    ).not.toBe('');
+    expect(snapshotRows(upgraded.native)).toEqual(rowsBefore);
+    expect(rowsOf(upgraded.native, 'kv')).toEqual(kvBefore);
+
+    // 3. The first original analysis on this connection upgrades the live
+    // schema in one transaction before it writes anything of its own.
+    const refusal = releaseNotAuthorizedServer();
+    const flow = await prepareOriginal(
+      'w01-upgrade-partial',
+      SERVER_MESSAGE,
+      'forehand_drive',
+      {
+        store: { ...upgraded, failNext: upgraded.failStatementOnce },
+        server: refusal,
+        clipName: 'w01-upgrade-partial',
+      },
+    );
     expect(
       schemaSql(upgraded.native, 'table', 'analysis_logical_operations'),
     ).toMatch(/'partial'/);
@@ -2035,10 +2062,13 @@ describe('W01-05 — an existing install created by the previous schema', () => 
         'analysis_logical_operations_immutable',
       ),
     ).toMatch(/'partial'/);
-    expect(
-      schemaSql(upgraded.native, 'table', 'analysis_reservation_refusal'),
-    ).not.toBe('');
-    expect(snapshotRows(upgraded.native)).toEqual(rowsBefore);
+    for (const table of tables)
+      expect(rowsOf(upgraded.native, table)).toEqual(
+        expect.arrayContaining(rowsBefore.get(table)!),
+      );
+    expect(rowsOf(upgraded.native, 'analysis_logical_operations')[0]).toEqual(
+      operationsBefore[0],
+    );
     expect(rowsOf(upgraded.native, 'kv')).toEqual(kvBefore);
     expect(indexesOf(upgraded.native)).toEqual(indexesBefore);
     expect(foreignKeysOf(upgraded.native)).toEqual(foreignKeysBefore);
@@ -2052,6 +2082,7 @@ describe('W01-05 — an existing install created by the previous schema', () => 
     const scored = operationsBefore[0] as {
       owner_key: string;
       operation_id: string;
+      capture_id: string;
       final_record_id: string | null;
       completion_kind: string | null;
     };
@@ -2069,33 +2100,36 @@ describe('W01-05 — an existing install created by the previous schema', () => 
           'INSERT INTO analysis_logical_operations SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND operation_id = ?',
         )
         .run(scored.owner_key, scored.operation_id),
-    ).toThrow(/UNIQUE|PRIMARY KEY/);
-    // Foreign keys are enforced against the rebuilt parent.
+    ).toThrow(/UNIQUE|PRIMARY KEY|cannot replace history/);
+    // Foreign keys are enforced in both directions of the rebuilt table: its
+    // attempts still reference it, and it still references its capture.
     expect(() =>
       upgraded.native
         .prepare(
-          `INSERT INTO analysis_execution_attempts (owner_key, operation_id, owner_generation, capture_id, analysis_id,
-             request_hash, api_origin, reservation_key, attempt_ordinal, state, attempt_count, created_at_ms, updated_at_ms)
-           VALUES (?, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 0, 'ffffffff-ffff-4fff-8fff-ffffffffffff',
-             'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', ?, ?, 'w01-orphan-reservation', 1, 'reserve_pending', 0, 1, 1)`,
+          'DELETE FROM analysis_logical_operations WHERE owner_key = ? AND operation_id = ?',
         )
-        .run(scored.owner_key, 'f'.repeat(64), ORIGIN),
+        .run(scored.owner_key, scored.operation_id),
     ).toThrow(/FOREIGN KEY/);
+    expect(() =>
+      upgraded.native
+        .prepare('DELETE FROM local_capture WHERE owner_key = ? AND id = ?')
+        .run(scored.owner_key, scored.capture_id),
+    ).toThrow(/FOREIGN KEY/);
+    expect(rowsOf(upgraded.native, 'analysis_logical_operations')[0]).toEqual(
+      operationsBefore[0],
+    );
     expect(
       schemaSql(upgraded.native, 'table', 'w01_previous_logical_operations'),
     ).toBe('');
+    expect(
+      upgraded.native
+        .prepare(
+          "SELECT name FROM sqlite_temp_master WHERE name LIKE 'analysis_logical_operations%'",
+        )
+        .all(),
+    ).toEqual([]);
 
-    // 3. On the upgraded install the typed refusal settles as the partial.
-    const refusal = releaseNotAuthorizedServer();
-    const flow = await prepareOriginal(
-      'w01-upgrade-partial',
-      SERVER_MESSAGE,
-      'forehand_drive',
-      {
-        store: { ...upgraded, failNext: upgraded.failStatementOnce },
-        server: refusal,
-      },
-    );
+    // 4. On the upgraded install the typed refusal settles as the partial.
     const before = snapshotAccess();
     const partial = expectPartialMarker(await flow.run());
     expect(reserveCalls(refusal.urls)).toHaveLength(1);
@@ -2119,7 +2153,7 @@ describe('W01-05 — an existing install created by the previous schema', () => 
       [],
     );
 
-    // 4. Opening the already-upgraded file again is a no-op for the data.
+    // 5. Opening the already-upgraded file again is a no-op for the data.
     const rowsAfter = snapshotRows(upgraded.native);
     const schemaAfter = schemaSql(
       upgraded.native,
