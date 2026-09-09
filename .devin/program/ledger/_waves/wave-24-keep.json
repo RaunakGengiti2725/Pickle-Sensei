@@ -1,0 +1,38 @@
+{
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "integration_order": {},
+  "packages": {
+    "W04-04": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w04-04/impl-r3",
+        "head_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+        "lane": 1,
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "W05-04": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w05-04/impl-r5",
+        "head_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+        "lane": 1,
+        "round": 5
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-24-keep"
+}
