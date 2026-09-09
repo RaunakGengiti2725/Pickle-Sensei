@@ -81,7 +81,6 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.1
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import {
-  admitChargeableRelease,
   readChargeableReleaseAdmission,
   readVerifiedReleasePolicy,
   ReleasePolicyError,
@@ -97,11 +96,13 @@ import {
 } from "./canonicalDigest.ts";
 import {
   importOfflineGrantKeyRing,
+  OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS,
   offlineGrantClaimsFromIssuance,
   OfflineGrantCryptoError,
   OfflineGrantIssuanceError,
   signOfflineExecutionGrant,
   verifyOfflineExecutionGrant,
+  type OfflineGrantKey,
   type OfflineGrantKeyRing,
 } from "./offlineSignature.ts";
 import {
@@ -5146,24 +5147,84 @@ function offlineGrantVerificationInstant(
   return Math.min(nowEpochSeconds, exp - 1);
 }
 
+/** The `kid` of a compact JWS header (NOT verification — it selects which
+ * configured key the signature is then verified against). */
+function decodeJwsHeaderKid(compactJws: string): string | null {
+  const segments = compactJws.split(".");
+  if (segments.length !== 3) return null;
+  try {
+    const base64 = segments[0].replace(/-/g, "+").replace(/_/g, "/");
+    const header: unknown = JSON.parse(atob(base64));
+    return isRecord(header) && typeof header.kid === "string" ? header.kid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The signing keys and instant a delayed receipt's grant is verified
+ * against. The ring is read as of the instant the grant was live: a previous
+ * key that had not yet retired then WAS the issuer (no retirement window to
+ * apply at that instant), while a grant it signed after retiring is verified
+ * inside its overlap window under the verifier's own rules (issued no later
+ * than retirement plus the propagation grace, before the overlap closed).
+ * The ring's plausibility against the TRUSTED clock is kept: a previous key
+ * whose retirement lies further ahead of now than the grace is not honoured
+ * at all. A key the ring no longer holds verifies nothing. */
+function offlineReceiptVerificationView(
+  grant: OfflineSignedExecutionGrant,
+  keyRing: OfflineGrantKeyRing,
+  nowEpochSeconds: number,
+): { readonly keys: readonly OfflineGrantKey[]; readonly nowEpochSeconds: number } {
+  const instant = offlineGrantVerificationInstant(grant, nowEpochSeconds);
+  const previous = keyRing.previousKey;
+  if (
+    previous === null ||
+    previous.retiredAtEpochSeconds >
+      nowEpochSeconds + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS
+  ) {
+    return { keys: [keyRing.activeKey], nowEpochSeconds: instant };
+  }
+  if (instant < previous.retiredAtEpochSeconds) {
+    return {
+      keys: [
+        keyRing.activeKey,
+        { purpose: previous.purpose, kid: previous.kid, key: previous.key },
+      ],
+      nowEpochSeconds: instant,
+    };
+  }
+  return {
+    keys: [keyRing.activeKey, previous],
+    nowEpochSeconds:
+      decodeJwsHeaderKid(grant.compactJws) === previous.kid
+        ? Math.min(instant, previous.overlapEndsAtEpochSeconds - 1)
+        : instant,
+  };
+}
+
 type OfflineReceiptReleaseLineage =
-  | { readonly release: OfflineReleasedArtifacts; readonly hold: null }
-  | { readonly release: null; readonly hold: OfflineReceiptHoldReason };
+  | { readonly release: OfflineReleasedArtifacts; readonly hold: null | "grant_revoked" }
+  | { readonly release: null; readonly hold: "evidence_ambiguous" };
 
 /** The release a delayed receipt's grant must verify against: the artifacts
  * of the policy the grant was issued under (`release.policy.sha256` in its
- * payload) — the active one without a read, otherwise the installed lineage
- * read by digest as the service role (once per distinct release per batch);
- * or the HOLD the lineage decides. A withdrawn release revokes every grant
- * issued under it; an unknown, unverifiable or never-eligible lineage is
- * ambiguous evidence. Only a storage failure throws (answered 503). The
+ * payload), read by digest as the service role once per distinct release per
+ * batch (the batch seeds the active policy so grants under it need no read);
+ * with the HOLD the lineage decides for chargeable work under it. A
+ * withdrawn release still verifies the grants issued under it — its
+ * abstentions are recorded, its chargeable work is a grant_revoked HOLD; an
+ * unknown lineage is ambiguous evidence. Whether the release was admissible
+ * when the grant was issued is what the grant's signature attests (the
+ * issuer judged it then, on its own trusted clock), so it is not re-derived
+ * here; only the lineage's standing NOW is. A read that fails
+ * (storage) or an authority row that cannot be trusted (integrity) throws
+ * and is answered 503: corrupt server state decides nothing durable. The
  * digest is taken from the still-unverified payload: it merely selects
  * which installed authority the signature is then verified against, and a
  * grant that names a release it was not signed over fails that check. */
 async function offlineReceiptReleaseLineage(
   grant: OfflineSignedExecutionGrant,
-  active: { readonly sha256: string; readonly release: OfflineReleasedArtifacts },
-  lineages: Map<string, OfflineReceiptReleaseLineage>,
+  policies: Map<string, VerifiedReleasePolicy | null>,
   nowEpochSeconds: number,
 ): Promise<OfflineReceiptReleaseLineage> {
   const payload = decodeJwtPayload(grant.compactJws);
@@ -5172,55 +5233,22 @@ async function offlineReceiptReleaseLineage(
   if (typeof named !== "string" || !/^[0-9a-f]{64}$/.test(named)) {
     return { release: null, hold: "evidence_ambiguous" };
   }
-  if (named === active.sha256) return { release: active.release, hold: null };
-  const known = lineages.get(named);
-  if (known) return known;
-  const admin = billingAdminDb();
-  if (!admin) throw new ReleasePolicyError("storage", { name: "MissingConfiguration" });
-  let policy: VerifiedReleasePolicy | null;
-  try {
+  let policy = policies.get(named);
+  if (policy === undefined) {
+    const admin = billingAdminDb();
+    if (!admin) throw new ReleasePolicyError("storage", { name: "MissingConfiguration" });
     policy = await readVerifiedReleasePolicy(() =>
       admin.rpc("read_analysis_release_policy_lineage", { p_policy_sha256: named }),
     );
-  } catch (error) {
-    if (error instanceof ReleasePolicyError && error.failure === "integrity") {
-      policy = null;
-    } else {
-      throw error;
-    }
+    policies.set(named, policy);
   }
-  let lineage: OfflineReceiptReleaseLineage;
-  if (!policy) {
-    lineage = { release: null, hold: "evidence_ambiguous" };
-  } else if (
+  if (!policy) return { release: null, hold: "evidence_ambiguous" };
+  const artifacts = offlineReleaseArtifacts(policy);
+  const revoked =
     policy.approval.denyNewAuthorizations ||
     (typeof policy.approval.withdrawnAt === "number" &&
-      policy.approval.withdrawnAt <= nowEpochSeconds)
-  ) {
-    lineage = { release: null, hold: "grant_revoked" };
-  } else {
-    // Eligible when the grant was issued (the instant the issuer judged it),
-    // never later than the last instant the grant was live.
-    const iat = payload?.iat;
-    const admission = admitChargeableRelease(
-      policy,
-      typeof iat === "number" && Number.isSafeInteger(iat)
-        ? Math.min(iat, offlineGrantVerificationInstant(grant, nowEpochSeconds))
-        : offlineGrantVerificationInstant(grant, nowEpochSeconds),
-    );
-    lineage =
-      admission.status === "active"
-        ? { release: offlineReleaseArtifacts(admission.policy), hold: null }
-        : {
-            release: null,
-            hold:
-              admission.status === "ineligible" && admission.reasonCode === "withdrawn"
-                ? "grant_revoked"
-                : "evidence_ambiguous",
-          };
-  }
-  lineages.set(named, lineage);
-  return lineage;
+      policy.approval.withdrawnAt <= nowEpochSeconds);
+  return { release: artifacts, hold: revoked ? "grant_revoked" : null };
 }
 
 /** Why this receipt must be HELD instead of settled, or null when its
@@ -5242,9 +5270,10 @@ async function offlineReceiptHoldReason(
   }
   if (lineage.release === null) return lineage.hold;
   const release = lineage.release;
+  const view = offlineReceiptVerificationView(grant, keyRing, nowEpochSeconds);
   let verified;
   try {
-    verified = await verifyOfflineExecutionGrant(grant, keyRing, {
+    verified = await verifyOfflineExecutionGrant(grant, view.keys, {
       binding: {
         issuer: OFFLINE_GRANT_ISSUER,
         allowedKeyIds: keyRing.allowedKeyIds,
@@ -5252,7 +5281,7 @@ async function offlineReceiptHoldReason(
         installationKeyId: receipt.installationKeyId,
       },
       release,
-      nowEpochSeconds: offlineGrantVerificationInstant(grant, nowEpochSeconds),
+      nowEpochSeconds: view.nowEpochSeconds,
     });
   } catch (error) {
     if (error instanceof OfflineGrantCryptoError) return "evidence_ambiguous";
@@ -5272,6 +5301,11 @@ async function offlineReceiptHoldReason(
     }
   } else if (receipt.ticket !== null) {
     return "evidence_ambiguous";
+  }
+  // Under a withdrawn release nothing rendered is chargeable; an abstention
+  // has nothing to charge and is recorded as such.
+  if (lineage.hold !== null && receipt.billingDisposition !== "not_chargeable") {
+    return lineage.hold;
   }
   if (output === null) {
     return receipt.billingDisposition === "joint_verification_required" ? "evidence_missing" : null;
@@ -5344,16 +5378,23 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
   if (!keyRing) {
     return serviceUnavailable("Offline receipt settlement", { name: "SigningKeyUnavailable" });
   }
-  const release = await chargeableReleaseAdmission();
-  if (release.status === "unavailable") {
-    return serviceUnavailable("Offline receipt settlement", release.error);
+  // The release authority is judged PER RECEIPT against the lineage its grant
+  // names — whether the currently active release is chargeable right now
+  // decides nothing about work already done under a grant. The active policy
+  // is read once per batch (uncached, service role) only to spare grants
+  // issued under it a lineage read; withdrawn or not, it is judged like any
+  // other lineage. An authority that cannot be read or trusted is a 503.
+  const admin = billingAdminDb();
+  if (!admin) {
+    return serviceUnavailable("Offline receipt settlement", { name: "MissingConfiguration" });
   }
-  if (release.status === "ineligible") return releaseNotAuthorized(release.reasonCode);
-  const activeRelease = {
-    sha256: release.policy.approval.policy.sha256,
-    release: offlineReleaseArtifacts(release.policy),
-  };
-  const lineages = new Map<string, OfflineReceiptReleaseLineage>();
+  const policies = new Map<string, VerifiedReleasePolicy | null>();
+  try {
+    const active = await readVerifiedReleasePolicy(() => admin.rpc("read_analysis_release_policy"));
+    if (active) policies.set(active.approval.policy.sha256, active);
+  } catch (error) {
+    return serviceUnavailable("Offline receipt settlement", error);
+  }
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
 
   const results: OfflineReceiptResult[] = [];
@@ -5373,7 +5414,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       holdReason = await offlineReceiptHoldReason(
         authed,
         keyRing,
-        await offlineReceiptReleaseLineage(parsed.grant, activeRelease, lineages, nowEpochSeconds),
+        await offlineReceiptReleaseLineage(parsed.grant, policies, nowEpochSeconds),
         nowEpochSeconds,
         parsed,
       );
