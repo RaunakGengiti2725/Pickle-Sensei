@@ -281,8 +281,9 @@ Deno.test(
       assertEquals(verified.protectedHeader.kid, ACTIVE_KID);
     }
 
-    // The binding allowlist still applies on top of the ring.
-    await rejectWith("invalid_key", () =>
+    // The binding allowlist still applies on top of the ring (kid outside it is
+    // refused by the shared metadata contract before any key is consulted).
+    await rejectWith("invalid_metadata", () =>
       rotation.verifyOfflineExecutionGrant(
         underPrevious,
         ring,
@@ -351,7 +352,7 @@ Deno.test(
     const verified = await rotation.verifyOfflineExecutionGrant(
       signed,
       rotated,
-      moduleContext(rotated.allowedKeyIds, NOW + 8 * DAY - 1),
+      moduleContext(rotated.allowedKeyIds, NOW + 7 * DAY - 1),
     );
     assertEquals(verified.protectedHeader.kid, ACTIVE_KID);
   },
