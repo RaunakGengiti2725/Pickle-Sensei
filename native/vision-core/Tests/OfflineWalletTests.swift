@@ -660,11 +660,17 @@ final class OfflineWalletTests: XCTestCase {
       try OfflineWallet.openFence(try XCTUnwrap(store.items[fenceAccount]), ownerId: ownerA, key: key), 2,
       "clear commits the fence to the revision it observed")
 
+    let next = try relaunched.replace(
+      ownerId: ownerA, expectedRevision: 0,
+      contents: OfflineWalletContents(grants: [], receipts: [receipt(id: "receipt-unsent")])
+    )
+    XCTAssertEqual(next.revision, 3, "revision 2 was already handed out")
+
     store.items[account] = revisionTwoBytes
     assertFailure(.tampered, "the pre-clear envelope must not replay as current state") { try relaunched.load(ownerId: ownerA) }
     XCTAssertEqual(try relaunched.discardCorrupt(ownerId: ownerA), .tampered)
-    let next = try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
-    XCTAssertEqual(next.revision, 3, "revision 2 was already handed out")
+    XCTAssertEqual(
+      try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 4)
   }
 
   func testClearOfAnAbsentWalletLeavesTheFenceAlone() throws {

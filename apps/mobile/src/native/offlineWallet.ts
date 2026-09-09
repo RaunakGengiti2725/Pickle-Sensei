@@ -177,20 +177,34 @@ export async function replaceOfflineWallet(
   contents: OfflineWalletContents,
 ): Promise<OfflineWalletSnapshot> {
   const native = requireNative();
+  const validated = validateContents(contents);
   const result = await native
-    .replaceWallet(ownerId, expectedRevision, {
-      grants: contents.grants.map(grant => ({
-        grantId: grant.grantId,
-        compactJws: grant.compactJws,
-      })),
-      receipts: contents.receipts.map(receipt => ({
-        receiptId: receipt.receiptId,
-        kind: receipt.kind,
-        payloadJson: receipt.payloadJson,
-      })),
-    })
+    .replaceWallet(ownerId, expectedRevision, validated)
     .catch(error => rethrowTyped(error));
   return parseSnapshot(result, ownerId);
+}
+
+/**
+ * Applies the read-back rules to what is about to be written, so a payload
+ * this side's `JSON.parse` would refuse on load is rejected here as a typed
+ * `invalid_receipt` / `invalid_grant` / `capacity_exceeded` before native
+ * commits it — never as a `bridge_contract` after the wallet already moved.
+ */
+function validateContents(contents: OfflineWalletContents): {
+  grants: OfflineWalletGrant[];
+  receipts: OfflineWalletReceipt[];
+} {
+  const reject = (failure: OfflineWalletFailure, detail: string) =>
+    new OfflineWalletError(
+      failure,
+      `The offline wallet contents are invalid: ${detail}.`,
+    );
+  const shape = parseContents(contents, {
+    grants: detail => reject('invalid_grant', detail),
+    receipts: detail => reject('invalid_receipt', detail),
+    capacity: detail => reject('capacity_exceeded', detail),
+  });
+  return { grants: shape.grants, receipts: shape.receipts };
 }
 
 export async function clearOfflineWallet(
@@ -306,48 +320,74 @@ function parseSnapshot(
   ) {
     throw contract('revision');
   }
-  if (!Array.isArray(record.grants)) throw contract('grants');
-  if (!Array.isArray(record.receipts)) throw contract('receipts');
+  const { grants, receipts } = parseContents(record, {
+    grants: contract,
+    receipts: contract,
+    capacity: contract,
+  });
+  return {
+    ownerId: record.ownerId,
+    revision: record.revision,
+    grants,
+    receipts,
+  };
+}
+
+interface ContentsRejections {
+  grants: (detail: string) => OfflineWalletError;
+  receipts: (detail: string) => OfflineWalletError;
+  capacity: (detail: string) => OfflineWalletError;
+}
+
+/** The item and count rules shared by write-side and read-side validation. */
+function parseContents(
+  record: { grants?: unknown; receipts?: unknown },
+  reject: ContentsRejections,
+): { grants: OfflineWalletGrant[]; receipts: OfflineWalletReceipt[] } {
+  if (!Array.isArray(record.grants)) throw reject.grants('grants');
+  if (!Array.isArray(record.receipts)) throw reject.receipts('receipts');
   if (record.grants.length > OFFLINE_WALLET_LIMITS.maxGrants) {
-    throw contract('grant count');
+    throw reject.capacity('grant count');
   }
   if (record.receipts.length > OFFLINE_WALLET_LIMITS.maxReceipts) {
-    throw contract('receipt count');
+    throw reject.capacity('receipt count');
   }
   const grantIds = new Set<string>();
   const grants = record.grants.map((raw: unknown): OfflineWalletGrant => {
-    if (!raw || typeof raw !== 'object') throw contract('grant');
+    if (!raw || typeof raw !== 'object') throw reject.grants('grant');
     const grant = raw as Record<string, unknown>;
     if (
       typeof grant.grantId !== 'string' ||
       typeof grant.compactJws !== 'string'
     ) {
-      throw contract('grant fields');
+      throw reject.grants('grant fields');
     }
     if (grant.grantId.length === 0 || grant.compactJws.length === 0) {
-      throw contract('empty grant field');
+      throw reject.grants('empty grant field');
     }
-    if (grantIds.has(grant.grantId)) throw contract('duplicate grantId');
+    if (grantIds.has(grant.grantId)) throw reject.grants('duplicate grantId');
     grantIds.add(grant.grantId);
     return { grantId: grant.grantId, compactJws: grant.compactJws };
   });
   const receiptIds = new Set<string>();
   const receipts = record.receipts.map((raw: unknown): OfflineWalletReceipt => {
-    if (!raw || typeof raw !== 'object') throw contract('receipt');
+    if (!raw || typeof raw !== 'object') throw reject.receipts('receipt');
     const receipt = raw as Record<string, unknown>;
     if (
       typeof receipt.receiptId !== 'string' ||
       typeof receipt.payloadJson !== 'string' ||
       (receipt.kind !== 'result' && receipt.kind !== 'unused_ticket_return')
     ) {
-      throw contract('receipt fields');
+      throw reject.receipts('receipt fields');
     }
-    if (receipt.receiptId.length === 0) throw contract('empty receiptId');
+    if (receipt.receiptId.length === 0) {
+      throw reject.receipts('empty receiptId');
+    }
     if (!isJsonObjectText(receipt.payloadJson)) {
-      throw contract('receipt payloadJson is not a JSON object');
+      throw reject.receipts('receipt payloadJson is not a JSON object');
     }
     if (receiptIds.has(receipt.receiptId)) {
-      throw contract('duplicate receiptId');
+      throw reject.receipts('duplicate receiptId');
     }
     receiptIds.add(receipt.receiptId);
     return {
@@ -356,10 +396,5 @@ function parseSnapshot(
       payloadJson: receipt.payloadJson,
     };
   });
-  return {
-    ownerId: record.ownerId,
-    revision: record.revision,
-    grants,
-    receipts,
-  };
+  return { grants, receipts };
 }

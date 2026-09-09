@@ -298,7 +298,11 @@ describe('offline wallet native bridge', () => {
       payloadJson,
     });
     const cases: Array<
-      [OfflineWalletError['failure'], string, Parameters<typeof replaceOfflineWallet>[2]]
+      [
+        OfflineWalletError['failure'],
+        string,
+        Parameters<typeof replaceOfflineWallet>[2],
+      ]
     > = [
       [
         'invalid_receipt',
