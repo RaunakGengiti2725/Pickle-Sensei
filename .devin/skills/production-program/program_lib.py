@@ -241,6 +241,12 @@ def blocking_breaks(adv: dict) -> list[dict]:
     return out
 
 
+def nonblocking_breaks(adv: dict) -> list[dict]:
+    """P2/P3 breaks: never gate acceptance, but a requeued implementer sees them
+    (a native trap on persisted state is P2 by reachability yet still a crash)."""
+    return [b for b in adv.get("breaks") or [] if isinstance(b, dict) and str(b.get("severity", "")).upper() not in ("P0", "P1")]
+
+
 @dataclass
 class Decision:
     accepted: bool
@@ -462,7 +468,8 @@ def prior_from_record(record: dict) -> tuple[dict | None, int]:
             findings["review_invariants"] = rev.get("invariant_violations", [])
         if adv:
             findings["adversary_breaks"] = blocking_breaks(adv)
-            findings["adversary_branch"] = adv.get("attack_branch", "")
+            findings["adversary_nonblocking_fix_if_crash_or_cheap"] = nonblocking_breaks(adv)
+            findings["adversary_branch"] = adv.get("attack_branch", "") or adv.get("attack_branch_sha", "")
         return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}, next_round
     return None, next_round
 
@@ -479,7 +486,8 @@ def _lane_findings(lane: dict) -> dict:
         findings["review_invariants"] = rev.get("invariant_violations", [])
     if adv:
         findings["adversary_breaks"] = blocking_breaks(adv)
-        findings["adversary_branch"] = adv.get("attack_branch", "")
+        findings["adversary_nonblocking_fix_if_crash_or_cheap"] = nonblocking_breaks(adv)
+        findings["adversary_branch"] = adv.get("attack_branch", "") or adv.get("attack_branch_sha", "")
     return {"branch": impl.get("branch", ""), "head_sha": impl.get("head_sha", ""), "findings": findings}
 
 
