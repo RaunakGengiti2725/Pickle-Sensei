@@ -2,6 +2,10 @@ import type {
   AnalysisFeedbackCategory,
   AnalysisFeedbackRating,
 } from '@pickle/shared-types';
+import {
+  validateOfflineSignedGrantShape,
+  type OfflineSignedExecutionGrant,
+} from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
 import { reportApiUnauthorized } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
@@ -502,3 +506,176 @@ export async function submitAnalysisFeedback(
 }
 
 export const api = { request };
+
+export type OfflineAttestationEnvironment = 'production' | 'development';
+
+export interface RegisteredOfflineDevice {
+  readonly deviceId: string;
+  readonly installationKeyId: string;
+  readonly attestationEnvironment: OfflineAttestationEnvironment;
+  readonly attestationState: 'unattested' | 'attested';
+}
+
+/** `POST /v1/offline/grants` as the server answers it: the signed grant plus
+ * the same facts restated in the clear so the wallet can bind the two before
+ * it holds anything. `ticketIds` is empty for a Pro lease. */
+export interface IssuedOfflineGrant {
+  readonly grantId: string;
+  readonly generation: number;
+  readonly entitlementSource: 'identity_lifetime_free' | 'verified_store';
+  readonly issuedAt: number;
+  readonly expiresAt: number;
+  readonly entitlementExpiresAt: number | null;
+  readonly ticketIds: readonly string[];
+  readonly keyId: string;
+  readonly grant: OfflineSignedExecutionGrant;
+}
+
+export interface OfflineGrantClient {
+  /** The grant issuer the wallet must find in every signed grant's `iss`. */
+  readonly issuer: string;
+  registerDevice(input: {
+    installationKeyId: string;
+    attestationEnvironment: OfflineAttestationEnvironment;
+  }): Promise<RegisteredOfflineDevice>;
+  issueGrant(input: {
+    installationKeyId: string;
+    requestedTickets: 0 | 1 | 2;
+  }): Promise<IssuedOfflineGrant>;
+}
+
+function isUnixSecondsValue(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/** The shared validators accept only plain data objects. A parsed response
+ * body may carry a foreign prototype, so it is re-materialised as JSON first. */
+function plainJson(value: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(value)) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Shape-only: a response missing any field, or whose signed grant is not a
+ * compact JWS, is not a grant. Binding the clear fields to the signed claims
+ * is the wallet's job (`holdOfflineGrant`). */
+export function parseIssuedOfflineGrant(
+  value: unknown,
+): IssuedOfflineGrant | null {
+  if (!isJsonObject(value)) return null;
+  const {
+    grantId,
+    generation,
+    entitlementSource,
+    issuedAt,
+    expiresAt,
+    entitlementExpiresAt,
+    ticketIds,
+    keyId,
+    grant,
+  } = value;
+  if (
+    !isNonEmptyString(grantId) ||
+    typeof generation !== 'number' ||
+    !Number.isInteger(generation) ||
+    generation < 1 ||
+    (entitlementSource !== 'identity_lifetime_free' &&
+      entitlementSource !== 'verified_store') ||
+    !isUnixSecondsValue(issuedAt) ||
+    !isUnixSecondsValue(expiresAt) ||
+    expiresAt <= issuedAt ||
+    (entitlementExpiresAt !== null &&
+      !isUnixSecondsValue(entitlementExpiresAt)) ||
+    !Array.isArray(ticketIds) ||
+    !ticketIds.every(isNonEmptyString) ||
+    !isNonEmptyString(keyId)
+  ) {
+    return null;
+  }
+  const signed = validateOfflineSignedGrantShape(plainJson(grant));
+  if (!signed.ok) return null;
+  return {
+    grantId,
+    generation,
+    entitlementSource,
+    issuedAt,
+    expiresAt,
+    entitlementExpiresAt: entitlementExpiresAt ?? null,
+    ticketIds: [...ticketIds],
+    keyId,
+    grant: signed.value,
+  };
+}
+
+function parseRegisteredOfflineDevice(
+  value: unknown,
+): RegisteredOfflineDevice | null {
+  if (!isJsonObject(value)) return null;
+  const device = value['device'];
+  if (!isJsonObject(device)) return null;
+  const { deviceId, installationKeyId, attestationEnvironment } = device;
+  const attestationState = device['attestationState'];
+  if (
+    !isNonEmptyString(deviceId) ||
+    !isNonEmptyString(installationKeyId) ||
+    (attestationEnvironment !== 'production' &&
+      attestationEnvironment !== 'development') ||
+    (attestationState !== 'unattested' && attestationState !== 'attested')
+  ) {
+    return null;
+  }
+  return {
+    deviceId,
+    installationKeyId,
+    attestationEnvironment,
+    attestationState,
+  };
+}
+
+/** Device registration and offline grant issuance. Both routes require the
+ * account bearer; the answer is checked for shape here and bound to the
+ * signed claims by the wallet before anything is held. */
+export function createOfflineGrantClient(
+  config: ApiConfigState,
+): OfflineGrantClient {
+  const requireSignedIn = () => {
+    if (!config.token?.trim()) {
+      throw new ApiError(
+        401,
+        'auth.required',
+        'Sign in before requesting offline ratings.',
+      );
+    }
+  };
+  return {
+    issuer: config.baseUrl,
+    async registerDevice(input) {
+      requireSignedIn();
+      const device = parseRegisteredOfflineDevice(
+        await request<unknown>(config, 'POST', '/v1/devices/register', {
+          installationKeyId: input.installationKeyId,
+          attestationEnvironment: input.attestationEnvironment,
+        }),
+      );
+      if (device === null) throw unreadableAnswer();
+      return device;
+    },
+    async issueGrant(input) {
+      requireSignedIn();
+      const issued = parseIssuedOfflineGrant(
+        await request<unknown>(config, 'POST', '/v1/offline/grants', {
+          installationKeyId: input.installationKeyId,
+          requestedTickets: input.requestedTickets,
+        }),
+      );
+      if (issued === null) throw unreadableAnswer();
+      return issued;
+    },
+  };
+}
