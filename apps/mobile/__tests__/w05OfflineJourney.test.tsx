@@ -38,6 +38,16 @@
  * expired generation that the ledger refuses to spend is never announced as
  * an offline analysis ready; and a HOLD the server answered with a refusal
  * is not described as a dropped connection.
+ *
+ * Round 5 pins what the fourth candidate got wrong: a Pro lease that is NOT
+ * live (lapsed, or unconfirmed for want of trusted time) lends nothing to
+ * the copy — the free tickets this phone still holds are counted and their
+ * retention stated exactly as they would be without the Pro row, and the
+ * wallet is never labelled a Pro pass; a live Pro lease beside held free
+ * tickets states their count; a HOLD whose journal entry names no pending
+ * receipt is not described as a receipt that "was never recorded" (the
+ * receipt may be on file and settled); and a HOLD over several receipts
+ * keeps count and noun in agreement.
  */
 import React from 'react';
 import { AppState, Text, type AppStateStatus } from 'react-native';
@@ -203,6 +213,7 @@ const TICKETS = [
 const GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
 const LAPSED_PRO_GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
 const SECOND_GENERATION_GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000003';
+const LATER_PRO_GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000004';
 const RESULT_SHA = 'c'.repeat(64);
 const BINDING = { installationKeyId: INSTALLATION_KEY, issuer: ISSUER };
 const CARD_TEST_ID = 'offline-allocation-card';
@@ -263,6 +274,17 @@ const LAPSED_PRO_GRANT: GrantShape = {
   issuedAt: ISSUED_AT - 14 * DAY_S,
   expiresAt: ISSUED_AT - 7 * DAY_S,
   entitlementExpiresAt: ISSUED_AT - 7 * DAY_S,
+};
+
+/** A Pro lease issued the day AFTER the free allocation: a free player who
+ * subscribed while still holding free tickets. Same generation, so the
+ * ledger lists it first. */
+const LATER_PRO_GRANT: GrantShape = {
+  entitlementSource: 'verified_store',
+  grantId: LATER_PRO_GRANT_ID,
+  issuedAt: ISSUED_AT + DAY_S,
+  expiresAt: ISSUED_AT + 7 * DAY_S,
+  entitlementExpiresAt: ISSUED_AT + 30 * DAY_S,
 };
 
 /** The server's next generation for this installation, issued a day after
@@ -960,7 +982,10 @@ describe('W05-04 Settings surfaces the offline journey', () => {
     expect(badgeOf(renderer)).toBe('ON HOLD');
     expect(copy).not.toContain('0 result');
     expect(copy).not.toContain('never arrived');
-    expect(copy).toContain('never recorded');
+    // The card cannot see whether the named receipt ever existed or was
+    // settled since; it only knows no pending receipt carries that id.
+    expect(copy).toContain('names no receipt that is still waiting');
+    expect(copy).not.toContain('never recorded');
     expect(copy).not.toMatch(/\bNothing\b/);
     expectDossierCompliant(copy);
   });
@@ -1874,5 +1899,290 @@ describe('W05-04 round 4 — the card follows trusted time, recovers from a tran
     // The HOLD never refunds: the spent ticket stays spent on screen.
     expect(copy).toContain('1 of 2');
     expectDossierCompliant(copy);
+  });
+});
+
+describe('W05-04 round 5 — a Pro lease that is not live lends nothing to the copy, and HOLD copy states only what the ledger holds', () => {
+  function copyOf(state: OfflineJourneyState): string {
+    const presented = presentOfflineJourney(state);
+    return [
+      presented.badge,
+      presented.title,
+      ...presented.rows.flatMap(row => [row.label, row.value]),
+      ...presented.notes,
+    ].join(' | ');
+  }
+
+  async function insertInFlightJournal(receiptIds: readonly string[]) {
+    await db.execute(
+      `INSERT INTO offline_wallet_journal
+         (owner_key, journal_id, kind, receipt_ids, state, opened_at, closed_at, verdicts)
+       VALUES (?, ?, 'receipt_submission', ?, 'in_flight', ?, NULL, NULL)`,
+      [
+        OWNER,
+        'dddddddd-0000-4000-8000-000000000005',
+        JSON.stringify(receiptIds),
+        new Date(ISSUED_AT * 1000).toISOString(),
+      ],
+    );
+  }
+
+  it('a lapsed Pro lease does not hide the expired free allocation this phone still holds', async () => {
+    await holdGrant(LAPSED_PRO_GRANT);
+    await holdGrant(FREE_GRANT);
+    mockReading = AFTER_EXPIRY;
+    const allocation = await readOfflineAllocation(db, AFTER_EXPIRY);
+    expect(allocation.spendableTickets).toBe(2);
+    expect(allocation.grants.map(grant => grant.execution.kind)).toEqual([
+      'expired',
+      'expired',
+    ]);
+    // Control: the identical wallet without the lapsed Pro row.
+    const control = copyOf({
+      kind: 'read',
+      allocation: {
+        ...allocation,
+        grants: allocation.grants.filter(
+          grant => grant.entitlementSource === 'identity_lifetime_free',
+        ),
+      },
+      wallet: { pending: [], unansweredPresentations: 0, hold: false },
+    });
+    expect(control).toContain('2 of 2 unspent');
+    expect(control).toContain('stay allocated');
+
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('EXPIRED');
+    expect(copy).toContain('Offline pass expired');
+    // The lapsed Pro row deletes none of the allocation facts and never
+    // relabels the wallet as a Pro pass.
+    expect(copy).toContain('2 of 2 unspent');
+    expect(copy).toContain('2 held analyses');
+    expect(copy).toContain('stay allocated');
+    expect(copy).toContain('never taken back');
+    expect(copy).not.toContain('Pro pass');
+    expect(copy).not.toContain('Pro');
+    expectDossierCompliant(copy);
+  });
+
+  it('a Pro lease issued after the free allocation, under no trusted time, does not hide the held free tickets', async () => {
+    await holdGrant(FREE_GRANT);
+    await holdGrant(LATER_PRO_GRANT);
+    mockReading = NO_TRUSTED_TIME;
+    const allocation = await readOfflineAllocation(db, NO_TRUSTED_TIME);
+    expect(allocation.spendableTickets).toBe(2);
+    // The ledger lists the Pro lease first (same generation, issued later).
+    expect(
+      allocation.grants.map(grant => [
+        grant.entitlementSource,
+        grant.execution.kind,
+      ]),
+    ).toEqual([
+      ['verified_store', 'reconcile_required'],
+      ['identity_lifetime_free', 'reconcile_required'],
+    ]);
+
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('CONFIRM ONLINE');
+    expect(copy).toContain('has not confirmed the time');
+    expect(copy).toContain('2 of 2 unspent');
+    expect(copy).toContain('2 held analyses');
+    expect(copy).toContain('stay allocated');
+    expect(copy).toContain('Unconfirmed');
+    expect(copy).not.toContain('Pro pass');
+    expectDossierCompliant(copy);
+  });
+
+  it('a live Pro lease beside a live free allocation is stated as a Pro pass AND states the free tickets still held', async () => {
+    await holdGrant(FREE_GRANT);
+    await holdGrant(LATER_PRO_GRANT);
+    mockReading = anchored((ISSUED_AT + 2 * DAY_S) * 1000);
+    const allocation = await readOfflineAllocation(db, mockReading);
+    expect(allocation.spendableTickets).toBe(2);
+    expect(allocation.grants.map(grant => grant.execution.kind)).toEqual([
+      'active',
+      'active',
+    ]);
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('Pro offline pass active');
+    expect(copy).toContain('Pro pass');
+    expect(copy).toContain('In 5 days');
+    // The free tickets are a fact of this phone's wallet: counted, but no
+    // sentence claims the Pro pass's results "stay allocated".
+    expect(copy).toContain('2 of 2 unspent');
+    expect(copy).not.toContain('stay allocated');
+    expect(copy).not.toContain('never taken back');
+    expectDossierCompliant(copy);
+  });
+
+  it('presenter: a Pro lease that is not live never relabels held free tickets as a Pro pass, whatever its verdict or position', () => {
+    const notLive: TrustedTimeLeaseVerdict[] = [
+      { kind: 'expired' },
+      { kind: 'reconcile_required', reason: 'no_trusted_time' },
+      { kind: 'reconcile_required', reason: 'floor_only' },
+      { kind: 'reconcile_required', reason: 'clock_rollback' },
+      { kind: 'reconcile_required', reason: 'storage_invalid' },
+      { kind: 'reconcile_required', reason: 'elapsed_unmeasured' },
+      { kind: 'reconcile_required', reason: 'invalid_lease' },
+      { kind: 'reconcile_required', reason: 'lease_ahead_of_clock' },
+      { kind: 'active', remainingMs: 0 },
+      { kind: 'active', remainingMs: Number.NaN },
+    ];
+    const free = (
+      execution: TrustedTimeLeaseVerdict,
+    ): HeldOfflineGrantView => ({
+      grantId: GRANT_ID,
+      generation: 1,
+      entitlementSource: 'identity_lifetime_free',
+      installationKeyId: INSTALLATION_KEY,
+      keyId: KEY_ID,
+      issuedAt: ISSUED_AT,
+      expiresAt: EXPIRES_AT,
+      entitlementExpiresAt: null,
+      grantJwsSha256: 'e'.repeat(64),
+      allocated: 2,
+      remaining: 2,
+      consumed: 0,
+      lifecycleSequence: 0,
+      execution,
+    });
+    const pro = (execution: TrustedTimeLeaseVerdict): HeldOfflineGrantView => ({
+      ...free(execution),
+      grantId: LATER_PRO_GRANT_ID,
+      entitlementSource: 'verified_store',
+      entitlementExpiresAt: EXPIRES_AT,
+      allocated: 0,
+      remaining: 0,
+    });
+    for (const proVerdict of notLive) {
+      for (const freeVerdict of notLive) {
+        for (const grants of [
+          [pro(proVerdict), free(freeVerdict)],
+          [free(freeVerdict), pro(proVerdict)],
+        ]) {
+          const copy = copyOf({
+            kind: 'read',
+            allocation: {
+              grants,
+              spendableTickets: 2,
+              consumedTickets: 0,
+              pendingReceipts: 0,
+            },
+            wallet: { pending: [], unansweredPresentations: 0, hold: false },
+          });
+          expect(copy).toContain('2 of 2 unspent');
+          expect(copy).toContain('2 held analyses');
+          expect(copy).toContain('stay allocated');
+          expect(copy).not.toContain('Pro');
+          expect(copy).not.toContain('READY');
+          expectDossierCompliant(copy);
+        }
+      }
+    }
+  });
+
+  it('an in-flight journal entry naming a receipt that IS on file (already accepted) is not described as a receipt that was never recorded', async () => {
+    await holdGrant();
+    await spend('op-1');
+    const outcome = await presentAndReceive('result_recorded');
+    expect(outcome.accepted).toBe(1);
+    const accepted = await db.execute(
+      `SELECT receipt_id, settlement FROM offline_receipt WHERE owner_key = ?`,
+      [OWNER],
+    );
+    const receiptId = String(accepted.rows[0]?.['receipt_id']);
+    expect(accepted.rows[0]?.['settlement']).toBe('accepted');
+    // Corruption written straight to storage: an unanswered presentation
+    // that names the settled receipt.
+    await insertInFlightJournal([receiptId]);
+    const truth = await ledgerTruth();
+    expect(truth.wallet.hold).toBe(true);
+    expect(truth.wallet.pending).toHaveLength(0);
+
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(copy).toContain('An offline result needs an online check');
+    expect(copy).toContain('Unreadable');
+    // The receipt is recorded on this phone and settled. The card states
+    // only what it can read: no pending receipt carries that id.
+    expect(copy).toContain('names no receipt that is still waiting');
+    expect(copy).not.toContain('never recorded');
+    expect(copy).not.toContain('0 result');
+    expect(copy).not.toMatch(/\bNothing\b/);
+    expectDossierCompliant(copy);
+  });
+
+  it('a HOLD whose grant rows are gone (receipts only) keeps count and noun in agreement for two pending receipts', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await spend('op-2');
+    await presentAndLoseConnection();
+    // Partial state: the grant and ticket rows are gone, the receipts and
+    // the in-flight journal survive.
+    await db.execute(`DELETE FROM offline_ticket WHERE owner_key = ?`, [OWNER]);
+    await db.execute(`DELETE FROM offline_grant WHERE owner_key = ?`, [OWNER]);
+    const truth = await ledgerTruth();
+    expect(truth.allocation.grants).toHaveLength(0);
+    expect(truth.wallet.hold).toBe(true);
+    expect(truth.wallet.pending).toHaveLength(2);
+
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(copy).toContain('2 results awaiting confirmation');
+    expect(copy).toContain('2 on hold');
+    expect(copy).toContain('The spent analyses stay recorded');
+    expect(copy).toContain('confirms them');
+    expect(copy).not.toContain('The spent analysis ');
+    expect(copy).not.toContain('confirms it');
+    expectDossierCompliant(copy);
+  });
+
+  it('presenter: a HOLD with no grant rows names one spent analysis for one receipt and none for a journal entry naming no pending receipt', () => {
+    const receipt = (index: number) => ({
+      receiptId: `receipt-${index}`,
+      operationId: `op-${index}`,
+      settlement: null,
+      presentations: 1,
+      phase: 'presented_unanswered' as const,
+    });
+    const empty = {
+      grants: [],
+      spendableTickets: 0,
+      consumedTickets: 0,
+      pendingReceipts: 0,
+    };
+    const one = copyOf({
+      kind: 'read',
+      allocation: { ...empty, pendingReceipts: 1 },
+      wallet: { pending: [receipt(1)], unansweredPresentations: 1, hold: true },
+    });
+    expect(one).toContain('1 result awaiting confirmation');
+    expect(one).toContain('The spent analysis stays recorded');
+    expect(one).toContain('confirms it');
+    expect(one).not.toContain('analyses');
+    // No pending receipt at all: nothing was spent that the card can name,
+    // so no sentence speaks of "the spent analysis".
+    const none = copyOf({
+      kind: 'read',
+      allocation: empty,
+      wallet: { pending: [], unansweredPresentations: 1, hold: true },
+    });
+    expect(none).toContain('ON HOLD');
+    expect(none).toContain('names no receipt that is still waiting');
+    expect(none).not.toContain('spent analysis');
+    expect(none).not.toContain('spent analyses');
+    expectDossierCompliant(one);
+    expectDossierCompliant(none);
   });
 });
