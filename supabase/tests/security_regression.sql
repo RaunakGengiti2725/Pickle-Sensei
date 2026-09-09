@@ -7009,5 +7009,172 @@ end $$;
 
 rollback;
 
+-- ───────── W11: two heirs racing one inherited ticket (committed, two sessions) ─────────
+-- An account with two sign-in identities allocates two tickets and is deleted;
+-- signing in again with each identity creates two accounts that both own the
+-- tickets. Their settlements of the SAME ticket run on different per-user
+-- locks, so the ledger's terminal uniqueness is what stands between them:
+-- the settlement must serialize on the ticket, the loser must read the
+-- terminal state as its contract verdict (offline.ticket_consumed — never a
+-- write error), exactly one consumed event and one shot exist, and the
+-- winner's replay stays idempotent. Runs outside a transaction so the second
+-- session can see committed rows.
+create schema w11_probe;
+
+create function w11_probe.await_lock(p_application text)
+returns void language plpgsql set search_path = '' as $$
+declare deadline timestamptz := clock_timestamp() + interval '3 seconds';
+begin
+  loop
+    perform pg_stat_clear_snapshot();
+    if exists (select 1 from pg_stat_activity where application_name = p_application and wait_event_type = 'Lock') then
+      return;
+    end if;
+    if clock_timestamp() > deadline then
+      raise exception 'W11: the second heir never blocked on the ticket — both settlements would commit independently';
+    end if;
+    perform pg_sleep(0.01);
+  end loop;
+end $$;
+
+create function w11_probe.shot(p_id uuid) returns text language sql as $$
+  select jsonb_build_object(
+    'id', p_id, 'resultKind', 'scored', 'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-08T10:00:00Z', 'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.4, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1', 'poseModelVersion', 'pose-1',
+      'paddleModelVersion', 'paddle-1', 'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))::text
+$$;
+
+-- "begin; act as this account through the API" for a dblink connection.
+create function w11_probe.as_client(p_uid uuid, p_session uuid) returns text language sql as $$
+  select format(
+    'begin; select set_config(''request.headers'', %L, true); set local role authenticated; '
+    || 'set local request.jwt.claim.sub = %L; set local request.jwt.claims = %L;',
+    jsonb_build_object('x-pickle-api-key', public.get_api_request_key())::text,
+    p_uid::text, jsonb_build_object('session_id', p_session)::text)
+$$;
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-0000000000b1', 'heir@example.test', '{"full_name":"Heir"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-w11', '00000000-0000-4000-8000-0000000000b1', '{"sub":"google-sub-w11"}'),
+  ('apple', 'apple-sub-w11', '00000000-0000-4000-8000-0000000000b1', '{"sub":"apple-sub-w11"}');
+insert into auth.sessions (id, user_id) values ('00000000-0000-4000-8000-00000000b101', '00000000-0000-4000-8000-0000000000b1');
+
+do $$
+<<heirs>>
+declare
+  connection text := format('host=%s port=%s dbname=%s user=postgres',
+    split_part(current_setting('unix_socket_directories'), ',', 1), current_setting('port'), current_database());
+  a uuid := '00000000-0000-4000-8000-0000000000b1';
+  b uuid := '00000000-0000-4000-8000-0000000000b2';
+  c uuid := '00000000-0000-4000-8000-0000000000b3';
+  sb uuid := '00000000-0000-4000-8000-00000000b102';
+  sc uuid := '00000000-0000-4000-8000-00000000b103';
+  shot_b uuid := '00000000-0000-4000-8000-0000000b10b1';
+  shot_c uuid := '00000000-0000-4000-8000-0000000b10c1';
+  t1 uuid;
+  tickets uuid[];
+  out_b text; out_c text; v text;
+  n_consumed integer; n_shots integer;
+  conn text;
+begin
+  foreach conn in array array['w11_b', 'w11_c'] loop
+    perform w07_probe.dblink_connect(conn, connection || ' application_name=' || conn);
+    perform w07_probe.dblink_exec(conn, 'set statement_timeout = ''5s''');
+  end loop;
+
+  -- The original account allocates two tickets on installation w11-key.
+  perform w07_probe.dblink_exec('w11_b', w11_probe.as_client(a, '00000000-0000-4000-8000-00000000b101'));
+  perform 1 from w07_probe.dblink('w11_b', 'select public.register_offline_device(''w11-key'', ''production'', true)') as t(value text);
+  select value into tickets from w07_probe.dblink('w11_b',
+    'select ticket_ids from public.issue_offline_grant(''w11-key'', 2)') as t(value uuid[]);
+  perform w07_probe.dblink_exec('w11_b', 'commit');
+  if coalesce(array_length(tickets, 1), 0) <> 2 then
+    raise exception 'W11 precondition: two tickets for a fresh free identity (got %)', tickets;
+  end if;
+  t1 := tickets[1];
+
+  -- Account deleted; each identity signs in again as its own account
+  -- (committed through the side connection so both sessions see it).
+  perform w07_probe.dblink_exec('w11_b', format('delete from auth.users where id = %L', a));
+  perform w07_probe.dblink_exec('w11_b', format(
+    'insert into auth.users (id, email, raw_app_meta_data) values (%L, ''heir-b@example.test'', ''{"provider":"google"}''), (%L, ''heir-c@example.test'', ''{"provider":"apple"}'');'
+    || 'insert into auth.identities (provider, provider_id, user_id, identity_data) values (''google'', ''google-sub-w11'', %L, ''{"sub":"google-sub-w11"}''), (''apple'', ''apple-sub-w11'', %L, ''{"sub":"apple-sub-w11"}'');'
+    || 'insert into auth.sessions (id, user_id) values (%L, %L), (%L, %L);',
+    b, c, b, c, sb, b, sc, c));
+  if (select count(*) from api_private.offline_owned_allocations(b)) <> 2
+     or (select count(*) from api_private.offline_owned_allocations(c)) <> 2 then
+    raise exception 'W11 precondition: both heirs own the inherited tickets';
+  end if;
+
+  -- The race: B settles T1 and holds its transaction open; C settles T1.
+  perform w07_probe.dblink_exec('w11_b', w11_probe.as_client(b, sb));
+  select value into out_b from w07_probe.dblink('w11_b',
+    format('select public.consume_offline_ticket(%L, %L::jsonb)', t1, w11_probe.shot(shot_b))) as t(value text);
+  perform w07_probe.dblink_exec('w11_c', w11_probe.as_client(c, sc));
+  perform w07_probe.dblink_send_query('w11_c',
+    format('select public.consume_offline_ticket(%L, %L::jsonb)', t1, w11_probe.shot(shot_c)));
+  perform w11_probe.await_lock('w11_c');
+  perform w07_probe.dblink_exec('w11_b', 'commit');
+  select value into out_c from w07_probe.dblink_get_result('w11_c') as t(value text);
+  perform 1 from w07_probe.dblink_get_result('w11_c', false) as t(value text);
+  perform w07_probe.dblink_exec('w11_c', 'commit');
+
+  select count(*) into n_consumed from public.offline_allocation_ledger where ticket_id = t1 and event = 'consumed';
+  select count(*) into n_shots from public.shots where id in (shot_b, shot_c);
+  if out_b <> 'accepted' or out_c <> 'offline.ticket_consumed' then
+    raise exception 'W11a: two heirs racing one ticket end accepted / offline.ticket_consumed (got B=% C=%)', out_b, out_c;
+  end if;
+  if n_consumed <> 1 or n_shots <> 1 or not exists (select 1 from public.shots where id = shot_b and user_id = b) then
+    raise exception 'W11b: exactly one consumed event and one shot, the winner''s (consumed=% shots=%)', n_consumed, n_shots;
+  end if;
+
+  -- After the race: the loser keeps reading the terminal state, the winner replays idempotently.
+  perform w07_probe.dblink_exec('w11_c', w11_probe.as_client(c, sc));
+  select value into v from w07_probe.dblink('w11_c',
+    format('select public.consume_offline_ticket(%L, %L::jsonb)', t1, w11_probe.shot(shot_c))) as t(value text);
+  perform w07_probe.dblink_exec('w11_c', 'commit');
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'W11c: the loser''s retry reads the terminal state (got %)', v;
+  end if;
+  perform w07_probe.dblink_exec('w11_b', w11_probe.as_client(b, sb));
+  select value into v from w07_probe.dblink('w11_b',
+    format('select public.consume_offline_ticket(%L, %L::jsonb)', t1, w11_probe.shot(shot_b))) as t(value text);
+  perform w07_probe.dblink_exec('w11_b', 'commit');
+  if v <> 'accepted' then
+    raise exception 'W11d: the winner''s replay of the same (ticket, shot) is accepted (got %)', v;
+  end if;
+
+  -- The same race on the other ticket through release vs. consume: one terminal event.
+  perform w07_probe.dblink_exec('w11_b', w11_probe.as_client(b, sb));
+  select value into out_b from w07_probe.dblink('w11_b',
+    format('select public.release_offline_ticket(%L, ''unused_ticket_returned'')', tickets[2])) as t(value text);
+  perform w07_probe.dblink_exec('w11_c', w11_probe.as_client(c, sc));
+  perform w07_probe.dblink_send_query('w11_c',
+    format('select public.consume_offline_ticket(%L, %L::jsonb)', tickets[2], w11_probe.shot(shot_c)));
+  perform w11_probe.await_lock('w11_c');
+  perform w07_probe.dblink_exec('w11_b', 'commit');
+  select value into out_c from w07_probe.dblink_get_result('w11_c') as t(value text);
+  perform 1 from w07_probe.dblink_get_result('w11_c', false) as t(value text);
+  perform w07_probe.dblink_exec('w11_c', 'commit');
+  if out_b <> 'accepted' or out_c <> 'offline.ticket_released' then
+    raise exception 'W11e: release racing consume ends accepted / offline.ticket_released (got B=% C=%)', out_b, out_c;
+  end if;
+  if (select count(*) from public.offline_allocation_ledger where ticket_id = tickets[2] and event in ('consumed', 'released')) <> 1
+     or exists (select 1 from public.shots where id = shot_c) then
+    raise exception 'W11f: one terminal event for the returned ticket and no shot';
+  end if;
+
+  foreach conn in array array['w11_b', 'w11_c'] loop
+    perform w07_probe.dblink_disconnect(conn);
+  end loop;
+  delete from auth.users where id in (b, c);
+end heirs $$;
+
 \echo W04-01 OFFLINE GRANTS MATRIX: ALL CASES PASSED
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED
