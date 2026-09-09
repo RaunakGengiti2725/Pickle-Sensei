@@ -584,7 +584,8 @@ Deno.test(
       );
       assertEquals(auth.userChecks, checks + 1, "the egress was not under stuffing");
 
-      for (let i = 0; i < BUDGET.limit; i += 1) {
+      // That guess was the first distinct one; the co-tenant spends the rest.
+      for (let i = 1; i < BUDGET.limit; i += 1) {
         assertEquals(
           (await call(userRequest("GET", PROBE, { token: forgedBearer(), ip }))).status,
           401,
