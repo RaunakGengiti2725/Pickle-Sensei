@@ -867,6 +867,37 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     }
   });
 
+  it('a `superseded` status after a lost confirmation proves the account is present: nothing deleted, and the review step lets the owner start again', async () => {
+    route({
+      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+      'delete-status': () =>
+        reply('delete-status', statusPayload('superseded')),
+    });
+    const renderer = renderScreen();
+    try {
+      await loseConfirmation(renderer);
+      await pressWhenArmed(renderer, 'Retry deletion');
+      expect(calls('delete-status')).toHaveLength(1);
+      const text = allText(renderer);
+      expect(text).toContain('A newer deletion request replaced this one');
+      expect(text).toContain('Nothing was deleted');
+      expect(text).toContain('Delete your account?');
+      expect(text).not.toContain('Deletion status unknown');
+      expect(buttonLabels(renderer)).toContain('Continue to delete');
+      expectNotDeleted(renderer);
+
+      await press(renderer, sheetButton(renderer, 'Continue to delete'));
+      expect(calls('delete-request')).toHaveLength(2);
+      expect(journalRows()).toMatchObject([
+        { operation_id: deletionId(10), phase: 'observing' },
+        { operation_id: deletionId(20), phase: 'ready' },
+      ]);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it("isolates the original owner's operation from a replacement account", async () => {
     route({
       'delete-request': init =>
