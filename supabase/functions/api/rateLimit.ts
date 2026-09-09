@@ -199,17 +199,32 @@ export function rateLimitResponse(result: RateLimitResult): Response {
 //               this edge minted is liveness, one nothing here minted is a
 //               guess.
 //
+// and by what KIND of credential was guessed — the route names it, since the
+// credential itself is untrusted — because floods of one kind must not fence
+// the others:
+//
+//   session     the bearer of any authenticated route (an access token, or
+//               junk);
+//   provider    the Google/Apple ID token bootstrap spends;
+//   refresh     the refresh token a refresh rotates.
+//
+// The session signal keeps the address-wide key the flat budget used
+// (`authfail:<ip>`); the other kinds are keyed beside it.
+//
 // The pre-auth gate (`peekAuthFailureBudget`) refuses, before Auth is asked:
-//   - a credential whose shard already holds `limit` refusals (replay);
-//   - once the address's stuffing signal reaches `limit`, any credential
-//     nothing here has VOUCHED for — vouched means minted by this edge
-//     (bootstrap/refresh sessions), verified by Auth, or judged dead by Auth.
-// So a co-tenant's flood spends at most `limit` upstream verdicts per window,
-// while established peers keep refreshing and signing in and a dead handset
-// keeps hearing 401 — the app's only sign-out signal. A NEVER-seen credential
-// (a fresh sign-in) from a stuffed address is deferred with 429 + Retry-After
-// (retryable) until the window turns; that deferral is the price of bounding
-// forged novelty upstream.
+//   - a credential whose shard already holds `limit` refusals — counting the
+//     presentations of it still in flight, so parallel replays cannot race
+//     past the cap;
+//   - once the address's stuffing signal for that kind reaches `limit`, any
+//     credential nothing here has VOUCHED for — vouched means minted by this
+//     edge (bootstrap/refresh sessions), verified by Auth, or judged dead by
+//     Auth.
+// So a co-tenant's flood spends at most `limit` upstream verdicts per kind per
+// window, while established peers keep refreshing and signing in and a dead
+// handset keeps hearing 401 — the app's only sign-out signal. A NEVER-seen
+// credential of the flooded kind (a first sign-in during an ID-token flood)
+// is deferred with 429 + Retry-After (retryable) until the window turns; that
+// deferral is the price of bounding forged novelty upstream.
 //
 // Shard keys are attacker-cardinality, so they live in their own bounded
 // table and in Redis with the window's TTL; when a shard cannot be admitted
@@ -218,6 +233,8 @@ export function rateLimitResponse(result: RateLimitResult): Response {
 // stored — never a token.
 
 export type AuthRefusalKind = "local" | "liveness" | "not_found" | "credential";
+
+export type AuthCredentialClass = "session" | "provider" | "refresh";
 
 export interface AuthRefusal {
   kind: AuthRefusalKind;
@@ -235,6 +252,13 @@ const AUTH_SHARD_SCOPE = "authcred";
 const AUTH_STUFFING_SCOPE = "authfail";
 const AUTH_SHARD_MAX = 20_000;
 const shards = new MemoryWindows(AUTH_SHARD_MAX);
+
+/** Presentations admitted to Auth and not yet charged, per credential:
+ * settled by the charge or the vouch, or forgotten once the upstream deadline
+ * has surely passed. */
+const AUTH_INFLIGHT_TTL_MS = 15_000;
+const AUTH_INFLIGHT_MAX = 20_000;
+const inflight = new Map<string, number[]>();
 
 /** How long a credential Auth verified or judged dead stays vouched. */
 export const AUTH_VOUCH_JUDGED_TTL_SECONDS = 60 * 60;
@@ -296,15 +320,26 @@ export function authErrorRefusalKind(error: unknown): AuthRefusalKind {
   });
 }
 
-/** The budget identity of a credential: its SHA-256, never the credential. */
+/** The budget identity of a credential: its kind and SHA-256 — never the
+ * credential. */
 export async function authFailureIdentity(
   credential: string | null | undefined,
+  credentialClass: AuthCredentialClass = "session",
 ): Promise<string | null> {
   if (typeof credential !== "string") return null;
   const trimmed = credential.trim();
   if (!trimmed) return null;
-  return await sha256Hex(trimmed);
+  return `${credentialClass}:${await sha256Hex(trimmed)}`;
 }
+
+function classOf(identity: string): AuthCredentialClass {
+  if (identity.startsWith("provider:")) return "provider";
+  if (identity.startsWith("refresh:")) return "refresh";
+  return "session";
+}
+
+const stuffingId = (ip: string, credentialClass: AuthCredentialClass) =>
+  credentialClass === "session" ? ip : `${ip}:${credentialClass}`;
 
 const refusals = new WeakMap<Response, AuthRefusal>();
 
@@ -342,10 +377,16 @@ export function authVouchTtlSeconds(expiresAtUnix: unknown): number {
   );
 }
 
-/** Remember that Auth verified `credential` (or minted it here). */
-export async function vouchAuthCredential(credential: string, ttlSeconds: number): Promise<void> {
-  const identity = await authFailureIdentity(credential);
+/** Remember that Auth verified `credential` (or minted it here); a
+ * presentation of it still counted in flight is settled. */
+export async function vouchAuthCredential(
+  credential: string,
+  ttlSeconds: number,
+  credentialClass?: AuthCredentialClass,
+): Promise<void> {
+  const identity = await authFailureIdentity(credential, credentialClass);
   if (identity === null) return;
+  inflightSettle(identity);
   await markerSet(vouchKey(identity), ttlSeconds);
 }
 
@@ -365,15 +406,18 @@ export async function vouchAuthSession(session: {
         ? Date.now() / 1_000 + session.expires_in
         : undefined;
   await Promise.all([
-    vouchAuthCredential(session.access_token, authVouchTtlSeconds(expiresAt)),
-    vouchAuthCredential(session.refresh_token, AUTH_VOUCH_REFRESH_TTL_SECONDS),
+    vouchAuthCredential(session.access_token, authVouchTtlSeconds(expiresAt), "session"),
+    vouchAuthCredential(session.refresh_token, AUTH_VOUCH_REFRESH_TTL_SECONDS, "refresh"),
   ]);
 }
 
 /** True once Auth judged `credential` dead within the current window: the
  * caller answers 401 itself instead of asking Auth again. */
-export async function authCredentialDead(credential: string | null | undefined): Promise<boolean> {
-  const identity = await authFailureIdentity(credential);
+export async function authCredentialDead(
+  credential: string | null | undefined,
+  credentialClass?: AuthCredentialClass,
+): Promise<boolean> {
+  const identity = await authFailureIdentity(credential, credentialClass);
   return identity !== null && (await markerPresent(deadKey(identity)));
 }
 
@@ -393,18 +437,62 @@ async function shardGet(key: string): Promise<number | null> {
   return shards.get(key);
 }
 
-/** The address's stuffing signal without counting a hit. */
-export function peekAuthStuffing(ip: string, budget: AuthFailureBudget): Promise<RateLimitResult> {
-  return peekRateLimit(AUTH_STUFFING_SCOPE, ip, budget.limit, budget.windowSeconds);
+function inflightPending(key: string, now: number): number[] {
+  const pending = inflight.get(key);
+  if (!pending) return [];
+  const live = pending.filter((startedAt) => startedAt > now - AUTH_INFLIGHT_TTL_MS);
+  if (live.length === pending.length) return pending;
+  if (live.length === 0) {
+    inflight.delete(key);
+  } else {
+    inflight.set(key, live);
+  }
+  return live;
+}
+
+function inflightAdmit(key: string, now: number): void {
+  const pending = inflightPending(key, now);
+  if (pending.length === 0) {
+    if (inflight.size >= AUTH_INFLIGHT_MAX) {
+      for (const stale of inflight.keys()) inflightPending(stale, now);
+      if (inflight.size >= AUTH_INFLIGHT_MAX) return;
+    }
+    inflight.set(key, [now]);
+    return;
+  }
+  pending.push(now);
+}
+
+function inflightSettle(key: string): void {
+  const pending = inflightPending(key, Date.now());
+  if (pending.length === 0) return;
+  pending.shift();
+  if (pending.length === 0) inflight.delete(key);
+}
+
+/** The address's stuffing signal for one kind of credential, without
+ * counting a hit. */
+export function peekAuthStuffing(
+  ip: string,
+  budget: AuthFailureBudget,
+  credentialClass: AuthCredentialClass = "session",
+): Promise<RateLimitResult> {
+  return peekRateLimit(
+    AUTH_STUFFING_SCOPE,
+    stuffingId(ip, credentialClass),
+    budget.limit,
+    budget.windowSeconds,
+  );
 }
 
 /**
- * Pre-auth gate for `identity` (the SHA-256 of the credential about to be
- * judged; null when the request carries none — a local refusal follows and
- * costs nothing upstream) presented from `ip`. Refuses a replayed credential
- * whose shard is exhausted and, once the address is under stuffing, every
- * credential nothing here has vouched for. A credential Auth already judged
- * dead this window is always let through — it is answered 401 locally.
+ * Pre-auth gate for `identity` (from `authFailureIdentity`; null when the
+ * request carries no credential — a local refusal follows and costs nothing
+ * upstream) presented from `ip`. Refuses a replayed credential whose shard —
+ * charged plus in flight — is exhausted and, once the address is under
+ * stuffing for that kind, every credential nothing here has vouched for. A
+ * credential Auth already judged dead this window is always let through — it
+ * is answered 401 locally.
  */
 export async function peekAuthFailureBudget(
   ip: string,
@@ -414,17 +502,28 @@ export async function peekAuthFailureBudget(
   const { bucket } = windowKey(AUTH_STUFFING_SCOPE, ip, budget.windowSeconds);
   const allow = (count: number) =>
     toResult(count, budget.limit, bucket, budget.windowSeconds, true);
+  const deny = (count: number) =>
+    toResult(count, budget.limit, bucket, budget.windowSeconds, false);
   if (identity === null) return allow(0);
   const { key: shardKey } = windowKey(AUTH_SHARD_SCOPE, `${ip}:${identity}`, budget.windowSeconds);
-  const [shard, stuffing] = await Promise.all([shardGet(shardKey), peekAuthStuffing(ip, budget)]);
+  const [shard, stuffing, vouched] = await Promise.all([
+    shardGet(shardKey),
+    peekAuthStuffing(ip, budget, classOf(identity)),
+    markerPresent(vouchKey(identity)),
+  ]);
   const replays = shard ?? 0;
-  if (replays < budget.limit && stuffing.allowed) return allow(replays);
-  if (await markerPresent(deadKey(identity))) return allow(replays);
   if (replays >= budget.limit) {
-    return toResult(replays, budget.limit, bucket, budget.windowSeconds, false);
+    return (await markerPresent(deadKey(identity))) ? allow(replays) : deny(replays);
   }
-  if (await markerPresent(vouchKey(identity))) return allow(replays);
-  return stuffing;
+  if (vouched) return allow(replays);
+  const now = Date.now();
+  const pending = inflightPending(identity, now).length;
+  if (!stuffing.allowed || replays + pending >= budget.limit) {
+    if (await markerPresent(deadKey(identity))) return allow(replays);
+    return stuffing.allowed ? deny(replays + pending) : stuffing;
+  }
+  inflightAdmit(identity, now);
+  return allow(replays + pending);
 }
 
 /**
@@ -441,6 +540,7 @@ export async function chargeAuthFailure(
 ): Promise<void> {
   const target = refusal.identity === undefined ? identity : refusal.identity;
   if (refusal.kind === "local" || target === null) return;
+  inflightSettle(target);
   let kind = refusal.kind;
   let vouched: boolean | null = null;
   if (kind === "not_found") {
@@ -466,6 +566,11 @@ export async function chargeAuthFailure(
     budget.windowSeconds,
   );
   if (shard === null || shard === 1) {
-    await enforceRateLimit(AUTH_STUFFING_SCOPE, ip, budget.limit, budget.windowSeconds);
+    await enforceRateLimit(
+      AUTH_STUFFING_SCOPE,
+      stuffingId(ip, classOf(target)),
+      budget.limit,
+      budget.windowSeconds,
+    );
   }
 }

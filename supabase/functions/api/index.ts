@@ -1173,7 +1173,10 @@ async function authenticateProviderToken(request: Request): Promise<
       kind: authErrorRefusalKind(signIn.error),
     });
   }
-  await vouchAuthSession(signIn.data.session);
+  await Promise.all([
+    vouchAuthCredential(token, authVouchTtlSeconds(payload?.exp), "provider"),
+    vouchAuthSession(signIn.data.session),
+  ]);
   return {
     authed: {
       id: signIn.data.user.id,
@@ -1359,10 +1362,10 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
-  const identity = await authFailureIdentity(refreshToken);
+  const identity = await authFailureIdentity(refreshToken, "refresh");
   const budget = await peekAuthFailureBudget(clientIp(request), identity, AUTH_FAILURE_LIMIT);
   if (!budget.allowed) return rateLimitResponse(budget);
-  if (await authCredentialDead(refreshToken)) {
+  if (await authCredentialDead(refreshToken, "refresh")) {
     return authRefusal(errorJson(401, "The session could not be refreshed. Sign in again."), {
       kind: "liveness",
       identity,
@@ -5053,7 +5056,16 @@ async function handleRequest(request: Request): Promise<Response> {
   // probing) — those never even reach Supabase Auth once tripped.
   const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
-  const bearerIdentity = await authFailureIdentity(bearerOf(request));
+  // A refresh is judged by the refresh token in its body, which its route
+  // gates and charges itself; bootstrap spends a provider ID token; every
+  // other route bears a session token.
+  const authPath = request.method === "POST" ? url.pathname : "";
+  const bearerIdentity = authPath.endsWith("/v1/auth/refresh")
+    ? null
+    : await authFailureIdentity(
+        bearerOf(request),
+        authPath.endsWith("/v1/account/bootstrap") ? "provider" : "session",
+      );
   const authFailures = await peekAuthFailureBudget(ip, bearerIdentity, AUTH_FAILURE_LIMIT);
   if (!authFailures.allowed) return rateLimitResponse(authFailures);
 
