@@ -25,6 +25,26 @@ cat >"$WORK/helper/select-simulator.sh" <<'SH_PICKER'
 #!/usr/bin/env bash
 printf 'fixture-owned-iphone\n'
 SH_PICKER
+# The wallet helper has its own direct host test; here it is a dependency
+# fake that records how the launch helper drives it and returns a verdict.
+cat >"$WORK/helper/wallet-persistence-check.sh" <<'SH_WALLET'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$@" >"$LAUNCH_FIXTURE_DIR/wallet-args.txt"
+[ -f "$LAUNCH_FIXTURE_DIR/app-alive" ] || { echo 'fixture: wallet probe asked to run against a dead app' >&2; exit 90; }
+[ -f "$LAUNCH_FIXTURE_DIR/log.pid" ] && builtin kill -0 "$(cat "$LAUNCH_FIXTURE_DIR/log.pid")" 2>/dev/null && { echo 'fixture: launch log stream still running during wallet probe' >&2; exit 91; }
+mkdir -p "$4"
+case "$LAUNCH_FIXTURE_CASE" in
+  wallet-fail)
+    echo 'wallet_persistence_ok=0' >"$4/wallet-summary.txt"
+    echo '::error::fixture wallet restore mismatch'
+    exit 1 ;;
+  wallet-silent)
+    exit 0 ;;
+  *)
+    echo 'wallet_persistence_ok=1' >"$4/wallet-summary.txt" ;;
+esac
+SH_WALLET
 cat >"$WORK/bin/PlistBuddy" <<'SH_PLIST'
 #!/usr/bin/env bash
 case "$2" in
@@ -146,7 +166,7 @@ cat >"$WORK/bin/find" <<'SH_FIND'
 #!/usr/bin/env bash
 exit 0
 SH_FIND
-chmod +x "$WORK/helper/select-simulator.sh" "$WORK/bin/"*
+chmod +x "$WORK/helper/select-simulator.sh" "$WORK/helper/wallet-persistence-check.sh" "$WORK/bin/"*
 
 run_case() {
   local case_name="$1" expected="$2" reason="$3" status=0
@@ -176,6 +196,13 @@ PY_BOUNDED_RUN
     test "$status" -eq 0 || { cat "$dir/run.log" >&2; return 1; }
     grep -F 'alive_after_6s=1' "$dir/relative artifact dir/launch-summary.txt" >/dev/null
     grep -F 'keychain_entitlement_errors=0' "$dir/relative artifact dir/launch-summary.txt" >/dev/null
+    grep -Fx 'wallet_persistence_ok=1' "$dir/relative artifact dir/launch-summary.txt" >/dev/null || { echo "launch summary lacks the wallet verdict: $case_name" >&2; return 1; }
+    grep -F 'wallet contents survived force-quit' "$dir/run.log" >/dev/null
+    # The probe runs against the surviving launch pid, on the same install,
+    # writing beneath the launch artifact dir.
+    test -f "$dir/wallet-args.txt" || { echo "wallet persistence check never ran: $case_name" >&2; return 1; }
+    printf '%s\n' fixture-owned-iphone com.fixture.launch "$WORK/Test App.app" \
+      "$dir/relative artifact dir/wallet" 987654321 | diff -u - "$dir/wallet-args.txt"
     test -f "$dir/relative artifact dir/launch-05s.png"
     test -f "$dir/relative artifact dir/launch-settled.png"
     if [ "$case_name" = normal-graceful ]; then
@@ -188,6 +215,22 @@ PY_BOUNDED_RUN
     grep -F "$reason" "$dir/run.log" >/dev/null || { cat "$dir/run.log" >&2; return 1; }
     if grep -q 'launch check passed:' "$dir/run.log"; then
       echo "failed case printed success: $case_name" >&2; return 1
+    fi
+    case "$case_name" in
+      wallet-fail|wallet-silent|entitlements|fatal)
+        test -f "$dir/wallet-args.txt" || { echo "wallet persistence check never ran: $case_name" >&2; return 1; } ;;
+      *)
+        # A launch that did not survive, or evidence that is already
+        # incomplete, is never probed further.
+        if [ -f "$dir/wallet-args.txt" ]; then
+          echo "wallet persistence check ran without a surviving launch: $case_name" >&2; return 1
+        fi
+        case "$case_name" in
+          app-final-*) grep -F 'wallet persistence check not run: FixtureApp did not survive the launch' "$dir/run.log" >/dev/null ;;
+        esac ;;
+    esac
+    if [ "$case_name" = wallet-fail ] || [ "$case_name" = wallet-silent ]; then
+      grep -Fx 'wallet_persistence_ok=0' "$dir/relative artifact dir/launch-summary.txt" >/dev/null
     fi
   fi
   if [ "$case_name" = log-early-zero ] || [ "$case_name" = log-early-error ]; then
@@ -221,3 +264,5 @@ run_case screenshot-early fail 'fixture screenshot failure'
 run_case screenshot-settled fail 'fixture screenshot failure'
 run_case entitlements fail 'signing entitlements are missing'
 run_case fatal fail 'fatal React Native error'
+run_case wallet-fail fail 'wallet persistence check failed (status 1)'
+run_case wallet-silent fail 'wallet persistence check produced no verdict (wallet_persistence_ok=0)'
