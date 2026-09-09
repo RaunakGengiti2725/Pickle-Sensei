@@ -1,17 +1,21 @@
 // Auth-failure budget accounting through the REAL handler (XC-RS-02).
 //
-// The per-IP `authfail` budget (AUTH_FAILURE_LIMIT = 30 / 300 s) exists to
-// starve token stuffing. It must be charged for every DEFINITIVE credential
-// refusal (Supabase Auth 400/401/403: bad, expired, revoked token) and for
-// nothing else: an Auth outage (5xx / 429 / network / malformed answer) says
-// nothing about the credential, so charging it locks every player behind a
-// shared club Wi-Fi or carrier NAT out for five minutes after Auth recovers.
+// The `authfail` budget (AUTH_FAILURE_LIMIT = 30 / 300 s) exists to starve
+// token stuffing. It must be charged for every DEFINITIVE credential refusal
+// (Supabase Auth 400/401/403: bad, expired, revoked token) and for nothing
+// else: an Auth outage (5xx / 429 / network / malformed answer) says nothing
+// about the credential, so charging it locks every player behind a shared
+// club Wi-Fi or carrier NAT out for five minutes after Auth recovers. Since
+// W11-01 the budget is sharded per CREDENTIAL with the per-IP counter as a
+// stuffing signal (rateLimit_nat_budget.test.ts): a refused credential is
+// held once it has used up its own budget, or once the egress is saturated
+// and it has already been refused there — never before Auth judged it once.
 //
 // Run:  cd supabase/functions/api/__wf__ && deno test -A --no-check \
 //         --config deno.json rate_limit_test.ts
 
 import { assert, assertEquals } from "@std/assert";
-import { peekRateLimit } from "../rateLimit.ts";
+import { peekAuthFailureBudget, peekRateLimit } from "../rateLimit.ts";
 import { loadHarness, SUPABASE_URL, TEST_USER_ID } from "./routesHarness.ts";
 
 /** Mirrors AUTH_FAILURE_LIMIT in index.ts. */
@@ -113,37 +117,47 @@ const chargedFailures = async (ip: string): Promise<number> => {
 };
 
 Deno.test(
-  "authfail: 31 genuinely invalid bearers from one IP → 30 × 401 then 429 on the 31st (lockout preserved)",
+  "authfail: 31 genuinely invalid bearers from one IP → 31 × 401 judged once each, then 429 for every REPLAY of a refused bearer (lockout of the stuffed credentials preserved)",
   async () => {
     const h = await loadHarness();
     const ip = "10.7.0.31";
     const statuses: number[] = [];
+    const replays: number[] = [];
+    let judged = 0;
     await withAuthUpstream(
-      onUserEndpoint(() =>
-        jsonResponse(401, {
+      onUserEndpoint(() => {
+        judged += 1;
+        return jsonResponse(401, {
           code: 401,
           msg: "invalid JWT: unable to parse or verify signature",
-        }),
-      ),
+        });
+      }),
       async () => {
         for (let i = 0; i < 31; i += 1) {
-          const response = await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`));
-          statuses.push(response.status);
-          if (i === 30) {
-            const retryAfter = Number(response.headers.get("Retry-After"));
-            assert(
-              Number.isInteger(retryAfter) &&
-                retryAfter >= 1 &&
-                retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
-              `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
-            );
-          }
+          statuses.push((await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`))).status);
         }
+        assertEquals(judged, 31, "every distinct credential is judged by Auth exactly once");
+        for (let i = 0; i < 31; i += 1) {
+          const response = await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`));
+          replays.push(response.status);
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          assert(
+            Number.isInteger(retryAfter) &&
+              retryAfter >= 1 &&
+              retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
+            `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
+          );
+        }
+        assertEquals(judged, 31, "replays of refused credentials never reach Auth again");
       },
     );
-    assertEquals(statuses.slice(0, 30), new Array(30).fill(401));
-    assertEquals(statuses[30], 429, "the 31st invalid bearer must be locked out");
-    assertEquals(await chargedFailures(ip), 30);
+    assertEquals(statuses, new Array(31).fill(401));
+    assertEquals(replays, new Array(31).fill(429), "every stuffed bearer is locked out");
+    assertEquals(
+      await chargedFailures(ip),
+      AUTH_FAILURE_LIMIT.limit,
+      "the egress stuffing signal is saturated (remaining floors at 0)",
+    );
   },
 );
 
@@ -203,6 +217,16 @@ Deno.test(
       () => postRefresh(h.handler, ip),
     );
     assertEquals(refused.status, 401);
-    assertEquals(await chargedFailures(ip), 1, "a refused refresh token is a real auth failure");
+    const shard = await peekAuthFailureBudget(ip, "rt-under-test", AUTH_FAILURE_LIMIT);
+    assertEquals(
+      shard.limit - shard.remaining,
+      1,
+      "a refused refresh token is a real auth failure, charged to that token's shard",
+    );
+    assertEquals(
+      await chargedFailures(ip),
+      0,
+      "…but a refresh token Auth no longer holds is a dead session, not stuffing",
+    );
   },
 );

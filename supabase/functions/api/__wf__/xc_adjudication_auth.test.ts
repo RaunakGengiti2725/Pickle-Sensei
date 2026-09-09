@@ -665,7 +665,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "W11-01 (fixed): the auth-failure budget (30/5 min) is per CREDENTIAL — 30 dead session tokens from a NAT address leave a co-tenant's VALID bearer, bootstrap and refresh at 200, while the replayed junk token itself is held",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -675,7 +675,8 @@ Deno.test(
       "victim works before the noise",
     );
 
-    // Co-tenant on the same NAT address presents 30 garbage session tokens.
+    // Co-tenant on the same NAT address presents 30 garbage session tokens;
+    // the fake Auth refuses each as `session_not_found` (a dead session).
     const now = Math.floor(Date.now() / 1000);
     for (let i = 0; i < 30; i += 1) {
       const junk = jwt({
@@ -693,19 +694,49 @@ Deno.test(
 
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
-      429,
-      "victim's VALID cached bearer → 429",
+      200,
+      "victim's VALID cached bearer → 200",
     );
-    const bootstrapBlocked = await call("POST", "/v1/account/bootstrap", {
+    const bootstrapAllowed = await call("POST", "/v1/account/bootstrap", {
       token: googleIdToken(VICTIM),
       ip,
       body: {},
     });
-    assertEquals(bootstrapBlocked.status, 429, "sign-in from the address → 429");
+    assertEquals(bootstrapAllowed.status, 200, "sign-in from the address → 200");
     assertEquals(
       (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
-      429,
-      "refresh from the address → 429",
+      200,
+      "refresh from the address → 200",
+    );
+
+    // The junk token replayed exhausts ITS OWN budget: 30 × 401 judged by
+    // Auth, then 429 without another Auth lookup.
+    const replayed = jwt({
+      iss: `${SUPABASE_URL}/auth/v1`,
+      sub: ATTACKER,
+      exp: now + 3600,
+      jti: "junk-replayed",
+    });
+    for (let i = 0; i < 30; i += 1) {
+      assertEquals(
+        (await call("GET", PROBE_ROUTE, { token: replayed, ip })).status,
+        401,
+        `replay ${i} → 401`,
+      );
+    }
+    upstreamCalls.length = 0;
+    const held = await call("GET", PROBE_ROUTE, { token: replayed, ip });
+    assertEquals(held.status, 429, "the 31st replay of one refused token → 429");
+    assert(Number(held.headers.get("Retry-After")) >= 1, "429 carries Retry-After");
+    assertEquals(
+      upstreamCalls.filter((c) => c === "auth:getUser").length,
+      0,
+      "…without asking Auth again",
+    );
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
+      200,
+      "the victim is still unaffected",
     );
   },
 );

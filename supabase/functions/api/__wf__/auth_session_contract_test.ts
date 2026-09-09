@@ -363,29 +363,66 @@ Deno.test("refresh without a refreshToken is a 400 validation error", async () =
   assertEquals(h.callsTo("/auth/v1/token").length, 0);
 });
 
-Deno.test("refused refreshes count toward the per-IP auth-failure budget", async () => {
-  const h = await loadSessionHarness();
-  const ip = freshIp();
-  await withFrozenClock(async () => {
-    for (let i = 0; i < 30; i += 1) {
-      const response = await h.handler(
+Deno.test(
+  "refused refreshes count toward the auth-failure budget of THAT refresh token, never against the address (W11-01)",
+  async () => {
+    const h = await loadSessionHarness();
+    const ip = freshIp();
+    await withFrozenClock(async () => {
+      for (let i = 0; i < 30; i += 1) {
+        const response = await h.handler(
+          apiRequest("POST", "/v1/auth/refresh", {
+            token: null,
+            ip,
+            body: { refreshToken: `rt-bogus-${i}` },
+          }),
+        );
+        assertEquals(response.status, 401);
+        await response.body?.cancel();
+      }
+      const minted = h.mintSession(GOOGLE_USER_ID);
+      const served = await h.handler(
+        apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }),
+      );
+      assertEquals(served.status, 200, "a good bearer from the same address is served");
+      await served.body?.cancel();
+      assertEquals(h.callsTo("/auth/v1/user").length, 1, "…judged by Auth once");
+
+      // One refused token replayed exhausts ITS budget wherever it is
+      // presented (the per-IP refresh budget is 30/min, so spread the replays
+      // over two fresh addresses to isolate the credential shard).
+      const grantsBefore = h.callsTo("grant_type=refresh_token").length;
+      const replayIp = freshIp();
+      for (let i = 0; i < 30; i += 1) {
+        const response = await h.handler(
+          apiRequest("POST", "/v1/auth/refresh", {
+            token: null,
+            ip: replayIp,
+            body: { refreshToken: "rt-bogus-replayed" },
+          }),
+        );
+        assertEquals(response.status, 401, `replay ${i + 1} is judged by GoTrue`);
+        await response.body?.cancel();
+      }
+      assertEquals(h.callsTo("grant_type=refresh_token").length - grantsBefore, 30);
+      const held = await h.handler(
         apiRequest("POST", "/v1/auth/refresh", {
           token: null,
-          ip,
-          body: { refreshToken: `rt-bogus-${i}` },
+          ip: freshIp(),
+          body: { refreshToken: "rt-bogus-replayed" },
         }),
       );
-      assertEquals(response.status, 401);
-      await response.body?.cancel();
-    }
-    const minted = h.mintSession(GOOGLE_USER_ID);
-    const blocked = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }));
-    assertEquals(blocked.status, 429, "a good bearer from the failing IP is throttled");
-    assert(Number(blocked.headers.get("Retry-After")) >= 1);
-    await blocked.body?.cancel();
-    assertEquals(h.callsTo("/auth/v1/user").length, 0);
-  });
-});
+      assertEquals(held.status, 429, "the 31st replay of one refused refresh token is held");
+      assert(Number(held.headers.get("Retry-After")) >= 1);
+      await held.body?.cancel();
+      assertEquals(
+        h.callsTo("grant_type=refresh_token").length - grantsBefore,
+        30,
+        "the held replay never reached GoTrue",
+      );
+    });
+  },
+);
 
 Deno.test(
   "refresh has its own per-IP budget: the 31st rotation in a minute is 429 even when every token is valid",
