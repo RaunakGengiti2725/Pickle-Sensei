@@ -2418,7 +2418,15 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     it("owner A's row whose owner_id column is no longer a UUID never locks owner B out: B gets the survey and requests under its own bearer", async () => {
       const confirm = deferred<Response>();
       route({
-        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-request': init =>
+          reply(
+            'delete-request',
+            requestPayload(
+              headerOf(init, 'Authorization') === `Bearer ${BEARER_A}`
+                ? 10
+                : 20,
+            ),
+          ),
         'delete-confirm': () => confirm.promise,
       });
       const first = renderScreen();
@@ -2457,8 +2465,12 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         // The damaged row is left exactly as it was: never rewritten,
         // never reclaimed.
         expect(journalRows()).toMatchObject([
-          { owner_id: damagedOwner, phase: 'confirm_pending' },
-          { owner_id: OWNER_B, operation_id: deletionId(10), phase: 'ready' },
+          {
+            owner_id: damagedOwner,
+            operation_id: deletionId(10),
+            phase: 'confirm_pending',
+          },
+          { owner_id: OWNER_B, operation_id: deletionId(20), phase: 'ready' },
         ]);
         expectNotDeleted(second);
       } finally {
