@@ -118,6 +118,7 @@ const apiSessionA = {
 const realFetch = globalThis.fetch;
 const mockFetch = jest.fn<Promise<Response>, [string, RequestInit]>();
 const realSetGenericPassword = Keychain.setGenericPassword;
+const realGetGenericPassword = Keychain.getGenericPassword;
 
 function iso(offsetMs: number): string {
   return new Date(Date.now() + offsetMs).toISOString();
@@ -2181,6 +2182,347 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         });
       } finally {
         act(() => second.unmount());
+      }
+    });
+  });
+
+  /**
+   * Round-6 adversary breaks. The Keychain record beside a journal row
+   * authorizes cleanup; it is not the deletion proof. A receipt the transport
+   * verified against the operation completes the deletion even when the
+   * Keychain cannot answer at all (locked / protected data unavailable) or
+   * its item is gone after a device restore — on this launch and on the
+   * next. And a row whose identifying SQLite COLUMNS are damaged (not just
+   * its document) is attributed only as far as its columns still allow:
+   * it never locks another owner out, and never turns into a fresh start
+   * for the owner it still names.
+   */
+  describe('receipts the Keychain cannot vouch for, and rows with damaged identifying columns', () => {
+    const WINDOW_CLOSED = 'The window for checking this deletion has closed';
+    const UNREADABLE = 'could not be read';
+
+    function journalDocument(row: unknown): Record<string, unknown> {
+      const { document } = row as { document: string };
+      return JSON.parse(document) as Record<string, unknown>;
+    }
+
+    function expectFreshEntry(renderer: TestRenderer.ReactTestRenderer) {
+      const text = allText(renderer);
+      expect(text).toContain("What's making you leave?");
+      expect(text).not.toContain(UNREADABLE);
+      expect(text).not.toContain('Deletion status unknown');
+      expect(text).not.toContain('may have completed');
+      expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
+    }
+
+    function expectHeldUnreadable(renderer: TestRenderer.ReactTestRenderer) {
+      expectUnknownOutcome(renderer);
+      expect(allText(renderer)).toContain(UNREADABLE);
+      expect(buttonLabels(renderer)).toEqual(['Close']);
+      expectNotDeleted(renderer);
+    }
+
+    function expectCompletedFromReceipt(
+      renderer: TestRenderer.ReactTestRenderer,
+    ) {
+      const text = allText(renderer);
+      expect(text).not.toContain('may have completed');
+      expect(text).not.toContain('Check your connection');
+      expect(text).not.toContain(UNREADABLE);
+      expect(text).not.toContain('contact support');
+      expect(text).not.toContain(WINDOW_CLOSED);
+      expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
+      expectDeleted(renderer);
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).toHaveBeenCalledWith(expect.objectContaining({ ownerKey: OWNER_A }));
+    }
+
+    function resetCleanupSpies() {
+      useAuthStore.setState({
+        completeAccountDeletion: jest.fn(() => Promise.resolve()),
+      });
+      mockShowBrandNotice.mockClear();
+    }
+
+    /** The Keychain stops answering at all — reads AND writes throw, the
+     * way errSecInteractionNotAllowed / errSecNotAvailable surface — once
+     * `down()` is called. Every call before that is real. */
+    function keychainOutage() {
+      let down = false;
+      const set = jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockImplementation(async (username, password, options) => {
+          if (down) throw new Error('errSecNotAvailable');
+          return realSetGenericPassword(username, password, options);
+        });
+      const get = jest
+        .spyOn(Keychain, 'getGenericPassword')
+        .mockImplementation(async options => {
+          if (down) throw new Error('errSecNotAvailable');
+          return realGetGenericPassword(options);
+        });
+      return {
+        down: () => {
+          down = true;
+        },
+        restore: () => {
+          set.mockRestore();
+          get.mockRestore();
+        },
+      };
+    }
+
+    /** The Keychain refuses exactly the SECOND write — the receipt seal. */
+    function refuseReceiptSeal() {
+      let writes = 0;
+      return jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockImplementation(async (username, password, options) => {
+          writes += 1;
+          if (writes === 2) throw new Error('errSecInteractionNotAllowed');
+          return realSetGenericPassword(username, password, options);
+        });
+    }
+
+    /** Confirms owner A's deletion; the reply is verified in place. */
+    async function confirmVerified(renderer: TestRenderer.ReactTestRenderer) {
+      await armDeletion(renderer);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+      await act(async () => {});
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expect(journalDocument(journalRows()[0])).toMatchObject({
+        serverState: 'completed',
+        receipt: {
+          completedAt: expect.any(String),
+          appleAuthorizationRevocation: 'revoked',
+        },
+      });
+    }
+
+    /** Rewrites one identifying column of owner A's row to a value that
+     * satisfies the table's CHECK constraints but is no longer well-formed;
+     * the document is untouched. */
+    function damageColumn(column: 'owner_id' | 'operation_id') {
+      const damaged = 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz';
+      const changed = mockDatabase.native
+        .prepare(
+          `UPDATE device_account_deletion_journal SET ${column} = ? WHERE owner_id = ?`,
+        )
+        .run(damaged, OWNER_A).changes;
+      expect(changed).toBe(1);
+      return damaged;
+    }
+
+    it('a confirmation reply verified while the Keychain is wholly unavailable completes on this launch — not "may have completed", no network hint, no status call', async () => {
+      const keychain = keychainOutage();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => {
+          // Protected data becomes unavailable between sending the
+          // confirmation and receiving its reply; the reply is verified
+          // against the operation regardless.
+          keychain.down();
+          return reply('delete-confirm', completionPayload());
+        },
+        'delete-status': () =>
+          reply('delete-status', statusPayload('completed')),
+      });
+      const renderer = renderScreen();
+      try {
+        await confirmVerified(renderer);
+        expect(journalRows()).toMatchObject([
+          {
+            owner_id: OWNER_A,
+            operation_id: deletionId(10),
+            phase: 'receipt_pending',
+          },
+        ]);
+        expect(deletionKeychainStore.size).toBe(1);
+        expect(calls('delete-status')).toHaveLength(0);
+        expectCompletedFromReceipt(renderer);
+      } finally {
+        act(() => renderer.unmount());
+        keychain.restore();
+      }
+    });
+
+    it('a relaunch whose Keychain item is gone over a receipt the Keychain never sealed completes from the journaled receipt — never "could not be read… contact support"', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () =>
+          reply('delete-status', statusPayload('completed')),
+      });
+      const seal = refuseReceiptSeal();
+      const first = renderScreen();
+      try {
+        await confirmVerified(first);
+        expect(journalRows()).toMatchObject([{ phase: 'receipt_pending' }]);
+      } finally {
+        act(() => first.unmount());
+        seal.mockRestore();
+      }
+      resetCleanupSpies();
+
+      // THIS_DEVICE_ONLY Keychain items do not come back with a backup
+      // restore; the SQLite journal (and its verified receipt) does.
+      deletionKeychainStore.clear();
+      await advance(60_000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectCompletedFromReceipt(second);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(journalRows()).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a relaunch whose Keychain item is gone over a sealed receipt (receipt_verified) still completes from the journaled receipt, without a status call', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () =>
+          reply('delete-status', statusPayload('completed')),
+      });
+      const first = renderScreen();
+      try {
+        await confirmVerified(first);
+        expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+        expectDeleted(first);
+      } finally {
+        act(() => first.unmount());
+      }
+      resetCleanupSpies();
+
+      deletionKeychainStore.clear();
+      await advance(60_000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectCompletedFromReceipt(second);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it("owner A's row whose owner_id column is no longer a UUID never locks owner B out: B gets the survey and requests under its own bearer", async () => {
+      const confirm = deferred<Response>();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => confirm.promise,
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        await act(async () => {
+          confirm.reject(new TypeError('Network request failed'));
+        });
+        await act(async () => {});
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, phase: 'confirm_pending' },
+        ]);
+      } finally {
+        act(() => first.unmount());
+      }
+      const damagedOwner = damageColumn('owner_id');
+
+      mockFetch.mockClear();
+      resetCleanupSpies();
+      await act(async () => {
+        signIn(OWNER_B, BEARER_B, 'apple');
+      });
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectFreshEntry(second);
+        await press(second, pressable(second, 'Skip the survey')[0]!);
+        await press(second, sheetButton(second, 'Continue to delete'));
+        await act(async () => {});
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(headerOf(calls('delete-request')[0]!, 'Authorization')).toBe(
+          `Bearer ${BEARER_B}`,
+        );
+        expect(sheetButtons(second, 'Permanently delete')).toHaveLength(1);
+        // The damaged row is left exactly as it was: never rewritten,
+        // never reclaimed.
+        expect(journalRows()).toMatchObject([
+          { owner_id: damagedOwner, phase: 'confirm_pending' },
+          { owner_id: OWNER_B, operation_id: deletionId(10), phase: 'ready' },
+        ]);
+        expectNotDeleted(second);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it("owner A's row whose operation_id column is damaged still names owner A over a sent confirmation: A stays held, B gets the survey", async () => {
+      const confirm = deferred<Response>();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => confirm.promise,
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        await act(async () => {
+          confirm.reject(new TypeError('Network request failed'));
+        });
+        await act(async () => {});
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, phase: 'confirm_pending' },
+        ]);
+      } finally {
+        act(() => first.unmount());
+      }
+      damageColumn('operation_id');
+
+      // Owner A: the row is still A's and a confirmation left this phone
+      // behind it, so A's re-entry stays held — no survey, no new request.
+      mockFetch.mockClear();
+      resetCleanupSpies();
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldUnreadable(second);
+        expect(calls('delete-request')).toHaveLength(0);
+      } finally {
+        act(() => second.unmount());
+      }
+
+      // Owner B has never touched deletion on this phone.
+      await act(async () => {
+        signIn(OWNER_B, BEARER_B, 'apple');
+      });
+      const third = renderScreen();
+      try {
+        await openDeleteSheet(third);
+        expectFreshEntry(third);
+        await press(third, pressable(third, 'Skip the survey')[0]!);
+        await press(third, sheetButton(third, 'Continue to delete'));
+        await act(async () => {});
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(headerOf(calls('delete-request')[0]!, 'Authorization')).toBe(
+          `Bearer ${BEARER_B}`,
+        );
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, phase: 'confirm_pending' },
+          { owner_id: OWNER_B, operation_id: deletionId(10), phase: 'ready' },
+        ]);
+        expectNotDeleted(third);
+      } finally {
+        act(() => third.unmount());
       }
     });
   });
