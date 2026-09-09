@@ -160,6 +160,17 @@ export type OwnerNamespaceProbe =
 
 /** Attempts per namespace before a failing page read is reported `unread`. */
 export const INVENTORY_READ_ATTEMPTS = 3;
+/** Pause before re-reading a page the source paced (HTTP 429) without a usable
+ * `retryAfterMs`; every other page error is retried at once. */
+export const INVENTORY_RETRY_AFTER_DEFAULT_MS = 1_000;
+/** Upper bound on a relayed Retry-After — the sweep never parks on one
+ * namespace, so one paced namespace costs at most
+ * `(INVENTORY_READ_ATTEMPTS - 1) * INVENTORY_RETRY_AFTER_MAX_MS`. */
+export const INVENTORY_RETRY_AFTER_MAX_MS = 2_000;
+/** In-process tries of the post-Auth stage (receipt read, sweep, certification)
+ * on a transient storage failure before the worker records
+ * `completion_unverified` and leaves the phase to be re-acquired. */
+export const POST_AUTH_VERIFY_ATTEMPTS = 3;
 export type DeletionConfirmationResult =
   | {
       outcome: "completed";
@@ -195,6 +206,9 @@ interface DeletionLease {
   appleRefreshTokenEncrypted: string | null;
   revenueCatCompleted: boolean;
   revenueCatAlreadyDeleted: boolean;
+  /** The Auth identity is already gone: only the sweep and the certification
+   * remain, nothing external is repeated. */
+  authDeleted: boolean;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -540,10 +554,13 @@ function parseLease(value: Record<string, unknown>): DeletionLease | null {
     typeof value.appleCompleted !== "boolean" ||
     !(value.appleAction === "revoke" || isAppleOutcome(value.appleAction)) ||
     typeof value.revenueCatCompleted !== "boolean" ||
-    typeof value.revenueCatAlreadyDeleted !== "boolean"
+    typeof value.revenueCatAlreadyDeleted !== "boolean" ||
+    !(value.authDeleted === undefined || typeof value.authDeleted === "boolean")
   ) {
     return null;
   }
+  const authDeleted = value.authDeleted === true;
+  if (authDeleted && !(value.appleCompleted && value.revenueCatCompleted)) return null;
   if (value.appleAction === "revoke") {
     if (
       value.appleCompleted ||
@@ -566,6 +583,7 @@ function parseLease(value: Record<string, unknown>): DeletionLease | null {
     appleRefreshTokenEncrypted: value.appleRefreshTokenEncrypted as string | null,
     revenueCatCompleted: value.revenueCatCompleted,
     revenueCatAlreadyDeleted: value.revenueCatAlreadyDeleted,
+    authDeleted,
   };
 }
 
@@ -652,6 +670,10 @@ async function runClaimedDeletion(
       throw new Error("Deletion lease is unavailable.");
   };
   try {
+    if (lease.authDeleted) {
+      failureCode = "completion_unverified";
+      return await certifyVerifiedSweep(rpc, dependencies, ownerId, operationId, binding);
+    }
     // Every namespace must be readable by its actor BEFORE anything
     // irreversible: a read the actor is not granted, or rows the source cannot
     // describe, would only surface after the Auth identity — and with it the
@@ -706,26 +728,7 @@ async function runClaimedDeletion(
     if (deleted.error && !isIntendedAuthUserNotFound(deleted.error))
       throw new Error("Auth deletion is unavailable.");
     failureCode = "completion_unverified";
-    const receipt = await rpcData(rpc, "read_account_deletion_receipt", {
-      p_owner_id: ownerId,
-      p_operation_id: operationId,
-    });
-    const residue = ownerNamespaceResidue(
-      "completion",
-      await verifyOwnerNamespacesEmpty(dependencies, ownerId),
-    );
-    if (residue) throw residue;
-    // A durable row that records the Auth absence without certifying it is
-    // certified by the worker that verified the sweep — the receipt exists
-    // only once every namespace has been paged to empty.
-    const result =
-      completionResult(operationId, receipt) ??
-      completionResult(
-        operationId,
-        await rpcData(rpc, "certify_account_deletion_completion", binding),
-      );
-    if (!result) throw new Error("Account deletion completion is unverified.");
-    return result;
+    return await certifyVerifiedSweep(rpc, dependencies, ownerId, operationId, binding);
   } catch (error) {
     try {
       if (error instanceof OwnerNamespaceResidue) {
@@ -745,6 +748,50 @@ async function runClaimedDeletion(
       return { outcome: "unavailable", code: failureCode };
     }
     return { outcome: "unavailable", code: failureCode };
+  }
+}
+
+/** The post-Auth stage: read the durable receipt, page every namespace to
+ * empty, then certify. A transient storage failure (an RPC that did not
+ * answer) is retried in-process up to `POST_AUTH_VERIFY_ATTEMPTS` times under
+ * the same lease — the identity is already gone, so the only way forward is to
+ * finish; residue or an unreadable namespace is never retried here and never
+ * certifies. */
+async function certifyVerifiedSweep(
+  rpc: DeletionOperationRpc,
+  dependencies: AccountDeletionWorkerDependencies,
+  ownerId: string,
+  operationId: string,
+  binding: { p_owner_id: string; p_operation_id: string; p_lease_token: string },
+): Promise<Extract<DeletionConfirmationResult, { outcome: "completed" }>> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      const receipt = await rpcData(rpc, "read_account_deletion_receipt", {
+        p_owner_id: ownerId,
+        p_operation_id: operationId,
+      });
+      const residue = ownerNamespaceResidue(
+        "completion",
+        await verifyOwnerNamespacesEmpty(dependencies, ownerId),
+      );
+      if (residue) throw residue;
+      // A durable row that records the Auth absence without certifying it is
+      // certified by the worker that verified the sweep — the receipt exists
+      // only once every namespace has been paged to empty.
+      // A certification whose response was lost is found by the next receipt
+      // read, never repeated.
+      const result =
+        completionResult(operationId, receipt) ??
+        completionResult(
+          operationId,
+          await rpcData(rpc, "certify_account_deletion_completion", binding),
+        );
+      if (!result) throw new Error("Account deletion completion is unverified.");
+      return result;
+    } catch (error) {
+      if (!(error instanceof DeletionStorageUnavailable) || attempt >= POST_AUTH_VERIFY_ATTEMPTS)
+        throw error;
+    }
   }
 }
 
@@ -817,6 +864,18 @@ function unreadVerdict(
   };
 }
 
+/** How long a failed page read waits before its retry: a paced source (429)
+ * is honoured for its relayed Retry-After, bounded, or the default pacing;
+ * every other page error retries at once. */
+function inventoryRetryDelayMs(result: IncompleteInventory<unknown>): number {
+  if (result.httpStatus !== 429) return 0;
+  const relayed = result.retryAfterMs;
+  if (relayed === undefined || !Number.isFinite(relayed) || relayed < 0) {
+    return INVENTORY_RETRY_AFTER_DEFAULT_MS;
+  }
+  return Math.min(relayed, INVENTORY_RETRY_AFTER_MAX_MS);
+}
+
 /** Reads every namespace for `ownerId` with the complete-inventory contract
  * (`readOwnerInventory`): an empty page after the last cursor is the only
  * proof of an empty namespace; a page error (after `INVENTORY_READ_ATTEMPTS`
@@ -838,6 +897,8 @@ export async function verifyOwnerNamespacesEmpty(
         result.reason === "page_error";
         attempt += 1
       ) {
+        const delay = inventoryRetryDelayMs(result);
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
         result = await readOwnerInventory(ownerNamespaceReader(namespace, owner, reader));
       }
       if (result.status === "INCOMPLETE") return unreadVerdict(namespace.table, result);
@@ -1034,6 +1095,9 @@ export interface InventoryPage<Row> {
   data: Row[] | null;
   error: { message: string; code?: string } | null;
   status?: number;
+  /** The source's Retry-After for a paced (429) page, in milliseconds, when
+   * the reader can relay it. */
+  retryAfterMs?: number;
 }
 
 export interface InventoryCursorReader<Row, Cursor> {
@@ -1081,6 +1145,8 @@ export interface IncompleteInventory<Row> {
   reason: InventoryIncompleteReason;
   error: { message: string; code?: string };
   httpStatus: number | null;
+  /** Relayed Retry-After of a paced page error, when the page carried one. */
+  retryAfterMs?: number;
 }
 
 export type InventoryReadResult<Row> = CompleteInventory<Row> | IncompleteInventory<Row>;
@@ -1120,11 +1186,14 @@ export async function readOwnerInventory<Row, Cursor>(
       return incomplete("page_error", thrownDetail(thrown));
     }
     if (page.error) {
-      return incomplete(
+      const failed = incomplete(
         "page_error",
         page.error,
         typeof page.status === "number" ? page.status : null,
       );
+      return typeof page.retryAfterMs === "number"
+        ? { ...failed, retryAfterMs: page.retryAfterMs }
+        : failed;
     }
     if (!Array.isArray(page.data)) return incomplete("malformed_page");
     const batch = page.data;
