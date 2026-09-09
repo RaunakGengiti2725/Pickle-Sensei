@@ -56,6 +56,45 @@ function sanitized(error: unknown): DeletionFoundationError {
   return new DeletionFoundationError('journal_unavailable');
 }
 
+/** The indexed columns of a row whose document cannot be read as an
+ * entry. They say which owner and operation the row belongs to and the
+ * last phase that was committed for it — nothing more. */
+export interface DeletionJournalRowStub {
+  readonly jobId: string;
+  readonly ownerId: string;
+  readonly apiOrigin: string;
+  readonly operationId: string | null;
+  readonly phase: DeletionPhase;
+}
+
+export interface DeletionJournalListing {
+  readonly entries: readonly DeletionJournalEntry[];
+  readonly unreadable: readonly DeletionJournalRowStub[];
+}
+
+function parseRowStub(row: Record<string, unknown>): DeletionJournalRowStub {
+  if (
+    Object.keys(row).length !== COLUMNS.length ||
+    !COLUMNS.every(key => Object.hasOwn(row, key)) ||
+    typeof row.document !== 'string' ||
+    row.document.length > DELETION_FOUNDATION_LIMITS.journalBytes ||
+    !deletionUuid(row.job_id) ||
+    !deletionUuid(row.owner_id) ||
+    typeof row.api_origin !== 'string' ||
+    (row.operation_id !== null && !deletionUuid(row.operation_id)) ||
+    !deletionMember(row.phase, DELETION_PHASES)
+  ) {
+    throw new DeletionFoundationError('journal_invalid');
+  }
+  return Object.freeze({
+    jobId: row.job_id,
+    ownerId: row.owner_id,
+    apiOrigin: row.api_origin,
+    operationId: row.operation_id,
+    phase: row.phase,
+  });
+}
+
 function parseRow(row: Record<string, unknown>): DeletionJournalEntry {
   if (
     Object.keys(row).length !== COLUMNS.length ||
@@ -191,7 +230,9 @@ export function createDeletionOperationJournal(db: LocalDb) {
       await initialize();
       return transaction(tx => readIn(tx, jobId));
     },
-    async list(): Promise<readonly DeletionJournalEntry[]> {
+    /** Every row, each on its own: a document that cannot be read as an
+     * entry is reported by its columns and never hides the other rows. */
+    async list(): Promise<DeletionJournalListing> {
       await initialize();
       return transaction(async tx => {
         const { rows } = await tx.execute(
@@ -200,7 +241,21 @@ export function createDeletionOperationJournal(db: LocalDb) {
         );
         if (rows.length > DELETION_FOUNDATION_LIMITS.journalEntries)
           throw new DeletionFoundationError('journal_capacity');
-        return Object.freeze(rows.map(parseRow));
+        const entries: DeletionJournalEntry[] = [];
+        const unreadable: DeletionJournalRowStub[] = [];
+        for (const row of rows) {
+          const stub = parseRowStub(row);
+          try {
+            entries.push(parseRow(row));
+          } catch (error) {
+            if (!(error instanceof DeletionFoundationError)) throw error;
+            unreadable.push(stub);
+          }
+        }
+        return Object.freeze({
+          entries: Object.freeze(entries),
+          unreadable: Object.freeze(unreadable),
+        });
       });
     },
     async create(value: DeletionJournalEntry): Promise<DeletionJournalEntry> {

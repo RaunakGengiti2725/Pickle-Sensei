@@ -171,6 +171,7 @@ type DeleteAccountStep =
   | {
       phase: 'request_unknown';
       attempt: AccountDeletionAttempt;
+      secondsLeft: number;
       context: AccountDeletionContext;
       flow: AccountDeletionFlow;
     }
@@ -533,7 +534,11 @@ function DeleteAccountDialog(props: {
     stopCountdown();
     timerRef.current = setInterval(() => {
       setStep(current => {
-        if (current.phase !== 'armed' && current.phase !== 'confirm_unknown')
+        if (
+          current.phase !== 'armed' &&
+          current.phase !== 'request_unknown' &&
+          current.phase !== 'confirm_unknown'
+        )
           return current;
         if (current.secondsLeft <= 1) {
           stopCountdown();
@@ -578,16 +583,20 @@ function DeleteAccountDialog(props: {
         if (secondsLeft > 0) startCountdown();
         return;
       }
-      case 'request_unknown':
+      case 'request_unknown': {
+        const secondsLeft = secondsUntil(state.nextAttemptAtMs);
         setCompletionUnknown(false);
         setError(state.message);
         setStep({
           phase: 'request_unknown',
           attempt: state.attempt,
+          secondsLeft,
           context,
           flow,
         });
+        if (secondsLeft > 0) startCountdown();
         return;
+      }
       case 'confirm_unknown': {
         const secondsLeft = secondsUntil(state.nextAttemptAtMs);
         setCompletionUnknown(true);
@@ -736,7 +745,13 @@ function DeleteAccountDialog(props: {
       flow,
       { phase: 'requesting' },
       () => ({
-        step: { phase: 'request_unknown', attempt, context, flow },
+        step: {
+          phase: 'request_unknown',
+          attempt,
+          secondsLeft: 0,
+          context,
+          flow,
+        },
         message: REQUEST_FAILED_MESSAGE,
       }),
       session => flow.retryRequest(attempt, session, survey),
@@ -1082,8 +1097,13 @@ function DeleteAccountDialog(props: {
             />
           ) : step.phase === 'request_unknown' ? (
             <Button
-              label="Retry request"
+              label={
+                step.secondsLeft > 0
+                  ? `Retry request (${step.secondsLeft})`
+                  : 'Retry request'
+              }
               variant="danger"
+              disabled={step.secondsLeft > 0}
               onPress={() =>
                 void retryRequest(step.attempt, step.context, step.flow)
               }

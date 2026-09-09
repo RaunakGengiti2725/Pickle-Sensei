@@ -10,6 +10,7 @@ import { deviceKeychainForVault } from './sessionVault';
 import { makeUuid } from '../util/uuid';
 import {
   createDeletionOperationFoundation,
+  type DeletionJournalRowStub,
   type DeletionOperationHandle,
   type DeletionOperationResult,
 } from './deletionOperation';
@@ -17,6 +18,7 @@ import type {
   DeletionHttpRequest,
   DeletionIssue,
   DeletionJournalEntry,
+  DeletionReceipt,
   DeletionRuntimePort,
 } from './deletionOperationContracts';
 
@@ -565,7 +567,7 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
       return ACCOUNT_CHANGED_MESSAGE;
     case 'rate_limited':
     case 'retry_later':
-      return 'Too many attempts. Try again in a moment. Nothing was deleted.';
+      return 'The server asked us to wait before another attempt. Nothing was deleted.';
     case 'raw_transactional_db_required':
     case 'journal_schema_invalid':
     case 'journal_unavailable':
@@ -747,7 +749,7 @@ function durableState(
           entry.lastIssue === 'unknown' ||
           entry.lastIssue === 'invalid_response'
             ? REQUEST_UNKNOWN_MESSAGE
-            : `${requestIssueMessage(entry.lastIssue)} Nothing has been deleted.`,
+            : withNothingDeleted(requestIssueMessage(entry.lastIssue)),
       };
     case 'securing':
       // The status capability never reached the Keychain, so this request
@@ -767,8 +769,18 @@ function durableState(
         ),
         message: null,
       };
-    case 'confirm_pending':
     case 'receipt_pending':
+      // The journal carries the receipt the transport verified against this
+      // operation; only the Keychain seal is outstanding, and that seal is
+      // for the cleanup continuation, not for whether the server deleted.
+      if (entry.receipt !== null) return completedFrom(entry.receipt);
+      return {
+        status: 'confirm_unknown',
+        attempt,
+        nextAttemptAtMs: entry.nextAttemptAtMs,
+        message: unresolvedConfirmationMessage(entry),
+      };
+    case 'confirm_pending':
       return {
         status: 'confirm_unknown',
         attempt,
@@ -799,14 +811,47 @@ function durableState(
           message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
         };
       }
-      return {
-        status: 'completed',
-        result: {
-          appleAuthorizationRevocation:
-            entry.receipt.appleAuthorizationRevocation,
-        },
-      };
+      return completedFrom(entry.receipt);
   }
+}
+
+function completedFrom(receipt: DeletionReceipt): AccountDeletionState {
+  return {
+    status: 'completed',
+    result: {
+      appleAuthorizationRevocation: receipt.appleAuthorizationRevocation,
+    },
+  };
+}
+
+function withNothingDeleted(message: string): string {
+  return /Nothing (?:was|has been) deleted/.test(message)
+    ? message
+    : `${message} Nothing has been deleted.`;
+}
+
+/** A Keychain that disagrees with the journal about the receipt: the two
+ * records of one operation contradict each other, so neither is proof. */
+function contradictsJournal(reason: DeletionIssue): boolean {
+  return reason === 'capability_conflict' || reason === 'receipt_conflict';
+}
+
+/** An unreadable row of this owner may hold a confirmation that left the
+ * device: its last committed phase says whether one ever could have. */
+function unreadableRowHolds(
+  row: DeletionJournalRowStub,
+  context: AccountDeletionContext,
+  apiOrigin: string | null,
+): boolean {
+  return (
+    row.ownerId === context.ownerKey &&
+    row.apiOrigin === apiOrigin &&
+    row.operationId !== null &&
+    row.phase !== 'request_pending' &&
+    row.phase !== 'request_unknown' &&
+    row.phase !== 'securing' &&
+    row.phase !== 'ready'
+  );
 }
 
 function resumable(
@@ -829,6 +874,20 @@ function resumable(
 }
 
 function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
+  /** The completion a job's journal row already proves: a receipt the
+   * transport verified against the operation, kept even when the Keychain
+   * refused the seal. A Keychain that contradicts it proves nothing. */
+  async function journaledCompletion(
+    jobId: string,
+    reason: DeletionIssue,
+  ): Promise<AccountDeletionState | null> {
+    if (contradictsJournal(reason)) return null;
+    const listed = await foundation.list();
+    if (listed.kind !== 'entries') return null;
+    const entry = listed.entries.find(row => row.jobId === jobId);
+    return entry?.receipt ? completedFrom(entry.receipt) : null;
+  }
+
   async function settle(
     result: DeletionOperationResult,
     unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
@@ -839,6 +898,10 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     // The device clock says the challenge lapsed before anything was sent.
     if (result.kind === 'held' && result.reason === 'confirmation_expired')
       return terminalMessage('expired');
+    if (result.kind === 'held' && result.jobId !== undefined) {
+      const completed = await journaledCompletion(result.jobId, result.reason);
+      if (completed) return completed;
+    }
     // The status capability lapsed over a sent confirmation: reopening the
     // row would only re-arm the poll that just refused to run.
     if (result.kind === 'held' && result.reason === 'status_expired')
@@ -948,6 +1011,11 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
         if (candidate.operationId === null || candidate.phase === 'securing')
           continue;
         if (candidate.phase === 'ready') return null;
+        if (
+          candidate.receipt !== null &&
+          !(opened.kind === 'held' && contradictsJournal(opened.reason))
+        )
+          return completedFrom(candidate.receipt);
         if (statusWindowClosed(candidate, nowMs))
           return statusWindowClosedState();
         if (opened.kind === 'held' && isLocalRecordIssue(opened.reason))
@@ -959,6 +1027,14 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           handle: null,
         })(opened.kind === 'held' ? opened.reason : null);
       }
+      // Only this owner's own unreadable row can be hiding a confirmation
+      // this owner sent; another owner's row says nothing about this one.
+      if (
+        listed.unreadable.some(row =>
+          unreadableRowHolds(row, context, apiOrigin),
+        )
+      )
+        return recordUnreadableState();
       return null;
     },
     request,

@@ -5,7 +5,11 @@ import {
   type DeletionVaultRead,
   type DeletionVaultWrite,
 } from './deletionCapabilityVault';
-import { createDeletionOperationJournal } from './deletionOperationJournal';
+import {
+  createDeletionOperationJournal,
+  type DeletionJournalListing,
+  type DeletionJournalRowStub,
+} from './deletionOperationJournal';
 import {
   createDeletionOperationTransport,
   receiptFromVerifiedDeletionStatus,
@@ -48,6 +52,8 @@ export interface DeletionFoundationDependencies {
   readonly maintenance?: DeletionMaintenancePort;
   readonly cleanup?: DeletionCleanupContinuation;
 }
+
+export type { DeletionJournalListing, DeletionJournalRowStub };
 
 export interface DeletionOperationHandle {
   readonly jobId: string;
@@ -329,17 +335,14 @@ export function createDeletionOperationFoundation(
       transport.dispose();
     },
     async list(): Promise<
-      | {
-          readonly kind: 'entries';
-          readonly entries: readonly DeletionJournalEntry[];
-        }
+      | ({ readonly kind: 'entries' } & DeletionJournalListing)
       | DeletionOperationResult
     > {
       if (disposed) return held('stale_handler');
       try {
         return Object.freeze({
           kind: 'entries',
-          entries: await journal.list(),
+          ...(await journal.list()),
         });
       } catch (error) {
         return errorResult(error);
@@ -355,7 +358,7 @@ export function createDeletionOperationFoundation(
       try {
         const nowMs = now();
         const jobIds: string[] = [];
-        for (const entry of await journal.list()) {
+        for (const entry of (await journal.list()).entries) {
           if (activeJobs.get(dependencies.db)?.has(entry.jobId)) continue;
           if (!(await inert(entry, nowMs))) continue;
           try {
