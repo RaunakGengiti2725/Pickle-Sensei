@@ -632,7 +632,9 @@ function terminalMessage(
 
 /** The confirmation left this device: the server may have acted on it, so
  * nothing short of a verified receipt says what became of the account. */
-function confirmationSent(entry: DeletionJournalEntry): boolean {
+function confirmationSent(
+  entry: Pick<DeletionJournalEntry, 'operationId' | 'phase'>,
+): boolean {
   return (
     entry.operationId !== null &&
     entry.phase !== 'request_pending' &&
@@ -728,6 +730,17 @@ function durableState(
     handle,
   };
   if (isTerminalServerState(entry)) return terminalMessage(entry.serverState);
+  // A receipt the transport verified against the operation is the deletion
+  // proof, whether or not the Keychain has sealed it yet.
+  if (entry.receipt !== null) {
+    return {
+      status: 'completed',
+      result: {
+        appleAuthorizationRevocation:
+          entry.receipt.appleAuthorizationRevocation,
+      },
+    };
+  }
   if (statusWindowClosed(entry, nowMs)) return statusWindowClosedState();
   switch (entry.phase) {
     case 'request_pending':
@@ -791,20 +804,11 @@ function durableState(
     case 'receipt_verified':
     case 'cleanup_pending':
     case 'cleanup_complete':
-      if (entry.receipt === null) {
-        return {
-          status: 'confirm_unknown',
-          attempt,
-          nextAttemptAtMs: entry.nextAttemptAtMs,
-          message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
-        };
-      }
       return {
-        status: 'completed',
-        result: {
-          appleAuthorizationRevocation:
-            entry.receipt.appleAuthorizationRevocation,
-        },
+        status: 'confirm_unknown',
+        attempt,
+        nextAttemptAtMs: entry.nextAttemptAtMs,
+        message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
       };
   }
 }
@@ -931,6 +935,15 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       if (listed.kind !== 'entries') return recordUnreadableState();
       const apiOrigin = getRuntimePublicConfig().apiBaseUrl;
       const nowMs = Date.now();
+      // An unreadable row is this owner's history only when it is this
+      // owner's row; one that never carried a confirmation has no outcome.
+      const unreadable = listed.unreadable.some(
+        row =>
+          row.ownerId === context.ownerKey &&
+          row.apiOrigin === apiOrigin &&
+          confirmationSent(row),
+      );
+      const idle = () => (unreadable ? recordUnreadableState() : null);
       const candidates = listed.entries
         .filter(entry => resumable(entry, context, apiOrigin, nowMs))
         .sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -941,13 +954,14 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           // A request that never became confirmable is nothing to resume.
           if (state.status === 'failed' && state.outcome === 'nothing_deleted')
             continue;
+          if (state.status === 'ready') return idle() ?? state;
           return state;
         }
         // No operation, or one whose capability never reached the Keychain:
         // no confirmation was ever sent, so there is no outcome to report.
         if (candidate.operationId === null || candidate.phase === 'securing')
           continue;
-        if (candidate.phase === 'ready') return null;
+        if (candidate.phase === 'ready') return idle();
         if (statusWindowClosed(candidate, nowMs))
           return statusWindowClosedState();
         if (opened.kind === 'held' && isLocalRecordIssue(opened.reason))
@@ -959,7 +973,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           handle: null,
         })(opened.kind === 'held' ? opened.reason : null);
       }
-      return null;
+      return idle();
     },
     request,
     retryRequest(attempt, session, survey) {
