@@ -89,7 +89,7 @@ import {
 } from "./releasePolicy.ts";
 import { canonicalizeOfflineJson, digestCanonicalOfflineJson } from "./canonicalDigest.ts";
 import {
-  importOfflineGrantSigningKey,
+  importOfflineGrantKeyRing,
   offlineGrantClaimsFromIssuance,
   OfflineGrantIssuanceError,
   signOfflineExecutionGrant,
@@ -4749,7 +4749,7 @@ async function offlineGrantSigningKey(): Promise<OfflineGrantKey | null> {
     return null;
   }
   try {
-    const key = await importOfflineGrantSigningKey(parsed);
+    const key = (await importOfflineGrantKeyRing(parsed, Math.floor(Date.now() / 1000))).signingKey;
     offlineSigningKeyCache = { raw, key };
     return key;
   } catch {

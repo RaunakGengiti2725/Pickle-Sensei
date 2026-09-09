@@ -300,6 +300,7 @@ Deno.test(
   "receipt signed under the retired key verifies inside the overlap and is rejected at/after overlapEndsAt (retired_key)",
   async () => {
     const rotation = await loadRotation();
+    const grace = rotation.OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS;
     const retiredAt = NOW + DAY;
     const overlapEndsAt = retiredAt + 2 * DAY;
     const ring = await rotation.importOfflineGrantKeyRing(
@@ -316,8 +317,9 @@ Deno.test(
     const underPrevious = await mint(previousSigningKey, issuedAt);
     const underActive = await mint(activeSigningKey, issuedAt);
 
-    // Inside the overlap (before retirement, at retirement, last second): accepted.
-    for (const now of [issuedAt, retiredAt - 1, retiredAt, overlapEndsAt - 1]) {
+    // Inside the overlap (as early as the ring may legitimately exist, just
+    // before retirement, at retirement, last second): accepted.
+    for (const now of [retiredAt - grace, retiredAt - 1, retiredAt, overlapEndsAt - 1]) {
       const verified = await rotation.verifyOfflineExecutionGrant(
         underPrevious,
         ring,
@@ -359,9 +361,22 @@ Deno.test(
       ),
     );
 
+    // The verifier's clock anchors the window too: a ring whose retirement
+    // lies more than one grace ahead of the trusted instant is not a ring
+    // this verifier can honour (invalid_key), for either kid.
+    for (const grant of [underPrevious, underActive]) {
+      await rejectWith("invalid_key", () =>
+        rotation.verifyOfflineExecutionGrant(
+          grant,
+          ring,
+          moduleContext(ring.allowedKeyIds, retiredAt - grace - 1),
+        ),
+      );
+    }
+
     // A key the ring never knew is invalid_key in every window.
     const underUnknown = await mint(unknownSigningKey, issuedAt);
-    for (const now of [issuedAt, retiredAt, overlapEndsAt]) {
+    for (const now of [retiredAt - grace, retiredAt, overlapEndsAt]) {
       await rejectWith("invalid_key", () =>
         rotation.verifyOfflineExecutionGrant(
           underUnknown,
@@ -426,7 +441,8 @@ Deno.test(
     );
 
     // Issued inside the grace (the old secret was still live in some isolate):
-    // honoured for the whole overlap, exactly like a pre-retirement grant.
+    // honoured for the whole overlap, exactly like a pre-retirement grant, and
+    // refused at the overlap end while the grant itself is still unexpired.
     for (const iat of [retiredAt, retiredAt + 1, retiredAt + grace]) {
       const inGrace = await mint(previousSigningKey, iat);
       for (const now of [iat, overlapEndsAt - 1]) {
@@ -437,6 +453,10 @@ Deno.test(
         );
         assertEquals(verified.protectedHeader.kid, PREVIOUS_KID, `${iat}@${now}`);
       }
+    }
+    for (const iat of [retiredAt + 1, retiredAt + grace]) {
+      const inGrace = await mint(previousSigningKey, iat);
+      assert(overlapEndsAt < moduleClaims(iat).exp, "still unexpired at the overlap end");
       await rejectWith("retired_key", () =>
         rotation.verifyOfflineExecutionGrant(
           inGrace,
@@ -539,9 +559,9 @@ Deno.test(
         NOW,
       ],
       [
-        "retiredAt past the contract's last instant, even against a matching clock",
+        "retiredAt past the contract's last instant, even inside the grace of a valid clock",
         ringDocument({ retiredAt: MAX_UNIX_SECONDS + 1, overlapEndsAt: MAX_UNIX_SECONDS + 1 }),
-        MAX_UNIX_SECONDS + 1,
+        MAX_UNIX_SECONDS,
       ],
       [
         "overlapEndsAt past the contract's last instant",
@@ -636,7 +656,10 @@ Deno.test(
       ],
       [
         "previous entry smuggling d beside the jwk",
-        { ...ringDocument({}), previous: { ...previousEntry(previousPublicJwk), d: activePrivateJwk.d } },
+        {
+          ...ringDocument({}),
+          previous: { ...previousEntry(previousPublicJwk), d: activePrivateJwk.d },
+        },
       ],
       [
         "previous entry missing its window",
@@ -647,7 +670,10 @@ Deno.test(
         { ...ringDocument({}), previous: { jwk: previousPublicJwk, retiredAtEpochSeconds: NOW } },
       ],
       ["previous entry undefined", { schemaVersion: 1, active: activePrivateJwk }],
-      ["previous entry as array", { ...ringDocument({}), previous: [previousEntry(previousPublicJwk)] }],
+      [
+        "previous entry as array",
+        { ...ringDocument({}), previous: [previousEntry(previousPublicJwk)] },
+      ],
       ["active given as PUBLIC material", ringDocument({ active: activePublicJwk })],
       ["active without kid", ringDocument({ active: { ...activePrivateJwk, kid: undefined } })],
       ["active missing", { schemaVersion: 1, previous: null }],
@@ -705,7 +731,10 @@ Deno.test(
         ringDocument({ active: { ...activePrivateJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE } }),
       ],
       ["legacy form, zero scalar", { ...activePrivateJwk, d: ZERO_COORDINATE }],
-      ["legacy form, scalar equal to the group order", { ...activePrivateJwk, d: bigIntToCoordinate(P256_N) }],
+      [
+        "legacy form, scalar equal to the group order",
+        { ...activePrivateJwk, d: bigIntToCoordinate(P256_N) },
+      ],
     ];
     for (const [name, document] of rejected) {
       await rejectWith(
@@ -768,13 +797,17 @@ Deno.test(
     const negatedSigningKey: OfflineGrantKey = {
       purpose: "offline_execution_grant",
       kid: PREVIOUS_KID,
-      key: (await rotation.importOfflineGrantKeyRing({ ...negatedActivePrivateJwk }, NOW)).signingKey
-        .key,
+      key: (await rotation.importOfflineGrantKeyRing({ ...negatedActivePrivateJwk }, NOW))
+        .signingKey.key,
     };
     const forged = await mint(negatedSigningKey, NOW);
     const honest = await rotation.importOfflineGrantKeyRing(ringDocument({}), NOW);
     await rejectWith("invalid_signature", () =>
-      rotation.verifyOfflineExecutionGrant(forged, honest, moduleContext(honest.allowedKeyIds, NOW)),
+      rotation.verifyOfflineExecutionGrant(
+        forged,
+        honest,
+        moduleContext(honest.allowedKeyIds, NOW),
+      ),
     );
   },
 );
@@ -793,7 +826,7 @@ Deno.test(
     const narrow = await rotation.verifyOfflineExecutionGrant(
       underActive,
       ring,
-      moduleContext([ACTIVE_KID], NOW + 1),
+      moduleContext([ACTIVE_KID], retiredAt + 1),
     );
     assertEquals(narrow.protectedHeader.kid, ACTIVE_KID);
     // Narrowing never widens: the previous kid stays refused by the allowlist.
@@ -801,21 +834,21 @@ Deno.test(
       rotation.verifyOfflineExecutionGrant(
         underPrevious,
         ring,
-        moduleContext([ACTIVE_KID], NOW + 1),
+        moduleContext([ACTIVE_KID], retiredAt + 1),
       ),
     );
     // And the reverse narrowing keeps the previous key usable inside its window.
     const previousOnly = await rotation.verifyOfflineExecutionGrant(
       underPrevious,
       ring,
-      moduleContext([PREVIOUS_KID], NOW + 1),
+      moduleContext([PREVIOUS_KID], retiredAt + 1),
     );
     assertEquals(previousOnly.protectedHeader.kid, PREVIOUS_KID);
     await rejectWith("invalid_metadata", () =>
       rotation.verifyOfflineExecutionGrant(
         underActive,
         ring,
-        moduleContext([PREVIOUS_KID], NOW + 1),
+        moduleContext([PREVIOUS_KID], retiredAt + 1),
       ),
     );
   },
@@ -881,7 +914,10 @@ Deno.test(
     for (const [name, entry] of [
       ["missing overlapEndsAt", { ...previousKey, overlapEndsAtEpochSeconds: undefined }],
       ["missing retiredAt", { ...previousKey, retiredAtEpochSeconds: undefined }],
-      ["overlap past the bound", { ...previousKey, overlapEndsAtEpochSeconds: retiredAt + max + 1 }],
+      [
+        "overlap past the bound",
+        { ...previousKey, overlapEndsAtEpochSeconds: retiredAt + max + 1 },
+      ],
       ["overlap before retirement", { ...previousKey, overlapEndsAtEpochSeconds: retiredAt - 1 }],
       ["string retiredAt", { ...previousKey, retiredAtEpochSeconds: String(retiredAt) }],
       [
@@ -925,7 +961,11 @@ Deno.test(
       );
     }
     // A retirement exactly one grace ahead of the verifier's clock is the accepted edge.
-    const edge = { ...previousKey, retiredAtEpochSeconds: NOW + grace, overlapEndsAtEpochSeconds: NOW + grace + DAY };
+    const edge = {
+      ...previousKey,
+      retiredAtEpochSeconds: NOW + grace,
+      overlapEndsAtEpochSeconds: NOW + grace + DAY,
+    };
     const atEdge = await rotation.verifyOfflineExecutionGrant(
       underPrevious,
       [ring.activeKey, edge],
@@ -1115,8 +1155,8 @@ Deno.test(
     const rotation = await loadRotation();
     const max = rotation.OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS;
     const grace = rotation.OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS;
-    const user = freshUser();
     const now = nowSeconds();
+    let user = freshUser();
     for (const document of [
       ringDocument({ retiredAt: now, overlapEndsAt: now + max + 1 }),
       ringDocument({ retiredAt: now, overlapEndsAt: now - 1 }),
@@ -1138,6 +1178,9 @@ Deno.test(
       { ...ringDocument({}), previousPrivateJwk },
       "not json",
     ]) {
+      // A refused attempt still counts against the per-user route budget (10/min),
+      // so each malformed document is tried from its own fresh account.
+      user = freshUser();
       reset(document);
       const response = await issue(user.token);
       assertEquals(response.status, 503, JSON.stringify(document));
@@ -1148,7 +1191,7 @@ Deno.test(
     }
     assertEquals(h.callsTo(GRANT_RPC).length, 0);
 
-    // The same account issues normally once the ring is well-formed again — and
+    // The last account issues normally once the ring is well-formed again — and
     // a retirement inside the grace is accepted.
     reset(ringDocument({ retiredAt: now + grace - 60 }));
     const ok = await issue(user.token);

@@ -826,15 +826,14 @@ const bigIntToCoordinate = (value: bigint): string =>
 
 const ROTATED_PRIVATE_JWK = { ...(await exportJWK(rotatedPair.privateKey)), kid: ROTATED_KID };
 const PREVIOUS_PUBLIC_JWK = { ...publicJwk, kid: KID };
-const rotatedSigningKey: OfflineGrantKey = {
-  purpose: OFFLINE_JWS_REQUIREMENTS.keyPurpose,
-  kid: ROTATED_KID,
-  key: rotatedPair.privateKey,
-};
 const GRACE = OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS;
 const MAX_OVERLAP = OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS;
 
-function ringDocument(retiredAt: number, overlapEndsAt: number, previous: unknown = PREVIOUS_PUBLIC_JWK) {
+function ringDocument(
+  retiredAt: number,
+  overlapEndsAt: number,
+  previous: unknown = PREVIOUS_PUBLIC_JWK,
+) {
   return {
     schemaVersion: OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION,
     active: ROTATED_PRIVATE_JWK,
@@ -934,14 +933,21 @@ Deno.test(
   "the previous key may not mint past the propagation grace: iat > retiredAt + grace is retired_key, iat == retiredAt + grace is honoured",
   async () => {
     const retiredAt = NOW;
-    const ring = await importOfflineGrantKeyRing(ringDocument(retiredAt, retiredAt + MAX_OVERLAP), NOW);
+    const ring = await importOfflineGrantKeyRing(
+      ringDocument(retiredAt, retiredAt + MAX_OVERLAP),
+      NOW,
+    );
     const late = await signOfflineExecutionGrant(
       { ...freeClaims(), iat: retiredAt + GRACE + 1, exp: retiredAt + GRACE + 3600 },
       signingKey,
       ringContext([KID], retiredAt + GRACE + 1),
     );
     await assert.rejects(
-      verifyOfflineExecutionGrant(late, ring, ringContext(ring.allowedKeyIds, retiredAt + GRACE + 2)),
+      verifyOfflineExecutionGrant(
+        late,
+        ring,
+        ringContext(ring.allowedKeyIds, retiredAt + GRACE + 2),
+      ),
       { name: "OfflineGrantCryptoError", code: "retired_key" },
     );
     const inGrace = await signOfflineExecutionGrant(
@@ -962,7 +968,10 @@ Deno.test(
   "key ring import anchors retiredAt to the trusted clock and to the contract's Unix-seconds range",
   async () => {
     await importOfflineGrantKeyRing(ringDocument(NOW + GRACE, NOW + GRACE + MAX_OVERLAP), NOW);
-    await importOfflineGrantKeyRing(ringDocument(NOW - 365 * 86_400, NOW), NOW);
+    await importOfflineGrantKeyRing(
+      ringDocument(NOW - 365 * 86_400, NOW - 365 * 86_400 + MAX_OVERLAP),
+      NOW,
+    );
     await rejectRing(ringDocument(NOW + GRACE + 1, NOW + GRACE + 1 + MAX_OVERLAP), "invalid_key");
     await rejectRing(ringDocument(NOW * 1000, NOW * 1000 + MAX_OVERLAP), "invalid_key");
     await rejectRing(
@@ -972,7 +981,7 @@ Deno.test(
     await rejectRing(
       ringDocument(253_402_300_800, 253_402_300_800),
       "invalid_key",
-      253_402_300_800,
+      253_402_300_799,
     );
     await rejectRing(ringDocument(NOW, NOW + MAX_OVERLAP + 1), "invalid_key");
     await rejectRing(ringDocument(NOW, NOW - 1), "invalid_key");
@@ -1003,9 +1012,17 @@ Deno.test(
     await rejectRing(ringDocument(NOW, NOW + 86_400, negated), "invalid_key");
     await rejectRing(ringDocument(NOW, NOW + 86_400, { ...activePublic, kid: KID }), "invalid_key");
     await rejectRing(ringDocument(NOW, NOW + 86_400, PRIVATE_JWK), "invalid_key");
-    await rejectRing(ringDocument(NOW, NOW + 86_400, { ...publicJwk, kid: ROTATED_KID }), "invalid_key");
     await rejectRing(
-      ringDocument(NOW, NOW + 86_400, { ...publicJwk, kid: KID, x: "A".repeat(43), y: "A".repeat(43) }),
+      ringDocument(NOW, NOW + 86_400, { ...publicJwk, kid: ROTATED_KID }),
+      "invalid_key",
+    );
+    await rejectRing(
+      ringDocument(NOW, NOW + 86_400, {
+        ...publicJwk,
+        kid: KID,
+        x: "A".repeat(43),
+        y: "A".repeat(43),
+      }),
       "invalid_key",
     );
     await rejectRing({ ...ROTATED_PRIVATE_JWK, x: publicJwk.x }, "invalid_key");
@@ -1022,7 +1039,11 @@ Deno.test(
       { name: "OfflineGrantCryptoError", code: "invalid_signature" },
     );
     await assert.rejects(
-      verifyOfflineExecutionGrant(forged, [rotatedKey, publicKey], ringContext([KID, ROTATED_KID], NOW)),
+      verifyOfflineExecutionGrant(
+        forged,
+        [rotatedKey, publicKey],
+        ringContext([KID, ROTATED_KID], NOW),
+      ),
       { name: "OfflineGrantCryptoError", code: "invalid_signature" },
     );
   },
@@ -1058,8 +1079,16 @@ Deno.test(
     for (const entry of [
       { ...ring.previousKey, overlapEndsAtEpochSeconds: undefined },
       { ...ring.previousKey, overlapEndsAtEpochSeconds: retiredAt + MAX_OVERLAP + 1 },
-      { ...ring.previousKey, retiredAtEpochSeconds: NOW + GRACE + 1, overlapEndsAtEpochSeconds: NOW + GRACE + 2 },
-      { ...ring.previousKey, retiredAtEpochSeconds: NOW * 1000, overlapEndsAtEpochSeconds: NOW * 1000 },
+      {
+        ...ring.previousKey,
+        retiredAtEpochSeconds: NOW + GRACE + 1,
+        overlapEndsAtEpochSeconds: NOW + GRACE + 2,
+      },
+      {
+        ...ring.previousKey,
+        retiredAtEpochSeconds: NOW * 1000,
+        overlapEndsAtEpochSeconds: NOW * 1000,
+      },
     ]) {
       await rejectGrant(valid, "invalid_key", ringContext(ring.allowedKeyIds, NOW), [
         ring.activeKey,
