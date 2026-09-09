@@ -4559,7 +4559,11 @@ begin
     ('free_rating_ledger', false, false, false, array[]::text[]),
     ('progress_daily', true, false, false, array[]::text[]),
     ('practice_days', true, false, false, array[]::text[]),
-    ('player_technique_rating', true, false, false, array[]::text[])
+    ('player_technique_rating', true, false, false, array[]::text[]),
+    ('offline_devices', true, false, false, array[]::text[]),
+    ('offline_grants', true, false, false, array[]::text[]),
+    ('offline_allocation_ledger', true, false, false, array[]::text[]),
+    ('offline_allocation_identity_links', false, false, false, array[]::text[])
   ) as expected(name, can_select, can_insert, can_delete, updatable)
   loop
     relation := format('public.%I', r.name)::regclass;
@@ -4593,8 +4597,10 @@ begin
   where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
   if functions <> array[
     'access_lock_key','access_state','apply_synced_shot','complete_onboarding',
-    'identity_scored_count','is_api_session_active','lifetime_scored_count',
-    'permit_backs_sync','permit_tombstoned','reserve_analysis_permit'
+    'consume_offline_ticket','identity_scored_count','is_api_session_active',
+    'issue_offline_grant','lifetime_scored_count','offline_hold_count',
+    'permit_backs_sync','permit_tombstoned','register_offline_device',
+    'release_offline_ticket','reserve_analysis_permit'
   ] then
     raise exception 'K27: authenticated RPC allowlist drifted (got %)', functions;
   end if;
@@ -5755,4 +5761,1253 @@ begin
 end $$;
 
 \echo W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED
+
+-- ============================================================================
+-- W04-01 (20260908120000_offline_device_grants): server-authoritative offline
+-- grants. Device registry, per-device grants with a lease bounded at the
+-- table (≤ 7 days, a Pro lease ≤ the verified entitlement expiry), and an
+-- append-only allocation ledger where allocation ≠ consumption.
+--
+-- Conservation for a free identity, under access_lock_key(uid):
+--   scored (lifetime_scored_count) + outstanding offline tickets ≤ 2 at every
+--   instant, whatever order online reservation, direct INSERT, late sync,
+--   allocation and settlement happen in. Allocation counts every permit a
+--   late sync can still spend (reserved at ANY age, or swept to
+--   released/expired) beside the holds; online reservation counts every
+--   permit still 'reserved' at any age beside the holds; the sync backstop
+--   and the shots gate refuse a scored row once scored + holds reach 2.
+--
+-- Settlement is server-authoritative: consume_offline_ticket() writes the
+-- consumed event AND the shot it names in one transaction under a vouch only
+-- it can set. A shot that already exists — paid for by an online permit,
+-- counted before the ticket, carrying a client-chosen created_at — never
+-- settles a ticket, and neither does a payload that names a permit or is not
+-- scored.
+--
+-- Nothing reclaims an allocation automatically: grant expiry, device
+-- deletion, account deletion and re-creation leave the hold in place; the
+-- original installation recovers it; another account on the same key does
+-- not. Client roles hold SELECT (own rows, API proof) and nothing else on the
+-- three tables; service_role holds nothing; the ledger is append-only for
+-- every role.
+--
+--   W1  device registration (idempotent, never downgrades, environment pinned,
+--       input validation, live API session required)
+--   W2  free allocation: tickets, 7-day lease, holds visible to access_state()
+--       and to reserve_analysis_permit(), re-issue instead of re-allocate
+--   W3  ADVERSARY A01: a direct INSERT beside an outstanding ticket cannot
+--       make the late sync a third rating; the gate itself refuses a direct
+--       INSERT once scored + holds fill the budget
+--   W4  ADVERSARY A02/A03: an existing rating (online-permit backed, or
+--       pre-counted with a forged future created_at) never settles a ticket;
+--       a payload naming a permit or an abstention never settles a ticket;
+--       the consumed event cannot be written around the RPC
+--   W5  settlement writes exactly one scored shot per ticket, idempotent on
+--       (ticket, shot id); consumed and released are terminal; a released
+--       ticket is not a re-credit
+--   W6  ADVERSARY c2-A01/A09: a stale (>24h) reserved permit and a swept
+--       released/expired permit are reservations to the allocator; the
+--       reserve path counts a stale reserved permit; no sequence yields
+--       scored + outstanding > 2
+--   W7  Pro lease bounds: ≤ 7 days, ≤ verified entitlement expiry, effective
+--       entitlement only (an expired Pro row is a free identity), and the
+--       table refuses every out-of-bounds lease for every role
+--   W8  no automatic reclaim: grant expiry, device deletion, account deletion
+--       and re-creation through the same identity keep the hold; the original
+--       installation recovers the ticket; a stranger on the same key gets
+--       nothing; identity linked after allocation carries the hold
+--   W9  denied client writes, cross-user isolation, service_role holds
+--       nothing, anon holds nothing, append-only for the owner role, sequences
+--       not client-usable
+--   W10 RPCs fail closed without a live API session / without the API proof
+-- ============================================================================
+
+begin;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000071', 'olga@example.com', '{"full_name":"Olga"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000072', 'omar@example.com', '{"full_name":"Omar"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000073', 'nia@example.com', '{"full_name":"Nia"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000074', 'noa@example.com', '{"full_name":"Noa"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000075', 'pia@example.com', '{"full_name":"Pia"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000076', 'paz@example.com', '{"full_name":"Paz"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000077', 'pol@example.com', '{"full_name":"Pol"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000078', 'rex@example.com', '{"full_name":"Rex"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-olga', '00000000-0000-4000-8000-000000000071', '{"sub":"google-sub-olga"}'),
+  ('apple', 'apple-sub-omar', '00000000-0000-4000-8000-000000000072', '{"sub":"apple-sub-omar"}'),
+  ('google', 'google-sub-nia', '00000000-0000-4000-8000-000000000073', '{"sub":"google-sub-nia"}'),
+  ('apple', 'apple-sub-noa', '00000000-0000-4000-8000-000000000074', '{"sub":"apple-sub-noa"}'),
+  ('google', 'google-sub-pia', '00000000-0000-4000-8000-000000000075', '{"sub":"google-sub-pia"}'),
+  ('apple', 'apple-sub-paz', '00000000-0000-4000-8000-000000000076', '{"sub":"apple-sub-paz"}'),
+  ('google', 'google-sub-pol', '00000000-0000-4000-8000-000000000077', '{"sub":"google-sub-pol"}'),
+  ('apple', 'apple-sub-rex', '00000000-0000-4000-8000-000000000078', '{"sub":"apple-sub-rex"}');
+insert into auth.sessions (id, user_id)
+select ('00000000-0000-4000-8000-0000000071' || lpad((n - 70)::text, 2, '0'))::uuid,
+       ('00000000-0000-4000-8000-0000000000' || n::text)::uuid
+from generate_series(71, 78) n;
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values
+  ('00000000-0000-4000-8000-000000000075', true, now() + interval '3 days'),
+  ('00000000-0000-4000-8000-000000000076', true, null),
+  ('00000000-0000-4000-8000-000000000077', true, now() - interval '1 hour');
+
+-- Runs one statement as the current role: 'allowed <n>' or '<SQLSTATE>:<hint>'.
+create function pg_temp.w_try(p_sql text) returns text
+language plpgsql as $$
+declare n integer; v_state text; v_hint text;
+begin
+  execute p_sql;
+  get diagnostics n = row_count;
+  return 'allowed ' || n;
+exception when others then
+  get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  return v_state || ':' || coalesce(v_hint, '');
+end $$;
+
+-- The sync / settlement payload shape.
+create function pg_temp.w_shot(p_id uuid, p_permit uuid, p_kind text) returns jsonb
+language sql as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', p_permit,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-08T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.4 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+
+-- A direct client INSERT of a shot, optionally with a client-chosen created_at.
+create function pg_temp.w_direct_shot(p_id uuid, p_user uuid, p_kind text, p_created_at timestamptz)
+returns text language plpgsql as $$
+begin
+  return pg_temp.w_try(format(
+    $q$insert into public.shots (
+         id, user_id, shot_type, captured_at, start_ms, end_ms,
+         overall_score, analysis_confidence, result_kind,
+         app_version, model_bundle_version, pose_model_version,
+         paddle_model_version, stroke_detector_version, phase_model_version,
+         scoring_model_version, shot_config_version%s
+       ) values (%L, %L, 'drive', now(), 0, 1000, %s, %s, %L,
+         '1.0.0', 'bundle-1', 'pose-1', 'paddle-1', 'stroke-1', 'phase-1',
+         'scoring-1', 'config-1'%s)$q$,
+    case when p_created_at is null then '' else ', created_at' end,
+    p_id, p_user,
+    case when p_kind = 'scored' then '8.0' else 'null' end,
+    case when p_kind = 'scored' then '0.9' else '0.2' end,
+    p_kind,
+    case when p_created_at is null then '' else format(', %L', p_created_at) end));
+end $$;
+
+-- Ledger summary for the caller: 'allocated:<n>,consumed:<n>,released:<n>'.
+create function pg_temp.w_events() returns text
+language sql as $$
+  select coalesce(string_agg(e || ':' || c, ',' order by e), '')
+  from (select event e, count(*) c from public.offline_allocation_ledger group by event) t
+$$;
+
+grant execute on function pg_temp.w_try(text), pg_temp.w_shot(uuid, uuid, text),
+  pg_temp.w_direct_shot(uuid, uuid, text, timestamptz), pg_temp.w_events()
+  to authenticated, anon;
+
+-- ─────────────────────────────── W1: registration ───────────────────────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare r record; first_id uuid; first_seen timestamptz;
+begin
+  select * into r from public.register_offline_device('olga-key-1', 'production', true);
+  if r.result <> 'accepted' or r.device_id is null or r.attestation_state <> 'attested' then
+    raise exception 'W1a: an attested production device must register (got %)', r;
+  end if;
+  first_id := r.device_id;
+  select attested_at into first_seen from public.offline_devices where id = first_id;
+  if first_seen is null then
+    raise exception 'W1a: an attested device must record attested_at';
+  end if;
+
+  select * into r from public.register_offline_device('olga-key-1', 'production', false);
+  if r.result <> 'accepted' or r.device_id <> first_id or r.attestation_state <> 'attested' then
+    raise exception 'W1b: re-registration must be idempotent and never downgrade attestation (got %)', r;
+  end if;
+  if (select attested_at from public.offline_devices where id = first_id) <> first_seen then
+    raise exception 'W1b: re-registration must keep the original attestation time';
+  end if;
+
+  select * into r from public.register_offline_device('olga-key-1', 'development', true);
+  if r.result <> 'offline.device_environment_mismatch' then
+    raise exception 'W1c: a known key may not change attestation environment (got %)', r.result;
+  end if;
+
+  select * into r from public.register_offline_device('olga-key-2', 'production', false);
+  if r.result <> 'accepted' or r.attestation_state <> 'unattested' then
+    raise exception 'W1d: an unattested device registers as unattested (got %)', r;
+  end if;
+  select * into r from public.register_offline_device('olga-key-2', 'production', true);
+  if r.result <> 'accepted' or r.attestation_state <> 'attested' then
+    raise exception 'W1e: a later attestation upgrades the device (got %)', r;
+  end if;
+
+  select * into r from public.register_offline_device('bad key with spaces', 'production', true);
+  if r.result <> 'offline.invalid_input' then
+    raise exception 'W1f: a malformed installation key is refused (got %)', r.result;
+  end if;
+  select * into r from public.register_offline_device('olga-key-3', 'staging', true);
+  if r.result <> 'offline.invalid_input' then
+    raise exception 'W1g: an unknown attestation environment is refused (got %)', r.result;
+  end if;
+  select * into r from public.register_offline_device(null, 'production', true);
+  if r.result <> 'offline.invalid_input' then
+    raise exception 'W1h: a null installation key is refused (got %)', r.result;
+  end if;
+  if (select count(*) from public.offline_devices) <> 2 then
+    raise exception 'W1i: refused input must persist nothing (got % devices)', (select count(*) from public.offline_devices);
+  end if;
+end $$;
+reset role;
+
+-- ─────────────────── W2: free allocation and visible holds ──────────────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare g record; g2 record; a record; r record;
+begin
+  select * into g from public.issue_offline_grant('olga-key-9', 2);
+  if g.result <> 'offline.device_not_registered' then
+    raise exception 'W2a: an unregistered key gets no grant (got %)', g.result;
+  end if;
+  perform public.register_offline_device('olga-key-4', 'production', false);
+  select * into g from public.issue_offline_grant('olga-key-4', 2);
+  if g.result <> 'offline.device_not_attested' then
+    raise exception 'W2b: an unattested device gets no grant (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('olga-key-1', 3);
+  if g.result <> 'offline.invalid_input' then
+    raise exception 'W2c: more tickets than the lifetime budget is invalid input (got %)', g.result;
+  end if;
+  if exists (select 1 from public.offline_grants) or exists (select 1 from public.offline_allocation_ledger) then
+    raise exception 'W2c: refused requests must persist nothing';
+  end if;
+
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'identity_lifetime_free'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 or g.generation <> 1
+     or g.entitlement_expires_at is not null then
+    raise exception 'W2d: a fresh free identity receives two tickets (got %)', g;
+  end if;
+  if g.expires_at <> g.issued_at + interval '7 days' then
+    raise exception 'W2d: a free grant is a 7-day execution window (got % → %)', g.issued_at, g.expires_at;
+  end if;
+  if pg_temp.w_events() <> 'allocated:2' then
+    raise exception 'W2d: two allocation events (got %)', pg_temp.w_events();
+  end if;
+  if (select count(distinct installation_key_id) from public.offline_allocation_ledger) <> 1
+     or (select min(installation_key_id) from public.offline_allocation_ledger) <> 'olga-key-1' then
+    raise exception 'W2d: every allocation names the installation it was handed to';
+  end if;
+
+  select * into a from public.access_state();
+  if a.scored_count <> 0 or a.reserved_count <> 2 or a.premium then
+    raise exception 'W2e: holds are visible as reservations (got %)', a;
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W2e: offline_hold_count must be 2 (got %)', public.offline_hold_count();
+  end if;
+  select * into r from public.reserve_analysis_permit('olga-online-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W2f: two outstanding tickets fill the free budget — no online reservation (got %)', r.result;
+  end if;
+
+  -- Refresh: the same two tickets, next generation, no new allocation.
+  select * into g2 from public.issue_offline_grant('olga-key-1', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.grant_id = g.grant_id
+     or not (g2.ticket_ids <@ g.ticket_ids and g.ticket_ids <@ g2.ticket_ids) then
+    raise exception 'W2g: a refresh re-issues the outstanding tickets (got %)', g2;
+  end if;
+  if pg_temp.w_events() <> 'allocated:2' then
+    raise exception 'W2g: a refresh allocates nothing new (got %)', pg_temp.w_events();
+  end if;
+  -- A second attested device of the same identity gets no ticket while the
+  -- first holds both — the holds are per identity, not per device.
+  select * into g2 from public.issue_offline_grant('olga-key-2', 2);
+  if g2.result <> 'access.paywall_required' then
+    raise exception 'W2h: another device of the same identity cannot draw a third ticket (got %)', g2.result;
+  end if;
+  if (select count(*) from public.offline_grants) <> 2 then
+    raise exception 'W2h: a refused allocation issues no grant';
+  end if;
+end $$;
+reset role;
+
+-- ───────── W3: ADVERSARY A01 — a direct INSERT beside an outstanding ticket ─────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare r record; g record; v text; d text; a record; t1 uuid;
+begin
+  perform public.register_offline_device('omar-key-1', 'production', true);
+  select * into r from public.reserve_analysis_permit('omar-p1');
+  if r.result <> 'accepted' then
+    raise exception 'W3 precondition: online reservation (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('omar-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W3a: with one live permit only ONE ticket fits the budget (got %)', g;
+  end if;
+  t1 := g.ticket_ids[1];
+
+  -- The attack: a permit-less direct INSERT while P1 is live (scored 0, hold 1).
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000731', '00000000-0000-4000-8000-000000000072', 'scored', null);
+  if d <> 'allowed 1' then
+    raise exception 'W3b: a direct INSERT under a live permit within the budget is allowed (got %)', d;
+  end if;
+  -- ...and the late sync of P1 would be the third unit: refused, permit released.
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000732', r.permit_id, 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'W3c: the sync beside a hold and a scored rating is the third unit — must be paywall_required (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits where id = r.permit_id and status = 'released' and outcome = 'free_limit_exceeded') then
+    raise exception 'W3c: the refused permit is released free_limit_exceeded';
+  end if;
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
+    raise exception 'W3c: scored + outstanding must stay ≤ 2 (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  -- A further direct INSERT: no live permit → refused.
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000733', '00000000-0000-4000-8000-000000000072', 'scored', null);
+  if d <> '42501:access.permit_not_reserved' then
+    raise exception 'W3d: no live permit — the direct INSERT is refused (got %)', d;
+  end if;
+  -- The ticket settles its rating: scored 2, holds 0. Everything else is spent.
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000734', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W3e: the ticket settles the rating the device rendered (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 2 or public.offline_hold_count() <> 0 then
+    raise exception 'W3e: 2 scored, 0 outstanding (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  select * into r from public.reserve_analysis_permit('omar-p2');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W3f: budget spent — no reservation (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('omar-key-1', 1);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'W3f: budget spent — no ticket (got %)', g.result;
+  end if;
+  select * into a from public.access_state();
+  if a.scored_count <> 2 or a.reserved_count <> 0 then
+    raise exception 'W3f: access_state reports the spent budget (got %)', a;
+  end if;
+end $$;
+reset role;
+
+-- The gate itself: two holds fill the budget, so a direct INSERT under a live
+-- permit is refused with the paywall verdict, and so is the sync.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-000000000711', '00000000-0000-4000-8000-000000000071', 'olga-owner-seeded');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare d text; v text;
+begin
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000712', '00000000-0000-4000-8000-000000000071', 'scored', null);
+  if d <> '42501:access.paywall_required' then
+    raise exception 'W3g: a direct INSERT beside two outstanding tickets is refused by the gate (got %)', d;
+  end if;
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000713', '00000000-0000-4000-8000-000000000711', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'W3h: a sync beside two outstanding tickets is refused (got %)', v;
+  end if;
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000714', '00000000-0000-4000-8000-000000000071', 'low_confidence', null);
+  if d <> 'allowed 1' then
+    raise exception 'W3i: an abstention is free and never touches the holds (got %)', d;
+  end if;
+  if public.lifetime_scored_count() <> 0 or public.offline_hold_count() <> 2 then
+    raise exception 'W3i: nothing was spent (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- ───── W4: ADVERSARY A02/A03 — an existing rating never settles a ticket ─────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007103"}';
+do $$
+declare r record; g record; v text; d text; t1 uuid; i text;
+begin
+  perform public.register_offline_device('nia-key-1', 'production', true);
+  -- S0: a pre-counted rating with a forged FUTURE created_at (client-writable
+  -- column), written under a live permit that is then cancelled.
+  select * into r from public.reserve_analysis_permit('nia-p0');
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000741', '00000000-0000-4000-8000-000000000073', 'scored', now() + interval '1 year');
+  if d <> 'allowed 1' then
+    raise exception 'W4 precondition: the pre-counted rating (got %)', d;
+  end if;
+  update public.analysis_permits set status = 'released', outcome = 'cancelled' where id = r.permit_id;
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'W4 precondition: S0 is counted';
+  end if;
+  -- The ticket is allocated AFTER S0 exists.
+  select * into g from public.issue_offline_grant('nia-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W4a: one rating left → one ticket (got %)', g;
+  end if;
+  t1 := g.ticket_ids[1];
+
+  -- A03: the forged-timestamp pre-counted rating.
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000741', null, 'scored'));
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'W4b: a rating counted before the ticket existed never settles it, whatever its created_at (got %)', v;
+  end if;
+  -- A02: a rating an online permit paid for (live permit → direct INSERT).
+  select * into r from public.reserve_analysis_permit('nia-p1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W4c: scored 1 + hold 1 = budget; the online reservation is refused (got %)', r.result;
+  end if;
+end $$;
+reset role;
+-- ...so give the attacker the permit anyway (owner-seeded, as a legacy build
+-- could have): the online rating is refused by the gate — and if it existed,
+-- it would not be chargeable either.
+insert into public.analysis_permits (id, user_id, idempotency_key)
+values ('00000000-0000-4000-8000-000000000742', '00000000-0000-4000-8000-000000000073', 'nia-p1-seeded');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007103"}';
+do $$
+declare v text; d text; i text;
+        t1 uuid := (select ticket_id from public.offline_allocation_ledger where event = 'allocated');
+begin
+  d := pg_temp.w_direct_shot('00000000-0000-4000-8000-000000000743', '00000000-0000-4000-8000-000000000073', 'scored', null);
+  if d <> '42501:access.paywall_required' then
+    raise exception 'W4d: the gate counts the hold — the online rating beside it is refused (got %)', d;
+  end if;
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000743', '00000000-0000-4000-8000-000000000742', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'W4d: the sync counts the hold too (got %)', v;
+  end if;
+  -- A payload that names a permit, or is an abstention, never settles a ticket.
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000744', '00000000-0000-4000-8000-000000000742', 'scored'));
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'W4e: a permit-backed payload never settles a ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000744', null, 'low_confidence'));
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'W4f: an abstention never settles a ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000744', null, 'partial'));
+  if v <> 'offline.shot_not_chargeable' then
+    raise exception 'W4f: a partial never settles a ticket (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '{"id":"not-a-uuid","resultKind":"scored"}'::jsonb);
+  if v <> 'offline.invalid_input' then
+    raise exception 'W4g: a malformed payload is invalid input (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, '[]'::jsonb);
+  if v <> 'offline.invalid_input' then
+    raise exception 'W4g: a non-object payload is invalid input (got %)', v;
+  end if;
+  if not exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000741')
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000744')
+     or pg_temp.w_events() <> 'allocated:1' then
+    raise exception 'W4h: refused settlements write nothing (events %)', pg_temp.w_events();
+  end if;
+  -- The consumed event cannot be written around the RPC (no client grant).
+  i := pg_temp.w_try(format(
+    $q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id, installation_key_id)
+       select user_id, device_id, grant_id, generation, ticket_id, 'consumed', %L, installation_key_id
+       from public.offline_allocation_ledger where ticket_id = %L$q$,
+    '00000000-0000-4000-8000-000000000741', t1));
+  if i <> '42501:' then
+    raise exception 'W4i: the client cannot append a consumed event (got %)', i;
+  end if;
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
+    raise exception 'W4j: scored 1 + outstanding 1 (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- Even the OWNER role cannot write a consumed event around the settlement
+-- vouch, or one naming an existing shot.
+do $$
+declare t1 uuid := (select ticket_id from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000073');
+        i text;
+begin
+  i := pg_temp.w_try(format(
+    $q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id, installation_key_id)
+       select user_id, device_id, grant_id, generation, ticket_id, 'consumed', %L, installation_key_id
+       from public.offline_allocation_ledger where ticket_id = %L$q$,
+    gen_random_uuid(), t1));
+  if i <> '23514:' then
+    raise exception 'W4k: a consumed event without the settlement vouch is a check violation for every role (got %)', i;
+  end if;
+  perform set_config('pickle.offline_ticket_id', t1::text, true);
+  i := pg_temp.w_try(format(
+    $q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id, installation_key_id)
+       select user_id, device_id, grant_id, generation, ticket_id, 'consumed', %L, installation_key_id
+       from public.offline_allocation_ledger where ticket_id = %L$q$,
+    '00000000-0000-4000-8000-000000000741', t1));
+  perform set_config('pickle.offline_ticket_id', '', true);
+  if i <> '23514:' then
+    raise exception 'W4l: a consumed event naming an existing shot is a check violation even under the vouch (got %)', i;
+  end if;
+  if pg_temp.w_events() <> 'allocated:4,consumed:1' then
+    raise exception 'W4l: nothing was written (events %)', pg_temp.w_events();
+  end if;
+end $$;
+
+-- ───────── W5: settlement writes the rating; terminal events; no re-credit ─────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007103"}';
+do $$
+declare t1 uuid := (select ticket_id from public.offline_allocation_ledger where event = 'allocated');
+        v text; g record; s record;
+begin
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000745', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W5a: settlement (got %)', v;
+  end if;
+  select * into s from public.shots where id = '00000000-0000-4000-8000-000000000745';
+  if not found or s.analysis_permit_id is not null or s.result_kind <> 'scored' or s.overall_score is null then
+    raise exception 'W5a: the settlement wrote the scored shot with no permit link (got %)', s;
+  end if;
+  if not exists (select 1 from public.offline_allocation_ledger where ticket_id = t1 and event = 'consumed' and shot_id = s.id) then
+    raise exception 'W5a: the consumed event names the shot';
+  end if;
+  if public.lifetime_scored_count() <> 2 or public.offline_hold_count() <> 0 then
+    raise exception 'W5a: both ratings spent (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000745', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W5b: replaying the same settlement is idempotent (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t1, pg_temp.w_shot('00000000-0000-4000-8000-000000000746', null, 'scored'));
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'W5c: a consumed ticket settles nothing else (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t1, 'unused_ticket_returned');
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'W5d: a consumed ticket cannot be returned (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(gen_random_uuid(), pg_temp.w_shot('00000000-0000-4000-8000-000000000746', null, 'scored'));
+  if v <> 'offline.ticket_not_found' then
+    raise exception 'W5e: an unknown ticket (got %)', v;
+  end if;
+  if (select count(*) from public.shots where user_id = (select auth.uid()) and result_kind = 'scored') <> 2 then
+    raise exception 'W5e: exactly two scored shots';
+  end if;
+  select * into g from public.issue_offline_grant('nia-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'W5f: nothing left to allocate (got %)', g.result;
+  end if;
+end $$;
+
+-- Release: terminal, not a re-credit, only the client's own reason.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare t uuid[]; v text; g record; r record;
+begin
+  select array_agg(ticket_id order by created_at, id) into t from public.offline_allocation_ledger where event = 'allocated';
+  v := public.release_offline_ticket(t[1], 'support_review');
+  if v <> 'offline.invalid_input' then
+    raise exception 'W5g: a client cannot self-assert a support review (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t[1], 'because');
+  if v <> 'offline.invalid_input' then
+    raise exception 'W5g: an unknown reason is invalid input (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t[1], 'unused_ticket_returned');
+  if v <> 'accepted' then
+    raise exception 'W5h: an unused ticket is returned (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t[1], 'unused_ticket_returned');
+  if v <> 'accepted' then
+    raise exception 'W5h: the return is idempotent (got %)', v;
+  end if;
+  if pg_temp.w_events() <> 'allocated:2,released:1' then
+    raise exception 'W5h: one released event (got %)', pg_temp.w_events();
+  end if;
+  v := public.consume_offline_ticket(t[1], pg_temp.w_shot('00000000-0000-4000-8000-000000000715', null, 'scored'));
+  if v <> 'offline.ticket_released' then
+    raise exception 'W5i: a released ticket cannot be consumed (got %)', v;
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W5j: returning a ticket is not a re-credit — it still counts (got %)', public.offline_hold_count();
+  end if;
+  select * into r from public.reserve_analysis_permit('olga-online-2');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W5j: no online slot opens on release (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 or g.ticket_ids[1] <> t[2] then
+    raise exception 'W5k: only the outstanding ticket is re-issued, no new one (got %)', g;
+  end if;
+  if pg_temp.w_events() <> 'allocated:2,released:1' then
+    raise exception 'W5k: no new allocation (got %)', pg_temp.w_events();
+  end if;
+end $$;
+reset role;
+
+-- ──── W6: ADVERSARY c2-A01/A09 — stale and swept permits are reservations ────
+insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome, created_at)
+values
+  ('00000000-0000-4000-8000-000000000751', '00000000-0000-4000-8000-000000000074', 'noa-stale', 'reserved', null, now() - interval '25 hours'),
+  ('00000000-0000-4000-8000-000000000781', '00000000-0000-4000-8000-000000000078', 'rex-swept', 'released', 'expired', now() - interval '25 hours');
+set local role authenticated;
+-- Noa: a stale (25h) permit that is still 'reserved'.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000074';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007104"}';
+do $$
+declare g record; r record; v text; a record;
+begin
+  perform public.register_offline_device('noa-key-1', 'production', true);
+  select * into a from public.access_state();
+  if a.reserved_count <> 0 then
+    raise exception 'W6 precondition: the UI does not show the stale permit as live (got %)', a;
+  end if;
+  select * into g from public.issue_offline_grant('noa-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W6a: the stale permit is a reservation to the allocator — one ticket (got %)', g;
+  end if;
+  select * into r from public.reserve_analysis_permit('noa-online-2');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W6b: stale permit + hold fill the budget — no second live permit (got %)', r.result;
+  end if;
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000752', '00000000-0000-4000-8000-000000000751', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W6c: the late sync of the stale permit is honoured (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
+    raise exception 'W6c: scored 1 + outstanding 1 (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  select * into r from public.reserve_analysis_permit('noa-online-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W6d: still nothing to reserve (got %)', r.result;
+  end if;
+end $$;
+-- Rex: a permit the production sweep already moved to released/expired.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000078';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007108"}';
+do $$
+declare g record; r record; v text;
+begin
+  perform public.register_offline_device('rex-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('rex-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W6e: a swept-but-syncable permit is a reservation to the allocator — one ticket (got %)', g;
+  end if;
+  -- The online path keeps its contract (Q3): a swept permit does not block a
+  -- new reservation...
+  select * into r from public.reserve_analysis_permit('rex-online-2');
+  if r.result <> 'accepted' then
+    raise exception 'W6f precondition: a swept permit does not block the reservation (got %)', r.result;
+  end if;
+  -- ...but the spend rule does: the swept permit's late sync lands, the fresh
+  -- permit's sync is the third unit and is refused.
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000782', '00000000-0000-4000-8000-000000000781', 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W6g: the swept permit''s late sync is honoured (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000783', r.permit_id, 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'W6h: scored 1 + hold 1 — the second sync is refused (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
+    raise exception 'W6h: scored + outstanding ≤ 2 (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  select * into g from public.issue_offline_grant('rex-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 or pg_temp.w_events() <> 'allocated:1' then
+    raise exception 'W6i: the refresh re-issues the one ticket and allocates nothing (got %, events %)', g, pg_temp.w_events();
+  end if;
+end $$;
+reset role;
+
+-- ─────────────────────────── W7: Pro lease bounds ───────────────────────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000075';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007105"}';
+do $$
+declare g record; ent timestamptz := (select expires_at from public.billing_entitlements where user_id = (select auth.uid()));
+begin
+  perform public.register_offline_device('pia-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('pia-key-1', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'W7a: a Pro identity receives a lease, never tickets (got %)', g;
+  end if;
+  if g.expires_at <> ent or g.entitlement_expires_at <> ent or g.expires_at > g.issued_at + interval '7 days' then
+    raise exception 'W7a: the lease ends at the verified entitlement expiry (3 days) (got % / entitlement %)', g.expires_at, ent;
+  end if;
+  if pg_temp.w_events() <> '' then
+    raise exception 'W7a: a lease allocates nothing (got %)', pg_temp.w_events();
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000076';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007106"}';
+do $$
+declare g record;
+begin
+  perform public.register_offline_device('paz-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('paz-key-1', 0);
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store' or g.entitlement_expires_at is not null then
+    raise exception 'W7b: a lifetime Pro identity receives a lease (got %)', g;
+  end if;
+  if g.expires_at <> g.issued_at + interval '7 days' then
+    raise exception 'W7b: an open-ended entitlement is capped at 7 days (got % → %)', g.issued_at, g.expires_at;
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000077';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007107"}';
+do $$
+declare g record; a record;
+begin
+  perform public.register_offline_device('pol-key-1', 'production', true);
+  select * into a from public.access_state();
+  if a.premium then
+    raise exception 'W7c precondition: an expired Pro row is not premium';
+  end if;
+  select * into g from public.issue_offline_grant('pol-key-1', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'identity_lifetime_free' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'W7c: an expired Pro row is a free identity — tickets, no lease (got %)', g;
+  end if;
+end $$;
+reset role;
+
+-- The table refuses every out-of-bounds lease, whoever writes it.
+do $$
+declare pia uuid := '00000000-0000-4000-8000-000000000075'; paz uuid := '00000000-0000-4000-8000-000000000076';
+        pol uuid := '00000000-0000-4000-8000-000000000077'; olga uuid := '00000000-0000-4000-8000-000000000071';
+        d_pia uuid := (select id from public.offline_devices where installation_key_id = 'pia-key-1');
+        d_paz uuid := (select id from public.offline_devices where installation_key_id = 'paz-key-1');
+        d_pol uuid := (select id from public.offline_devices where installation_key_id = 'pol-key-1');
+        d_olga4 uuid := (select id from public.offline_devices where installation_key_id = 'olga-key-4');
+        ent timestamptz := (select expires_at from public.billing_entitlements where user_id = pia);
+        i text;
+begin
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'verified_store', 9, now(), now() + interval '8 days', null)$q$, paz, d_paz));
+  if i <> '23514:' then raise exception 'W7d: a lease longer than 7 days is refused (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'verified_store', 9, now(), %L::timestamptz + interval '1 hour', %L::timestamptz)$q$, pia, d_pia, ent, ent));
+  if i <> '23514:' then raise exception 'W7e: a lease past the verified entitlement expiry is refused (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'verified_store', 9, now(), now() + interval '1 day', null)$q$, pia, d_pia));
+  if i <> '23514:' then raise exception 'W7f: a Pro lease must record the verified entitlement expiry (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'verified_store', 9, now(), now() + interval '1 day', now() + interval '1 day')$q$, pol, d_pol));
+  if i <> '23514:' then raise exception 'W7g: an expired entitlement backs no Pro lease (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'identity_lifetime_free', 9, now(), now() + interval '1 day', now() + interval '1 day')$q$, olga, d_olga4));
+  if i <> '23514:' then raise exception 'W7h: a free grant carries no entitlement expiry (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'identity_lifetime_free', 9, now(), now() + interval '1 day', null)$q$, olga, d_olga4));
+  if i <> '23514:' then raise exception 'W7i: an unattested device receives no grant (got %)', i; end if;
+  i := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at, entitlement_expires_at)
+    values (%L, %L, 'identity_lifetime_free', 9, now(), now() + interval '1 day', null)$q$, olga, d_pia));
+  if i <> '23514:' then raise exception 'W7j: a grant names the owner''s own device (got %)', i; end if;
+  i := pg_temp.w_try('update public.offline_grants set expires_at = expires_at + interval ''1 day''');
+  if i <> '23514:' then raise exception 'W7k: an issued lease is immutable (got %)', i; end if;
+  if (select count(*) from public.offline_grants where generation = 9) <> 0 then
+    raise exception 'W7l: refused leases persist nothing';
+  end if;
+end $$;
+
+-- ────────────────── W8: nothing reclaims an allocation automatically ──────────────────
+-- Olga holds two tickets (one returned, one outstanding) on olga-key-1 with
+-- both grants issued in generation 1/2/3. Age the grants past expiry (owner,
+-- storage-level — the table forbids it for every client path), remove the
+-- device, then the account.
+alter table public.offline_grants disable trigger offline_grants_guard;
+update public.offline_grants
+   set issued_at = issued_at - interval '30 days', expires_at = expires_at - interval '30 days'
+ where user_id = '00000000-0000-4000-8000-000000000071';
+alter table public.offline_grants enable trigger offline_grants_guard;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare g record; r record; t uuid := (
+  select a.ticket_id from public.offline_allocation_ledger a
+  where a.event = 'allocated' and not exists (
+    select 1 from public.offline_allocation_ledger x where x.ticket_id = a.ticket_id and x.event <> 'allocated'));
+begin
+  if not exists (select 1 from public.offline_grants where expires_at < now()) then
+    raise exception 'W8 precondition: the grants are expired';
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W8a: grant expiry reclaims nothing (holds %)', public.offline_hold_count();
+  end if;
+  select * into r from public.reserve_analysis_permit('olga-online-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W8a: the expired grant''s tickets still hold the budget (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or g.ticket_ids <> array[t] then
+    raise exception 'W8b: a new grant re-issues the outstanding ticket of the expired one (got %)', g;
+  end if;
+end $$;
+reset role;
+
+delete from public.offline_devices where installation_key_id = 'olga-key-1';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000071';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007101"}';
+do $$
+declare g record;
+begin
+  if pg_temp.w_events() <> 'allocated:2,released:1' or public.offline_hold_count() <> 2 then
+    raise exception 'W8c: deleting the device reclaims nothing (events %, holds %)', pg_temp.w_events(), public.offline_hold_count();
+  end if;
+  if exists (select 1 from public.offline_grants where device_id not in (select id from public.offline_devices)) then
+    raise exception 'W8c: grants cascade with the device';
+  end if;
+  perform public.register_offline_device('olga-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 or g.generation <> 1 then
+    raise exception 'W8d: the re-registered installation recovers its outstanding ticket (got %)', g;
+  end if;
+  select * into g from public.issue_offline_grant('olga-key-2', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'W8e: another installation of the identity cannot draw the held ticket (got %)', g.result;
+  end if;
+end $$;
+reset role;
+
+-- Account deletion (Auth admin deleteUser → auth.users cascade) → sign in
+-- again with the SAME Google account → a new account row: the hold follows
+-- the identity; the original installation recovers the ticket.
+delete from auth.users where id = '00000000-0000-4000-8000-000000000071';
+do $$
+begin
+  if exists (select 1 from public.offline_devices where user_id = '00000000-0000-4000-8000-000000000071')
+     or exists (select 1 from public.offline_grants where user_id = '00000000-0000-4000-8000-000000000071') then
+    raise exception 'W8f: devices and grants cascade with the account';
+  end if;
+  if (select count(*) from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000071') <> 3 then
+    raise exception 'W8f: the ledger survives the account (no FK, no cascade)';
+  end if;
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000079', 'olga@example.com', '{"full_name":"Olga"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-olga', '00000000-0000-4000-8000-000000000079', '{"sub":"google-sub-olga"}');
+insert into auth.sessions (id, user_id) values ('00000000-0000-4000-8000-000000007109', '00000000-0000-4000-8000-000000000079');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000079';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007109"}';
+do $$
+declare g record; r record; a record; v text;
+begin
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W8g: the identity''s holds survive account re-creation (holds %)', public.offline_hold_count();
+  end if;
+  select * into a from public.access_state();
+  if a.reserved_count <> 2 then
+    raise exception 'W8g: access_state shows the identity''s holds (got %)', a;
+  end if;
+  select * into r from public.reserve_analysis_permit('olga2-online-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W8g: no fresh budget for the re-created account (got %)', r.result;
+  end if;
+  perform public.register_offline_device('olga-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W8h: the original installation recovers the identity''s outstanding ticket (got %)', g;
+  end if;
+  if pg_temp.w_events() <> '' then
+    raise exception 'W8h: recovery allocates nothing; the old account''s events stay its own (got %)', pg_temp.w_events();
+  end if;
+  -- The recovered ticket settles a rating for the new account row, in its name.
+  v := public.consume_offline_ticket(g.ticket_ids[1], pg_temp.w_shot('00000000-0000-4000-8000-000000000791', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'W8i: the recovered ticket settles (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1
+     or pg_temp.w_events() <> 'consumed:1' then
+    raise exception 'W8i: scored 1 (the settled ticket) + outstanding 1 (the returned one still counts)';
+  end if;
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'W8j: nothing left (got %)', g.result;
+  end if;
+end $$;
+reset role;
+
+-- A stranger on the SAME installation key gets nothing of Olga's.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare g record; v text;
+begin
+  perform public.register_offline_device('olga-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'W8k: an unrelated identity on the same key recovers nothing (its own budget is spent) (got %)', g.result;
+  end if;
+  if exists (select 1 from public.offline_allocation_ledger where user_id <> (select auth.uid())) then
+    raise exception 'W8k: another identity''s ledger rows are invisible';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  perform set_config('w04.released_ticket',
+    (select ticket_id::text from public.offline_allocation_ledger where event = 'released'), true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000076';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007106"}';
+do $$
+declare g record; v text; t uuid := current_setting('w04.released_ticket')::uuid;
+begin
+  -- Paz (Pro) on Olga's key: the lease is Paz's; Olga's ticket is not.
+  perform public.register_offline_device('olga-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('olga-key-1', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'W8l: a Pro stranger on the key receives its own lease and none of the tickets (got %)', g;
+  end if;
+  v := public.consume_offline_ticket(t, pg_temp.w_shot('00000000-0000-4000-8000-000000000761', null, 'scored'));
+  if v <> 'offline.ticket_not_found' then
+    raise exception 'W8m: a stranger cannot consume another identity''s ticket (got %)', v;
+  end if;
+  v := public.release_offline_ticket(t, 'unused_ticket_returned');
+  if v <> 'offline.ticket_not_found' then
+    raise exception 'W8m: a stranger cannot return another identity''s ticket (got %)', v;
+  end if;
+end $$;
+reset role;
+
+-- An identity linked AFTER the allocation carries the hold: Rex (one
+-- outstanding ticket) links a Google identity, deletes the account, and signs
+-- in again with ONLY the Google identity.
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-rex-late', '00000000-0000-4000-8000-000000000078', '{"sub":"google-sub-rex-late"}');
+delete from auth.users where id = '00000000-0000-4000-8000-000000000078';
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-000000000070', 'rex@example.com', '{"full_name":"Rex"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-rex-late', '00000000-0000-4000-8000-000000000070', '{"sub":"google-sub-rex-late"}');
+insert into auth.sessions (id, user_id) values ('00000000-0000-4000-8000-000000007100', '00000000-0000-4000-8000-000000000070');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000070';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007100"}';
+do $$
+declare g record; r record;
+begin
+  if public.offline_hold_count() <> 1 then
+    raise exception 'W8n: a late-linked identity carries the hold (holds %)', public.offline_hold_count();
+  end if;
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'W8n precondition: the late-linked identity inherited the rating';
+  end if;
+  select * into r from public.reserve_analysis_permit('rex2-online-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W8n: scored 1 + hold 1 — nothing to reserve (got %)', r.result;
+  end if;
+  perform public.register_offline_device('rex-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('rex-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'W8o: the original installation recovers the ticket through the late-linked identity (got %)', g;
+  end if;
+  if pg_temp.w_events() <> '' then
+    raise exception 'W8o: recovery allocates nothing (got %)', pg_temp.w_events();
+  end if;
+end $$;
+reset role;
+
+-- ───────── W9: denied client writes, isolation, service_role, anon, append-only ─────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare t text; op text; r text;
+        own_device uuid := (select id from public.offline_devices where user_id = (select auth.uid()) limit 1);
+        own_grant uuid := (select id from public.offline_grants where user_id = (select auth.uid()) limit 1);
+        own_ticket uuid := (select ticket_id from public.offline_allocation_ledger where user_id = (select auth.uid()) and event = 'allocated' limit 1);
+begin
+  if own_device is null or own_grant is null or own_ticket is null then
+    raise exception 'W9 precondition: Omar reads his own device, grant and ledger rows';
+  end if;
+  if exists (select 1 from public.offline_devices where user_id <> (select auth.uid()))
+     or exists (select 1 from public.offline_grants where user_id <> (select auth.uid()))
+     or exists (select 1 from public.offline_allocation_ledger where user_id <> (select auth.uid())) then
+    raise exception 'W9a: other owners'' rows are invisible';
+  end if;
+  foreach t in array array['offline_devices', 'offline_grants', 'offline_allocation_ledger', 'offline_allocation_identity_links'] loop
+    if has_table_privilege('authenticated', format('public.%I', t), 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_any_column_privilege('authenticated', format('public.%I', t)::regclass, 'INSERT,UPDATE') then
+      raise exception 'W9b: authenticated must hold only SELECT on %', t;
+    end if;
+    if has_table_privilege('anon', format('public.%I', t), 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_any_column_privilege('anon', format('public.%I', t)::regclass, 'SELECT,INSERT,UPDATE') then
+      raise exception 'W9c: anon must hold nothing on %', t;
+    end if;
+    if has_table_privilege('service_role', format('public.%I', t), 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+       or has_any_column_privilege('service_role', format('public.%I', t)::regclass, 'SELECT,INSERT,UPDATE') then
+      raise exception 'W9d: service_role must hold nothing on % (no direct reclaim, no TRUNCATE)', t;
+    end if;
+    if not (select relrowsecurity from pg_class where oid = format('public.%I', t)::regclass) then
+      raise exception 'W9e: RLS must be enabled on %', t;
+    end if;
+  end loop;
+  if has_table_privilege('authenticated', 'public.offline_allocation_identity_links', 'SELECT') then
+    raise exception 'W9e: the identity-link table is not client-readable';
+  end if;
+  foreach t in array array['offline_allocation_ledger_id_seq', 'offline_allocation_identity_links_id_seq'] loop
+    if has_sequence_privilege('authenticated', format('public.%I', t), 'SELECT,UPDATE,USAGE')
+       or has_sequence_privilege('anon', format('public.%I', t), 'SELECT,UPDATE,USAGE')
+       or has_sequence_privilege('service_role', format('public.%I', t), 'SELECT,UPDATE,USAGE') then
+      raise exception 'W9f: ledger sequences are not client-usable (%)', t;
+    end if;
+  end loop;
+
+  -- Live writes as the owner through the client role: all 42501.
+  r := pg_temp.w_try(format($q$insert into public.offline_devices (user_id, installation_key_id, attestation_environment, attestation_state, attested_at)
+    values (%L, 'forged-key', 'production', 'attested', now())$q$, (select auth.uid())));
+  if r <> '42501:' then raise exception 'W9g: device insert (got %)', r; end if;
+  r := pg_temp.w_try(format('update public.offline_devices set attestation_state = ''attested'', attested_at = now() where id = %L', own_device));
+  if r <> '42501:' then raise exception 'W9g: device update (got %)', r; end if;
+  r := pg_temp.w_try(format('delete from public.offline_devices where id = %L', own_device));
+  if r <> '42501:' then raise exception 'W9g: device delete (got %)', r; end if;
+  r := pg_temp.w_try(format($q$insert into public.offline_grants (user_id, device_id, entitlement_source, generation, issued_at, expires_at)
+    values (%L, %L, 'identity_lifetime_free', 99, now(), now() + interval '1 day')$q$, (select auth.uid()), own_device));
+  if r <> '42501:' then raise exception 'W9h: grant insert (got %)', r; end if;
+  r := pg_temp.w_try(format('update public.offline_grants set expires_at = now() + interval ''30 days'' where id = %L', own_grant));
+  if r <> '42501:' then raise exception 'W9h: grant update (got %)', r; end if;
+  r := pg_temp.w_try(format('delete from public.offline_grants where id = %L', own_grant));
+  if r <> '42501:' then raise exception 'W9h: grant delete (got %)', r; end if;
+  r := pg_temp.w_try(format($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, installation_key_id)
+    values (%L, %L, %L, 1, gen_random_uuid(), 'allocated', 'omar-key-1')$q$, (select auth.uid()), own_device, own_grant));
+  if r <> '42501:' then raise exception 'W9i: ledger allocate (got %)', r; end if;
+  r := pg_temp.w_try(format($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, installation_key_id)
+    values (%L, %L, %L, 1, %L, 'released', 'support_review', 'omar-key-1')$q$, (select auth.uid()), own_device, own_grant, own_ticket));
+  if r <> '42501:' then raise exception 'W9i: ledger release (got %)', r; end if;
+  r := pg_temp.w_try('update public.offline_allocation_ledger set event = ''released'', reason = ''support_review'' where event = ''consumed''');
+  if r <> '42501:' then raise exception 'W9i: ledger update (got %)', r; end if;
+  r := pg_temp.w_try('delete from public.offline_allocation_ledger');
+  if r <> '42501:' then raise exception 'W9i: ledger delete (got %)', r; end if;
+  r := pg_temp.w_try('truncate public.offline_allocation_ledger');
+  if r <> '42501:' then raise exception 'W9i: ledger truncate (got %)', r; end if;
+  r := pg_temp.w_try('select 1 from public.offline_allocation_identity_links');
+  if r <> '42501:' then raise exception 'W9j: identity links are not client-readable (got %)', r; end if;
+  -- Privileged helpers are not client-executable.
+  foreach op in array array[
+    'public.guard_offline_grant()', 'public.guard_offline_ledger_event()',
+    'public.guard_offline_ledger_append_only()', 'public.guard_offline_identity_link()',
+    'public.inherit_offline_allocation_holds()', 'public.online_reservation_count()',
+    'api_private.offline_identity_hashes(uuid)', 'api_private.offline_owned_allocations(uuid)',
+    'api_private.offline_ticket_owned_by(uuid, text[], uuid, uuid)'
+  ] loop
+    if has_function_privilege('authenticated', op, 'EXECUTE') or has_function_privilege('anon', op, 'EXECUTE')
+       or has_function_privilege('service_role', op, 'EXECUTE') then
+      raise exception 'W9k: % must not be client-executable', op;
+    end if;
+  end loop;
+  foreach op in array array[
+    'public.register_offline_device(text, text, boolean)', 'public.issue_offline_grant(text, integer)',
+    'public.consume_offline_ticket(uuid, jsonb)', 'public.release_offline_ticket(uuid, text)',
+    'public.offline_hold_count()'
+  ] loop
+    if has_function_privilege('anon', op, 'EXECUTE') or has_function_privilege('service_role', op, 'EXECUTE') then
+      raise exception 'W9l: % is for the authenticated client only', op;
+    end if;
+  end loop;
+end $$;
+reset role;
+
+-- Without the API proof, a bearer alone reads nothing.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare header text := current_setting('request.headers');
+begin
+  perform set_config('request.headers', '{}', true);
+  if exists (select 1 from public.offline_devices) or exists (select 1 from public.offline_grants)
+     or exists (select 1 from public.offline_allocation_ledger) then
+    raise exception 'W9m: a user token alone must not read the offline tables';
+  end if;
+  if public.offline_hold_count() <> 0 then
+    raise exception 'W9m: offline_hold_count answers 0 without the API proof';
+  end if;
+  perform set_config('request.headers', header, true);
+end $$;
+reset role;
+
+-- Append-only for the OWNER role too (support edits go through new rows).
+do $$
+declare r text;
+begin
+  r := pg_temp.w_try('update public.offline_allocation_ledger set reason = ''support_review'' where event = ''released''');
+  if r <> '23514:' then raise exception 'W9n: owner update of the ledger (got %)', r; end if;
+  r := pg_temp.w_try('delete from public.offline_allocation_ledger where event = ''released''');
+  if r <> '23514:' then raise exception 'W9n: owner delete of the ledger (got %)', r; end if;
+  r := pg_temp.w_try('update public.offline_allocation_identity_links set identity_hash = repeat(''0'', 64)');
+  if r <> '23514:' then raise exception 'W9n: owner update of the identity links (got %)', r; end if;
+  r := pg_temp.w_try('delete from public.offline_allocation_identity_links');
+  if r <> '23514:' then raise exception 'W9n: owner delete of the identity links (got %)', r; end if;
+  -- Owner-written support review is a legal terminal event; a second
+  -- terminal event, an unknown reason, or a foreign owner are not.
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    select user_id, device_id, grant_id, generation, ticket_id, 'released', 'support_review', identity_hashes, installation_key_id
+    from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000072' and event = 'allocated'
+      and ticket_id not in (select ticket_id from public.offline_allocation_ledger where event <> 'allocated')$q$);
+  if r <> 'allowed 0' then raise exception 'W9o precondition: Omar has no outstanding ticket left (got %)', r; end if;
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    select user_id, device_id, grant_id, generation, ticket_id, 'released', 'support_review', identity_hashes, installation_key_id
+    from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000072' and event = 'consumed'$q$);
+  if r <> '23514:' then raise exception 'W9o: a second terminal event is refused (got %)', r; end if;
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    select '00000000-0000-4000-8000-000000000072', device_id, grant_id, generation, ticket_id, 'released', 'support_review', identity_hashes, installation_key_id
+    from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000074' and event = 'allocated'$q$);
+  if r <> '23514:' then raise exception 'W9p: a foreign owner cannot close another identity''s ticket (got %)', r; end if;
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    select user_id, device_id, grant_id, generation, ticket_id, 'released', 'lost', identity_hashes, installation_key_id
+    from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000074' and event = 'allocated'$q$);
+  if r <> '23514:' then raise exception 'W9q: an unknown release reason is refused (got %)', r; end if;
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    select user_id, device_id, grant_id, generation, ticket_id, 'released', 'support_review', identity_hashes, installation_key_id
+    from public.offline_allocation_ledger where user_id = '00000000-0000-4000-8000-000000000074' and event = 'allocated'$q$);
+  if r <> 'allowed 1' then raise exception 'W9r: a support review closes Noa''s outstanding ticket (got %)', r; end if;
+  r := pg_temp.w_try($q$insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    values ('00000000-0000-4000-8000-000000000074', gen_random_uuid(), gen_random_uuid(), 1, gen_random_uuid(), 'released', 'support_review', '{}', 'noa-key-1')$q$);
+  if r <> '23514:' then raise exception 'W9s: a terminal event needs a prior allocation (got %)', r; end if;
+end $$;
+
+-- Anon: nothing.
+set local role anon;
+do $$
+declare t text; r text;
+begin
+  foreach t in array array['offline_devices', 'offline_grants', 'offline_allocation_ledger', 'offline_allocation_identity_links'] loop
+    r := pg_temp.w_try(format('select 1 from public.%I limit 1', t));
+    if r <> '42501:' then raise exception 'W9t: anon must not read public.% (got %)', t, r; end if;
+  end loop;
+  r := pg_temp.w_try('select public.register_offline_device(''anon-key'', ''production'', true)');
+  if r <> '42501:' then raise exception 'W9u: anon register (got %)', r; end if;
+  r := pg_temp.w_try('select public.issue_offline_grant(''anon-key'', 1)');
+  if r <> '42501:' then raise exception 'W9u: anon issue (got %)', r; end if;
+  r := pg_temp.w_try('select public.consume_offline_ticket(gen_random_uuid(), ''{}''::jsonb)');
+  if r <> '42501:' then raise exception 'W9u: anon consume (got %)', r; end if;
+  r := pg_temp.w_try('select public.release_offline_ticket(gen_random_uuid(), ''unused_ticket_returned'')');
+  if r <> '42501:' then raise exception 'W9u: anon release (got %)', r; end if;
+  r := pg_temp.w_try('select public.offline_hold_count()');
+  if r <> '42501:' then raise exception 'W9u: anon hold count (got %)', r; end if;
+end $$;
+reset role;
+
+-- ──────────── W10: every RPC fails closed without a live API session ────────────
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare header text := current_setting('request.headers'); claims text := current_setting('request.jwt.claims'); r text; sql text;
+begin
+  foreach sql in array array[
+    'select public.register_offline_device(''omar-key-1'', ''production'', true)',
+    'select public.issue_offline_grant(''omar-key-1'', 1)',
+    'select public.consume_offline_ticket(gen_random_uuid(), ''{}''::jsonb)',
+    'select public.release_offline_ticket(gen_random_uuid(), ''unused_ticket_returned'')'
+  ] loop
+    -- Another user's session id.
+    perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000007103"}', true);
+    r := pg_temp.w_try(sql);
+    if r <> '42501:' then raise exception 'W10a: another user''s session must not authorize % (got %)', sql, r; end if;
+    -- No session id.
+    perform set_config('request.jwt.claims', '{}', true);
+    r := pg_temp.w_try(sql);
+    if r <> '42501:' then raise exception 'W10b: a missing session must not authorize % (got %)', sql, r; end if;
+    -- Malformed session id.
+    perform set_config('request.jwt.claims', '{"session_id":"nope"}', true);
+    r := pg_temp.w_try(sql);
+    if r <> '42501:' then raise exception 'W10c: a malformed session must not authorize % (got %)', sql, r; end if;
+    perform set_config('request.jwt.claims', claims, true);
+    -- No API proof.
+    perform set_config('request.headers', '{}', true);
+    r := pg_temp.w_try(sql);
+    if r <> '42501:' then raise exception 'W10d: the server request key is required for % (got %)', sql, r; end if;
+    perform set_config('request.headers', header, true);
+  end loop;
+end $$;
+reset role;
+
+-- Expired and revoked sessions.
+update auth.sessions set not_after = now() - interval '1 second' where id = '00000000-0000-4000-8000-000000007102';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare r text;
+begin
+  r := pg_temp.w_try('select public.issue_offline_grant(''omar-key-1'', 1)');
+  if r <> '42501:' then raise exception 'W10e: an expired session must not authorize an allocation (got %)', r; end if;
+end $$;
+reset role;
+delete from auth.sessions where id = '00000000-0000-4000-8000-000000007102';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000072';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007102"}';
+do $$
+declare r text;
+begin
+  r := pg_temp.w_try('select public.register_offline_device(''omar-key-1'', ''production'', true)');
+  if r <> '42501:' then raise exception 'W10f: a revoked session must not authorize registration (got %)', r; end if;
+end $$;
+reset role;
+
+-- Final conservation audit across every free identity touched above: scored
+-- + outstanding (allocated, not consumed) ≤ 2 for each identity hash, and
+-- every consumed event names exactly one scored, permit-less shot.
+do $$
+declare bad record;
+begin
+  for bad in
+    select h.hash,
+           (select scored_count from public.free_rating_ledger l where l.identity_hash = h.hash) as scored,
+           (select count(*) from public.offline_allocation_ledger a
+             where a.event = 'allocated' and h.hash = any(a.identity_hashes)
+               and not exists (select 1 from public.offline_allocation_ledger c where c.ticket_id = a.ticket_id and c.event = 'consumed')) as outstanding
+    from (select distinct unnest(identity_hashes) as hash from public.offline_allocation_ledger) h
+  loop
+    if coalesce(bad.scored, 0) + bad.outstanding > 2 then
+      raise exception 'W-AUDIT: identity % holds scored % + outstanding % > 2', bad.hash, bad.scored, bad.outstanding;
+    end if;
+  end loop;
+  if exists (
+    select 1 from public.offline_allocation_ledger c
+    left join public.shots s on s.id = c.shot_id
+    where c.event = 'consumed' and (s.id is null or s.result_kind <> 'scored' or s.analysis_permit_id is not null)
+  ) then
+    raise exception 'W-AUDIT: every consumed event names one scored, permit-less shot';
+  end if;
+  if (select count(*) from public.offline_allocation_ledger where event = 'consumed')
+     <> (select count(distinct shot_id) from public.offline_allocation_ledger where event = 'consumed') then
+    raise exception 'W-AUDIT: a shot settles at most one ticket';
+  end if;
+end $$;
+
+rollback;
+
+\echo W04-01 OFFLINE GRANTS MATRIX: ALL CASES PASSED
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED
