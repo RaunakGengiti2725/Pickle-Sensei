@@ -46,10 +46,11 @@ grant execute on function pg_temp.w08_id(integer), pg_temp.w08_challenge(integer
 insert into auth.users (id, email, raw_app_meta_data)
   select pg_temp.w08_id(n), 'w08-test-' || n || '@example.test',
     jsonb_build_object('provider', case when n in (1, 6) then 'apple' else 'google' end)
-  from generate_series(1, 8) n;
+  from (select n from generate_series(1, 8) n union all select 10 union all select 11) s;
 insert into auth.identities (provider, provider_id, user_id)
   select case when n in (1, 6) then 'apple' else 'google' end,
-    'w08-test-identity-' || n, pg_temp.w08_id(n) from generate_series(1, 8) n;
+    'w08-test-identity-' || n, pg_temp.w08_id(n)
+  from (select n from generate_series(1, 8) n union all select 10 union all select 11) s;
 insert into auth.sessions (id, user_id) values (pg_temp.w08_id(9001), pg_temp.w08_id(1));
 insert into public.shots (
   id, user_id, shot_type, captured_at, start_ms, end_ms, overall_score, analysis_confidence, result_kind,
@@ -227,7 +228,7 @@ begin
     or exists (select 1 from public.profiles where id = pg_temp.w08_id(1))
     or exists (select 1 from public.account_external_credentials where user_id = pg_temp.w08_id(1))
     or public.read_account_deletion_status(pg_temp.w08_id(1002), pg_temp.w08_cap(2))
-      <> '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb
+      <> '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb
     or not exists (select 1 from api_private.account_deletion_operations o, w08_results r
       where o.id = pg_temp.w08_id(1002) and r.name = 'takeover' and o.auth_deleted_at is not null
         and o.completed_at is null and o.phase = 'auth_delete_intent' and o.last_error_code is null
@@ -255,15 +256,16 @@ select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except ta
   union all (table w08_ledger_before except table public.free_rating_ledger)), 'free-rating identity ledger is byte-for-byte unchanged after cascade');
 set local role service_role;
 select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1002), pg_temp.w08_cap(2))
-  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'uncertified Auth absence reports blocked with no receipt through the status capability');
-select pg_temp.w08_assert(public.read_account_deletion_receipt(pg_temp.w08_id(1), pg_temp.w08_id(1002))->>'state' = 'blocked'
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'uncertified Auth absence under a live sweep reports in_progress with no receipt through the status capability');
+select pg_temp.w08_assert(public.read_account_deletion_receipt(pg_temp.w08_id(1), pg_temp.w08_id(1002))->>'state' = 'in_progress'
   and public.read_account_deletion_receipt(pg_temp.w08_id(1), pg_temp.w08_id(1002))->'completionReceipt' = 'null'::jsonb, 'owner receipt read withholds the receipt until certification');
-select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(1), pg_temp.w08_id(1002))->>'outcome' = 'blocked', 'acquisition after Auth deletion answers blocked instead of issuing a fresh lease');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(1), pg_temp.w08_id(1002))->>'outcome' = 'busy', 'acquisition under a live post-Auth lease answers busy instead of issuing a fresh lease');
 select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(1), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='first'))->>'outcome' = 'stale_lease', 'fenced stale lease cannot certify a receipt');
 select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(2), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='takeover'))->>'outcome' = 'stale_lease', 'certification is bound to the operation owner');
 select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(1), pg_temp.w08_id(1002), gen_random_uuid())->>'outcome' = 'stale_lease', 'a forged lease token cannot certify a receipt');
 select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(1), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='first'), 'completion_unverified')->>'outcome' = 'stale_lease', 'fenced stale worker cannot record residue after Auth deletion');
-select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(1), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='takeover'), 'checkpoint_unavailable')->>'outcome' = 'stale_lease', 'only the residue verdict may be recorded against the retained post-Auth lease');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(1), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='takeover'), 'checkpoint_unavailable')->>'outcome' = 'stale_lease', 'only the post-Auth verdicts may be recorded against the retained post-Auth lease');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(1), pg_temp.w08_id(1002), (select (data->>'leaseToken')::uuid from w08_results where name='takeover'), 'apple_cleanup_unavailable')->>'outcome' = 'stale_lease', 'a pre-Auth verdict cannot be recorded against the retained post-Auth lease');
 reset role;
 select pg_temp.w08_assert((select o.completed_at is null and o.last_error_code is null and o.lease_token = (r.data->>'leaseToken')::uuid
   from api_private.account_deletion_operations o, w08_results r where o.id = pg_temp.w08_id(1002) and r.name = 'takeover'),
@@ -350,7 +352,7 @@ select public.set_account_deletion_auth_intent(pg_temp.w08_id(6), pg_temp.w08_id
 reset role;
 delete from auth.users where id = pg_temp.w08_id(6);
 select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1006), pg_temp.w08_cap(6))
-  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'legacy manual Apple outcome is withheld until the worker certifies');
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'legacy manual Apple outcome is withheld until the worker certifies');
 set local role service_role;
 select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(6), pg_temp.w08_id(1006), (select (data->>'leaseToken')::uuid from w08_results where name='manual'))->>'state' = 'completed', 'legacy manual Apple operation certifies with its retained lease');
 reset role;
@@ -427,7 +429,6 @@ set local role service_role;
 select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1008), pg_temp.w08_cap(8))
   = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'status after residue is blocked with no receipt');
 select pg_temp.w08_assert(public.read_account_deletion_receipt(pg_temp.w08_id(8), pg_temp.w08_id(1008))->'completionReceipt' = 'null'::jsonb, 'owner receipt read after residue withholds the receipt');
-select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(8), pg_temp.w08_id(1008))->>'outcome' = 'blocked', 'residue cannot be retried with a fresh lease once the identity is gone');
 select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='newer_credential'))->>'outcome' = 'stale_lease', 'the released residue lease can never certify a receipt afterwards');
 select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='newer_credential'), 'completion_unverified')->>'outcome' = 'stale_lease', 'a residue verdict is recorded once');
 reset role;
@@ -435,6 +436,135 @@ select pg_temp.w08_assert((select completed_at is null and last_error_code = 'co
   from api_private.account_deletion_operations where id = pg_temp.w08_id(1008)), 'residue verdict is durable and never becomes a receipt');
 select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
   union all (table w08_ledger_before except table public.free_rating_ledger)), 'certification and residue verdicts do not alter the free-rating ledger');
+
+-- Round 5: a residue verdict is not a dead end. The post-Auth phase is
+-- re-acquired under the exact binding (a fresh lease, no external step
+-- repeated), residue found again is recorded again, and only a clean sweep
+-- certifies — exactly once.
+set local role service_role;
+insert into w08_results values ('residue_retry', public.claim_account_deletion_work(pg_temp.w08_id(8), pg_temp.w08_id(1008)));
+select pg_temp.w08_assert((select data->>'outcome' = 'claimed' and (data->>'authDeleted')::boolean and (data->>'appleCompleted')::boolean
+  and data->>'appleAction' = 'revoked' and data->'appleRefreshTokenEncrypted' = 'null'::jsonb
+  and (data->>'revenueCatCompleted')::boolean and (data->>'revenueCatAlreadyDeleted')::boolean
+  from w08_results where name='residue_retry'), 'the residue verdict is re-acquired as a post-Auth claim with every external step already complete');
+select pg_temp.w08_assert((select a.data->>'leaseToken' <> b.data->>'leaseToken' and a.data->>'confirmedAt' = b.data->>'confirmedAt'
+  and a.data->>'operationId' = b.data->>'operationId' from w08_results a, w08_results b where a.name='newer_credential' and b.name='residue_retry'),
+  'post-Auth re-acquisition issues a fresh lease on the same operation and confirmation');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1008), pg_temp.w08_cap(8))
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'a re-acquired post-Auth sweep reads in_progress with no receipt');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(8), pg_temp.w08_id(1008))->>'outcome' = 'busy', 'a live re-acquired post-Auth lease is not issued twice');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='newer_credential'))->>'outcome' = 'stale_lease', 'the released residue lease stays fenced after re-acquisition');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(2), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='residue_retry'))->>'outcome' = 'stale_lease', 'a re-acquired lease certifies only for its own owner');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='residue_retry'), 'completion_unverified')->>'outcome' = 'released', 'residue found again is recorded against the re-acquired lease');
+reset role;
+select pg_temp.w08_assert((select auth_deleted_at is not null and completed_at is null and phase = 'auth_delete_intent'
+  and lease_token is null and attempts = 2 and last_error_code = 'completion_unverified'
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1008)), 'a second residue verdict leaves the row uncertified and blocked without a receipt');
+set local role service_role;
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1008), pg_temp.w08_cap(8))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'status after a repeated residue verdict is blocked with no receipt');
+insert into w08_results values ('clean_retry', public.claim_account_deletion_work(pg_temp.w08_id(8), pg_temp.w08_id(1008)));
+select pg_temp.w08_assert((select data->>'outcome' = 'claimed' and (data->>'authDeleted')::boolean from w08_results where name='clean_retry'), 'the phase is re-acquired again for the clean sweep');
+insert into w08_results values ('residue_certified', public.certify_account_deletion_completion(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='clean_retry')));
+select pg_temp.w08_assert((select data->>'state' = 'completed' and data->'completionReceipt'->>'completedAt' is not null
+  and data->>'appleAuthorizationRevocation' = 'revoked' from w08_results where name='residue_certified'), 'the clean sweep after residue certifies completion with the re-acquired lease');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(8), pg_temp.w08_id(1008), (select (data->>'leaseToken')::uuid from w08_results where name='clean_retry'))->>'outcome' = 'stale_lease', 'the re-acquired lease certifies exactly once');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(8), pg_temp.w08_id(1008))->>'outcome' = 'completed', 'recovery after the late certification reads completion');
+reset role;
+select pg_temp.w08_assert((select o.phase = 'completed' and o.completed_at > o.auth_deleted_at and o.lease_token is null and o.attempts = 3
+  and o.last_error_code is null and o.completed_at = (r.data->'completionReceipt'->>'completedAt')::timestamptz
+  from api_private.account_deletion_operations o, w08_results r where o.id = pg_temp.w08_id(1008) and r.name = 'residue_certified'),
+  'the late certification is the single durable receipt and follows the Auth delete');
+
+-- Round 5: the worker dies after the Auth delete (or its deleteUser response is
+-- lost). The retained lease reads in_progress while live and is busy to others;
+-- once expired, nobody certifies with it, the status is still recoverable, and
+-- exactly one worker re-acquires the phase under the exact binding.
+set local role service_role;
+select public.begin_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), pg_temp.w08_challenge(10,2010), pg_temp.w08_cap(10));
+select public.begin_account_deletion_operation(pg_temp.w08_id(11), pg_temp.w08_id(1011), pg_temp.w08_challenge(11,2011), pg_temp.w08_cap(11));
+reset role;
+update api_private.account_deletion_operations
+  set created_at = created_at - interval '10 seconds', challenge_expires_at = challenge_expires_at - interval '10 seconds',
+    status_expires_at = status_expires_at - interval '10 seconds', retain_until = retain_until - interval '10 seconds'
+  where owner_id in (pg_temp.w08_id(10), pg_temp.w08_id(11));
+set local role service_role;
+insert into w08_results values ('crash', public.confirm_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_challenge(10,2010), pg_temp.w08_id(1010)));
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'));
+reset role;
+delete from auth.users where id = pg_temp.w08_id(10);
+set local role service_role;
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1010), pg_temp.w08_cap(10))
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'a live post-Auth sweep reads in_progress, never blocked');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1010))->>'outcome' = 'busy', 'a live post-Auth lease is not re-issued');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(11), pg_temp.w08_id(1010))->>'outcome' = 'invalid', 'another owner cannot claim the post-Auth phase');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1011))->>'outcome' = 'invalid', 'another operation cannot claim the post-Auth phase');
+reset role;
+update api_private.account_deletion_operations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w08_id(1010);
+set local role service_role;
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'))->>'outcome' = 'stale_lease', 'an expired retained lease cannot certify');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'), 'completion_unverified')->>'outcome' = 'stale_lease', 'an expired retained lease cannot record a verdict');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1010), pg_temp.w08_cap(10))
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'an expired post-Auth lease without a verdict is recoverable, not blocked');
+insert into w08_results values ('reacquired', public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1010)));
+select pg_temp.w08_assert((select b.data->>'outcome' = 'claimed' and (b.data->>'authDeleted')::boolean and (b.data->>'appleCompleted')::boolean
+  and b.data->>'appleAction' = 'not_applicable' and b.data->'appleRefreshTokenEncrypted' = 'null'::jsonb
+  and (b.data->>'revenueCatCompleted')::boolean and (b.data->>'revenueCatAlreadyDeleted')::boolean
+  and a.data->>'leaseToken' <> b.data->>'leaseToken' and a.data->>'confirmedAt' = b.data->>'confirmedAt'
+  from w08_results a, w08_results b where a.name='crash' and b.name='reacquired'), 'the expired post-Auth phase is re-acquired with a fresh lease and no external step to repeat');
+reset role;
+select pg_temp.w08_assert((select attempts = 2 and last_error_code is null and completed_at is null and phase = 'auth_delete_intent'
+  and lease_expires_at > clock_timestamp() from api_private.account_deletion_operations where id = pg_temp.w08_id(1010)), 'post-Auth re-acquisition spends one attempt and renews the lease');
+set local role service_role;
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='crash'))->>'outcome' = 'stale_lease', 'the expired lease stays fenced after re-acquisition');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1010))->>'outcome' = 'busy', 're-acquired post-Auth lease is exclusive');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='reacquired'), 'auth_delete_unavailable')->>'outcome' = 'released', 'a lost Auth-delete response is recorded against the post-Auth lease');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1010), pg_temp.w08_cap(10))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'a recorded post-Auth verdict reads blocked with no receipt');
+insert into w08_results values ('reacquired_again', public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1010)));
+select pg_temp.w08_assert((select data->>'outcome' = 'claimed' and (data->>'authDeleted')::boolean from w08_results where name='reacquired_again'), 'a released post-Auth verdict is re-acquired');
+insert into w08_results values ('crash_certified', public.certify_account_deletion_completion(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='reacquired_again')));
+select pg_temp.w08_assert((select data->>'state' = 'completed' and data->>'appleAuthorizationRevocation' = 'not_applicable' from w08_results where name='crash_certified'), 'the recovered sweep certifies completion');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(10), pg_temp.w08_id(1010), (select (data->>'leaseToken')::uuid from w08_results where name='reacquired_again'))->>'outcome' = 'stale_lease', 'the recovered sweep certifies exactly once');
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(10), pg_temp.w08_id(1010))->>'outcome' = 'completed', 'recovery after certification reads completion');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1010), pg_temp.w08_cap(10))->>'state' = 'completed'
+  and public.read_account_deletion_status(pg_temp.w08_id(1010), pg_temp.w08_cap(10))->'completionReceipt'->>'completedAt' is not null, 'status hands out the certified receipt');
+reset role;
+select pg_temp.w08_assert((select phase = 'completed' and completed_at > auth_deleted_at and lease_token is null and attempts = 3 and last_error_code is null
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1010)), 'the recovered receipt follows the Auth delete');
+
+-- Round 5: post-Auth recovery keeps the retry budget and the identity binding.
+set local role service_role;
+insert into w08_results values ('budget', public.confirm_account_deletion_operation(pg_temp.w08_id(11), pg_temp.w08_challenge(11,2011), pg_temp.w08_id(1011)));
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(11), pg_temp.w08_id(1011), (select (data->>'leaseToken')::uuid from w08_results where name='budget'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(11), pg_temp.w08_id(1011), (select (data->>'leaseToken')::uuid from w08_results where name='budget'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(11), pg_temp.w08_id(1011), (select (data->>'leaseToken')::uuid from w08_results where name='budget'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(11), pg_temp.w08_id(1011), (select (data->>'leaseToken')::uuid from w08_results where name='budget'));
+reset role;
+delete from auth.users where id = pg_temp.w08_id(11);
+update api_private.account_deletion_operations set lease_expires_at = clock_timestamp() - interval '1 second', attempts = 8 where id = pg_temp.w08_id(1011);
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(11), pg_temp.w08_id(1011))->>'outcome' = 'blocked', 'post-Auth re-acquisition stops at eight attempts');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1011), pg_temp.w08_cap(11))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'an exhausted post-Auth operation reads blocked with no receipt');
+reset role;
+update api_private.account_deletion_operations set attempts = 1 where id = pg_temp.w08_id(1011);
+insert into auth.users (id, email, raw_app_meta_data) values (pg_temp.w08_id(11), 'w08-test-11@example.test', '{"provider":"google"}');
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(11), pg_temp.w08_id(1011))->>'outcome' = 'blocked', 'a recreated identity under the same id cannot re-acquire the post-Auth phase');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(11), pg_temp.w08_id(1011), (select (data->>'leaseToken')::uuid from w08_results where name='budget'))->>'outcome' = 'stale_lease', 'a recreated identity cannot be certified as deleted');
+reset role;
+select pg_temp.w08_assert((select completed_at is null and phase = 'auth_delete_intent' and attempts = 1 and lease_token = (r.data->>'leaseToken')::uuid
+  from api_private.account_deletion_operations o, w08_results r where o.id = pg_temp.w08_id(1011) and r.name='budget'), 'refused post-Auth re-acquisition leaves the row untouched');
+delete from auth.users where id = pg_temp.w08_id(11);
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(11), pg_temp.w08_id(1011))->>'outcome' = 'claimed', 'once the identity is gone again the post-Auth phase is re-acquired');
+reset role;
+select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
+  union all (table w08_ledger_before except table public.free_rating_ledger)), 'post-Auth recovery does not alter the free-rating ledger');
 
 select 'W08 SQL assertions passed: ' || count(*) from w08_assertions;
 rollback;
