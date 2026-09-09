@@ -19,9 +19,17 @@
  * fully spent pass is not READY; a server-answered HOLD is not described as
  * an unanswered one; corrupt journal state never yields a zero count; and an
  * inconsistent remaining time is never presented as a live pass.
+ *
+ * Round 3 pins what the second candidate got wrong: a card that stays on
+ * screen must keep following the ledger — a HOLD the sync drain resolves
+ * (on the foreground transition that started the drain, or on the drain's
+ * own timer) leaves the screen without navigation; Settings re-reads on
+ * foreground like Analyze; a pass whose trusted end passes while the ready
+ * screen is open stops being READY; and a fully spent pass never announces
+ * "0 held analyses" whatever the lease verdict.
  */
 import React from 'react';
-import { Text } from 'react-native';
+import { AppState, Text, type AppStateStatus } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
@@ -34,7 +42,10 @@ import {
   OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
 } from '@pickle/shared-types';
 import type { LocalDb } from '../src/data/db';
-import type { TrustedTimeReading } from '../src/data/trustedTime';
+import type {
+  TrustedTimeLeaseVerdict,
+  TrustedTimeReading,
+} from '../src/data/trustedTime';
 
 jest.mock('../src/config/authConfig', () => ({
   GOOGLE_WEB_CLIENT_ID: null,
@@ -117,6 +128,7 @@ import {
 import {
   clearApiSession,
   establishApiSession,
+  getApiSession,
 } from '../src/account/apiSession';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
 import { useConsentStore } from '../src/state/consentStore';
@@ -150,6 +162,12 @@ import {
   reconcileOfflineWallet,
   type OfflineWalletStatus,
 } from '../src/data/offlineWallet';
+import {
+  SYNC_RETRY_BASE_MS,
+  clearSyncRuntime,
+  configureSyncRuntime,
+  triggerOutboxSync,
+} from '../src/data/syncRuntime';
 import {
   closeSqliteTestDatabases,
   createSqliteTestDb,
@@ -306,6 +324,18 @@ function anchored(nowMs: number): TrustedTimeReading {
 
 /** Anchored exactly at issue: six whole days of lease remain. */
 const AT_ISSUE = anchored(ISSUED_AT * 1000);
+const HALF_HOUR_MS = 30 * 60 * 1000;
+const HALF_HOUR_BEFORE_EXPIRY = anchored(EXPIRES_AT * 1000 - HALF_HOUR_MS);
+const AFTER_EXPIRY = anchored(EXPIRES_AT * 1000 + 1000);
+/** The phone has never confirmed the time with the server. */
+const NO_TRUSTED_TIME: TrustedTimeReading = {
+  authority: 'none',
+  continuity: 'unmeasured',
+  nowMs: ISSUED_AT * 1000,
+  wallClockMs: ISSUED_AT * 1000,
+  rollbackDetected: false,
+  storage: 'empty',
+};
 
 function consumption(operationId: string) {
   return {
@@ -1131,5 +1161,286 @@ describe('W05-04 presenter boundaries', () => {
     });
     expect(copy).toContain('READY');
     expect(copy).toContain('In under an hour');
+  });
+
+  it('never announces a zero count for a fully spent pass, whatever the lease verdict', () => {
+    const verdicts: TrustedTimeLeaseVerdict[] = [
+      { kind: 'expired' },
+      { kind: 'reconcile_required', reason: 'no_trusted_time' },
+      { kind: 'reconcile_required', reason: 'clock_rollback' },
+    ];
+    for (const execution of verdicts) {
+      const copy = copyOf({
+        kind: 'read',
+        allocation: {
+          grants: [{ ...activeGrant(0), remaining: 0, consumed: 2, execution }],
+          spendableTickets: 0,
+          consumedTickets: 2,
+          pendingReceipts: 0,
+        },
+        wallet: quietWallet,
+      });
+      expect(copy).toContain('0 of 2');
+      expect(copy).not.toMatch(/\b0 held analys/);
+      expect(copy).not.toMatch(/\bYour 0\b/);
+      expectDossierCompliant(copy);
+    }
+  });
+});
+
+describe('W05-04 the card keeps following the ledger while it stays on screen', () => {
+  type ChangeListener = (state: AppStateStatus) => void;
+  const appStateListeners = new Set<ChangeListener>();
+  const originalAppState = AppState.currentState;
+
+  /** The OS transitions as every shipping AppState subscriber sees them. */
+  function foreground() {
+    AppState.currentState = 'active';
+    for (const listener of [...appStateListeners]) listener('active');
+  }
+
+  function background() {
+    AppState.currentState = 'background';
+    for (const listener of [...appStateListeners]) listener('background');
+  }
+
+  const RECEIPTS_PATH = '/v1/offline/receipts';
+
+  /** The connection is down: every request fails before an answer. */
+  function loseConnection() {
+    fetchSpy?.mockRestore();
+    fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new TypeError('Network request failed');
+    });
+  }
+
+  /** Answers every presented receipt with `status`, but only once released,
+   * so the server's answer can be ordered after the card's own reads. The
+   * route is matched by path: the sync runtime builds its client on the API
+   * session's origin, the direct drain on the grant issuer. */
+  function answerReceiptsWhenReleased(status: string): {
+    release(): void;
+    presented(): number;
+  } {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let presented = 0;
+    fetchSpy?.mockRestore();
+    fetchSpy = jest
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input, init) => {
+        if (new URL(String(input)).pathname !== RECEIPTS_PATH) {
+          return new Response(JSON.stringify({ error: 'not_found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        presented += 1;
+        await gate;
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          receipts?: Array<{ receiptId: string }>;
+        };
+        return new Response(
+          JSON.stringify({
+            receipts: (body.receipts ?? []).map(receipt => ({
+              receiptId: receipt.receiptId,
+              status,
+            })),
+            rejected: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
+    return { release: () => release(), presented: () => presented };
+  }
+
+  /** `settle()` for a test running on fake timers: flushes due timers and
+   * the promise chains behind them without advancing the clock. */
+  async function settleFake() {
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(0);
+      });
+    }
+  }
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+    await settleFake();
+  }
+
+  function apiSession() {
+    const session = getApiSession();
+    if (!session) throw new Error('the test signs in before configuring sync');
+    return session;
+  }
+
+  beforeEach(() => {
+    appStateListeners.clear();
+    AppState.currentState = 'active';
+    jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((event, listener) => {
+        expect(event).toBe('change');
+        const change = listener as ChangeListener;
+        appStateListeners.add(change);
+        return { remove: jest.fn(() => appStateListeners.delete(change)) };
+      });
+  });
+
+  afterEach(async () => {
+    if (mounted) await act(async () => mounted?.unmount());
+    mounted = null;
+    clearSyncRuntime();
+    jest.useRealTimers();
+    AppState.currentState = originalAppState;
+    jest.restoreAllMocks();
+  });
+
+  it('Analyze states READY once the drain the foreground transition started records the result', async () => {
+    await holdGrant();
+    await spend('op-1');
+    // The shipping sync runtime presents the receipt and the connection drops
+    // before the answer: a HOLD, recorded by the runtime's own drain.
+    loseConnection();
+    configureSyncRuntime(apiSession());
+    await triggerOutboxSync();
+    expect((await ledgerTruth()).wallet.hold).toBe(true);
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+
+    background();
+    const answer = answerReceiptsWhenReleased('result_recorded');
+    await act(async () => {
+      foreground();
+    });
+    await settle();
+    // The runtime's drain re-presented the receipt on the same transition
+    // and is still waiting for the server: the HOLD stands, honestly.
+    expect(answer.presented()).toBe(1);
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+
+    answer.release();
+    await settle();
+    await settle();
+    const truth = await ledgerTruth();
+    expect(truth.wallet.hold).toBe(false);
+    expect(truth.pending).toHaveLength(0);
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('Nothing');
+    expect(copy).not.toContain('on hold');
+    expect(copy).not.toContain('awaiting confirmation');
+    expectDossierCompliant(copy);
+  });
+
+  it('Analyze states READY within the sync cadence after a timer-driven drain resolved the HOLD, with no navigation or foreground event', async () => {
+    jest.useFakeTimers();
+    await holdGrant();
+    await spend('op-1');
+    await presentAndLoseConnection();
+    const renderer = await render(<AnalyzeScreen />);
+    await settleFake();
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+
+    const outcome = await presentAndReceive('result_recorded');
+    expect(outcome.accepted).toBe(1);
+    expect((await ledgerTruth()).wallet.hold).toBe(false);
+    handle.calls.length = 0;
+
+    await advance(SYNC_RETRY_BASE_MS);
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('1 of 2');
+    expect(copy).toContain('Nothing');
+    expect(copy).not.toContain('on hold');
+    // The card caught up by reading; it wrote nothing.
+    expect(handle.calls.length).toBeGreaterThan(0);
+    expect(handle.calls.filter(call => WRITE_STATEMENT.test(call.sql))).toEqual(
+      [],
+    );
+  });
+
+  it('Settings states READY after a HOLD resolved across a background/foreground cycle', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await presentAndLoseConnection();
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+
+    background();
+    const outcome = await presentAndReceive('result_recorded');
+    expect(outcome.accepted).toBe(1);
+    await act(async () => {
+      foreground();
+    });
+    await settle();
+
+    expect((await ledgerTruth()).wallet.hold).toBe(false);
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('Nothing');
+    expect(copy).not.toContain('on hold');
+  });
+
+  it('Analyze stops calling a pass READY once trusted time passes its end while the ready screen stays open', async () => {
+    jest.useFakeTimers();
+    mockReading = HALF_HOUR_BEFORE_EXPIRY;
+    await holdGrant();
+    const renderer = await render(<AnalyzeScreen />);
+    await settleFake();
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(textOf(card(renderer))).toContain('In under an hour');
+
+    // Trusted time has not moved on: the phone's timers alone prove nothing.
+    await advance(HALF_HOUR_MS - 60_000);
+    expect(badgeOf(renderer)).toBe('READY');
+
+    mockReading = AFTER_EXPIRY;
+    expect(
+      (await readOfflineAllocation(db, AFTER_EXPIRY)).grants[0]?.execution.kind,
+    ).toBe('expired');
+    await advance(2 * 60_000);
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('EXPIRED');
+    expect(copy).not.toContain('In under an hour');
+    expect(copy).toContain('Expired');
+    expectDossierCompliant(copy);
+  });
+
+  it('an expired, fully spent pass never announces "0 held analyses" on Analyze', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await spend('op-2');
+    mockReading = AFTER_EXPIRY;
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('EXPIRED');
+    expect(copy).toContain('0 of 2');
+    expect(copy).not.toMatch(/\b0 held analys/);
+    expect(copy).not.toMatch(/\bYour 0\b/);
+    expectDossierCompliant(copy);
+  });
+
+  it('an unconfirmed, fully spent pass never announces "0 held analyses" on Settings', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await spend('op-2');
+    mockReading = NO_TRUSTED_TIME;
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('CONFIRM ONLINE');
+    expect(copy).toContain('0 of 2');
+    expect(copy).not.toMatch(/\b0 held analys/);
+    expect(copy).not.toMatch(/\bYour 0\b/);
+    expectDossierCompliant(copy);
   });
 });
