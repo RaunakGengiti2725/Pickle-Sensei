@@ -43,7 +43,7 @@
 //         --config deno.json rateLimit_nat_budget.test.ts
 
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
-import { enforceRateLimit, peekRateLimit } from "../rateLimit.ts";
+import { peekRateLimit } from "../rateLimit.ts";
 import { loadIsolate, type RateLimitModule } from "./harness.ts";
 import {
   fakeSupabaseAccessToken,
@@ -533,6 +533,7 @@ Deno.test(
   async () => {
     await withPinnedClock(async () => {
       const h = await loadHarness();
+      h.tables.profiles = [profile()];
       const ip = freshIp();
       const usedRefresh = new Set<string>();
       installAuth(h, { usedRefresh });
@@ -546,7 +547,10 @@ Deno.test(
       });
       assertEquals(count(stale, 401), PER_MINUTE_ROUTE_LIMIT, `statuses ${stale.join(",")}`);
       assertEquals(await egressCharged(ip), 0, "a rotated-away token is no guess");
-      assertEquals((await readMe(h.handler, ip, fakeSupabaseAccessToken(TEST_USER_ID))).status, 200);
+      assertEquals(
+        (await readMe(h.handler, ip, fakeSupabaseAccessToken(TEST_USER_ID))).status,
+        200,
+      );
     });
   },
 );
@@ -573,7 +577,9 @@ Deno.test(
 
       // The handsets (or their stale tabs) keep presenting the fenced bearer.
       clock.advance(60_000);
-      const fenced = await repeat(PER_MINUTE_ROUTE_LIMIT, (i) => readMe(h.handler, ip, handsets[i]));
+      const fenced = await repeat(PER_MINUTE_ROUTE_LIMIT, (i) =>
+        readMe(h.handler, ip, handsets[i]),
+      );
       assertEquals(count(fenced, 401), PER_MINUTE_ROUTE_LIMIT, `statuses ${fenced.join(",")}`);
       assertEquals(h.calls.filter(isUserCall).length, userCallsAfterLogout, "fenced locally");
       assertEquals(await egressCharged(ip), 0, "a fence this edge applied is not a guess");
@@ -639,7 +645,10 @@ Deno.test(
       assertEquals(count(statuses, 503), 40, `statuses ${statuses.join(",")}`);
       assertEquals(await egressCharged(ip), 0);
       h.userStatus = 200;
-      assertEquals((await readMe(h.handler, ip, fakeSupabaseAccessToken(TEST_USER_ID))).status, 200);
+      assertEquals(
+        (await readMe(h.handler, ip, fakeSupabaseAccessToken(TEST_USER_ID))).status,
+        200,
+      );
     });
   },
 );
@@ -812,7 +821,11 @@ Deno.test(
         refreshToken: sessionRefreshToken(refreshed.body),
       };
       assert(rotated.accessToken && rotated.refreshToken);
-      assertEquals((await readMe(h.handler, ip, rotated.accessToken)).status, 200, "rotated bearer");
+      assertEquals(
+        (await readMe(h.handler, ip, rotated.accessToken)).status,
+        200,
+        "rotated bearer",
+      );
 
       // Fifty minutes on the flood is still running (a fresh window, thirty
       // fresh guesses): the rotated-into token is vouched for as well.
@@ -1063,7 +1076,10 @@ Deno.test(
         error_description: "Invalid Refresh Token: Refresh Token Not Found",
         error_code: "refresh_token_not_found",
       },
-      { error: "invalid_grant", error_description: "Invalid Refresh Token: Refresh Token Not Found" },
+      {
+        error: "invalid_grant",
+        error_description: "Invalid Refresh Token: Refresh Token Not Found",
+      },
       {
         name: "AuthApiError",
         status: 400,
@@ -1162,8 +1178,13 @@ Deno.test(
       const refresh = await authCredentialIdentity(session.refreshToken);
       assert((await peekAuthFailureBudget(ip, bearer, budget)).allowed, "minted bearer");
       assert(
-        (await peekAuthFailureBudget(ip, await authCredentialIdentity(` ${session.accessToken} `), budget))
-          .allowed,
+        (
+          await peekAuthFailureBudget(
+            ip,
+            await authCredentialIdentity(` ${session.accessToken} `),
+            budget,
+          )
+        ).allowed,
         "whitespace around the bearer",
       );
       assert((await peekAuthFailureBudget(ip, refresh, budget)).allowed, "minted refresh");
@@ -1173,7 +1194,11 @@ Deno.test(
       // step is a fresh window, so the egress is saturated again each time.
       clock.advance(3_601_000);
       await saturate(ip);
-      assertEquals((await peekAuthFailureBudget(ip, bearer, budget)).allowed, false, "expired bearer");
+      assertEquals(
+        (await peekAuthFailureBudget(ip, bearer, budget)).allowed,
+        false,
+        "expired bearer",
+      );
       assert((await peekAuthFailureBudget(ip, refresh, budget)).allowed, "an hour idle");
       clock.advance(40 * DAY_MS);
       await saturate(ip);
@@ -1195,7 +1220,10 @@ Deno.test(
       clock.advance(2 * 60_000);
       await saturate(ip);
       assertEquals((await peekAuthFailureBudget(ip, refresh, budget)).allowed, false, "grace over");
-      assert((await peekAuthFailureBudget(ip, rotatedRefresh, budget)).allowed, "the current token");
+      assert(
+        (await peekAuthFailureBudget(ip, rotatedRefresh, budget)).allowed,
+        "the current token",
+      );
 
       // A refresh token idle for over a year is no longer vouched for (the
       // registry's hygiene bound); Auth still judges it once the window turns.
@@ -1232,7 +1260,11 @@ Deno.test(
         await chargeAuthFailure(venue, await authCredentialIdentity("rt-x"), "liveness", budget),
         "liveness",
       );
-      assertEquals(await egressSpent(venue), 1, "already_used is a sign-out wherever it was minted");
+      assertEquals(
+        await egressSpent(venue),
+        1,
+        "already_used is a sign-out wherever it was minted",
+      );
 
       // Refused as forged after all: its own shard and the egress hold it.
       for (let i = 0; i < budget.limit; i += 1) {
@@ -1247,17 +1279,34 @@ Deno.test(
   "minted registry: a venue session presented while 55,000 later sessions are minted on the isolate stays vouched for (recently used entries survive eviction); a never-presented one from before them is forgotten",
   async () => {
     await withPinnedClock(async () => {
-      const { authCredentialIdentity, peekAuthFailureBudget, chargeAuthFailure, noteMintedSession } =
-        await loadPrimitives();
+      const {
+        authCredentialIdentity,
+        peekAuthFailureBudget,
+        chargeAuthFailure,
+        noteMintedSession,
+      } = await loadPrimitives();
       const budget = AUTH_FAILURE_LIMIT;
       const ip = "203.0.113.92";
       const expiresAt = Math.floor(Date.now() / 1000) + 3_600;
       for (let i = 0; i < budget.limit; i += 1) {
-        await chargeAuthFailure(ip, await authCredentialIdentity(`forged-${i}`), "credential", budget);
+        await chargeAuthFailure(
+          ip,
+          await authCredentialIdentity(`forged-${i}`),
+          "credential",
+          budget,
+        );
       }
 
-      const venue = { accessToken: `venue.${crypto.randomUUID()}`, refreshToken: "rt-venue", expiresAt };
-      const idle = { accessToken: `idle.${crypto.randomUUID()}`, refreshToken: "rt-idle", expiresAt };
+      const venue = {
+        accessToken: `venue.${crypto.randomUUID()}`,
+        refreshToken: "rt-venue",
+        expiresAt,
+      };
+      const idle = {
+        accessToken: `idle.${crypto.randomUUID()}`,
+        refreshToken: "rt-idle",
+        expiresAt,
+      };
       await noteMintedSession(venue);
       await noteMintedSession(idle);
       const venueBearer = await authCredentialIdentity(venue.accessToken);
@@ -1310,7 +1359,12 @@ Deno.test(
       // credential (liveness-marked) is admitted at the shard's next window
       // while never-seen ones are held.
       for (let i = 0; i < budget.limit; i += 1) {
-        await chargeAuthFailure(ip, await authCredentialIdentity(`forged-${i}`), "credential", budget);
+        await chargeAuthFailure(
+          ip,
+          await authCredentialIdentity(`forged-${i}`),
+          "credential",
+          budget,
+        );
       }
       const marked = await authCredentialIdentity("dead-marked");
       await chargeAuthFailure(ip, marked, "liveness", budget);
@@ -1319,7 +1373,8 @@ Deno.test(
       clock.advance(2_000);
       assert((await peekAuthFailureBudget(ip, marked, budget)).allowed, "liveness mark kept");
       assertEquals(
-        (await peekAuthFailureBudget(ip, await authCredentialIdentity("never-seen"), budget)).allowed,
+        (await peekAuthFailureBudget(ip, await authCredentialIdentity("never-seen"), budget))
+          .allowed,
         false,
       );
     });
@@ -1337,7 +1392,12 @@ Deno.test(
       // Fifty egresses each present 400 distinct forged credentials.
       for (let i = 0; i < 20_000; i += 1) {
         const egress = `198.51.100.${(i % 50) + 1}`;
-        await chargeAuthFailure(egress, await authCredentialIdentity(`forged-${i}`), "credential", budget);
+        await chargeAuthFailure(
+          egress,
+          await authCredentialIdentity(`forged-${i}`),
+          "credential",
+          budget,
+        );
       }
       // Every flooding egress is under stuffing: never-seen credentials there are held.
       const heldElsewhere = await peekAuthFailureBudget(
@@ -1365,7 +1425,9 @@ Deno.test(
       assert((await peekAuthFailureBudget(venue, novel, budget)).allowed);
       await chargeAuthFailure(venue, novel, "credential", budget);
       assertEquals(
-        spent(await peekAuthFailureBudget(venue, await authCredentialIdentity("venue-other"), budget)),
+        spent(
+          await peekAuthFailureBudget(venue, await authCredentialIdentity("venue-other"), budget),
+        ),
         1,
         "the egress signal is exact after the flood elsewhere",
       );
