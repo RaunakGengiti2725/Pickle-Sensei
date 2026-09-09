@@ -12,14 +12,21 @@
 //       refresh_token_not_found — a token it holds no row for) is decided by
 //       provenance: a refresh token THIS edge minted is liveness, one nothing
 //       here ever minted is a guess.
-//   C2  The stuffing signal counts DISTINCT refused guesses per egress. Once
-//       it reaches the budget, a credential nothing has vouched for is 429
+//   C2  The stuffing signal counts DISTINCT refused guesses per egress and per
+//       credential kind, named by the route (the bearer of any authenticated
+//       route is a session token; bootstrap spends a provider ID token; a
+//       refresh is judged by the refresh token in its body, never by its
+//       bearer header). Once it reaches the
+//       budget, a credential of that kind nothing has vouched for is 429
 //       before Auth; a vouched credential (minted here, verified here, or
 //       judged dead by Auth) is still judged by Auth — so a peer's session,
-//       its refresh, and a signed-out handset's 401 all survive a co-tenant
-//       flood, while forged novelty is bounded to the budget upstream.
+//       its refresh, a new handset's sign-in and a signed-out handset's 401
+//       all survive a co-tenant's bearer flood, while forged novelty is
+//       bounded to the budget upstream per kind.
 //   C3  A single credential refused `limit` times in a window is 429 before
-//       Auth (replay throttle), whatever the egress signal says.
+//       Auth (replay throttle), whatever the egress signal says — counting
+//       presentations still in flight, so parallel replays cannot race past
+//       the cap.
 //   C4  Shard storage is attacker-cardinality; when it cannot admit a shard
 //       the refusal is charged to the egress signal instead. Exhaustion
 //       therefore fails CLOSED on the egress, never open.
@@ -47,9 +54,11 @@ async function primitives() {
   configureRedis(false);
   const iso = await loadIsolate();
   const rl = iso.rateLimit;
-  const id = (label: string) => rl.authFailureIdentity(label) as Promise<string>;
-  const stuffing = async (ip: string) =>
-    BUDGET.limit - (await rl.peekAuthStuffing(ip, BUDGET)).remaining;
+  type Class = "session" | "provider" | "refresh";
+  const id = (label: string, credentialClass?: Class) =>
+    rl.authFailureIdentity(label, credentialClass) as Promise<string>;
+  const stuffing = async (ip: string, credentialClass?: Class) =>
+    BUDGET.limit - (await rl.peekAuthStuffing(ip, BUDGET, credentialClass)).remaining;
   return { rl, id, stuffing };
 }
 
@@ -59,6 +68,23 @@ function frozenClock(): () => void {
   Date.now = () => frozen;
   return () => {
     Date.now = realNow;
+  };
+}
+
+/** A clock pinned just past the start of an auth-failure window, so the test
+ * can step through per-minute route budgets without leaving the window. */
+function pinnedClock(): { advance: (ms: number) => void; restore: () => void } {
+  const realNow = Date.now;
+  const windowMs = BUDGET.windowSeconds * 1000;
+  let now = Math.floor(realNow() / windowMs) * windowMs + 1000;
+  Date.now = () => now;
+  return {
+    advance: (ms) => {
+      now += ms;
+    },
+    restore: () => {
+      Date.now = realNow;
+    },
   };
 }
 
@@ -174,13 +200,30 @@ Deno.test(
       assertEquals(res.headers.get("Retry-After"), String(novel.retryAfterSeconds));
       await res.body?.cancel();
 
-      for (const vouched of ["peer-access", "peer-a2", "peer-r2"]) {
+      for (const vouched of ["peer-access", "peer-a2"]) {
         assertEquals(
           (await rl.peekAuthFailureBudget(ip, await id(vouched), BUDGET)).allowed,
           true,
           vouched,
         );
       }
+      assertEquals(
+        (await rl.peekAuthFailureBudget(ip, await id("peer-r2", "refresh"), BUDGET)).allowed,
+        true,
+        "peer-r2",
+      );
+      // Each credential kind has its own stuffing signal: a bearer flood does
+      // not fence refresh tokens or ID tokens nobody vouched for.
+      assertEquals(await stuffing(ip, "refresh"), 0);
+      assertEquals(await stuffing(ip, "provider"), 0);
+      assertEquals(
+        (await rl.peekAuthFailureBudget(ip, await id("novel-rt", "refresh"), BUDGET)).allowed,
+        true,
+      );
+      assertEquals(
+        (await rl.peekAuthFailureBudget(ip, await id("novel-idt", "provider"), BUDGET)).allowed,
+        true,
+      );
       assertEquals(
         (await rl.peekAuthFailureBudget(ip, null, BUDGET)).allowed,
         true,
@@ -209,30 +252,36 @@ Deno.test(
         refresh_token: "rt-minted-here",
         expires_in: 3600,
       });
+      const rt = (label: string) => id(label, "refresh");
       for (let i = 0; i < 5; i += 1) {
-        await rl.chargeAuthFailure(ip, await id("rt-minted-here"), { kind: "not_found" }, BUDGET);
+        await rl.chargeAuthFailure(ip, await rt("rt-minted-here"), { kind: "not_found" }, BUDGET);
       }
-      assertEquals(await stuffing(ip), 0, "a signed-out handset retrying is not an attack");
-      await rl.chargeAuthFailure(ip, await id("rt-never-minted"), { kind: "not_found" }, BUDGET);
-      assertEquals(await stuffing(ip), 1, "a refresh token nobody minted is a guess");
+      assertEquals(
+        await stuffing(ip, "refresh"),
+        0,
+        "a signed-out handset retrying is not an attack",
+      );
+      await rl.chargeAuthFailure(ip, await rt("rt-never-minted"), { kind: "not_found" }, BUDGET);
+      assertEquals(await stuffing(ip, "refresh"), 1, "a refresh token nobody minted is a guess");
       // The refusal may name the credential it judged (a refresh judges the
       // body, not the bearer): the named identity is the one charged.
       await rl.chargeAuthFailure(
         ip,
         null,
-        { kind: "not_found", identity: await id("rt-other-forged") },
+        { kind: "not_found", identity: await rt("rt-other-forged") },
         BUDGET,
       );
-      assertEquals(await stuffing(ip), 2);
+      assertEquals(await stuffing(ip, "refresh"), 2);
       await rl.chargeAuthFailure(
         ip,
         await id("bearer"),
         { kind: "credential", identity: null },
         BUDGET,
       );
-      assertEquals(await stuffing(ip), 2, "a refusal naming no identity charges nothing");
+      assertEquals(await stuffing(ip), 0, "a refusal naming no identity charges nothing");
       await rl.chargeAuthFailure(ip, await id("bearer"), { kind: "local" }, BUDGET);
-      assertEquals(await stuffing(ip), 2, "local refusals charge nothing");
+      assertEquals(await stuffing(ip), 0, "local refusals charge nothing");
+      assertEquals(await stuffing(ip, "refresh"), 2);
     } finally {
       restore();
     }
@@ -526,20 +575,42 @@ Deno.test(
         }),
       );
       assertEquals(rotated.status, 200, `peer refresh → ${rotated.status}`);
-      const next = (rotated.body as { session: { accessToken: string } }).session.accessToken;
+      const next = (rotated.body as { session: { accessToken: string; refreshToken: string } })
+        .session;
       const checks = auth.userChecks;
-      assertEquals((await call(userRequest("GET", PROBE, { token: next, ip }))).status, 200);
+      assertEquals(
+        (await call(userRequest("GET", PROBE, { token: next.accessToken, ip }))).status,
+        200,
+      );
       assertEquals(auth.userChecks, checks + 1, "the rotated bearer was verified upstream");
 
-      // Forged novelty stays bounded: a sign-in nothing vouches for from the
-      // stuffed address waits for the window (retryable), never a lockout of
-      // established peers.
+      // A bearer flood is not an ID-token flood: a new handset still signs
+      // in, and a refresh token nothing here minted is still judged by Auth.
       const grants = auth.tokenGrants;
       const signIn = await call(
         userRequest("POST", "/v1/account/bootstrap", { token: handsetIdToken(), ip, body: {} }),
       );
-      assertEquals(signIn.status, 429);
-      assertEquals(auth.tokenGrants, grants, "no upstream grant was spent for it");
+      assertEquals(signIn.status, 200, `new handset signs in → ${signIn.status}`);
+      assertEquals(auth.tokenGrants, grants + 1);
+      const unknownRefresh = await call(
+        userRequest("POST", "/v1/auth/refresh", {
+          ip,
+          body: { refreshToken: `rt-${crypto.randomUUID()}` },
+        }),
+      );
+      assertEquals(unknownRefresh.status, 401, "judged by Auth, not deferred");
+      assertEquals(auth.tokenGrants, grants + 2);
+      // A refresh is gated by the refresh token it presents, never by a stale
+      // bearer header nothing vouches for any more.
+      const staleBearer = await call(
+        userRequest("POST", "/v1/auth/refresh", {
+          token: forgedBearer(),
+          ip,
+          body: { refreshToken: next.refreshToken },
+        }),
+      );
+      assertEquals(staleBearer.status, 200, `stale bearer, live refresh → ${staleBearer.status}`);
+      assertEquals(auth.tokenGrants, grants + 3);
 
       const neighbour = await call(
         userRequest("GET", PROBE, { token: forgedBearer(), ip: "100.64.11.2" }),
@@ -613,6 +684,93 @@ Deno.test(
         401,
         "the refused refresh token still tells the app to sign in again",
       );
+    } finally {
+      restore();
+    }
+  },
+);
+
+Deno.test(
+  "an ID-token flood on bootstrap is bounded to the budget upstream and defers only sign-ins: the venue's session bearers and refresh tokens stay judged by Auth",
+  async () => {
+    const clock = pinnedClock();
+    try {
+      const { auth, call, bootstrap } = await wire();
+      const ip = "100.64.14.1";
+      const peer = await bootstrap(ip);
+      clock.advance(60_000);
+
+      const grants = auth.tokenGrants;
+      for (let i = 0; i < BUDGET.limit; i += 1) {
+        const forged = await call(
+          userRequest("POST", "/v1/account/bootstrap", {
+            token: handsetIdToken(crypto.randomUUID()),
+            ip,
+            body: {},
+          }),
+        );
+        assertEquals(forged.status, 401, `forged ID token ${i + 1} is judged by Auth`);
+      }
+      assertEquals(auth.tokenGrants, grants + BUDGET.limit);
+      clock.advance(60_000);
+      const deferred = await call(
+        userRequest("POST", "/v1/account/bootstrap", { token: handsetIdToken(), ip, body: {} }),
+      );
+      assertEquals(deferred.status, 429, "a sign-in nothing vouches for waits for the window");
+      assertEquals(auth.tokenGrants, grants + BUDGET.limit, "no upstream grant was spent for it");
+
+      // Session bearers and refresh tokens are other kinds: a forged bearer is
+      // judged, the peer's refresh rotates, and the peer's rotated bearer is
+      // verified.
+      const checks = auth.userChecks;
+      assertEquals(
+        (await call(userRequest("GET", PROBE, { token: forgedBearer(), ip }))).status,
+        401,
+      );
+      assertEquals(auth.userChecks, checks + 1, "a session guess is still judged by Auth");
+      const rotated = await call(
+        userRequest("POST", "/v1/auth/refresh", {
+          token: peer.accessToken,
+          ip,
+          body: { refreshToken: peer.refreshToken },
+        }),
+      );
+      assertEquals(rotated.status, 200, `peer refresh → ${rotated.status}`);
+      const next = (rotated.body as { session: { accessToken: string } }).session.accessToken;
+      assertEquals((await call(userRequest("GET", PROBE, { token: next, ip }))).status, 200);
+    } finally {
+      clock.restore();
+    }
+  },
+);
+
+Deno.test(
+  "parallel replays of one forged bearer cannot race past the replay cap: of 120 concurrent presentations at most the budget reaches Auth",
+  async () => {
+    const restore = frozenClock();
+    try {
+      const { auth, call } = await wire();
+      const ip = "100.64.15.1";
+      const forged = forgedBearer();
+      const responses = await Promise.all(
+        Array.from({ length: 120 }, () => call(userRequest("GET", PROBE, { token: forged, ip }))),
+      );
+      const judged = responses.filter((r) => r.status === 401).length;
+      const deferred = responses.filter((r) => r.status === 429).length;
+      assertEquals(judged + deferred, 120);
+      assert(auth.userChecks <= BUDGET.limit, `Auth judged the replay ${auth.userChecks} times`);
+      assertEquals(judged, auth.userChecks);
+      assert(deferred >= 120 - BUDGET.limit);
+
+      // Once judged the credential replays no further; the egress holds one
+      // distinct guess, so a co-tenant's first guess is still judged.
+      assertEquals((await call(userRequest("GET", PROBE, { token: forged, ip }))).status, 429);
+      const checks = auth.userChecks;
+      assertEquals(
+        (await call(userRequest("GET", PROBE, { token: forgedBearer(), ip }))).status,
+        401,
+      );
+      assertEquals(auth.userChecks, checks + 1);
     } finally {
       restore();
     }
