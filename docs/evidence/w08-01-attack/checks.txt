@@ -1,0 +1,15 @@
+# W08-01 attack checks on candidate c77ce0b280f74e2894d4c23acc9bd55c09e1f4c8
+
+$ cd apps/mobile && npx tsc --noEmit
+exit 0 (see tsc.txt, empty output)
+
+$ npx eslint apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx
+exit 0
+
+$ npx prettier --check apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx
+Checking formatting...
+All matched files use Prettier code style!
+exit 0
+
+$ cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx
+exit 1 — Tests: 6 failed, 15 passed, 21 total (attack-run.txt)
