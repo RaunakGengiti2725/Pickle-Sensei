@@ -26,7 +26,7 @@ const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
 const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
 const ANALYSIS_RELEASE_AUTHORITY = "20260908020000_analysis_release_authority.sql";
 const PERMIT_PARTIAL_OUTCOME = "20260908100000_permit_partial_terminal_outcome.sql";
-const OFFLINE_DEVICE_GRANTS = "20260908120000_offline_device_grants.sql";
+const OFFLINE_DEVICE_GRANTS = "20260908160000_offline_device_grants.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -1767,8 +1767,33 @@ Deno.test(
       ),
       "the append-only guard is wired",
     );
+    // Round 7 (ATK-05): (ticket_id, event) lets 'consumed' and 'released'
+    // coexist on one ticket; the table itself must hold ONE terminal row per
+    // ticket, whichever writer or lock the two settlers came through.
+    ok(
+      statements.includes(
+        "create unique index if not exists offline_allocation_ledger_one_terminal_idx on public.offline_allocation_ledger (ticket_id) where event in ('consumed', 'released')",
+      ),
+      "a ticket carries at most one terminal event (unique partial index over ticket_id where event in consumed/released)",
+    );
+    const [ticketLock] = apiPrivateFunctionBodies(raw, "offline_ticket_lock_key");
+    ok(
+      ticketLock.includes(
+        "pg_catalog.hashtextextended('pickle.offline-ticket:' || p_ticket_id::text, 0)",
+      ) && ticketLock.includes("immutable"),
+      "the per-ticket advisory key is derived from the ticket id in its own namespace (never collides with access_lock_key)",
+    );
     const [eventGuard] = functionBodies(raw, "guard_offline_ledger_event");
     ok(eventGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_ledger_event`);
+    ok(
+      eventGuard.indexOf(
+        "pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(new.ticket_id))",
+      ) > -1 &&
+        eventGuard.indexOf(
+          "pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(new.ticket_id))",
+        ) < eventGuard.indexOf("t.event in ('consumed', 'released')"),
+      "the event guard takes the ticket's lock before reading the ticket's allocation/terminal state",
+    );
     ok(
       eventGuard.includes("security definer") && eventGuard.includes("set search_path = ''"),
       "the event guard is a pinned definer",
@@ -1881,6 +1906,7 @@ Deno.test(
       "offline_identity_hashes(uuid)",
       "offline_ticket_owned_by(uuid, text[], uuid, uuid)",
       "offline_owned_allocations(uuid)",
+      "offline_ticket_lock_key(uuid)",
     ]) {
       const [body] = apiPrivateFunctionBodies(raw, helper.split("(")[0]);
       ok(body, `${OFFLINE_DEVICE_GRANTS} must define api_private.${helper}`);
@@ -2082,6 +2108,21 @@ Deno.test(
         `public.${name} is never granted back to a non-user role`,
       );
     }
+    // Round 7 (ATK-01): a first registration has no row for `for update` to
+    // lock, so two overlapping submits of one (user, key) both insert and the
+    // loser raises 23505. The user lock is taken BEFORE the lookup, and a
+    // unique_violation (any writer the lock did not order) replays the row.
+    const [register] = functionBodies(raw, "register_offline_device");
+    const registerLock = register.indexOf(
+      "pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))",
+    );
+    ok(
+      registerLock > -1 &&
+        registerLock < register.indexOf("from public.offline_devices") &&
+        /exception\s+when unique_violation then/.test(register) &&
+        !register.includes("on conflict"),
+      "register_offline_device serialises on access_lock_key(uid) before its lookup and replays the existing row on a unique violation — idempotent under a double submit",
+    );
     const [issue] = functionBodies(raw, "issue_offline_grant");
     ok(
       issue.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
@@ -2176,6 +2217,20 @@ Deno.test(
           `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
         ) && !body.includes("a.user_id = v_uid"),
         `public.${name} addresses the caller's tickets by account OR identity (allocation-time or late-linked)`,
+      );
+      // Round 7 (ATK-05): two recovered sibling accounts own one ticket under
+      // DIFFERENT access_lock_key(uid) values, so the caller's lock alone lets
+      // consume and release both succeed. Both settlers must also take the
+      // TICKET's lock before reading the ledger, and answer the ticket verdict
+      // (not a SQL error) when the index still catches a second terminal row.
+      const ticketLockAt = body.indexOf(
+        "pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id))",
+      );
+      ok(
+        ticketLockAt > -1 &&
+          ticketLockAt < body.indexOf("from public.offline_allocation_ledger") &&
+          /exception\s+when unique_violation then/.test(body),
+        `public.${name} serialises on the ticket's advisory lock before reading the ledger and maps a late unique violation to the ticket's terminal verdict`,
       );
     }
     ok(

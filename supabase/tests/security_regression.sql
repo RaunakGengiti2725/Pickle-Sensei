@@ -4472,7 +4472,7 @@ reset role;
 set local request.jwt.claim.sub = '';
 
 -- ============================================================================
--- T. W04-01 (20260908120000_offline_device_grants): device registry, per-device
+-- T. W04-01 (20260908160000_offline_device_grants): device registry, per-device
 --    offline grants with expiry and an append-only allocation ledger where
 --    allocation ≠ consumption. Conservation: outstanding + consumed + released
 --    offline tickets + live online reservations + lifetime scored ≤ 2 for a
@@ -6810,6 +6810,262 @@ begin
   end if;
   if not exists (select 1 from pg_constraint where conname = 'shots_one_settlement' and conrelid = 'public.shots'::regclass) then
     raise exception 'T15: shots_one_settlement must exist';
+  end if;
+end $$;
+
+-- T16 (adversary, round 6: ATK-01 / ATK-05): the serialisation the RPCs rely
+-- on is visible in this session's own lock table (pg_locks, this backend,
+-- transaction-scoped advisory locks) and at the ledger's index.
+--  * register_offline_device() takes access_lock_key(uid) BEFORE the lookup —
+--    a row that does not exist yet cannot be locked, so two first
+--    registrations of one (user, key) must queue on the user lock; the
+--    second then finds the row and replays as accepted.
+--  * consume_offline_ticket() / release_offline_ticket() take the TICKET's
+--    lock (api_private.offline_ticket_lock_key) beside the caller's — two
+--    recovered sibling accounts hold different user locks, so only the
+--    ticket lock orders their settlements; the loser reads the winner's
+--    row and answers offline.ticket_consumed / offline.ticket_released.
+--  * offline_allocation_ledger_one_terminal_idx: a ticket can hold ONE row
+--    in {consumed, released}, whatever writer and whatever lock.
+--  * the lock-key helper is api_private, definer, fixed search_path and
+--    executable by no client role.
+-- Yara (google + apple) allocates two tickets, deletes the account; google →
+-- Yana, apple → Yuri; both recover the installation's tickets.
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000081', 'yara@example.com',
+   '{"full_name":"Yara"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-yara', '00000000-0000-4000-8000-000000000081',
+   '{"sub":"google-sub-yara","email":"yara@example.com"}'),
+  ('apple', 'apple-sub-yara', '00000000-0000-4000-8000-000000000081',
+   '{"sub":"apple-sub-yara","email":"yara@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000008101', '00000000-0000-4000-8000-000000000081');
+create function pg_temp.t_holds_lock(p_key bigint) returns boolean
+language sql security definer as $$
+  select exists (
+    select 1 from pg_locks l
+    where l.locktype = 'advisory' and l.pid = pg_backend_pid() and l.objsubid = 1
+      and ((l.classid::bigint << 32) | l.objid::bigint) = p_key
+  );
+$$;
+grant execute on function pg_temp.t_holds_lock(bigint) to authenticated;
+create function pg_temp.t_ticket_lock_key(p_ticket uuid) returns bigint
+language sql security definer as $$
+  select api_private.offline_ticket_lock_key(p_ticket);
+$$;
+grant execute on function pg_temp.t_ticket_lock_key(uuid) to authenticated;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000081';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008101"}';
+do $$
+declare g record;
+begin
+  if pg_temp.t_holds_lock(public.access_lock_key((select auth.uid()))) then
+    raise exception 'T16: precondition — Yara holds no user lock before her first RPC';
+  end if;
+  select * into g from public.register_offline_device('yara-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T16: registration (got %)', g.result;
+  end if;
+  if not pg_temp.t_holds_lock(public.access_lock_key((select auth.uid()))) then
+    raise exception 'T16/ATK-01: register_offline_device() must serialise on access_lock_key(uid) — a first registration has no row to lock';
+  end if;
+  select * into g from public.issue_offline_grant('yara-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T16: two tickets are allocated to the first life (got %, %)', g.result, g.ticket_ids;
+  end if;
+  insert into t_state values ('yara-t1', g.ticket_ids[1]), ('yara-t2', g.ticket_ids[2]);
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-000000000081';
+end $$;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000082', 'yara@example.com',
+   '{"full_name":"Yana"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000083', 'yara@privaterelay.example.com',
+   '{"full_name":"Yuri"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-yara', '00000000-0000-4000-8000-000000000082',
+   '{"sub":"google-sub-yara","email":"yara@example.com"}'),
+  ('apple', 'apple-sub-yara', '00000000-0000-4000-8000-000000000083',
+   '{"sub":"apple-sub-yara","email":"yara@privaterelay.example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000008201', '00000000-0000-4000-8000-000000000082'),
+  ('00000000-0000-4000-8000-000000008301', '00000000-0000-4000-8000-000000000083');
+-- Yana (google) recovers the installation and RELEASES ticket 1.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000082';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008201"}';
+do $$
+declare g record; v text;
+  t1 uuid := (select id from t_state where key = 'yara-t1');
+  t2 uuid := (select id from t_state where key = 'yara-t2');
+begin
+  select * into g from public.register_offline_device('yara-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T16: Yana re-registers the installation (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('yara-key-1', 2);
+  if g.result <> 'accepted' or g.ticket_ids <> array[t1, t2] and g.ticket_ids <> array[t2, t1] then
+    raise exception 'T16: Yana recovers the original tickets (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_holds_lock(pg_temp.t_ticket_lock_key(t1)) then
+    raise exception 'T16: precondition — no ticket lock is held before a settlement';
+  end if;
+  v := public.release_offline_ticket(t1, 'unused_ticket_returned');
+  if v <> 'accepted' then
+    raise exception 'T16: Yana returns ticket 1 (got %)', v;
+  end if;
+  if not pg_temp.t_holds_lock(pg_temp.t_ticket_lock_key(t1)) then
+    raise exception 'T16/ATK-05: release_offline_ticket() must serialise on the TICKET''s advisory lock, not only the caller''s';
+  end if;
+  if pg_temp.t_holds_lock(pg_temp.t_ticket_lock_key(t2)) then
+    raise exception 'T16: the ticket lock is per ticket — settling t1 must not lock t2';
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- Yuri (apple) recovers the same installation: consuming ticket 1 is refused
+-- with the TICKET verdict; ticket 2 consumes under its own lock; Yana's later
+-- release of ticket 2 is refused the same way. One terminal event per ticket.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000083';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008301"}';
+do $$
+declare g record; v text;
+  t1 uuid := (select id from t_state where key = 'yara-t1');
+  t2 uuid := (select id from t_state where key = 'yara-t2');
+begin
+  select * into g from public.register_offline_device('yara-key-1', 'production', true);
+  if g.result <> 'accepted' then
+    raise exception 'T16: Yuri re-registers the installation (got %)', g.result;
+  end if;
+  select * into g from public.issue_offline_grant('yara-key-1', 2);
+  if g.result <> 'accepted' or g.ticket_ids <> array[t2] then
+    raise exception 'T16: Yuri recovers only the outstanding ticket (got %, %)', g.result, g.ticket_ids;
+  end if;
+  v := public.consume_offline_ticket(t1, pg_temp.n_shot('00000000-0000-4000-8000-000000000831', null, 'scored'));
+  if v <> 'offline.ticket_released' then
+    raise exception 'T16/ATK-05: the sibling account is told the ticket was released (got %)', v;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000831') then
+    raise exception 'T16: a refused settlement writes no shot';
+  end if;
+  v := public.consume_offline_ticket(t2, pg_temp.n_shot('00000000-0000-4000-8000-000000000832', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T16: Yuri settles ticket 2 (got %)', v;
+  end if;
+  if not pg_temp.t_holds_lock(pg_temp.t_ticket_lock_key(t2)) then
+    raise exception 'T16/ATK-05: consume_offline_ticket() must serialise on the TICKET''s advisory lock, not only the caller''s';
+  end if;
+  -- t2 consumed counts as the rating; t1 released is still a hold (a
+  -- return is not a re-credit): 1 + 1 = the pair's whole budget.
+  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
+    raise exception 'T16: one rating counted, the released ticket still held (got %, %)', public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000082';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008201"}';
+do $$
+declare v text;
+  t2 uuid := (select id from t_state where key = 'yara-t2');
+begin
+  v := public.release_offline_ticket(t2, 'unused_ticket_returned');
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'T16/ATK-05: the sibling account is told the ticket was consumed (got %)', v;
+  end if;
+  v := public.consume_offline_ticket(t2, pg_temp.n_shot('00000000-0000-4000-8000-000000000833', null, 'scored'));
+  if v <> 'offline.ticket_consumed' then
+    raise exception 'T16: a consumed ticket is terminal for the sibling too (got %)', v;
+  end if;
+  -- Yana also still holds t1 (returned, not re-credited); t2 left her hold
+  -- when the sibling's consumption became the ticket's one terminal event.
+  if public.offline_hold_count() <> 1 then
+    raise exception 'T16: the consumed ticket leaves both siblings'' holds (got %)', public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local request.jwt.claims = '';
+-- Ledger shape after both lives settled: each ticket carries exactly one
+-- terminal event; the one-terminal index and the private lock helper exist
+-- and are closed to every client role.
+do $$
+declare t1 uuid := (select id from t_state where key = 'yara-t1');
+        t2 uuid := (select id from t_state where key = 'yara-t2');
+        a record; r text;
+begin
+  if (select string_agg(event, ',' order by id) from public.offline_allocation_ledger where ticket_id = t1) <> 'allocated,released'
+     or (select string_agg(event, ',' order by id) from public.offline_allocation_ledger where ticket_id = t2) <> 'allocated,consumed' then
+    raise exception 'T16: exactly one terminal event per ticket (got % / %)',
+      (select string_agg(event, ',' order by id) from public.offline_allocation_ledger where ticket_id = t1),
+      (select string_agg(event, ',' order by id) from public.offline_allocation_ledger where ticket_id = t2);
+  end if;
+  if not exists (
+    select 1 from pg_indexes
+    where schemaname = 'public' and tablename = 'offline_allocation_ledger'
+      and indexname = 'offline_allocation_ledger_one_terminal_idx'
+      and indexdef ilike 'create unique index%'
+      and indexdef ilike '%(ticket_id)%'
+      and indexdef ilike '%where%consumed%released%'
+  ) then
+    raise exception 'T16/ATK-05: a unique partial index over (ticket_id) where event in (consumed, released) must exist';
+  end if;
+  -- The trigger refuses a second terminal row (check_violation); the INDEX
+  -- refuses it too, for a writer the trigger's read-committed lookup did not
+  -- see — proven here with the trigger disabled inside this rolled-back
+  -- transaction: the owner's 'released' row beside t2's 'consumed' row is a
+  -- unique_violation at the table.
+  select * into a from public.offline_allocation_ledger where ticket_id = t2 and event = 'allocated';
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    values (a.user_id, a.device_id, a.grant_id, a.generation, t2, 'released', 'support_review', a.identity_hashes, a.installation_key_id);
+    raise exception 'T16: a consumed ticket never gains a released row, whatever the writer';
+  exception when check_violation then null;
+  end;
+  alter table public.offline_allocation_ledger disable trigger offline_allocation_ledger_guard_event;
+  begin
+    insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id)
+    values (a.user_id, a.device_id, a.grant_id, a.generation, t2, 'released', 'support_review', a.identity_hashes, a.installation_key_id);
+    raise exception 'T16/ATK-05: without the guard the one-terminal index alone must refuse the second terminal row';
+  exception when unique_violation then null;
+  end;
+  alter table public.offline_allocation_ledger enable trigger offline_allocation_ledger_guard_event;
+  if (select count(*) from public.offline_allocation_ledger where ticket_id = t2 and event in ('consumed', 'released')) <> 1 then
+    raise exception 'T16: the refused terminal row persisted';
+  end if;
+  foreach r in array array['anon', 'authenticated', 'service_role'] loop
+    if has_function_privilege(r, 'api_private.offline_ticket_lock_key(uuid)', 'EXECUTE') then
+      raise exception 'T16: % must not execute the ticket lock-key helper', r;
+    end if;
+  end loop;
+  if not exists (
+    select 1 from pg_proc p
+    where p.oid = 'api_private.offline_ticket_lock_key(uuid)'::regprocedure
+      and p.prosecdef and p.proconfig @> array['search_path=""']
+  ) then
+    raise exception 'T16: the ticket lock-key helper must be definer with a fixed search_path';
+  end if;
+  if api_private.offline_ticket_lock_key(t1) = api_private.offline_ticket_lock_key(t2)
+     or api_private.offline_ticket_lock_key(t1) = public.access_lock_key(t1) then
+    raise exception 'T16: ticket lock keys are per ticket and in their own namespace';
   end if;
 end $$;
 
