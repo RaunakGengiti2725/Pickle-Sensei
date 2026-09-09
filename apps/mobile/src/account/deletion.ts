@@ -222,6 +222,20 @@ async function post(
           false,
         );
       }
+      // `blocked` answers a confirmation the server already holds (auth
+      // deleted, attempts exhausted, status window closed): the outcome of
+      // that confirmation is unresolved, never "nothing happened".
+      if (
+        confirming &&
+        response.status === 409 &&
+        error?.['code'] === 'account.deletion_blocked'
+      ) {
+        throw new AccountDeletionError(
+          'deletion.unknown',
+          confirmIssueMessage('blocked'),
+          false,
+        );
+      }
       const message =
         error && typeof error['message'] === 'string'
           ? error['message']
@@ -592,6 +606,13 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
   }
 }
 
+/** States the known outcome once; much issue copy already carries it. */
+function withNothingDeleted(message: string): string {
+  return /Nothing (?:was|has been) deleted/.test(message)
+    ? message
+    : `${message} Nothing has been deleted.`;
+}
+
 function confirmIssueMessage(issue: DeletionIssue | null): string {
   switch (issue) {
     case 'confirmation_expired':
@@ -815,7 +836,7 @@ function durableState(
           entry.lastIssue === 'unknown' ||
           entry.lastIssue === 'invalid_response'
             ? REQUEST_UNKNOWN_MESSAGE
-            : `${requestIssueMessage(entry.lastIssue)} Nothing has been deleted.`,
+            : withNothingDeleted(requestIssueMessage(entry.lastIssue)),
       };
     case 'securing':
       // The status capability never reached the Keychain, so this request
@@ -1064,7 +1085,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           // pacing has passed is re-asked under the same job: the server
           // answers with the refusal again, or with a fresh challenge. Only
           // what it answers now is shown; a re-ask the server did not answer
-          // is presented as any unanswered request is (paced "Retry request").
+          // (a dead bearer, a lost reply) leaves its refusal standing.
           if (
             state.status === 'already_in_progress' &&
             refusalStale(opened.entry, nowMs)

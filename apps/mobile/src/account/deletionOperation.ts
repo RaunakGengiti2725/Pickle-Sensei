@@ -244,10 +244,16 @@ export function createDeletionOperationFoundation(
     requireCurrent(context);
     const reply = await transport.request(context, body);
     if (reply.kind !== 'requested') {
+      // A standing refusal (a confirmed deletion is being carried out) is
+      // the server's last word on this account until it answers the request
+      // itself; a re-ask that it did not answer never unsays it.
       const unknown = await update(entry, {
         phase: 'request_unknown',
         serverState: 'unknown',
-        lastIssue: remoteIssue(reply),
+        lastIssue:
+          entry.lastIssue === 'in_progress'
+            ? 'in_progress'
+            : remoteIssue(reply),
         nextAttemptAtMs: now() + delay(entry, reply, true),
         retryCount: Math.min(20, entry.retryCount + 1),
       });
