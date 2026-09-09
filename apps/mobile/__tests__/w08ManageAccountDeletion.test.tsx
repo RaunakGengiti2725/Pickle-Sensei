@@ -2856,7 +2856,9 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
        * deletion (`answer`); the server's last word — a confirmed deletion
        * is being carried out — must stand, on this launch and the next,
        * until the server itself says otherwise. */
-      async function reaskUnanswered(answer: () => Promise<Response> | Response) {
+      async function reaskUnanswered(
+        answer: () => Promise<Response> | Response,
+      ) {
         let requests = 0;
         route({
           'delete-request': () => {
