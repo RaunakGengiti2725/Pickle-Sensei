@@ -23,6 +23,16 @@
 // Without XC_PG_URL the postgres half is `ignore`d — an ignored run is NOT a
 // pass (the W04-04-AC2 gate runs with XC_PG_URL set).
 //
+// Round 2 additionally pins: a ticket re-issued under a refreshed grant
+// generation settles once through a receipt bound to that grant (allocation
+// LINEAGE, not the literal allocated row); a receipt that arrives before its
+// session syncs is answered `pending` (nothing durable) and settles once the
+// session exists; a receipt for a grant issued under a previous, still
+// approved release policy settles after the authority rotates (the route reads
+// that release's lineage as the service role — never from the token) while a
+// withdrawn lineage is HELD as grant_revoked; lifecycleSequence beyond int4 is
+// a durable verdict.
+//
 // Runs unchanged against BASE_SHA, where the route answers 404 and the RPC
 // does not exist, so every test fails there.
 
@@ -40,27 +50,34 @@ import {
   type OfflineResultReceipt,
   type OfflineSignedExecutionGrant,
 } from "../../../../packages/shared-types/src/offlineAuthorization.ts";
-import { digestCanonicalOfflineJson, digestOfflineGrantTransport } from "../canonicalDigest.ts";
+import type { AnalysisReleasePolicyDocument } from "../../../../packages/shared-types/src/analysisReleasePolicy.ts";
+import {
+  canonicalizeOfflineJson,
+  digestCanonicalOfflineJson,
+  digestOfflineGrantTransport,
+} from "../canonicalDigest.ts";
 import {
   importOfflineGrantVerificationKey,
   offlineGrantClaimsFromIssuance,
-  signOfflineExecutionGrant,
   type OfflineGrantKey,
+  signOfflineExecutionGrant,
 } from "../offlineSignature.ts";
 import { activeReleasePolicyRow, HARNESS_RELEASE_POLICY } from "./releasePolicyFixture.ts";
 import {
   captureConsole,
   fakeGoogleIdToken,
   loadHarness,
+  type RecordedCall,
   SUPABASE_URL,
   userRequest,
-  type RecordedCall,
 } from "./routesHarness.ts";
 
 const h = await loadHarness();
 
 const RECEIPTS_PATH = "/v1/offline/receipts";
 const SETTLE_RPC = "/rest/v1/rpc/settle_offline_receipt";
+const LINEAGE_RPC = "/rest/v1/rpc/read_analysis_release_policy_lineage";
+const SERVICE_BEARER = "Bearer service-role-test-key";
 const CONSUME_RPC = "/rest/v1/rpc/consume_offline_ticket";
 const RELEASE_RPC = "/rest/v1/rpc/release_offline_ticket";
 const ISSUER = `${SUPABASE_URL}/functions/v1/api`;
@@ -99,6 +116,78 @@ const RELEASE: OfflineReleasedArtifacts = {
   mechanicsModel: HARNESS_RELEASE_POLICY.mechanics.lineage.model,
   benchmarkModel: HARNESS_RELEASE_POLICY.benchmark.lineage.model,
 };
+
+/** The release authority AFTER a routine rotation: a second, approved,
+ * non-withdrawn policy with its own model lineage becomes active while the
+ * first stays installed (never withdrawn). */
+async function rotatedReleasePolicyRow(): Promise<Record<string, unknown>> {
+  const artifact = { version: "harness-2", sha256: "d".repeat(64) };
+  const lineage = {
+    pipeline: artifact,
+    definition: artifact,
+    model: artifact,
+    preprocessing: artifact,
+    calibration: artifact,
+    dataset: artifact,
+    validationReport: artifact,
+    supportedDomain: artifact,
+  };
+  const issuedAt = Math.floor(Date.now() / 1000) - 3_600;
+  const document: AnalysisReleasePolicyDocument = {
+    ...HARNESS_RELEASE_POLICY,
+    version: "harness-policy-2",
+    validFrom: issuedAt,
+    validUntil: issuedAt + 365 * 86_400,
+    mechanics: { lineage },
+    benchmark: { ...HARNESS_RELEASE_POLICY.benchmark, lineage },
+  };
+  return {
+    document,
+    canonicalDocument: canonicalizeOfflineJson(document),
+    denyNewAuthorizations: false,
+    approval: {
+      policy: { version: document.version, sha256: await digestCanonicalOfflineJson(document) },
+      mechanicsApprovedAt: issuedAt,
+      benchmarkApprovedAt: issuedAt,
+      withdrawnAt: null,
+      denyNewAuthorizations: false,
+    },
+  };
+}
+
+/** What read_analysis_release_policy_lineage(p_policy_sha256) answers for a
+ * sha the authority does not know: the same "no policy" row shape the active
+ * reader uses, which the edge verifier resolves to null. */
+const UNKNOWN_LINEAGE_ROW = {
+  document: null,
+  canonicalDocument: null,
+  denyNewAuthorizations: true,
+  approval: null,
+};
+
+interface LineageParams {
+  p_policy_sha256: string;
+}
+
+function lineageParams(call: RecordedCall): LineageParams {
+  assert(call.body && typeof call.body === "object", "rpc body must be an object");
+  return call.body as LineageParams;
+}
+
+/** Serve the installed (never withdrawn) first policy by its sha, exactly as
+ * the migration's reader does, on top of the durable settlement stand-in. */
+function lineageRespond(
+  known: Record<string, Record<string, unknown>>,
+): (call: RecordedCall) => Response | null {
+  return (call) => {
+    if (!call.url.endsWith(LINEAGE_RPC)) return durableRespond(call);
+    const row = known[lineageParams(call).p_policy_sha256] ?? UNKNOWN_LINEAGE_ROW;
+    return new Response(JSON.stringify(row), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+}
 
 const VERSION_VECTOR = {
   appVersion: "1.0.0",
@@ -327,6 +416,9 @@ interface SettleParams {
 }
 
 const durable = new Map<string, { sha256: string; row: SettleRow }>();
+/** Sessions the stand-in database knows (the app's session outbox may sync
+ * AFTER the receipt that names one arrives). */
+const syncedSessions = new Set<string>();
 
 function settleParams(call: RecordedCall): SettleParams {
   assert(call.body && typeof call.body === "object", "rpc body must be an object");
@@ -361,6 +453,22 @@ function durableRespond(call: RecordedCall): Response | null {
       result_id: null,
     };
     durable.set(key, { sha256: params.p_receipt_sha256, row });
+  } else if (
+    params.p_receipt.ticket !== null &&
+    params.p_output !== null &&
+    typeof params.p_output.sessionId === "string" &&
+    !syncedSessions.has(params.p_output.sessionId)
+  ) {
+    // consume_offline_ticket() = shot.session_not_found: a transient
+    // condition, answered without a durable verdict so the redelivery decides.
+    row = {
+      result: "accepted",
+      delivery: "pending",
+      status: "pending",
+      reason_code: null,
+      financial_disposition: "reserved",
+      result_id: null,
+    };
   } else {
     row = {
       result: "accepted",
@@ -386,6 +494,7 @@ function durableRespond(call: RecordedCall): Response | null {
 function reset(): void {
   h.reset();
   durable.clear();
+  syncedSessions.clear();
   Deno.env.set(SIGNING_ENV, JSON.stringify(privateJwk));
   h.respond = durableRespond;
 }
@@ -400,7 +509,7 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 
 interface RouteResult {
   receiptId: string;
-  delivery: "settled" | "replayed" | "held" | "rejected";
+  delivery: "settled" | "replayed" | "held" | "pending" | "rejected";
   reconciliation: Record<string, unknown> | null;
   error: { code: string; message: string } | null;
 }
@@ -869,6 +978,229 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
+// Round 2 — release-authority rotation between offline execution and delayed
+// delivery. The delayed receipt is judged against the release the grant was
+// issued under (as the route already does for time via the grant's own
+// expiry), read from the authority by its sha as the SERVICE ROLE — the
+// signed grant only names which installed lineage to look up, it never
+// supplies it.
+// ---------------------------------------------------------------------------
+
+Deno.test(
+  "a receipt for a grant issued under the previous, still approved release settles after the authority rotates — the prior lineage is read once per batch as the service role, never from the token",
+  async () => {
+    reset();
+    const user = freshUser();
+    const executedUnderV1 = await settledFixture(user.sub, TICKET_A, 1);
+    const alsoUnderV1 = await settledFixture(user.sub, TICKET_B, 2, {
+      claims: executedUnderV1.claims,
+    });
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: releasePolicyRow });
+
+    const out = await results(
+      await post(
+        {
+          receipts: [
+            {
+              receipt: alsoUnderV1.receipt,
+              grant: alsoUnderV1.grant,
+              output: alsoUnderV1.output,
+            },
+            {
+              receipt: executedUnderV1.receipt,
+              grant: executedUnderV1.grant,
+              output: executedUnderV1.output,
+            },
+          ],
+        },
+        user.token,
+      ),
+    );
+    assertEquals(
+      out.map((r) => [r.receiptId, r.delivery, r.error]),
+      [
+        ["receipt-2", "settled", null],
+        ["receipt-1", "settled", null],
+      ],
+    );
+    const params = settleCalls();
+    assertEquals(params.length, 2);
+    assertEquals(
+      params.map((p) => p.p_hold_reason),
+      [null, null],
+    );
+
+    const lineage = h.callsTo(LINEAGE_RPC);
+    assertEquals(lineage.length, 1, "one lineage read per distinct release per batch");
+    assertEquals(lineage[0].headers.authorization, SERVICE_BEARER);
+    assertEquals(lineageParams(lineage[0]), { p_policy_sha256: RELEASE.policy.sha256 });
+
+    // A grant under the NOW-active release still verifies without a lineage read.
+    reset();
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+    h.respond = lineageRespond({});
+    const rotated = h.rpcs.read_analysis_release_policy as {
+      approval: { policy: { version: string; sha256: string } };
+    };
+    const v2: OfflineReleasedArtifacts = {
+      policy: rotated.approval.policy,
+      mechanicsModel: { version: "harness-2", sha256: "d".repeat(64) },
+      benchmarkModel: { version: "harness-2", sha256: "d".repeat(64) },
+    };
+    const claimsV2 = offlineGrantClaimsFromIssuance(
+      {
+        result: "accepted",
+        grant_id: GRANT_ID,
+        generation: 3,
+        entitlement_source: "identity_lifetime_free",
+        issued_at: iso(nowSeconds() - 60),
+        expires_at: iso(nowSeconds() - 60 + 7 * DAY),
+        entitlement_expires_at: null,
+        ticket_ids: [TICKET_A, TICKET_B],
+      },
+      { issuer: ISSUER, ownerId: user.sub, installationKeyId: INSTALLATION_KEY, release: v2 },
+    );
+    const grantV2 = await signOfflineExecutionGrant(claimsV2, signingKey, {
+      binding: {
+        issuer: ISSUER,
+        allowedKeyIds: [KID],
+        ownerId: user.sub,
+        installationKeyId: INSTALLATION_KEY,
+      },
+      release: v2,
+      nowEpochSeconds: claimsV2.iat + 1,
+    });
+    const resultId = crypto.randomUUID();
+    const outV2 = output(resultId);
+    const recV2 = await receipt({
+      receiptId: "receipt-v2",
+      ownerId: user.sub,
+      grant: grantV2,
+      claims: claimsV2,
+      ticket: ticketRef(TICKET_A, claimsV2),
+      lifecycleSequence: 1,
+      operationId: "operation-v2",
+      resultId,
+      fullOutputSha256: await digestCanonicalOfflineJson(outV2),
+    });
+    const current = await results(
+      await post({ receipts: [{ receipt: recV2, grant: grantV2, output: outV2 }] }, user.token),
+    );
+    assertEquals(current[0].delivery, "settled");
+    assertEquals(h.callsTo(LINEAGE_RPC).length, 0);
+  },
+);
+
+Deno.test(
+  "a grant whose release lineage was withdrawn is HELD as grant_revoked, an unknown lineage is HELD as evidence_ambiguous, a lineage read failure is a 503 that decides nothing",
+  async () => {
+    reset();
+    const user = freshUser();
+    const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+
+    const withdrawnAt = nowSeconds() - 30;
+    const withdrawnRow = {
+      ...releasePolicyRow,
+      approval: {
+        ...(releasePolicyRow.approval as Record<string, unknown>),
+        withdrawnAt,
+      },
+    };
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: withdrawnRow });
+    const withdrawn = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(withdrawn[0].delivery, "held");
+    assertEquals(withdrawn[0].reconciliation, {
+      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
+      ownerId: user.sub,
+      receiptId: "receipt-1",
+      status: "reconciliation_required",
+      reasonCode: "grant_revoked",
+      financialDisposition: "reserved",
+    });
+    assertEquals(settleCalls()[0].p_hold_reason, "grant_revoked");
+
+    reset();
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+    h.respond = lineageRespond({});
+    const unknown = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(unknown[0].delivery, "held");
+    assertEquals(unknown[0].reconciliation?.reasonCode, "evidence_ambiguous");
+    assertEquals(unknown[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(settleCalls()[0].p_hold_reason, "evidence_ambiguous");
+
+    reset();
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+    h.rpcErrors.read_analysis_release_policy_lineage = 500;
+    const { result: failed } = await captureConsole(() => post({ receipts: [entry] }, user.token));
+    assertEquals(failed.status, 503);
+    await failed.body?.cancel();
+    assertEquals(settleCalls().length, 0);
+    assertEquals(durable.size, 0);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Round 2 — a receipt that arrives before the session it names has synced is
+// a transient condition, not evidence against the receipt: the RPC answers
+// `pending` with nothing durable and the ticket still reserved; the very same
+// receipt (same identity, same operation) settles once the session exists.
+// ---------------------------------------------------------------------------
+
+Deno.test(
+  "a receipt delivered before its session syncs is answered pending (reserved, not durable) and the identical redelivery settles once the session exists",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = freeClaims(user.sub);
+    const grant = await sign(claims);
+    const sessionId = crypto.randomUUID();
+    const resultId = crypto.randomUUID();
+    const out = output(resultId, { sessionId });
+    const rec = await receipt({
+      receiptId: "receipt-early",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_A, claims),
+      lifecycleSequence: 1,
+      operationId: "operation-early",
+      resultId,
+      fullOutputSha256: await digestCanonicalOfflineJson(out),
+    });
+    const entry = { receipt: rec, grant, output: out };
+
+    const early = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(early[0].delivery, "pending");
+    assertEquals(early[0].error, null);
+    assertEquals(early[0].reconciliation, {
+      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
+      ownerId: user.sub,
+      receiptId: "receipt-early",
+      status: "pending",
+      financialDisposition: "reserved",
+    });
+    assertEquals(durable.size, 0);
+
+    const stillEarly = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(stillEarly[0].delivery, "pending");
+
+    syncedSessions.add(sessionId);
+    const late = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(late[0].delivery, "settled");
+    assertEquals(late[0].reconciliation?.status, "result_recorded");
+    assertEquals(late[0].reconciliation?.financialDisposition, "consumed");
+    const params = settleCalls();
+    assertEquals(params.length, 3);
+    assertEquals(new Set(params.map((p) => p.p_receipt_sha256)).size, 1);
+    assertEquals(new Set(params.map((p) => p.p_receipt.operationId)).size, 1);
+    assertEquals(h.callsTo(RELEASE_RPC).length, 0);
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Live postgres half — the REAL settle_offline_receipt() on a disposable
 // postgres:16 with every migration applied.
 // ---------------------------------------------------------------------------
@@ -943,31 +1275,90 @@ async function ledgerEvents(sql: Sql, ticketId: string): Promise<string[]> {
   return rows.map((row) => row.event);
 }
 
-async function issueFreeGrant(
+type LiveGrant = { claims: OfflineExecutionGrantClaims; grant: OfflineSignedExecutionGrant };
+
+/** issue_offline_grant() for an already registered installation — the
+ * documented lease-refresh path re-issues the installation's outstanding
+ * tickets under the NEXT generation (a new grant id) without writing a new
+ * allocation row. */
+async function refreshFreeGrant(
   sql: Sql,
   n: number,
   key: string,
-): Promise<{ claims: OfflineExecutionGrantClaims; grant: OfflineSignedExecutionGrant }> {
+  requested = 2,
+  ownerId = U(n),
+): Promise<LiveGrant> {
+  const row = await inTx(sql, n, async (tx) => {
+    const rows = await tx.unsafe<{ row: unknown }[]>(
+      `select to_jsonb(g) as row from public.issue_offline_grant('${key}', ${requested}) g`,
+    );
+    return rows[0].row;
+  });
+  const claims = offlineGrantClaimsFromIssuance(row, {
+    issuer: ISSUER,
+    ownerId,
+    installationKeyId: key,
+    release: RELEASE,
+  });
+  assert(claims.allocation, `free grant expected: ${JSON.stringify(row)}`);
+  return { claims, grant: await sign(claims) };
+}
+
+async function registerDevice(sql: Sql, n: number, key: string): Promise<void> {
   await inTx(sql, n, async (tx) => {
     const rows = await tx.unsafe<{ result: string }[]>(
       `select r.result from public.register_offline_device('${key}', 'production', true) r`,
     );
     assertEquals(rows[0].result, "accepted");
   });
-  const row = await inTx(sql, n, async (tx) => {
-    const rows = await tx.unsafe<{ row: unknown }[]>(
-      `select to_jsonb(g) as row from public.issue_offline_grant('${key}', 2) g`,
-    );
-    return rows[0].row;
+}
+
+async function issueFreeGrant(sql: Sql, n: number, key: string, requested = 2): Promise<LiveGrant> {
+  await registerDevice(sql, n, key);
+  const issued = await refreshFreeGrant(sql, n, key, requested);
+  assert(issued.claims.allocation && issued.claims.allocation.ticketIds.length === requested);
+  return issued;
+}
+
+async function liveReceipt(
+  ownerId: string,
+  issued: LiveGrant,
+  ticketId: string,
+  tag: string,
+  overrides: Partial<ReceiptOptions> = {},
+  outputOverrides: Record<string, unknown> = {},
+): Promise<{ receipt: OfflineResultReceipt; output: Record<string, unknown> }> {
+  const resultId = crypto.randomUUID();
+  const out = output(resultId, outputOverrides);
+  const rec = await receipt({
+    receiptId: `receipt-${tag}-${RUN}`,
+    ownerId,
+    grant: issued.grant,
+    claims: issued.claims,
+    ticket: ticketRef(ticketId, issued.claims),
+    lifecycleSequence: 1,
+    operationId: `operation-${tag}-${RUN}`,
+    resultId,
+    fullOutputSha256: await digestCanonicalOfflineJson(out),
+    ...overrides,
   });
-  const claims = offlineGrantClaimsFromIssuance(row, {
-    issuer: ISSUER,
-    ownerId: U(n),
-    installationKeyId: key,
-    release: RELEASE,
-  });
-  assert(claims.allocation && claims.allocation.ticketIds.length === 2);
-  return { claims, grant: await sign(claims) };
+  return { receipt: rec, output: out };
+}
+
+async function shotCount(sql: Sql, ticketId: string): Promise<number> {
+  const [{ count }] = await sql.unsafe<{ count: string }[]>(
+    `select count(*)::text as count from public.shots where offline_ticket_id = '${ticketId}'`,
+  );
+  return Number(count);
+}
+
+async function counters(sql: Sql, n: number): Promise<{ held: number; scored: number }> {
+  const [{ held, scored }] = await inTx(sql, n, (tx) =>
+    tx.unsafe<{ held: number; scored: number }[]>(
+      `select public.offline_hold_count() as held, public.lifetime_scored_count() as scored`,
+    ),
+  );
+  return { held: Number(held), scored: Number(scored) };
 }
 
 Deno.test({
@@ -1144,7 +1535,11 @@ Deno.test({
       for (const statement of [
         `select 1 from public.offline_receipt_settlements`,
         `insert into public.offline_receipt_settlements (receipt_id, receipt_sha256, user_id, owner_id, installation_key_id, grant_id, grant_jws_sha256, operation_id, result_id, full_output_sha256, billing_disposition, lifecycle_sequence, status, financial_disposition, receipt)
-         values ('x', '${"0".repeat(64)}', '${U(1)}', '${U(1)}', 'k', '${GRANT_ID}', '${"0".repeat(64)}', 'op', 'res', '${"0".repeat(64)}', 'not_chargeable', 1, 'result_recorded', 'not_applicable', '{}'::jsonb)`,
+         values ('x', '${"0".repeat(64)}', '${U(1)}', '${U(1)}', 'k', '${GRANT_ID}', '${"0".repeat(
+           64,
+         )}', 'op', 'res', '${"0".repeat(
+           64,
+         )}', 'not_chargeable', 1, 'result_recorded', 'not_applicable', '{}'::jsonb)`,
         `update public.offline_receipt_settlements set status = 'result_recorded' where receipt_id = '${recB.receiptId}'`,
         `delete from public.offline_receipt_settlements where receipt_id = '${recB.receiptId}'`,
       ]) {
@@ -1166,6 +1561,302 @@ Deno.test({
         sessionless = (error as { code?: string }).code ?? "";
       }
       assertEquals(sessionless, "42501");
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Round 2, live DB — allocation LINEAGE. issue_offline_grant() re-issues the
+// installation's outstanding tickets under the next generation (a new grant
+// id) and writes no new allocation row, so a receipt rendered under the
+// refreshed grant names the ticket exactly as that grant lists it. It must
+// settle once; the superseded grant's receipt for the same ticket must then
+// hold, never double-consume; a grant of another installation, or a
+// generation the grant never had, stays HELD as evidence_ambiguous.
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "live DB: a ticket re-issued under the next grant generation settles exactly once through a receipt bound to the refreshed grant; out-of-order receipts across generations never double-consume; foreign installations and contradictory generations stay HELD",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 2);
+      const key = KEY("refresh");
+      const gen1 = await issueFreeGrant(sql, 2, key);
+      assert(gen1.claims.allocation);
+      const [ticketA, ticketB] = gen1.claims.allocation.ticketIds;
+
+      const gen2 = await refreshFreeGrant(sql, 2, key);
+      assert(gen2.claims.allocation);
+      assert(gen2.claims.jti !== gen1.claims.jti);
+      assertEquals(gen2.claims.allocation.generation, gen1.claims.allocation.generation + 1);
+      assertEquals([...gen2.claims.allocation.ticketIds].sort(), [ticketA, ticketB].sort());
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated"]);
+
+      // Rendered under the refreshed grant → settles, consumed once.
+      const late = await liveReceipt(U(2), gen2, ticketA, "gen2");
+      const verdict = await inTx(sql, 2, (tx) => settle(tx, late.receipt, late.output, null));
+      assertEquals(verdict, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "consumed",
+        result_id: late.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+      const replay = await inTx(sql, 2, (tx) => settle(tx, late.receipt, late.output, null));
+      assertEquals(replay, { ...verdict, delivery: "replayed" });
+
+      // The SAME ticket under the superseded generation-1 grant: held as a
+      // conflicting receipt, the consumed event stands, no second rating.
+      const stale = await liveReceipt(U(2), gen1, ticketA, "gen1-stale");
+      const held = await inTx(sql, 2, (tx) => settle(tx, stale.receipt, stale.output, null));
+      assertEquals(held.delivery, "held");
+      assertEquals(held.reason_code, "conflicting_receipt");
+      assertEquals(held.financial_disposition, "reserved");
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // Ticket B rendered under the ORIGINAL grant still settles once —
+      // delivery order across generations is free.
+      const early = await liveReceipt(U(2), gen1, ticketB, "gen1");
+      const first = await inTx(sql, 2, (tx) => settle(tx, early.receipt, early.output, null));
+      assertEquals(first.delivery, "settled");
+      assertEquals(first.financial_disposition, "consumed");
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated", "consumed"]);
+      // …and its refreshed twin then holds rather than consuming again.
+      const twin = await liveReceipt(U(2), gen2, ticketB, "gen2-twin");
+      const heldTwin = await inTx(sql, 2, (tx) => settle(tx, twin.receipt, twin.output, null));
+      assertEquals(heldTwin.delivery, "held");
+      assertEquals(heldTwin.reason_code, "conflicting_receipt");
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated", "consumed"]);
+      assertEquals(await counters(sql, 2), { held: 0, scored: 2 });
+
+      // Another installation of the same account: its grant never listed
+      // ticket 1, so a receipt binding ticket 1 to it is ambiguous evidence
+      // (held, reserved) and the honest receipt under the allocating grant
+      // still settles afterwards.
+      await createUser(sql, 3);
+      const key1 = KEY("install-1");
+      const key2 = KEY("install-2");
+      const g1 = await issueFreeGrant(sql, 3, key1, 1);
+      await registerDevice(sql, 3, key2);
+      const g2 = await refreshFreeGrant(sql, 3, key2, 1);
+      assert(g1.claims.allocation && g2.claims.allocation);
+      const [t1] = g1.claims.allocation.ticketIds;
+      const [t2] = g2.claims.allocation.ticketIds;
+      assert(t1 !== t2);
+      const cross = await liveReceipt(U(3), g2, t1, "cross-install");
+      const heldCross = await inTx(sql, 3, (tx) => settle(tx, cross.receipt, cross.output, null));
+      assertEquals(heldCross.delivery, "held");
+      assertEquals(heldCross.reason_code, "evidence_ambiguous");
+      assertEquals(heldCross.financial_disposition, "reserved");
+      assertEquals(await ledgerEvents(sql, t1), ["allocated"]);
+      // A generation the allocating grant never had is contradictory evidence.
+      const contradictory = await liveReceipt(U(3), g2, t2, "generation-99", {
+        ticket: { ...ticketRef(t2, g2.claims), generation: 99 },
+      });
+      const heldContradictory = await inTx(sql, 3, (tx) =>
+        settle(tx, contradictory.receipt, contradictory.output, null),
+      );
+      assertEquals(heldContradictory.delivery, "held");
+      assertEquals(heldContradictory.reason_code, "evidence_ambiguous");
+      assertEquals(await ledgerEvents(sql, t2), ["allocated"]);
+      assertEquals(await counters(sql, 3), { held: 2, scored: 0 });
+      const honest1 = await liveReceipt(U(3), g1, t1, "honest-1");
+      const honest2 = await liveReceipt(U(3), g2, t2, "honest-2");
+      assertEquals(
+        (await inTx(sql, 3, (tx) => settle(tx, honest1.receipt, honest1.output, null))).delivery,
+        "settled",
+      );
+      assertEquals(
+        (await inTx(sql, 3, (tx) => settle(tx, honest2.receipt, honest2.output, null))).delivery,
+        "settled",
+      );
+      assertEquals(await ledgerEvents(sql, t1), ["allocated", "consumed"]);
+      assertEquals(await ledgerEvents(sql, t2), ["allocated", "consumed"]);
+      assertEquals(await counters(sql, 3), { held: 0, scored: 2 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+/** The re-created account of a deleted user: a NEW auth.users row holding the
+ * SAME sign-in identity (provider subject), the arm offline_ticket_owned_by()
+ * recovers outstanding tickets through. */
+async function recreateUser(sql: Sql, deleted: number, recreated: number): Promise<void> {
+  await sql.unsafe(`delete from auth.users where id = '${U(deleted)}'`);
+  await sql.unsafe(`delete from auth.users where id = '${U(recreated)}'`);
+  await sql.unsafe(
+    `insert into auth.users (id, email, raw_app_meta_data)
+     values ('${U(recreated)}', 'w04-04-${deleted}-${RUN}@example.com', '{"provider":"google"}')`,
+  );
+  await sql.unsafe(
+    `insert into auth.identities (provider, provider_id, user_id, identity_data)
+     values ('google', 'w04-04-${deleted}-${RUN}', '${U(
+       recreated,
+     )}', '{"sub":"w04-04-${deleted}-${RUN}"}')`,
+  );
+  await sql.unsafe(
+    `insert into auth.sessions (id, user_id) values ('${SESSION(recreated)}', '${U(recreated)}')`,
+  );
+}
+
+Deno.test({
+  name: "live DB: the original installation of a deleted-and-re-created account settles its outstanding ticket through the grant that re-issued it (original-owner recovery), exactly once",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 4);
+      const key = KEY("recovery");
+      const original = await issueFreeGrant(sql, 4, key);
+      assert(original.claims.allocation);
+      const [ticketA, ticketB] = original.claims.allocation.ticketIds;
+
+      await recreateUser(sql, 4, 40);
+      await registerDevice(sql, 40, key);
+      const recovered = await refreshFreeGrant(sql, 40, key);
+      assert(recovered.claims.allocation);
+      assertEquals([...recovered.claims.allocation.ticketIds].sort(), [ticketA, ticketB].sort());
+      assert(recovered.claims.jti !== original.claims.jti);
+
+      const rec = await liveReceipt(U(40), recovered, ticketA, "recovered");
+      const verdict = await inTx(sql, 40, (tx) => settle(tx, rec.receipt, rec.output, null));
+      assertEquals(verdict.delivery, "settled", JSON.stringify(verdict));
+      assertEquals(verdict.financial_disposition, "consumed");
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      const [shot] = await sql.unsafe<{ user_id: string }[]>(
+        `select user_id from public.shots where id = '${rec.receipt.resultId}'`,
+      );
+      assertEquals(shot, { user_id: U(40) });
+      const again = await inTx(sql, 40, (tx) => settle(tx, rec.receipt, rec.output, null));
+      assertEquals(again.delivery, "replayed");
+      assertEquals(await shotCount(sql, ticketA), 1);
+      assertEquals(await counters(sql, 40), { held: 1, scored: 1 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Round 2, live DB — transient session and wide integers. A receipt that
+// arrives before the session it names has synced is `pending` (no durable
+// row, ticket reserved) and the identical receipt settles once the session
+// exists; lifecycleSequence / generation are parsed as wide integers, so a
+// contract-valid 2^31 receives a durable verdict and 2^53 (not a safe
+// integer) is refused without a verdict.
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "live DB: a receipt delivered before its session syncs is pending (nothing durable, ticket reserved) and settles once the session exists; lifecycleSequence 2^31 gets a durable verdict, 2^53 is refused",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 5);
+      const key = KEY("session");
+      const issued = await issueFreeGrant(sql, 5, key);
+      assert(issued.claims.allocation);
+      const [ticketA, ticketB] = issued.claims.allocation.ticketIds;
+      const sessionId = crypto.randomUUID();
+      const rec = await liveReceipt(U(5), issued, ticketA, "session", {}, { sessionId });
+
+      const early = await inTx(sql, 5, (tx) => settle(tx, rec.receipt, rec.output, null));
+      assertEquals(early, {
+        result: "accepted",
+        delivery: "pending",
+        status: "pending",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated"]);
+      assertEquals(await shotCount(sql, ticketA), 0);
+      const settled = async (): Promise<string[]> =>
+        (
+          await sql.unsafe<{ receipt_id: string }[]>(
+            `select receipt_id from public.offline_receipt_settlements where user_id = '${U(
+              5,
+            )}' order by id`,
+          )
+        ).map((r) => r.receipt_id);
+      assertEquals(await settled(), []);
+      assertEquals(await counters(sql, 5), { held: 2, scored: 0 });
+      const stillEarly = await inTx(sql, 5, (tx) => settle(tx, rec.receipt, rec.output, null));
+      assertEquals(stillEarly, early);
+
+      await sql.unsafe(
+        `insert into public.sessions (id, user_id, started_at) values ('${sessionId}', '${U(
+          5,
+        )}', now())`,
+      );
+      const late = await inTx(sql, 5, (tx) => settle(tx, rec.receipt, rec.output, null));
+      assertEquals(late, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "consumed",
+        result_id: rec.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await settled(), [rec.receipt.receiptId]);
+      assertEquals(
+        (await inTx(sql, 5, (tx) => settle(tx, rec.receipt, rec.output, null))).delivery,
+        "replayed",
+      );
+
+      // A generation beyond int4 the grant never had: contradictory evidence,
+      // durably HELD (never a non-durable invalid_input).
+      const wideGeneration = await liveReceipt(U(5), issued, ticketB, "generation-2p31", {
+        ticket: { ...ticketRef(ticketB, issued.claims), generation: 2 ** 31 },
+      });
+      const heldWide = await inTx(sql, 5, (tx) =>
+        settle(tx, wideGeneration.receipt, wideGeneration.output, null),
+      );
+      assertEquals(heldWide.delivery, "held");
+      assertEquals(heldWide.reason_code, "evidence_ambiguous");
+      assertEquals(heldWide.financial_disposition, "reserved");
+
+      // lifecycleSequence 2^31 is contract-valid: settles, durably recorded.
+      const wide = await liveReceipt(U(5), issued, ticketB, "sequence-2p31", {
+        lifecycleSequence: 2 ** 31,
+      });
+      const verdict = await inTx(sql, 5, (tx) => settle(tx, wide.receipt, wide.output, null));
+      assertEquals(verdict.delivery, "settled", JSON.stringify(verdict));
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated", "consumed"]);
+      const [row] = await sql.unsafe<{ lifecycle_sequence: string; generation: string }[]>(
+        `select lifecycle_sequence::text, generation::text from public.offline_receipt_settlements
+         where receipt_id = '${wide.receipt.receiptId}'`,
+      );
+      assertEquals(row, {
+        lifecycle_sequence: String(2 ** 31),
+        generation: String(issued.claims.allocation.generation),
+      });
+      assertEquals(await settled(), [
+        rec.receipt.receiptId,
+        wideGeneration.receipt.receiptId,
+        wide.receipt.receiptId,
+      ]);
+
+      // 2^53 is outside the shared contract (not a safe integer): refused,
+      // nothing recorded.
+      const unsafe = await liveReceipt(U(5), issued, ticketB, "sequence-2p53", {
+        lifecycleSequence: 2 ** 53,
+      });
+      const refused = await inTx(sql, 5, (tx) => settle(tx, unsafe.receipt, unsafe.output, null));
+      assertEquals(refused.result, "offline.invalid_input");
+      assertEquals(refused.delivery, null);
+      assertEquals((await settled()).length, 3);
+      assertEquals(await counters(sql, 5), { held: 0, scored: 2 });
     } finally {
       await sql.end();
     }
