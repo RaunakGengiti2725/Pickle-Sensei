@@ -566,6 +566,177 @@ reset role;
 select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
   union all (table w08_ledger_before except table public.free_rating_ledger)), 'post-Auth recovery does not alter the free-rating ledger');
 
+
+-- Round 6: the post-Auth certification phase is reachable through the status
+-- capability the app keeps polling with after its session is gone. The
+-- database counts the owner's namespaces under the lease; residue is recorded
+-- without a receipt and a clean count certifies exactly once. The status view
+-- agrees with the claim RPC for an identity recreated under the same id.
+insert into auth.users (id, email, raw_app_meta_data) values
+  (pg_temp.w08_id(12), 'w08-test-12@example.test', '{"provider":"google"}'),
+  (pg_temp.w08_id(13), 'w08-test-13@example.test', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id) values
+  ('google', 'w08-test-identity-12', pg_temp.w08_id(12)), ('google', 'w08-test-identity-13', pg_temp.w08_id(13));
+insert into auth.sessions (id, user_id) values (pg_temp.w08_id(9012), pg_temp.w08_id(12));
+insert into public.user_saved_drills (user_id, slug) values (pg_temp.w08_id(12), 'w08-r6-drill');
+do $$
+declare f oid; r text;
+begin
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'claim_account_deletion_status_work'
+      and pg_get_function_identity_arguments(p.oid) = 'p_operation_id uuid, p_status_capability_hash bytea';
+  perform pg_temp.w08_assert(f is not null, 'the status-capability claim RPC exists with the operation + capability binding');
+  perform pg_temp.w08_assert(has_function_privilege('service_role', f, 'EXECUTE'), 'the status-capability claim is service-executable');
+  foreach r in array array['anon','authenticated'] loop
+    perform pg_temp.w08_assert(not has_function_privilege(r, f, 'EXECUTE'), 'clients cannot claim through the status capability (' || r || ')');
+  end loop;
+  perform pg_temp.w08_assert(not exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE'), 'PUBLIC cannot claim through the status capability');
+  perform pg_temp.w08_assert(exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']),
+    'the status-capability claim is a definer with a fixed empty search_path');
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'read_account_deletion_owner_residue'
+      and pg_get_function_identity_arguments(p.oid) = 'p_owner_id uuid, p_operation_id uuid, p_lease_token uuid';
+  perform pg_temp.w08_assert(f is not null, 'the owner residue count exists with the owner, operation and lease binding');
+  perform pg_temp.w08_assert(has_function_privilege('service_role', f, 'EXECUTE'), 'the owner residue count is service-executable');
+  foreach r in array array['anon','authenticated'] loop
+    perform pg_temp.w08_assert(not has_function_privilege(r, f, 'EXECUTE'), 'clients cannot count another owner''s residue (' || r || ')');
+  end loop;
+  perform pg_temp.w08_assert(not exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE'), 'PUBLIC cannot count owner residue');
+  perform pg_temp.w08_assert(exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']),
+    'the owner residue count is a definer with a fixed empty search_path');
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'api_private' and p.proname = 'account_deletion_owner_namespaces';
+  perform pg_temp.w08_assert(f is not null, 'the owner namespace catalog reader exists');
+  foreach r in array array['anon','authenticated','service_role'] loop
+    perform pg_temp.w08_assert(not has_function_privilege(r, f, 'EXECUTE'), 'the owner namespace catalog reader is private (' || r || ')');
+  end loop;
+  perform pg_temp.w08_assert(not exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE'), 'PUBLIC cannot read the owner namespace catalog');
+end $$;
+select pg_temp.w08_assert(
+  (select array_agg(table_schema || '.' || table_name order by table_schema, table_name) from api_private.account_deletion_owner_namespaces())
+    @> array['public.profiles', 'public.sessions', 'public.shots', 'public.shot_phases', 'public.shot_measurements', 'public.shot_checkpoints',
+      'public.captures', 'public.analysis_permits', 'public.consent_records', 'public.evaluation_trials', 'public.analysis_feedback',
+      'public.user_saved_drills', 'public.player_rank_state', 'public.billing_entitlements', 'public.settlement_receipts',
+      'public.offline_devices', 'public.offline_grants', 'api_private.billing_verification_tickets'],
+  'every account-owned namespace the Edge pages is counted from the catalog');
+select pg_temp.w08_assert(not exists (select 1 from api_private.account_deletion_owner_namespaces()
+  where table_name in ('free_rating_ledger', 'account_deletion_operations', 'webhook_events', 'offline_allocation_ledger')),
+  'retained ledgers and the receipt row itself are not owner namespaces');
+set local role service_role;
+select public.begin_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), pg_temp.w08_challenge(12,2012), pg_temp.w08_cap(12));
+select public.begin_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), pg_temp.w08_challenge(13,2013), pg_temp.w08_cap(13));
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'outcome' = 'blocked',
+  'the status capability moves nothing while the identity is present (pending)');
+reset role;
+update api_private.account_deletion_operations
+  set created_at = created_at - interval '10 seconds', challenge_expires_at = challenge_expires_at - interval '10 seconds',
+    status_expires_at = status_expires_at - interval '10 seconds', retain_until = retain_until - interval '10 seconds'
+  where owner_id in (pg_temp.w08_id(12), pg_temp.w08_id(13));
+set local role service_role;
+insert into w08_results values ('r6', public.confirm_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_challenge(12,2012), pg_temp.w08_id(1012)));
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'outcome' = 'blocked',
+  'the status capability moves nothing while the identity is present (confirmed, lease live)');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'));
+reset role;
+delete from auth.users where id = pg_temp.w08_id(12);
+select pg_temp.w08_assert(not exists (select 1 from auth.sessions where user_id = pg_temp.w08_id(12)), 'the deleting session cascades with the identity');
+-- the rows the cascade "missed", written with the foreign-key triggers off
+set local session_replication_role = replica;
+insert into public.user_saved_drills (user_id, slug) values (pg_temp.w08_id(12), 'w08-r6-residue');
+set local session_replication_role = origin;
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(13))->>'outcome' = 'invalid',
+  'another operation''s capability cannot claim the post-Auth phase');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), sha256('forged'::bytea))->>'outcome' = 'invalid',
+  'a forged capability cannot claim the post-Auth phase');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1013), pg_temp.w08_cap(12))->>'outcome' = 'invalid',
+  'a capability is bound to its own operation');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'outcome' = 'busy',
+  'a live post-Auth lease is respected by the status capability');
+select pg_temp.w08_assert(public.read_account_deletion_owner_residue(pg_temp.w08_id(12), pg_temp.w08_id(1012), gen_random_uuid())->>'outcome' = 'stale_lease',
+  'a forged lease counts nothing');
+select pg_temp.w08_assert(public.read_account_deletion_owner_residue(pg_temp.w08_id(13), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'))->>'outcome' = 'stale_lease',
+  'a cross-owner lease counts nothing');
+reset role;
+update api_private.account_deletion_operations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w08_id(1012);
+set local role service_role;
+select pg_temp.w08_assert(public.read_account_deletion_owner_residue(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6'))->>'outcome' = 'stale_lease',
+  'an expired lease counts nothing');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))
+  = '{"state":"in_progress","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'the dead worker''s phase is still recoverable');
+insert into w08_results values ('r6_status_claim', public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12)));
+select pg_temp.w08_assert((select b.data->>'outcome' = 'claimed' and (b.data->>'authDeleted')::boolean and (b.data->>'ownerId')::uuid = pg_temp.w08_id(12)
+  and (b.data->>'operationId')::uuid = pg_temp.w08_id(1012) and a.data->>'leaseToken' <> b.data->>'leaseToken'
+  and (b.data->>'appleCompleted')::boolean and (b.data->>'revenueCatCompleted')::boolean and b.data->'appleRefreshTokenEncrypted' = 'null'::jsonb
+  from w08_results a, w08_results b where a.name='r6' and b.name='r6_status_claim'),
+  'the status capability re-acquires the post-Auth phase under the original owner and operation with nothing external to repeat');
+insert into w08_results values ('r6_counted', public.read_account_deletion_owner_residue(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim')));
+select pg_temp.w08_assert((select data->>'outcome' = 'counted' from w08_results where name='r6_counted'), 'the lease holder counts the owner namespaces');
+select pg_temp.w08_assert((select jsonb_agg(e order by e->>'schema', e->>'table') = '[{"schema":"public","table":"user_saved_drills","column":"user_id","rows":1}]'::jsonb
+  from w08_results r, jsonb_array_elements(r.data->'namespaces') e where r.name='r6_counted' and (e->>'rows')::bigint > 0),
+  'the count names exactly the table with residue and its row count');
+select pg_temp.w08_assert(public.fail_account_deletion_operation(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim'), 'completion_unverified')->>'outcome' = 'released',
+  'residue found through the status capability is recorded against its lease');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, 'residue reads blocked with no receipt');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim'))->>'outcome' = 'stale_lease',
+  'the spent status-capability lease cannot certify');
+reset role;
+select pg_temp.w08_assert((select completed_at is null and phase = 'auth_delete_intent' and lease_token is null and last_error_code = 'completion_unverified' and attempts = 2
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1012)), 'the residue verdict is durable and spent one attempt');
+select pg_temp.w08_assert((select count(*) = (select count(*) from api_private.account_deletion_owner_namespaces())
+  and bool_and(e ? 'schema' and e ? 'table' and e ? 'column' and jsonb_typeof(e->'rows') = 'number')
+  from w08_results r, jsonb_array_elements(r.data->'namespaces') e where r.name='r6_counted'),
+  'every catalog namespace is counted, names and counts only');
+delete from public.user_saved_drills where user_id = pg_temp.w08_id(12);
+set local role service_role;
+insert into w08_results values ('r6_status_claim_2', public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12)));
+select pg_temp.w08_assert((select data->>'outcome' = 'claimed' and (data->>'authDeleted')::boolean from w08_results where name='r6_status_claim_2'), 'a recorded residue verdict is re-acquired through the status capability');
+select pg_temp.w08_assert((select not exists (select 1 from jsonb_array_elements(public.read_account_deletion_owner_residue(pg_temp.w08_id(12), pg_temp.w08_id(1012), (data->>'leaseToken')::uuid)->'namespaces') e where (e->>'rows')::bigint > 0)
+  from w08_results where name='r6_status_claim_2'), 'a clean sweep counts zero rows in every namespace');
+insert into w08_results values ('r6_certified', public.certify_account_deletion_completion(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim_2')));
+select pg_temp.w08_assert((select data->>'state' = 'completed' and data->'completionReceipt'->>'completedAt' is not null from w08_results where name='r6_certified'), 'the clean sweep certifies through the status capability''s lease');
+select pg_temp.w08_assert(public.certify_account_deletion_completion(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim_2'))->>'outcome' = 'stale_lease', 'certification through the status capability happens exactly once');
+select pg_temp.w08_assert(public.read_account_deletion_owner_residue(pg_temp.w08_id(12), pg_temp.w08_id(1012), (select (data->>'leaseToken')::uuid from w08_results where name='r6_status_claim_2'))->>'outcome' = 'stale_lease', 'a spent lease counts nothing');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1012), pg_temp.w08_cap(12))->>'outcome' = 'completed', 'the status capability reads completion afterwards');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1012), pg_temp.w08_cap(12)) = (select data from w08_results where name='r6_certified'), 'status hands out the one certified receipt');
+reset role;
+select pg_temp.w08_assert((select phase = 'completed' and completed_at > auth_deleted_at and lease_token is null and attempts = 3 and last_error_code is null
+  from api_private.account_deletion_operations where id = pg_temp.w08_id(1012)), 'the status-capability receipt follows the Auth delete');
+-- Round 6: an identity recreated under the same id reads blocked, matching the
+-- claim RPC; the status capability never re-acquires it.
+set local role service_role;
+insert into w08_results values ('r6_same_id', public.confirm_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_challenge(13,2013), pg_temp.w08_id(1013)));
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='r6_same_id'), 'apple', 'not_applicable');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='r6_same_id'), 'revenuecat');
+select public.checkpoint_account_deletion_operation(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='r6_same_id'), 'external_complete');
+select public.set_account_deletion_auth_intent(pg_temp.w08_id(13), pg_temp.w08_id(1013), (select (data->>'leaseToken')::uuid from w08_results where name='r6_same_id'));
+reset role;
+delete from auth.users where id = pg_temp.w08_id(13);
+update api_private.account_deletion_operations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w08_id(1013);
+insert into auth.users (id, email, raw_app_meta_data) values (pg_temp.w08_id(13), 'w08-test-13@example.test', '{"provider":"google"}');
+set local role service_role;
+select pg_temp.w08_assert(public.claim_account_deletion_work(pg_temp.w08_id(13), pg_temp.w08_id(1013))->>'outcome' = 'blocked', 'a recreated identity cannot be re-acquired (owner binding)');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1013), pg_temp.w08_cap(13))->>'outcome' = 'blocked', 'a recreated identity cannot be re-acquired (status capability)');
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))
+  = '{"state":"blocked","completionReceipt":null,"appleAuthorizationRevocation":null}'::jsonb, '/delete-status is honest for a recreated identity: blocked, no receipt');
+reset role;
+select pg_temp.w08_assert((select completed_at is null and phase = 'auth_delete_intent' and attempts = 1 and lease_token = (r.data->>'leaseToken')::uuid
+  from api_private.account_deletion_operations o, w08_results r where o.id = pg_temp.w08_id(1013) and r.name='r6_same_id'), 'a recreated identity leaves the row untouched');
+delete from auth.users where id = pg_temp.w08_id(13);
+set local role service_role;
+select pg_temp.w08_assert(public.read_account_deletion_status(pg_temp.w08_id(1013), pg_temp.w08_cap(13))->>'state' = 'in_progress', 'once the identity is gone again the phase reads recoverable');
+select pg_temp.w08_assert(public.claim_account_deletion_status_work(pg_temp.w08_id(1013), pg_temp.w08_cap(13))->>'outcome' = 'claimed', 'once the identity is gone again the status capability re-acquires the phase');
+reset role;
+select pg_temp.w08_assert(not exists ((table public.free_rating_ledger except table w08_ledger_before)
+  union all (table w08_ledger_before except table public.free_rating_ledger)), 'status-capability recovery does not alter the free-rating ledger');
+
 select 'W08 SQL assertions passed: ' || count(*) from w08_assertions;
 rollback;
 

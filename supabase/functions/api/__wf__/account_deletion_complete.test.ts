@@ -1262,7 +1262,6 @@ Deno.test({
 const R4_OWNER = "0000000a-0806-4000-8000-000000000202";
 const R4_SESSION = "0000000a-0806-4000-8000-000000000302";
 const R4_IDENTITY = "w0806-r4-google-sub";
-const R4_RESIDUE_SHOT = "0000000a-0806-4000-8000-000000000602";
 const BLOCKED_NO_RECEIPT = {
   state: "blocked",
   completionReceipt: null,
@@ -1539,7 +1538,7 @@ async function deleteStatusRoute(
 }
 
 Deno.test({
-  name: "live PG: residue after the Auth delete never yields a completion receipt — the durable row stays blocked without a receipt, /delete-status is honest, and nothing can certify afterwards",
+  name: "live PG: residue after the Auth delete never yields a completion receipt — the durable row stays blocked without a receipt, /delete-status is honest (it counts the residue itself and records the verdict), nothing can certify afterwards, and only the clean sweep certifies exactly once",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -1547,10 +1546,18 @@ Deno.test({
       const calls: WireCall[] = [];
       const rpc = wireRpc(sql, calls);
       const begun = await r4Begin(sql, rpc);
-      const residue = new Map<string, Row[]>([
-        ["shots", [{ id: R4_RESIDUE_SHOT, user_id: R4_OWNER }]],
-      ]);
-      const dependencies = r4Dependencies(sql, calls, residue);
+      // genuine residue: a row that survives the identity cascade (written
+      // right after the Auth delete with the foreign-key triggers off) — seen
+      // by the worker's owner read AND by the database's own count
+      const base = r4Dependencies(sql, calls, new Map());
+      const dependencies: AccountDeletionConfirmDependencies = {
+        ...base,
+        deleteAuthUser: async (ownerId) => {
+          const deleted = await base.deleteAuthUser(ownerId);
+          await leaveResidue(sql, R4_OWNER, "w0806-r4-residue");
+          return deleted;
+        },
+      };
       const result = await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
         challenge: begun.challenge,
         operationId: begun.operationId,
@@ -1587,11 +1594,48 @@ Deno.test({
       assertEquals(row.phase, "auth_delete_intent");
       assertEquals(row.lease_token, null);
       assertEquals(row.last_error_code, "completion_unverified");
-      // /delete-status through the shipping route: blocked, no receipt
+      // /delete-status through the shipping route: the poll re-acquires the
+      // post-Auth phase under the status capability, the database counts the
+      // residue, the verdict is recorded again — blocked, no receipt
+      const beforePoll = calls.length;
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
         body: BLOCKED_NO_RECEIPT,
       });
+      const poll = calls.slice(beforePoll);
+      assertEquals(poll[0].name, "read_account_deletion_status");
+      assertEquals(poll[1].name, "claim_account_deletion_status_work");
+      assertEquals((poll[1].data as Row).outcome, "claimed");
+      assertEquals((poll[1].data as Row).ownerId, R4_OWNER);
+      assertEquals((poll[1].data as Row).operationId, begun.operationId);
+      assertNotEquals((poll[1].data as Row).leaseToken, lease);
+      const counted = poll.find((call) => call.name === "read_account_deletion_owner_residue");
+      assert(counted, "the database counted the owner namespaces under the lease");
+      assertEquals(counted.parameters.p_owner_id, R4_OWNER);
+      assertEquals(counted.parameters.p_operation_id, begun.operationId);
+      assertEquals(
+        ((counted.data as Row).namespaces as Row[]).filter((entry) => entry.rows !== 0),
+        [{ schema: "public", table: "user_saved_drills", column: "user_id", rows: 1 }],
+      );
+      assertEquals(
+        poll.map((call) => call.name).filter((name) => name !== "read_account_deletion_receipt"),
+        [
+          "read_account_deletion_status",
+          "claim_account_deletion_status_work",
+          "read_account_deletion_owner_residue",
+          "fail_account_deletion_operation",
+          "read_account_deletion_status",
+        ],
+        "no Apple/RevenueCat/Auth step is repeated by the poll",
+      );
+      assertEquals(poll.at(-2)?.parameters.p_error_code, "completion_unverified");
+      assertEquals(poll.at(-2)?.data, { outcome: "released" });
+      assertEquals(
+        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
+        0,
+      );
+      const polled = await durableRow(sql, begun.operationId);
+      assertEquals(polled, { ...row, attempts: row.attempts + 1 });
       // the owner receipt read says the same
       assertEquals(
         (
@@ -1612,15 +1656,25 @@ Deno.test({
           p_lease_token: crypto.randomUUID(),
         },
         { p_owner_id: PG_OWNER, p_operation_id: begun.operationId, p_lease_token: lease },
+        {
+          p_owner_id: R4_OWNER,
+          p_operation_id: begun.operationId,
+          p_lease_token: (poll[1].data as Row).leaseToken,
+        },
       ]) {
         const certify = await certifyDirect(sql, attempt);
         assertEquals(certify.error, null, "certify RPC exists and is callable by the service");
         assertEquals(certify.data, { outcome: "stale_lease" });
       }
-      assertEquals(await durableRow(sql, begun.operationId), row);
+      assertEquals(await durableRow(sql, begun.operationId), polled);
+      // every further poll finds the residue again: blocked, no receipt
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
         body: BLOCKED_NO_RECEIPT,
+      });
+      assertEquals(await durableRow(sql, begun.operationId), {
+        ...row,
+        attempts: row.attempts + 2,
       });
       // a later worker re-acquires the post-Auth phase (round 5) — and while
       // the residue is still there it is found again: no receipt, verdict
@@ -1651,14 +1705,17 @@ Deno.test({
         0,
       );
       const retried = await durableRow(sql, begun.operationId);
-      assertEquals(retried, { ...row, attempts: row.attempts + 1 });
+      assertEquals(retried, { ...row, attempts: row.attempts + 3 });
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
         body: BLOCKED_NO_RECEIPT,
       });
-      // the cascade catches up (the residue is gone): the next sweep is clean
-      // and certifies exactly once
-      residue.delete("shots");
+      assertEquals(await durableRow(sql, begun.operationId), {
+        ...row,
+        attempts: row.attempts + 4,
+      });
+      // the residue is cleared: the next sweep is clean and certifies exactly once
+      await sql.unsafe(`delete from public.user_saved_drills where user_id = $1`, [R4_OWNER]);
       const ledgerBefore = await ledgerSnapshot(sql);
       const recovered = await resumeConfirmedAccountDeletionOperation(
         rpc,
@@ -1678,6 +1735,7 @@ Deno.test({
       assertEquals(certified.phase, "completed");
       assertEquals(certified.lease_token, null);
       assertEquals(certified.last_error_code, null);
+      assertEquals(certified.attempts, row.attempts + 5);
       assert(certified.completed_at !== null && retried.auth_deleted_at !== null);
       assert(certified.completed_at.getTime() > retried.auth_deleted_at.getTime());
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
@@ -1688,6 +1746,10 @@ Deno.test({
           appleAuthorizationRevocation: "not_applicable",
         },
       });
+      assertEquals(
+        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
+        1,
+      );
       assertEquals(await ledgerSnapshot(sql), ledgerBefore, "free-rating ledger untouched");
     } finally {
       await sql.end();
@@ -1975,7 +2037,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "live PG: when the post-Auth storage keeps failing the verdict is recorded and released, /delete-status is honest (blocked, no receipt), and a later worker re-acquires the phase and certifies exactly once",
+  name: "live PG: when the post-Auth storage keeps failing the verdict is recorded and released without a receipt; the app's next status poll re-acquires the phase under the same owner/operation and certifies exactly once, and a later worker only re-reads the receipt",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -2013,10 +2075,6 @@ Deno.test({
       assertEquals(row.phase, "auth_delete_intent");
       assertEquals(row.lease_token, null);
       assertEquals(row.last_error_code, "completion_unverified");
-      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
-        status: 200,
-        body: BLOCKED_NO_RECEIPT,
-      });
       // the spent lease certifies nothing
       assertEquals(
         (
@@ -2028,27 +2086,26 @@ Deno.test({
         ).data,
         { outcome: "stale_lease" },
       );
-      // recovery: a worker with the operation binding re-acquires the phase
-      const beforeResume = calls.length;
-      const resumed = await resumeConfirmedAccountDeletionOperation(
-        wire,
-        dependencies,
-        R4_OWNER,
-        begun.operationId,
-      );
-      assertEquals(resumed.outcome, "completed");
-      if (resumed.outcome !== "completed") throw new Error("unreachable");
-      assertEquals(resumed.operationId, begun.operationId);
-      assertEquals(resumed.appleAuthorizationRevocation, "not_applicable");
-      const claim = calls[beforeResume];
-      assertEquals(claim.name, "claim_account_deletion_work");
+      assertEquals(await durableRow(sql, begun.operationId), row);
+      // recovery: the status poll — the capability the app still holds after
+      // its session cascaded away — re-acquires the phase, the database counts
+      // every namespace clean, and the poll certifies exactly once
+      const beforePoll = calls.length;
+      const polled = await deleteStatusRoute(wire, begun.operationId, begun.statusCapability);
+      assertEquals(polled.status, 200);
+      const body = polled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(polled.body, completedBody(body.completionReceipt.completedAt));
+      const claim = calls[beforePoll + 1];
+      assertEquals(claim.name, "claim_account_deletion_status_work");
       const claimed = claim.data as Row;
       assertEquals(claimed.outcome, "claimed");
+      assertEquals(claimed.ownerId, R4_OWNER);
+      assertEquals(claimed.operationId, begun.operationId);
       assertEquals(claimed.authDeleted, true);
       assertEquals(claimed.appleCompleted, true);
       assertEquals(claimed.revenueCatCompleted, true);
       assertNotEquals(claimed.leaseToken, lease, "a fresh lease, not the spent one");
-      assertRecoveryOnly(calls, beforeResume);
+      assertRecoveryOnly(calls, beforePoll);
       assertEquals(
         calls.filter((call) => call.name === "certify_account_deletion_completion").length,
         1,
@@ -2060,11 +2117,15 @@ Deno.test({
       assertEquals(certified.attempts, 2);
       assert(certified.completed_at !== null && row.auth_deleted_at !== null);
       assert(certified.completed_at.getTime() > row.auth_deleted_at.getTime());
+      assertEquals(
+        certified.completed_at.getTime(),
+        Date.parse(body.completionReceipt.completedAt),
+      );
       assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
         status: 200,
-        body: completedBody(resumed.completionReceipt.completedAt),
+        body: completedBody(body.completionReceipt.completedAt),
       });
-      // exactly once: neither lease certifies again, a further resume only reads
+      // exactly once: neither lease certifies again, a later worker only reads
       for (const token of [lease, claimed.leaseToken as string]) {
         assertEquals(
           (
@@ -2077,19 +2138,27 @@ Deno.test({
           { outcome: "stale_lease" },
         );
       }
-      const beforeSecond = calls.length;
+      const beforeResume = calls.length;
+      const resumed = await resumeConfirmedAccountDeletionOperation(
+        wire,
+        dependencies,
+        R4_OWNER,
+        begun.operationId,
+      );
+      assertEquals(resumed, {
+        outcome: "completed",
+        operationId: begun.operationId,
+        deleted: true,
+        completionReceipt: { completedAt: body.completionReceipt.completedAt },
+        appleAuthorizationRevocation: "not_applicable",
+      });
       assertEquals(
-        await resumeConfirmedAccountDeletionOperation(
-          wire,
-          dependencies,
-          R4_OWNER,
-          begun.operationId,
-        ),
-        resumed,
+        calls.slice(beforeResume).map((call) => call.name),
+        ["claim_account_deletion_work"],
       );
       assertEquals(
-        calls.slice(beforeSecond).map((call) => call.name),
-        ["claim_account_deletion_work"],
+        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
+        1,
       );
       assertEquals(await durableRow(sql, begun.operationId), certified);
       assertEquals(await ledgerSnapshot(sql), ledgerBefore, "free-rating ledger untouched");
@@ -2100,7 +2169,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "live PG: worker death after the Auth delete — the retained lease reads in_progress while live and is busy to others, once expired it is re-acquired under the exact owner/operation binding and certifies exactly once; forged, cross-owner, cross-operation and expired leases never certify",
+  name: "live PG: worker death after the Auth delete — the retained lease reads in_progress while live and is busy to others (the status poll included); once expired the app's status poll re-acquires it under the exact owner/operation binding and certifies exactly once; forged, cross-owner, cross-operation and expired leases never certify",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -2202,23 +2271,20 @@ Deno.test({
         { outcome: "stale_lease" },
         "an expired lease certifies nothing",
       );
-      // no verdict was recorded: the phase is still recoverable, not blocked
-      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
-        status: 200,
-        body: IN_PROGRESS_NO_RECEIPT,
-      });
+      // no verdict was recorded: the phase is still recoverable, not blocked —
+      // and the status poll is the shipping surface that recovers it: the
+      // capability re-acquires the exact owner/operation, the database counts
+      // every namespace clean, the poll certifies exactly once
       const beforeResume = calls.length;
-      const resumed = await resumeConfirmedAccountDeletionOperation(
-        wire,
-        dependencies,
-        R4_OWNER,
-        begun.operationId,
-      );
-      assertEquals(resumed.outcome, "completed");
-      if (resumed.outcome !== "completed") throw new Error("unreachable");
-      const claimed = calls[beforeResume].data as Row;
-      assertEquals(calls[beforeResume].name, "claim_account_deletion_work");
+      const polled = await deleteStatusRoute(wire, begun.operationId, begun.statusCapability);
+      assertEquals(polled.status, 200);
+      const body = polled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(polled.body, completedBody(body.completionReceipt.completedAt));
+      const claimed = calls[beforeResume + 1].data as Row;
+      assertEquals(calls[beforeResume + 1].name, "claim_account_deletion_status_work");
       assertEquals(claimed.outcome, "claimed");
+      assertEquals(claimed.ownerId, R4_OWNER);
+      assertEquals(claimed.operationId, begun.operationId);
       assertEquals(claimed.authDeleted, true);
       assertNotEquals(claimed.leaseToken, lease);
       assertRecoveryOnly(calls, beforeResume);
@@ -2233,10 +2299,35 @@ Deno.test({
       assertEquals(certified.attempts, 2);
       assert(certified.completed_at !== null);
       assert(certified.completed_at.getTime() > row.auth_deleted_at.getTime());
+      assertEquals(
+        certified.completed_at.getTime(),
+        Date.parse(body.completionReceipt.completedAt),
+      );
       assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
         status: 200,
-        body: completedBody(resumed.completionReceipt.completedAt),
+        body: completedBody(body.completionReceipt.completedAt),
       });
+      // a later owner-bound worker only re-reads the durable receipt
+      const beforeWorker = calls.length;
+      assertEquals(
+        await resumeConfirmedAccountDeletionOperation(
+          wire,
+          dependencies,
+          R4_OWNER,
+          begun.operationId,
+        ),
+        {
+          outcome: "completed",
+          operationId: begun.operationId,
+          deleted: true,
+          completionReceipt: { completedAt: body.completionReceipt.completedAt },
+          appleAuthorizationRevocation: "not_applicable",
+        },
+      );
+      assertEquals(
+        calls.slice(beforeWorker).map((call) => call.name),
+        ["claim_account_deletion_work"],
+      );
       for (const token of [lease, claimed.leaseToken as string]) {
         assertEquals(
           (
@@ -2258,7 +2349,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "live PG: a lost deleteUser response is recorded against the retained post-Auth lease and released; the app's retried confirm re-acquires the phase without a second RevenueCat or Auth call and certifies exactly once",
+  name: "live PG: a lost deleteUser response is recorded against the retained post-Auth lease and released; the app's status poll re-acquires the phase without a second RevenueCat or Auth call and certifies exactly once, and a retried confirm only re-reads the receipt",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -2288,25 +2379,20 @@ Deno.test({
       assertEquals(row.completed_at, null);
       assertEquals(row.lease_token, null);
       assertEquals(row.last_error_code, "auth_delete_unavailable");
-      assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
-        status: 200,
-        body: BLOCKED_NO_RECEIPT,
-      });
-      // the app retries the confirm with the same challenge (its session is
-      // still cached): the confirm RPC re-acquires the post-Auth phase
-      const beforeRetry = calls.length;
-      const retried = await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
-        challenge: begun.challenge,
-        operationId: begun.operationId,
-      });
-      assertEquals(retried.outcome, "completed");
-      if (retried.outcome !== "completed") throw new Error("unreachable");
-      const claimed = calls[beforeRetry].data as Row;
-      assertEquals(calls[beforeRetry].name, "confirm_account_deletion_operation");
+      // the poll the app keeps making re-acquires the post-Auth phase under
+      // the status capability: no second Auth or RevenueCat call, one receipt
+      const beforePoll = calls.length;
+      const polled = await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability);
+      assertEquals(polled.status, 200);
+      const body = polled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(polled.body, completedBody(body.completionReceipt.completedAt));
+      const claimed = calls[beforePoll + 1].data as Row;
+      assertEquals(calls[beforePoll + 1].name, "claim_account_deletion_status_work");
       assertEquals(claimed.outcome, "claimed");
+      assertEquals(claimed.ownerId, R4_OWNER);
       assertEquals(claimed.authDeleted, true);
       assertNotEquals(claimed.leaseToken, lease);
-      assertRecoveryOnly(calls, beforeRetry);
+      assertRecoveryOnly(calls, beforePoll);
       assertEquals(calls.filter((call) => call.name === "auth_delete").length, 1);
       assertEquals(calls.filter((call) => call.name === "revenuecat_delete").length, 1);
       assertEquals(
@@ -2317,9 +2403,38 @@ Deno.test({
       assertEquals(certified.phase, "completed");
       assertEquals(certified.last_error_code, null);
       assertEquals(certified.attempts, 2);
+      assertEquals(
+        certified.completed_at?.getTime(),
+        Date.parse(body.completionReceipt.completedAt),
+      );
+      // the app retries the confirm with the same challenge (its session is
+      // still cached): the confirm RPC finds the certified operation and only
+      // re-reads its receipt — nothing is repeated, nothing certifies again
+      const beforeRetry = calls.length;
+      const retried = await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
+        challenge: begun.challenge,
+        operationId: begun.operationId,
+      });
+      assertEquals(retried, {
+        outcome: "completed",
+        operationId: begun.operationId,
+        deleted: true,
+        completionReceipt: { completedAt: body.completionReceipt.completedAt },
+        appleAuthorizationRevocation: "not_applicable",
+      });
+      assertEquals(
+        calls.slice(beforeRetry).map((call) => call.name),
+        ["confirm_account_deletion_operation"],
+      );
+      assertEquals((calls[beforeRetry].data as Row).outcome, "completed");
+      assertEquals(
+        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
+        1,
+      );
+      assertEquals(await durableRow(sql, begun.operationId), certified);
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
-        body: completedBody(retried.completionReceipt.completedAt),
+        body: completedBody(body.completionReceipt.completedAt),
       });
       assertEquals(await ledgerSnapshot(sql), ledgerBefore, "free-rating ledger untouched");
     } finally {
@@ -2329,7 +2444,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "live PG: an unreadable namespace after the Auth delete never yields a receipt — completion_unverified is recorded, the row stays blocked without a receipt, and only a later complete clean sweep certifies (exactly once)",
+  name: "live PG: an unreadable namespace after the Auth delete never yields a receipt from the worker — completion_unverified is recorded, the row stays blocked without a receipt; the status poll's database-counted clean sweep certifies exactly once, and a worker whose read path is still denied returns no receipt it did not verify",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -2358,11 +2473,28 @@ Deno.test({
       assertEquals(row.completed_at, null);
       assertEquals(row.lease_token, null);
       assertEquals(row.last_error_code, "completion_unverified");
-      assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
-        status: 200,
-        body: BLOCKED_NO_RECEIPT,
-      });
-      // still unreadable on the retry: still no receipt
+      // the status poll counts every namespace inside the database — the
+      // owner read path's denial does not reach it — and certifies exactly once
+      const beforePoll = calls.length;
+      const polled = await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability);
+      assertEquals(polled.status, 200);
+      const body = polled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(polled.body, completedBody(body.completionReceipt.completedAt));
+      assertEquals(calls[beforePoll + 1].name, "claim_account_deletion_status_work");
+      assertEquals((calls[beforePoll + 1].data as Row).outcome, "claimed");
+      assertRecoveryOnly(calls, beforePoll);
+      assertEquals(
+        calls.filter((call) => call.name === "certify_account_deletion_completion").length,
+        1,
+      );
+      const certified = await durableRow(sql, begun.operationId);
+      assertEquals(certified.phase, "completed");
+      assertEquals(
+        certified.completed_at?.getTime(),
+        Date.parse(body.completionReceipt.completedAt),
+      );
+      // still unreadable on the worker's retry: the worker verifies nothing it
+      // cannot read and hands out no receipt — the durable row does not move
       assertEquals(
         await resumeConfirmedAccountDeletionOperation(
           rpc,
@@ -2374,13 +2506,14 @@ Deno.test({
       );
       assertEquals(
         calls.filter((call) => call.name === "certify_account_deletion_completion").length,
-        0,
+        1,
       );
+      assertEquals(await durableRow(sql, begun.operationId), certified);
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
-        body: BLOCKED_NO_RECEIPT,
+        body: completedBody(body.completionReceipt.completedAt),
       });
-      // the read path recovers: the complete clean sweep certifies once
+      // the read path recovers: the worker re-reads the one durable receipt
       denied.clear();
       const recovered = await resumeConfirmedAccountDeletionOperation(
         rpc,
@@ -2388,16 +2521,21 @@ Deno.test({
         R4_OWNER,
         begun.operationId,
       );
-      assertEquals(recovered.outcome, "completed");
-      if (recovered.outcome !== "completed") throw new Error("unreachable");
+      assertEquals(recovered, {
+        outcome: "completed",
+        operationId: begun.operationId,
+        deleted: true,
+        completionReceipt: { completedAt: body.completionReceipt.completedAt },
+        appleAuthorizationRevocation: "not_applicable",
+      });
       assertEquals(
         calls.filter((call) => call.name === "certify_account_deletion_completion").length,
         1,
       );
-      assertEquals((await durableRow(sql, begun.operationId)).phase, "completed");
+      assertEquals(await durableRow(sql, begun.operationId), certified);
       assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
         status: 200,
-        body: completedBody(recovered.completionReceipt.completedAt),
+        body: completedBody(body.completionReceipt.completedAt),
       });
     } finally {
       await sql.end();
@@ -2485,6 +2623,341 @@ Deno.test({
         0,
         "no worker certified anything; the direct attempt above was refused",
       );
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ── W08-06 round 6: the post-Auth certification phase is reachable from a
+// shipping surface after the deleting session is gone ────────────────────────
+
+/** The confirm route's live-session check as index.ts performs it: the owner's
+ * own bearer runs `public.is_api_session_active()` under RLS — false the moment
+ * the Auth delete cascades the `auth.sessions` row away. */
+function shippingLiveSession(sql: Sql): (ownerId: string) => Promise<boolean> {
+  return async (ownerId) => {
+    const rows = await sql.begin(async (tx) => {
+      await asOwner(tx as unknown as Tx, ownerId, R4_SESSION);
+      return await tx.unsafe(`select public.is_api_session_active() as active`);
+    });
+    return (rows as unknown as Row[])[0]?.active === true;
+  };
+}
+
+/** Rows that survived the identity cascade: written with the foreign-key
+ * triggers off (superuser `session_replication_role = replica`), which is the
+ * only way to observe genuine residue under the shipped schema. */
+async function leaveResidue(sql: Sql, ownerId: string, slug: string): Promise<void> {
+  await sql.begin(async (tx) => {
+    await tx.unsafe(`set local session_replication_role = replica`);
+    await tx.unsafe(`insert into public.user_saved_drills (user_id, slug) values ($1, $2)`, [
+      ownerId,
+      slug,
+    ]);
+  });
+}
+
+function countCalls(calls: WireCall[], name: string): number {
+  return calls.filter((call) => call.name === name).length;
+}
+
+Deno.test({
+  name: "live PG (shipping surface): after a lost deleteUser response the app's confirm retry is refused (session_invalid) and the status poll — the capability the app still holds — settles the post-Auth phase: original owner and operation, no external call repeated, certified exactly once",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
+    try {
+      const calls: WireCall[] = [];
+      const rpc = wireRpc(sql, calls);
+      const begun = await r4Begin(sql, rpc);
+      const ledgerBefore = await ledgerSnapshot(sql);
+      const dependencies = {
+        ...r4Dependencies(sql, calls, new Map(), { loseAuthDeleteResponse: true }),
+        verifyLiveSession: shippingLiveSession(sql),
+      };
+      const first = await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
+        challenge: begun.challenge,
+        operationId: begun.operationId,
+      });
+      assertEquals(first, { outcome: "unavailable", code: "auth_delete_unavailable" });
+      const interrupted = await durableRow(sql, begun.operationId);
+      assert(interrupted.auth_deleted_at !== null);
+      assertEquals(interrupted.completed_at, null);
+      assertEquals(interrupted.last_error_code, "auth_delete_unavailable");
+      assertEquals(
+        (await sql.unsafe(`select 1 from auth.users where id = $1`, [R4_OWNER])).length,
+        0,
+        "the Auth identity is gone",
+      );
+      assertEquals(
+        (await sql.unsafe(`select 1 from auth.sessions where user_id = $1`, [R4_OWNER])).length,
+        0,
+        "…and its sessions cascaded with it",
+      );
+      // the app's retried confirm cannot reach the phase: its session is gone
+      const beforeRetry = calls.length;
+      assertEquals(
+        await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
+          challenge: begun.challenge,
+          operationId: begun.operationId,
+        }),
+        { outcome: "rejected", code: "session_invalid" },
+      );
+      assertEquals(calls.length, beforeRetry, "a refused confirm touches no RPC");
+      // a wrong capability settles nothing and learns nothing
+      const forged = await deleteStatusRoute(rpc, begun.operationId, "0".repeat(64));
+      assertEquals(forged.status, 404);
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 0);
+      // the status poll the app keeps making is the shipping recovery path
+      const settled = await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability);
+      assertEquals(settled.status, 200);
+      const body = settled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(body.state, "completed");
+      assertEquals(settled.body, completedBody(body.completionReceipt.completedAt));
+      assertRecoveryOnly(calls, beforeRetry);
+      assertEquals(countCalls(calls, "auth_delete"), 1);
+      assertEquals(countCalls(calls, "revenuecat_delete"), 1);
+      assertEquals(countCalls(calls, "claim_account_deletion_work"), 0, "no owner-bound claim");
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 1);
+      const certification = calls.find(
+        (call) => call.name === "certify_account_deletion_completion",
+      )!;
+      assertEquals(certification.parameters.p_owner_id, R4_OWNER);
+      assertEquals(certification.parameters.p_operation_id, begun.operationId);
+      assertEquals(certification.data, completedBody(body.completionReceipt.completedAt));
+      const certified = await durableRow(sql, begun.operationId);
+      assertEquals(certified.phase, "completed");
+      assertEquals(certified.last_error_code, null);
+      assertEquals(certified.lease_token, null);
+      assertEquals(
+        certified.completed_at?.getTime(),
+        Date.parse(body.completionReceipt.completedAt),
+      );
+      assertEquals(
+        (
+          await sql.unsafe(
+            `select count(*)::int as n from api_private.account_deletion_operations where owner_id = $1`,
+            [R4_OWNER],
+          )
+        )[0].n,
+        1,
+        "no new operation was minted",
+      );
+      // repeated polls return the same durable receipt without certifying again
+      assertEquals(await deleteStatusRoute(rpc, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: completedBody(body.completionReceipt.completedAt),
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 1);
+      assertEquals(await ledgerSnapshot(sql), ledgerBefore, "free-rating ledger untouched");
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live PG (shipping surface): a worker that died after the Auth delete leaves a live lease the status poll respects; once it expires the poll re-acquires the phase, residue is counted by the database and recorded without a receipt, and only the later clean sweep certifies — exactly once",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
+    try {
+      const calls: WireCall[] = [];
+      const wire = wireRpc(sql, calls);
+      // the worker's failure record never reaches the database: the retained
+      // post-Auth lease stays live, exactly as a worker that died would leave it
+      const rpc = faultyRpc(wire, [
+        { name: "fail_account_deletion_operation", mode: "drop", times: 1 },
+      ]);
+      const begun = await r4Begin(sql, wire);
+      const ledgerBefore = await ledgerSnapshot(sql);
+      const dependencies = {
+        ...r4Dependencies(sql, calls, new Map(), { loseAuthDeleteResponse: true }),
+        verifyLiveSession: shippingLiveSession(sql),
+      };
+      assertEquals(
+        await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
+          challenge: begun.challenge,
+          operationId: begun.operationId,
+        }),
+        { outcome: "unavailable", code: "auth_delete_unavailable" },
+      );
+      const dead = await durableRow(sql, begun.operationId);
+      assert(dead.auth_deleted_at !== null);
+      assert(dead.lease_token !== null && dead.lease_expires_at !== null);
+      assert(dead.lease_expires_at.getTime() > Date.now(), "the dead worker's lease is live");
+      assertEquals(dead.completed_at, null);
+      // the rows the cascade "missed"
+      await leaveResidue(sql, R4_OWNER, "residue-drill");
+      // a live lease is respected: the poll reports the sweep in progress
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: IN_PROGRESS_NO_RECEIPT,
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 0);
+      assertEquals((await durableRow(sql, begun.operationId)).lease_token, dead.lease_token);
+      // the lease expires; the next poll re-acquires and finds the residue
+      await sql.unsafe(
+        `update api_private.account_deletion_operations
+            set lease_expires_at = clock_timestamp() - interval '1 second' where id = $1`,
+        [begun.operationId],
+      );
+      const beforePoll = calls.length;
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: BLOCKED_NO_RECEIPT,
+      });
+      assertRecoveryOnly(calls, beforePoll);
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 0);
+      const counted = calls
+        .slice(beforePoll)
+        .find((call) => call.name === "read_account_deletion_owner_residue");
+      assert(counted, "the database counted the owner's namespaces");
+      const namespaces = (counted.data as { namespaces: Row[] }).namespaces;
+      assertEquals(
+        namespaces.filter((entry) => Number(entry.rows) > 0),
+        [{ schema: "public", table: "user_saved_drills", column: "user_id", rows: 1 }],
+      );
+      assert(
+        namespaces.some((entry) => entry.table === "shots") &&
+          namespaces.some((entry) => entry.table === "profiles") &&
+          namespaces.some((entry) => entry.table === "offline_grants"),
+        "every cascading owner table is counted",
+      );
+      const failed = calls
+        .slice(beforePoll)
+        .filter((call) => call.name === "fail_account_deletion_operation");
+      assertEquals(failed.length, 1);
+      assertEquals(failed[0].parameters.p_error_code, "completion_unverified");
+      assertEquals(failed[0].data, { outcome: "released" });
+      const residueRow = await durableRow(sql, begun.operationId);
+      assertEquals(residueRow.completed_at, null);
+      assertEquals(residueRow.phase, "auth_delete_intent");
+      assertEquals(residueRow.lease_token, null);
+      assertEquals(residueRow.last_error_code, "completion_unverified");
+      // still there on the next poll: still no receipt
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: BLOCKED_NO_RECEIPT,
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 0);
+      // the residue is gone: the clean sweep certifies once
+      await sql.unsafe(`delete from public.user_saved_drills where user_id = $1`, [R4_OWNER]);
+      const settled = await deleteStatusRoute(wire, begun.operationId, begun.statusCapability);
+      const body = settled.body as { state: string; completionReceipt: { completedAt: string } };
+      assertEquals(body.state, "completed");
+      assertEquals(settled, {
+        status: 200,
+        body: completedBody(body.completionReceipt.completedAt),
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 1);
+      assertEquals((await durableRow(sql, begun.operationId)).phase, "completed");
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: completedBody(body.completionReceipt.completedAt),
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 1);
+      assertEquals(countCalls(calls, "auth_delete"), 1);
+      assertEquals(countCalls(calls, "revenuecat_delete"), 1);
+      assertEquals(await ledgerSnapshot(sql), ledgerBefore, "free-rating ledger untouched");
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live PG (shipping surface): /delete-status is honest for a post-Auth phase whose identity exists again under the same id — blocked, no claim, no receipt — and the status capability never moves a phase while the identity is present",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
+    try {
+      const calls: WireCall[] = [];
+      const wire = wireRpc(sql, calls);
+      const begun = await r4Begin(sql, wire);
+      // a confirmed operation whose identity is still present: the poll reads
+      // and moves nothing (the confirm route owns the pre-Auth phases)
+      await sql.unsafe(
+        `update api_private.account_deletion_operations
+            set confirmed_at = clock_timestamp(), phase = 'confirmed' where id = $1`,
+        [begun.operationId],
+      );
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: IN_PROGRESS_NO_RECEIPT,
+      });
+      assertEquals(
+        calls
+          .filter((call) => call.name.startsWith("claim_") && call.data !== null)
+          .map((call) => (call.data as Row).outcome),
+        calls.filter((call) => call.name.startsWith("claim_")).map(() => "blocked"),
+      );
+      assertEquals(countCalls(calls, "read_account_deletion_owner_residue"), 0);
+      const untouched = await durableRow(sql, begun.operationId);
+      assertEquals(untouched.phase, "confirmed");
+      assertEquals(untouched.lease_token, null);
+      assertEquals(untouched.attempts, 0);
+      // now the real flow: the worker dies after the Auth delete…
+      await sql.unsafe(
+        `update api_private.account_deletion_operations
+            set confirmed_at = null, phase = 'requested' where id = $1`,
+        [begun.operationId],
+      );
+      const rpc = faultyRpc(wire, [
+        { name: "fail_account_deletion_operation", mode: "drop", times: 1 },
+      ]);
+      const dependencies = {
+        ...r4Dependencies(sql, calls, new Map(), { loseAuthDeleteResponse: true }),
+        verifyLiveSession: shippingLiveSession(sql),
+      };
+      assertEquals(
+        await confirmAccountDeletionOperation(rpc, dependencies, R4_OWNER, {
+          challenge: begun.challenge,
+          operationId: begun.operationId,
+        }),
+        { outcome: "unavailable", code: "auth_delete_unavailable" },
+      );
+      await sql.unsafe(
+        `update api_private.account_deletion_operations
+            set lease_expires_at = clock_timestamp() - interval '1 second' where id = $1`,
+        [begun.operationId],
+      );
+      // …and the identity is back under the same id before anything settles
+      await sql.unsafe(
+        `insert into auth.users (id, email, raw_app_meta_data) values ('${R4_OWNER}', 'w0806r4@example.com', '{"provider":"google"}')`,
+      );
+      const orphaned = await durableRow(sql, begun.operationId);
+      assert(orphaned.auth_deleted_at !== null);
+      const beforePoll = calls.length;
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: BLOCKED_NO_RECEIPT,
+      });
+      assertEquals(countCalls(calls, "certify_account_deletion_completion"), 0);
+      assertEquals(countCalls(calls, "read_account_deletion_owner_residue"), 0);
+      for (const call of calls.slice(beforePoll)) {
+        if (call.name.startsWith("claim_")) assertEquals(call.data, { outcome: "blocked" });
+      }
+      assertEquals(
+        (
+          await wire("claim_account_deletion_work", {
+            p_owner_id: R4_OWNER,
+            p_operation_id: begun.operationId,
+          })
+        ).data,
+        { outcome: "blocked" },
+        "the status view agrees with the claim RPC",
+      );
+      const row = await durableRow(sql, begun.operationId);
+      assertEquals(row.completed_at, null);
+      assertEquals(row.phase, "auth_delete_intent");
+      assertEquals(row.lease_token, orphaned.lease_token, "nothing re-acquired the phase");
+      assertEquals(row.attempts, orphaned.attempts);
+      assertEquals(await deleteStatusRoute(wire, begun.operationId, begun.statusCapability), {
+        status: 200,
+        body: BLOCKED_NO_RECEIPT,
+      });
     } finally {
       await sql.end();
     }
