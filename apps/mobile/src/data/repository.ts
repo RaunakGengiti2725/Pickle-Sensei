@@ -128,6 +128,7 @@ export const OWNER_SCOPED_KV_NAMESPACES = [
   'consistency',
   'practice.set',
   'billing.pending-fulfilment',
+  'analysis.release-policy',
 ] as const;
 
 /**

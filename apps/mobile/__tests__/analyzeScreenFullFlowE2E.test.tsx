@@ -142,6 +142,10 @@ import {
   establishApiSession,
 } from '../src/account/apiSession';
 import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 
 const owner = '22222222-2222-4222-8222-222222222222';
 
@@ -177,6 +181,8 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       finalized.push(body);
       return jsonResponse(finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalized };

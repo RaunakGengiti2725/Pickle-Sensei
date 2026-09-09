@@ -790,3 +790,29 @@ export function createOfflineGrantClient(
     },
   };
 }
+
+export const ANALYSIS_RELEASE_POLICY_PATH = '/v1/analysis/release-policy';
+
+/** Transport for the release authority. The body is returned unparsed: the
+ * canonical-bytes / digest verification that decides whether it is a policy
+ * at all lives in `analysis/releasePolicyClient.ts`, never in the client. */
+export interface ReleasePolicyClient {
+  read(): Promise<unknown>;
+}
+
+export function createReleasePolicyClient(
+  config: ApiConfigState,
+): ReleasePolicyClient {
+  return {
+    async read() {
+      if (!config.token?.trim()) {
+        throw new ApiError(
+          401,
+          'auth.required',
+          'Sign in before checking whether validated ratings are available.',
+        );
+      }
+      return request<unknown>(config, 'GET', ANALYSIS_RELEASE_POLICY_PATH);
+    },
+  };
+}

@@ -39,6 +39,11 @@ import {
   seedSqliteCapture,
 } from '../../testSupport/sqlite';
 import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+  permitCalls,
+} from '../../testSupport/releasePolicyFixture';
+import {
   createCanonicalAccessClient,
   createRevenueCatBillingClient,
   type BillingAccessDependencies,
@@ -537,6 +542,8 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
           },
         });
       }
+      if (isReleasePolicyRequest(url))
+        return jsonResponse(200, activeReleaseAuthority());
       throw new Error(`Unexpected fetch: ${url}`);
     });
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
@@ -558,7 +565,7 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
       appVersion: '0.1.0',
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(permitCalls(fetchMock)).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.test/v1/analysis-permits',
       expect.objectContaining({
@@ -605,6 +612,8 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
           },
         });
       }
+      if (isReleasePolicyRequest(url))
+        return jsonResponse(200, activeReleaseAuthority());
       throw new Error(`Unexpected fetch: ${url}`);
     });
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
@@ -625,7 +634,7 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
       apiConfig: { baseUrl: 'https://api.test', token: 'id-token' },
       appVersion: '0.1.0',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(permitCalls(fetchMock)).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.test/v1/analysis-permits',
       expect.objectContaining({

@@ -219,6 +219,10 @@ import {
   runOriginalCaptureAnalysis,
   reconcileOriginalCaptureAnalysis,
 } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthorityResponse,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 import { loadSavedTechniqueConfirmation } from '../src/analysis/savedTechniqueConfirmation';
 import { Button, ScreenHeader } from '../src/design/components';
 import { TechniqueIntentPicker } from '../src/flow/TechniqueIntentPicker';
@@ -291,6 +295,7 @@ async function fixture(
   let reservations = 0;
   const server = { releaseAvailable };
   const http = jest.fn(async (url: string, init?: RequestInit) => {
+    if (isReleasePolicyRequest(url)) return activeReleaseAuthorityResponse();
     if (url.endsWith('/v1/analysis-permits')) {
       reservations += 1;
       return {

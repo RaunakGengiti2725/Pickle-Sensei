@@ -14,6 +14,10 @@ import {
 } from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 import { API_REQUEST_TIMEOUT_MS } from '../src/data/api';
 import { runJournal } from '../src/analysis/runJournal';
 import { loadSavedTechniqueConfirmation } from '../src/analysis/savedTechniqueConfirmation';
@@ -99,6 +103,8 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       finalized.push(body);
       return jsonResponse(finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalized };
@@ -320,6 +326,8 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
       let onReleaseStarted: (() => void) | undefined;
       const events: string[] = [];
       const server = jest.fn(async (url: string, init?: RequestInit) => {
+        if (isReleasePolicyRequest(url))
+          return jsonResponse(activeReleaseAuthority());
         const body = JSON.parse(String(init?.body));
         if (url.endsWith('/v1/analysis-permits')) {
           events.push('reserve');

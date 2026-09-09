@@ -143,6 +143,7 @@ describe('account-scoped local repository', () => {
       'consistency',
       'practice.set',
       'billing.pending-fulfilment',
+      'analysis.release-policy',
     ]);
     expect(practiceSetKeyForOwner(ownerA)).toBe(`practice.set:${ownerA}`);
   });

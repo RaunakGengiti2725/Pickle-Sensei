@@ -17,6 +17,10 @@ import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { LocalDb } from '../src/data/db';
 import type { CapturedClip } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
@@ -80,6 +84,8 @@ function permitServer(options?: { access?: unknown }): {
       });
       return jsonResponse({ ok: true });
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return {
@@ -335,6 +341,8 @@ describe('runCaptureAnalysis permit accounting after reservation (audit)', () =>
           },
         });
       }
+      if (isReleasePolicyRequest(url))
+        return jsonResponse(activeReleaseAuthority());
       throw new Error(`Unexpected fetch: ${url}`);
     });
     (globalThis as { fetch?: unknown }).fetch = fetchMock;

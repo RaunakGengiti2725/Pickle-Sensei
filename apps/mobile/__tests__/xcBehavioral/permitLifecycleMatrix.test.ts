@@ -51,6 +51,10 @@ import {
   type RunCaptureAnalysisOutcome,
 } from '../../src/analysis/runCaptureAnalysis';
 import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../testSupport/releasePolicyFixture';
 
 const SUITE = 'permitLifecycleMatrix';
 const OWNER = '22222222-2222-4222-8222-222222222222';
@@ -247,6 +251,7 @@ function permitServer(): PermitServer {
       }
       return json(200, finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url)) return json(200, activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return server;

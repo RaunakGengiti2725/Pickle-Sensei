@@ -20,6 +20,11 @@ import {
   PAYWALL_REQUIRED_CODE,
   runCaptureAnalysis,
 } from '../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthorityResponse,
+  isReleasePolicyRequest,
+  permitCalls,
+} from '../../testSupport/releasePolicyFixture';
 
 /**
  * A reserve refused with HTTP 402 `access.paywall_required` is an
@@ -64,12 +69,13 @@ function errorResponse(
 function refusingServer(response: Response): jest.Mock {
   return jest.fn(async (url: string) => {
     if (url.endsWith('/v1/analysis-permits')) return response;
+    if (isReleasePolicyRequest(url)) return activeReleaseAuthorityResponse();
     throw new Error(`Unexpected fetch: ${url}`);
   });
 }
 
 function expectReserveRequest(fetchMock: jest.Mock): void {
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(permitCalls(fetchMock)).toHaveLength(1);
   expect(fetchMock).toHaveBeenCalledWith(
     'https://api.test/v1/analysis-permits',
     expect.objectContaining({
@@ -266,6 +272,7 @@ describe('runCaptureAnalysis — paywall-required reserve refusals', () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const fetchMock = jest.fn(async (url: string) => {
+      if (isReleasePolicyRequest(url)) return activeReleaseAuthorityResponse();
       if (url !== 'https://api.test/v1/analysis-permits') {
         throw new Error(`Unexpected fetch: ${url}`);
       }

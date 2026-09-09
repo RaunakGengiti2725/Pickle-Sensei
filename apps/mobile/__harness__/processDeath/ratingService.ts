@@ -17,6 +17,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { BEARER_TOKEN } from './report';
+import { activeReleaseAuthority } from '../../testSupport/releasePolicyFixture';
 
 export interface PermitRecord {
   readonly id: string;
@@ -98,6 +99,9 @@ export async function startRatingService(): Promise<RatingService> {
     path: string,
     body: unknown,
   ): { status: number; body: unknown } => {
+    if (method === 'GET' && path === '/v1/analysis/release-policy') {
+      return { status: 200, body: activeReleaseAuthority() };
+    }
     if (method === 'POST' && path === '/v1/analysis-permits') {
       const key = isRecord(body) ? body['idempotencyKey'] : undefined;
       if (typeof key !== 'string' || key.length === 0)

@@ -394,6 +394,7 @@ describe('AGENTS.md owner-scoping invariants for overlay state', () => {
       'consistency',
       'practice.set',
       'billing.pending-fulfilment',
+      'analysis.release-policy',
     ]);
     expect(rankCelebrationKeyForOwner('owner-1')).toBe(
       'rank.celebrated:owner-1',

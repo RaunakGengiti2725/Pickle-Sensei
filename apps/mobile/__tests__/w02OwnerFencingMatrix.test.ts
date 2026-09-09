@@ -39,6 +39,10 @@ import {
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
 import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
+import {
   OriginalAnalysisExecution,
   originalAnalysisOperations,
 } from '../src/analysis/originalAnalysisOperations';
@@ -283,6 +287,8 @@ function server(store: Store) {
         });
       }
       if (url.endsWith('/v1/sessions')) return response(200, {});
+      if (isReleasePolicyRequest(url))
+        return response(200, activeReleaseAuthority());
       throw new Error(`Unexpected test request ${url}`);
     },
   );

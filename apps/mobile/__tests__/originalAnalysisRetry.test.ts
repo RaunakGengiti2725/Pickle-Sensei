@@ -48,6 +48,10 @@ import {
   createSqliteTestDb,
   seedSqliteCapture,
 } from '../testSupport/sqlite';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 
 jest.mock('@pickle/analysis-pipeline', () => {
   const actual = jest.requireActual('@pickle/analysis-pipeline');
@@ -1240,6 +1244,7 @@ async function runnerSetup(noPose = false, auto = false) {
           rejected: [],
         });
       }
+      if (isReleasePolicyRequest(url)) return ok(activeReleaseAuthority());
       throw new Error(`Unexpected test HTTP ${url}`);
     },
   );

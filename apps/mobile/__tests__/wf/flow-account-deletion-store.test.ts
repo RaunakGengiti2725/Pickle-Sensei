@@ -256,6 +256,7 @@ describe('completeAccountDeletion', () => {
       'consistency',
       'practice.set',
       'billing.pending-fulfilment',
+      'analysis.release-policy',
     ]);
     const kvDeletes = tx
       .filter(c => c.sql === 'DELETE FROM kv WHERE key = ?')
@@ -267,6 +268,7 @@ describe('completeAccountDeletion', () => {
       `consistency:${OWNER}`,
       `practice.set:${OWNER}`,
       `billing.pending-fulfilment:${OWNER}`,
+      `analysis.release-policy:${OWNER}`,
     ]);
     expect(mockExecuted.some(c => c.sql === 'ROLLBACK')).toBe(false);
     // One clean pass: the purge is not retried once it committed.

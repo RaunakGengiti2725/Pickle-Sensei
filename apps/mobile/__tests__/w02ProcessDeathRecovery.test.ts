@@ -371,6 +371,7 @@ describe('W02-03 process-death recovery (child Node process, node:sqlite)', () =
     expect(second.final).toEqual(first.final);
     // The relaunch issued no further request: replay is served from disk.
     expect(result.server.requests.map(request => request.path)).toEqual([
+      '/v1/analysis/release-policy',
       '/v1/analysis-permits',
       '/v1/shots:sync',
     ]);
@@ -595,7 +596,9 @@ describe('W02-03 process-death recovery (child Node process, node:sqlite)', () =
         expect(reserves.length).toBeGreaterThanOrEqual(1);
         for (const request of reserves) expect(request.faulted).toEqual(fault);
         expectRedirectNeverFollowed(faulted);
-        expect(faulted.serverAfter.requests).toEqual([]);
+        expect(
+          faulted.serverAfter.requests.map(request => request.path),
+        ).toEqual(['/v1/analysis/release-policy']);
         expect(faulted.serverAfter.permits).toEqual([]);
 
         // No verdict ⇒ nothing terminal, nothing fabricated, same key kept.
