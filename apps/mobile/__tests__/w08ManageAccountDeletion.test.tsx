@@ -1262,7 +1262,10 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         );
 
         // The only live action is another status check of the SAME operation.
-        expect(buttonLabels(renderer)).toEqual(['Close', 'Retry deletion']);
+        expect(buttonLabels(renderer)).toEqual([
+          'Close',
+          expect.stringMatching(/^Retry deletion/),
+        ]);
         await pressWhenArmed(renderer, 'Retry deletion');
         expect(calls('delete-status')).toHaveLength(2);
         expect(calls('delete-request')).toHaveLength(1);
@@ -1342,7 +1345,10 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         for (let round = 0; round < 25; round += 1) await advance(0);
         await advance(HOUR_MS);
         expect(journalReads() - readsAfterOpen).toBeLessThanOrEqual(3);
-        expect(jest.getTimerCount()).toBe(0);
+        // Settled: a further day of idle time re-arms nothing at all.
+        const readsSettled = journalReads();
+        await advance(DAY_MS);
+        expect(journalReads()).toBe(readsSettled);
         expect(calls('delete-status')).toHaveLength(statusCallsBefore);
         expectNotDeleted(second);
         expectSentConfirmationHonest(second);
@@ -1391,7 +1397,12 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         expect(buttonLabels(second)).toEqual(['Close']);
         expect(calls('delete-status')).toHaveLength(0);
         expect(calls('delete-request')).toHaveLength(1);
-        expect(jest.getTimerCount()).toBe(0);
+        // Nothing is re-armed behind the message either.
+        const readsSettled = journalReads();
+        await advance(DAY_MS);
+        expect(journalReads()).toBe(readsSettled);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(buttonLabels(second)).toEqual(['Close']);
       } finally {
         act(() => second.unmount());
       }

@@ -1,5 +1,24 @@
-import type { ApiSession } from './apiSession';
-import type { DataOwnerContext } from '../data/accountScope';
+import { getApiSession, type ApiSession } from './apiSession';
+import {
+  canonicalDataOwner,
+  getDataOwnerSnapshot,
+  type DataOwnerContext,
+} from '../data/accountScope';
+import type { LocalDb } from '../data/db';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { deviceKeychainForVault } from './sessionVault';
+import { makeUuid } from '../util/uuid';
+import {
+  createDeletionOperationFoundation,
+  type DeletionOperationHandle,
+  type DeletionOperationResult,
+} from './deletionOperation';
+import type {
+  DeletionHttpRequest,
+  DeletionIssue,
+  DeletionJournalEntry,
+  DeletionRuntimePort,
+} from './deletionOperationContracts';
 
 /**
  * Client for the backend's two-step account deletion
@@ -74,6 +93,7 @@ export class AccountDeletionError extends Error {
     readonly code:
       | 'deletion.not_configured'
       | 'deletion.session_expired'
+      | 'deletion.in_progress'
       | 'deletion.rejected'
       | 'deletion.unknown'
       | 'deletion.unavailable',
@@ -92,9 +112,30 @@ export interface AccountDeletionContext extends DataOwnerContext {
 export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
   'We could not confirm whether your account was deleted. The request may have completed. Check your connection and retry, or contact support if you still cannot confirm.';
 
+/** The journal holds a row this build cannot read. Whether a confirmation
+ * was sent under it is exactly what cannot be known, so the answer is
+ * never an empty history. */
+export const ACCOUNT_DELETION_RECORDS_UNREADABLE_MESSAGE =
+  'The deletion records on this phone could not be read, so we cannot tell whether a deletion of this account was already confirmed. Contact support before trying again.';
+
+/** The server refused a request because a confirmed deletion of this
+ * account is already being carried out (HTTP 409
+ * `account.deletion_in_progress`). Nothing new was requested. */
+export const ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE =
+  'A deletion of this account was already confirmed and is being carried out by the server. This attempt requested nothing new — close this dialog and check back later.';
+
 export interface AccountDeletionChallenge {
   challenge: string;
   expiresAt: string;
+  /** The server-side operation the challenge belongs to; a confirmation
+   * bound to it is only trusted when the reply names the same operation. */
+  operationId?: string;
+}
+
+/** A confirmation bound to the operation its challenge was minted for. */
+export interface AccountDeletionConfirmation {
+  readonly challenge: string;
+  readonly operationId: string;
 }
 
 export interface AccountDeletionResult {
@@ -168,6 +209,17 @@ async function post(
         isRecord(payload) && isRecord(payload['error'])
           ? payload['error']
           : null;
+      if (
+        !confirming &&
+        response.status === 409 &&
+        error?.['code'] === 'account.deletion_in_progress'
+      ) {
+        throw new AccountDeletionError(
+          'deletion.in_progress',
+          ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+          false,
+        );
+      }
       const message =
         error && typeof error['message'] === 'string'
           ? error['message']
@@ -202,7 +254,7 @@ async function post(
 export async function requestAccountDeletion(
   session: ApiSession | null,
   survey: AccountDeletionSurvey | null = null,
-  fetchFn: AccountDeletionFetch = globalThis.fetch,
+  fetchFn: AccountDeletionFetch = fetchInPlace,
 ): Promise<AccountDeletionChallenge> {
   if (!session) {
     throw new AccountDeletionError(
@@ -226,14 +278,17 @@ export async function requestAccountDeletion(
       false,
     );
   }
-  return { challenge, expiresAt };
+  const operationId = payload['operationId'];
+  return typeof operationId === 'string' && operationId.length > 0
+    ? { challenge, expiresAt, operationId }
+    : { challenge, expiresAt };
 }
 
 /** Step 2 — irreversibly delete the account named by the challenge. */
 export async function confirmAccountDeletion(
   session: ApiSession | null,
-  challenge: string,
-  fetchFn: AccountDeletionFetch = globalThis.fetch,
+  challenge: string | AccountDeletionConfirmation,
+  fetchFn: AccountDeletionFetch = fetchInPlace,
 ): Promise<AccountDeletionResult> {
   if (!session) {
     throw new AccountDeletionError(
@@ -242,13 +297,26 @@ export async function confirmAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-confirm', {
-    challenge,
-  });
+  const bound = typeof challenge === 'string' ? null : challenge;
+  const payload = await post(
+    session,
+    fetchFn,
+    '/v1/me/delete-confirm',
+    bound
+      ? { challenge: bound.challenge, operationId: bound.operationId }
+      : { challenge },
+  );
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
       'deletion.unknown',
       `The server did not confirm the deletion. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`,
+      true,
+    );
+  }
+  if (bound && payload['operationId'] !== bound.operationId) {
+    throw new AccountDeletionError(
+      'deletion.unknown',
+      `The server's reply did not name this deletion. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`,
       true,
     );
   }
@@ -263,4 +331,808 @@ export async function confirmAccountDeletion(
     return { appleAuthorizationRevocation: 'not_applicable' };
   }
   return { appleAuthorizationRevocation };
+}
+
+/**
+ * Durable deletion (W08): the shipping screen runs on the journaled
+ * deletion operation (`deletionOperation.ts`) over the redirect-rejecting
+ * transport (`deletionOperationTransport.ts`), reached through
+ * `fetchNoRedirect` over the app's fetch. The journal lives in the app's
+ * transactional SQLite database and the status capability in the Keychain.
+ * A database that cannot be opened or cannot host the journal leaves only
+ * the two-call client above, which rides the same redirect-rejecting fetch
+ * (`fetchInPlace`) and binds its confirmation to the operation the request
+ * named, but journals nothing and therefore cannot resume after a restart.
+ */
+
+const NO_REDIRECT_INIT = Object.freeze({
+  redirect: 'error',
+  credentials: 'omit',
+  cache: 'no-store',
+  referrerPolicy: 'no-referrer',
+} as const);
+
+/**
+ * `fetch` that never follows a redirect and reports where the reply came
+ * from. React Native's Response carries no `redirected` flag and its `url`
+ * is the URL the network stack actually answered (empty when unknown), so a
+ * reply is marked redirected unless the platform answered in place at the
+ * exact requested URL.
+ */
+export async function fetchNoRedirect(
+  input: string,
+  init: DeletionHttpRequest,
+): Promise<Response> {
+  const response = await globalThis.fetch(input, {
+    ...init,
+    ...NO_REDIRECT_INIT,
+  });
+  const url = typeof response.url === 'string' ? response.url : '';
+  const redirected =
+    response.redirected === true || url.length === 0 || url !== input;
+  return new Proxy(response, {
+    get(target, property) {
+      if (property === 'redirected') return redirected;
+      if (property === 'url') return url;
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+/** The two-call client's fetch: the same never-follow request options as
+ * `fetchNoRedirect`, and a reply the platform reports as answered anywhere
+ * but the requested URL is dropped before its body is read — the caller sees
+ * a lost reply, never a server answer. A reply that carries no URL at all
+ * (iOS always reports one; only bare stand-ins omit it) is not evidence of a
+ * redirect; the operation binding in `confirmAccountDeletion` still guards
+ * what it may claim. */
+async function fetchInPlace(
+  input: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const response = await globalThis.fetch(input, {
+    ...init,
+    ...NO_REDIRECT_INIT,
+  });
+  const url = typeof response.url === 'string' ? response.url : '';
+  if (response.redirected === true || (url.length > 0 && url !== input)) {
+    throw new TypeError('The deletion reply was answered from another URL.');
+  }
+  return response;
+}
+
+/** The API origin is fixed per build, so its generation never advances. */
+const deletionRuntime: DeletionRuntimePort = Object.freeze({
+  originSnapshot: () => ({
+    apiOrigin: getRuntimePublicConfig().apiBaseUrl,
+    generation: 0,
+  }),
+  ownerSnapshot: getDataOwnerSnapshot,
+  bearerFor(owner: DataOwnerContext): string | null {
+    const session = getApiSession();
+    return session &&
+      session.apiBaseUrl === getRuntimePublicConfig().apiBaseUrl &&
+      canonicalDataOwner(session.canonicalAppUserId) === owner.ownerKey
+      ? session.bearerToken
+      : null;
+  },
+});
+
+type DeletionFoundation = ReturnType<typeof createDeletionOperationFoundation>;
+
+let foundationCache: {
+  readonly db: LocalDb;
+  readonly foundation: DeletionFoundation;
+} | null = null;
+
+function durableDeletionFoundation(
+  openDb: () => LocalDb,
+): DeletionFoundation | null {
+  let db: LocalDb;
+  try {
+    db = openDb();
+    if (db.ownerContext !== undefined || !db.transaction) return null;
+  } catch {
+    return null;
+  }
+  if (foundationCache?.db === db) return foundationCache.foundation;
+  const keychain = deviceKeychainForVault();
+  if (!keychain) return null;
+  foundationCache?.foundation.dispose();
+  const foundation = createDeletionOperationFoundation({
+    db,
+    keychain,
+    runtime: deletionRuntime,
+    http: { fetchNoRedirect },
+    newJobId: makeUuid,
+  });
+  foundationCache = { db, foundation };
+  return foundation;
+}
+
+/** One deletion attempt as the screen holds it: the durable job handle, or
+ * the in-memory challenge of the two-call client (bound to the operation
+ * the server named, when it named one). */
+export type AccountDeletionAttempt =
+  | {
+      readonly kind: 'durable';
+      readonly jobId: string;
+      readonly operationId: string | null;
+      /** Null when the journal entry could be listed but not opened. */
+      readonly handle: DeletionOperationHandle | null;
+    }
+  | {
+      readonly kind: 'legacy';
+      readonly operationId: string | null;
+      readonly challenge: string;
+    };
+
+/**
+ * What the screen may honestly show. Only `completed` carries a receipt the
+ * server verified; `confirm_unknown` and `in_progress` mean the account MAY
+ * be gone; `failed` ends the attempt (its message says what is known).
+ */
+export type AccountDeletionState =
+  | {
+      readonly status: 'ready';
+      readonly attempt: AccountDeletionAttempt;
+      /** Earliest moment the server (or the retry budget) accepts a confirmation. */
+      readonly reviewAfterMs: number;
+      readonly message: string | null;
+    }
+  | {
+      readonly status: 'request_unknown';
+      readonly attempt: AccountDeletionAttempt;
+      /** Earliest moment the retry budget accepts another request. */
+      readonly nextAttemptAtMs: number;
+      readonly message: string;
+    }
+  | {
+      readonly status: 'confirm_unknown';
+      readonly attempt: AccountDeletionAttempt;
+      /** Earliest moment the retry budget accepts a status check. */
+      readonly nextAttemptAtMs: number;
+      readonly message: string;
+    }
+  | {
+      readonly status: 'in_progress';
+      readonly attempt: AccountDeletionAttempt;
+      readonly nextAttemptAtMs: number;
+    }
+  /** The server is already carrying out a confirmed deletion of this
+   * account that this attempt did not start; the attempt requested nothing
+   * and holds no capability to observe it, so it can only be closed. */
+  | { readonly status: 'already_in_progress'; readonly message: string }
+  | {
+      readonly status: 'failed';
+      readonly message: string;
+      readonly outcome: 'nothing_deleted' | 'unknown';
+    }
+  | { readonly status: 'completed'; readonly result: AccountDeletionResult };
+
+export interface AccountDeletionFlow {
+  /** Whether attempts are journaled and survive a restart. */
+  readonly durable: boolean;
+  /** The owner's unfinished operation, resumed under its own operation id. */
+  resume(context: AccountDeletionContext): Promise<AccountDeletionState | null>;
+  request(
+    session: ApiSession,
+    survey: AccountDeletionSurvey | null,
+  ): Promise<AccountDeletionState>;
+  retryRequest(
+    attempt: AccountDeletionAttempt,
+    session: ApiSession,
+    survey: AccountDeletionSurvey | null,
+  ): Promise<AccountDeletionState>;
+  confirm(
+    attempt: AccountDeletionAttempt,
+    session: ApiSession,
+  ): Promise<AccountDeletionState>;
+  /** Learn the outcome of a confirmation whose reply was lost. */
+  recover(
+    attempt: AccountDeletionAttempt,
+    session: ApiSession,
+  ): Promise<AccountDeletionState>;
+  /** Observe a confirmation the server is still carrying out. */
+  poll(
+    attempt: AccountDeletionAttempt,
+    session: ApiSession,
+  ): Promise<AccountDeletionState>;
+}
+
+const REQUEST_FAILED_MESSAGE =
+  'The deletion request could not be completed. Nothing was deleted.';
+const REQUEST_UNKNOWN_MESSAGE =
+  'We could not confirm that the deletion request reached the server. Nothing has been deleted — retry the request.';
+const ACCOUNT_CHANGED_MESSAGE =
+  'The signed-in account changed. Close this dialog and start again for the account you want to delete.';
+const RECORD_FAILED_MESSAGE =
+  'Account deletion could not be recorded on this phone. Nothing was deleted — please try again.';
+const JOURNAL_FULL_MESSAGE =
+  'This phone still holds too many unfinished deletion attempts to record another. Nothing was deleted — come back after an earlier attempt has expired.';
+/** A confirmation this flow cannot carry: the attempt belongs to the other
+ * flow, so nothing was sent and the outcome is known — nothing happened. */
+const CONFIRMATION_UNSENT_MESSAGE =
+  'This deletion attempt could not be confirmed from here, so no confirmation was sent. Nothing was deleted — start again.';
+/** The server answered `blocked` to a confirmation it holds: it stopped
+ * carrying the deletion out, possibly part-way. Nothing about the account
+ * is known from here; only the server (or support) can say. */
+const CONFIRMATION_BLOCKED_MESSAGE =
+  'The server could not complete this deletion. Your account may have been deleted or may still exist — check the status again, or contact support if you cannot confirm.';
+/** The 24-hour status capability lapsed over a sent confirmation: no status
+ * request this phone can make is accepted any more, so the outcome stays
+ * unknown for good and nothing new is armed for the same account. */
+const STATUS_WINDOW_CLOSED_MESSAGE =
+  'The window for checking this deletion has closed, so this phone can no longer confirm whether your account was deleted. Contact support to find out.';
+
+function requestIssueMessage(issue: DeletionIssue | null): string {
+  switch (issue) {
+    case 'session_required':
+      return 'Your sign-in has expired. Sign in again, then delete your account.';
+    case 'stale_handler':
+    case 'origin_unavailable':
+      return ACCOUNT_CHANGED_MESSAGE;
+    case 'rate_limited':
+    case 'retry_later':
+      return 'Too many attempts. Try again in a moment. Nothing was deleted.';
+    case 'raw_transactional_db_required':
+    case 'journal_schema_invalid':
+    case 'journal_unavailable':
+    case 'journal_invalid':
+    case 'journal_unsupported':
+    case 'journal_conflict':
+    case 'capability_missing':
+    case 'capability_unavailable':
+    case 'capability_invalid':
+    case 'capability_unsupported':
+    case 'capability_conflict':
+    case 'capability_write_ambiguous':
+      return RECORD_FAILED_MESSAGE;
+    case 'journal_capacity':
+      return JOURNAL_FULL_MESSAGE;
+    default:
+      return REQUEST_FAILED_MESSAGE;
+  }
+}
+
+function confirmIssueMessage(issue: DeletionIssue | null): string {
+  switch (issue) {
+    case 'confirmation_expired':
+      return 'The server reported this confirmation as expired. Check the deletion status to be sure before starting again.';
+    case 'session_required':
+      return 'Your sign-in has expired. This response does not confirm whether your account was deleted. Sign in again before retrying.';
+    case 'stale_handler':
+    case 'origin_unavailable':
+      return `${ACCOUNT_CHANGED_MESSAGE} ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
+    case 'rate_limited':
+    case 'retry_later':
+      return `The server asked us to wait before checking again. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
+    case 'rejected':
+      return `The server did not accept the confirmation. ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`;
+    case 'blocked':
+      return CONFIRMATION_BLOCKED_MESSAGE;
+    case 'status_expired':
+      return STATUS_WINDOW_CLOSED_MESSAGE;
+    default:
+      return ACCOUNT_DELETION_UNKNOWN_MESSAGE;
+  }
+}
+
+/** The server states that end an operation the server never confirmed:
+ * `expired` (challenge lapsed unconfirmed) and `superseded` (a newer request
+ * replaced it). `blocked` is NOT one of them — the server answers it once
+ * it holds a confirmation or the account is already gone, so it never
+ * proves the account present. */
+function terminalMessage(
+  state: 'expired' | 'superseded',
+): AccountDeletionState {
+  switch (state) {
+    case 'expired':
+      return {
+        status: 'failed',
+        outcome: 'nothing_deleted',
+        message:
+          'The deletion request expired before it was confirmed. Nothing was deleted — start again when you are ready.',
+      };
+    case 'superseded':
+      return {
+        status: 'failed',
+        outcome: 'unknown',
+        message:
+          'A newer deletion request replaced this one. Start again to continue.',
+      };
+  }
+}
+
+function isTerminalServerState(
+  entry: DeletionJournalEntry,
+): entry is DeletionJournalEntry & {
+  readonly serverState: 'expired' | 'superseded';
+} {
+  return (
+    entry.receipt === null &&
+    (entry.serverState === 'expired' || entry.serverState === 'superseded')
+  );
+}
+
+/** True once a confirmation has been handed to the server under this row
+ * and no completion receipt settled it. */
+function confirmationUnresolved(entry: DeletionJournalEntry): boolean {
+  return (
+    entry.receipt === null &&
+    entry.phase !== 'request_pending' &&
+    entry.phase !== 'request_unknown' &&
+    entry.phase !== 'securing' &&
+    entry.phase !== 'ready'
+  );
+}
+
+/** The moment after which the server accepts no status request for this
+ * operation; mirrors the foundation's `poll` guard. */
+function statusWindowClosed(
+  entry: DeletionJournalEntry,
+  nowMs: number,
+): boolean {
+  const closesAt = Date.parse(entry.statusExpiresAt ?? '');
+  return Number.isFinite(closesAt) && nowMs >= closesAt;
+}
+
+function statusWindowClosedState(): AccountDeletionState {
+  return {
+    status: 'failed',
+    outcome: 'unknown',
+    message: STATUS_WINDOW_CLOSED_MESSAGE,
+  };
+}
+
+function durableState(
+  entry: DeletionJournalEntry,
+  handle: DeletionOperationHandle,
+  nowMs: number,
+): AccountDeletionState {
+  const attempt: AccountDeletionAttempt = {
+    kind: 'durable',
+    jobId: entry.jobId,
+    operationId: entry.operationId,
+    handle,
+  };
+  if (isTerminalServerState(entry)) return terminalMessage(entry.serverState);
+  // Nothing this phone can still ask settles a sent confirmation once the
+  // status window is over: the outcome is unknown, and stays so.
+  if (confirmationUnresolved(entry) && statusWindowClosed(entry, nowMs))
+    return statusWindowClosedState();
+  switch (entry.phase) {
+    case 'request_pending':
+    case 'request_unknown':
+      if (entry.lastIssue === 'in_progress') {
+        return {
+          status: 'already_in_progress',
+          message: ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+        };
+      }
+      return {
+        status: 'request_unknown',
+        attempt,
+        nextAttemptAtMs: entry.nextAttemptAtMs,
+        message:
+          entry.lastIssue === null ||
+          entry.lastIssue === 'unknown' ||
+          entry.lastIssue === 'invalid_response'
+            ? REQUEST_UNKNOWN_MESSAGE
+            : `${requestIssueMessage(entry.lastIssue)} Nothing has been deleted.`,
+      };
+    case 'securing':
+      // The status capability never reached the Keychain, so this request
+      // cannot be confirmed — and never was.
+      return {
+        status: 'failed',
+        outcome: 'nothing_deleted',
+        message: RECORD_FAILED_MESSAGE,
+      };
+    case 'ready':
+      return {
+        status: 'ready',
+        attempt,
+        reviewAfterMs: Math.max(
+          entry.reviewAfterMs ?? 0,
+          entry.nextAttemptAtMs,
+        ),
+        message: null,
+      };
+    case 'confirm_pending':
+    case 'receipt_pending':
+      return {
+        status: 'confirm_unknown',
+        attempt,
+        nextAttemptAtMs: entry.nextAttemptAtMs,
+        message: confirmIssueMessage(entry.lastIssue),
+      };
+    case 'observing':
+      return entry.serverState === 'in_progress'
+        ? {
+            status: 'in_progress',
+            attempt,
+            nextAttemptAtMs: entry.nextAttemptAtMs,
+          }
+        : {
+            status: 'confirm_unknown',
+            attempt,
+            nextAttemptAtMs: entry.nextAttemptAtMs,
+            message: confirmIssueMessage(
+              entry.serverState === 'blocked' ? 'blocked' : entry.lastIssue,
+            ),
+          };
+    case 'receipt_verified':
+    case 'cleanup_pending':
+    case 'cleanup_complete':
+      if (entry.receipt === null) {
+        return {
+          status: 'confirm_unknown',
+          attempt,
+          nextAttemptAtMs: entry.nextAttemptAtMs,
+          message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
+        };
+      }
+      return {
+        status: 'completed',
+        result: {
+          appleAuthorizationRevocation:
+            entry.receipt.appleAuthorizationRevocation,
+        },
+      };
+  }
+}
+
+function resumable(
+  entry: DeletionJournalEntry,
+  context: AccountDeletionContext,
+  apiOrigin: string | null,
+  nowMs: number,
+): boolean {
+  if (entry.ownerId !== context.ownerKey || entry.apiOrigin !== apiOrigin)
+    return false;
+  if (isTerminalServerState(entry)) return false;
+  if (entry.operationId === null || entry.receipt !== null) return true;
+  // A sent confirmation stays unresolved until the server says otherwise;
+  // the status window closing does not make the account provably present.
+  if (entry.phase !== 'securing' && entry.phase !== 'ready') return true;
+  const window =
+    // Never confirmed: only a live challenge can still be presented.
+    Date.parse(entry.expiresAt ?? '');
+  return Number.isFinite(window) && nowMs < window;
+}
+
+function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
+  async function settle(
+    result: DeletionOperationResult,
+    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+    reopened = false,
+  ): Promise<AccountDeletionState> {
+    if (result.kind === 'available')
+      return durableState(result.entry, result.handle, Date.now());
+    // The device clock says the challenge lapsed before anything was sent.
+    if (result.kind === 'held' && result.reason === 'confirmation_expired')
+      return terminalMessage('expired');
+    // The status window is over: reopening the row would only show the
+    // stale observing/confirm_pending phase again and re-arm a poll that
+    // can never be sent.
+    if (result.kind === 'held' && result.reason === 'status_expired')
+      return statusWindowClosedState();
+    if (result.kind === 'held' && result.jobId !== undefined && !reopened) {
+      const view = await foundation.open(result.jobId);
+      if (view.kind === 'available') return settle(view, unresolved, true);
+    }
+    return unresolved(result.kind === 'held' ? result.reason : null);
+  }
+
+  function requestFailed(reason: DeletionIssue | null): AccountDeletionState {
+    return {
+      status: 'failed',
+      outcome: 'nothing_deleted',
+      message: requestIssueMessage(reason),
+    };
+  }
+
+  function confirmUnsent(): AccountDeletionState {
+    return {
+      status: 'failed',
+      outcome: 'nothing_deleted',
+      message: CONFIRMATION_UNSENT_MESSAGE,
+    };
+  }
+
+  /** A sent confirmation whose outcome this call did not learn. Most
+   * reasons leave a status check worth repeating; a record this build can
+   * no longer read or a lapsed status window leave nothing to retry. */
+  function confirmUnresolved(attempt: AccountDeletionAttempt) {
+    return (reason: DeletionIssue | null): AccountDeletionState => {
+      switch (reason) {
+        case 'status_expired':
+          return statusWindowClosedState();
+        case 'journal_schema_invalid':
+        case 'journal_invalid':
+        case 'journal_unsupported':
+        case 'capability_missing':
+        case 'capability_invalid':
+        case 'capability_unsupported':
+          return {
+            status: 'failed',
+            outcome: 'unknown',
+            message: ACCOUNT_DELETION_RECORDS_UNREADABLE_MESSAGE,
+          };
+        default:
+          return {
+            status: 'confirm_unknown',
+            attempt,
+            nextAttemptAtMs: 0,
+            message: confirmIssueMessage(reason),
+          };
+      }
+    };
+  }
+
+  /** Runs `operate` on the attempt's handle; a handle the foundation no
+   * longer recognises (older revision, or none after a resume that could
+   * not open the job) is refreshed once through `open(jobId)`. */
+  async function operate(
+    attempt: AccountDeletionAttempt,
+    run: (handle: DeletionOperationHandle) => Promise<DeletionOperationResult>,
+    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+  ): Promise<AccountDeletionState> {
+    if (attempt.kind !== 'durable') return unresolved(null);
+    let result: DeletionOperationResult | null = attempt.handle
+      ? await run(attempt.handle)
+      : null;
+    if (
+      result === null ||
+      (result.kind === 'held' &&
+        result.reason === 'stale_handler' &&
+        result.jobId === undefined)
+    ) {
+      const reopened = await foundation.open(attempt.jobId);
+      if (reopened.kind !== 'available')
+        return settle(reopened, unresolved, true);
+      result = await run(reopened.handle);
+    }
+    return settle(result, unresolved);
+  }
+
+  function requestBody(
+    survey: AccountDeletionSurvey | null,
+  ): Readonly<Record<string, unknown>> {
+    return survey ? { survey } : {};
+  }
+
+  /** A full journal is reclaimed once (inert rows only) before the request
+   * is given up on; when nothing could be freed the failure says so. */
+  async function request(
+    _session: ApiSession,
+    survey: AccountDeletionSurvey | null,
+  ): Promise<AccountDeletionState> {
+    let result = await foundation.request(undefined, requestBody(survey));
+    if (result.kind === 'held' && result.reason === 'journal_capacity') {
+      const reclaimed = await foundation.reclaim();
+      if (reclaimed.kind === 'reclaimed' && reclaimed.jobIds.length > 0)
+        result = await foundation.request(undefined, requestBody(survey));
+    }
+    return settle(result, requestFailed);
+  }
+
+  return {
+    durable: true,
+    async resume(context) {
+      const listed = await foundation.list();
+      // A journal that cannot be read is not an empty one: a confirmation
+      // may have been sent under a row this build cannot parse, so no
+      // fresh request is offered over it.
+      if (listed.kind !== 'entries') {
+        return {
+          status: 'failed',
+          outcome: 'unknown',
+          message: ACCOUNT_DELETION_RECORDS_UNREADABLE_MESSAGE,
+        };
+      }
+      const apiOrigin = getRuntimePublicConfig().apiBaseUrl;
+      const nowMs = Date.now();
+      const candidates = listed.entries
+        .filter(entry => resumable(entry, context, apiOrigin, nowMs))
+        .sort((a, b) => b.createdAtMs - a.createdAtMs);
+      for (const candidate of candidates) {
+        const opened = await foundation.open(candidate.jobId);
+        if (opened.kind === 'available') {
+          const state = durableState(opened.entry, opened.handle, nowMs);
+          // A request that never became confirmable is nothing to resume.
+          if (state.status === 'failed' && state.outcome === 'nothing_deleted')
+            continue;
+          return state;
+        }
+        // No operation, or one whose capability never reached the Keychain:
+        // no confirmation was ever sent, so there is no outcome to report.
+        if (candidate.operationId === null || candidate.phase === 'securing')
+          continue;
+        if (candidate.phase === 'ready') return null;
+        return confirmUnresolved({
+          kind: 'durable',
+          jobId: candidate.jobId,
+          operationId: candidate.operationId,
+          handle: null,
+        })(opened.kind === 'held' ? opened.reason : null);
+      }
+      return null;
+    },
+    request,
+    retryRequest(attempt, session, survey) {
+      if (attempt.kind !== 'durable') return request(session, survey);
+      return operate(
+        attempt,
+        handle => foundation.retryRequest(handle, requestBody(survey)),
+        requestFailed,
+      );
+    },
+    confirm(attempt) {
+      if (attempt.kind !== 'durable') return Promise.resolve(confirmUnsent());
+      return operate(
+        attempt,
+        handle => foundation.confirm(handle),
+        confirmUnresolved(attempt),
+      );
+    },
+    recover(attempt) {
+      return operate(
+        attempt,
+        handle => foundation.poll(handle),
+        confirmUnresolved(attempt),
+      );
+    },
+    poll(attempt) {
+      return operate(
+        attempt,
+        handle => foundation.poll(handle),
+        confirmUnresolved(attempt),
+      );
+    },
+  };
+}
+
+/** The two-call client the screen falls back to; injected so the screen's
+ * module boundary (not this file's local bindings) decides which
+ * implementation runs. */
+export interface AccountDeletionLegacyClient {
+  requestAccountDeletion(
+    session: ApiSession | null,
+    survey: AccountDeletionSurvey | null,
+  ): Promise<AccountDeletionChallenge>;
+  confirmAccountDeletion(
+    session: ApiSession | null,
+    challenge: string | AccountDeletionConfirmation,
+  ): Promise<AccountDeletionResult>;
+}
+
+async function legacyRequest(
+  client: AccountDeletionLegacyClient,
+  session: ApiSession,
+  survey: AccountDeletionSurvey | null,
+): Promise<AccountDeletionState> {
+  try {
+    const { challenge, operationId } = await client.requestAccountDeletion(
+      session,
+      survey,
+    );
+    return {
+      status: 'ready',
+      attempt: {
+        kind: 'legacy',
+        operationId: operationId ?? null,
+        challenge,
+      },
+      reviewAfterMs: Date.now(),
+      message: null,
+    };
+  } catch (e) {
+    if (e instanceof AccountDeletionError && e.code === 'deletion.in_progress')
+      return { status: 'already_in_progress', message: e.message };
+    return {
+      status: 'failed',
+      outcome: 'nothing_deleted',
+      message:
+        e instanceof AccountDeletionError ? e.message : REQUEST_FAILED_MESSAGE,
+    };
+  }
+}
+
+/** The legacy client has no status capability: the only way to learn the
+ * outcome of a lost confirmation is to present the same challenge again. */
+async function legacyConfirm(
+  client: AccountDeletionLegacyClient,
+  attempt: AccountDeletionAttempt,
+  session: ApiSession,
+  retrying: boolean,
+): Promise<AccountDeletionState> {
+  if (attempt.kind !== 'legacy') {
+    return retrying
+      ? {
+          status: 'failed',
+          outcome: 'unknown',
+          message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
+        }
+      : {
+          status: 'failed',
+          outcome: 'nothing_deleted',
+          message: CONFIRMATION_UNSENT_MESSAGE,
+        };
+  }
+  try {
+    const result = await client.confirmAccountDeletion(
+      session,
+      attempt.operationId === null
+        ? attempt.challenge
+        : { challenge: attempt.challenge, operationId: attempt.operationId },
+    );
+    return { status: 'completed', result };
+  } catch (e) {
+    if (!retrying && e instanceof AccountDeletionError) {
+      // A first confirmation is known not to have acted only when the
+      // client never sent it (unavailable, not configured) or the server
+      // refused it before acting (a throttle, an explicit rejection); a
+      // dead bearer or a lost reply proves nothing.
+      if (
+        e.code === 'deletion.unavailable' ||
+        (e.code === 'deletion.rejected' && e.retryable)
+      ) {
+        return {
+          status: 'ready',
+          attempt,
+          reviewAfterMs: Date.now(),
+          message: e.message,
+        };
+      }
+      if (
+        e.code === 'deletion.not_configured' ||
+        e.code === 'deletion.rejected'
+      ) {
+        return {
+          status: 'failed',
+          outcome: 'nothing_deleted',
+          message: e.message,
+        };
+      }
+    }
+    const message = !(e instanceof AccountDeletionError)
+      ? ACCOUNT_DELETION_UNKNOWN_MESSAGE
+      : e.code === 'deletion.unknown' || e.code === 'deletion.session_expired'
+        ? e.message
+        : e.code === 'deletion.rejected'
+          ? `${e.message} ${ACCOUNT_DELETION_UNKNOWN_MESSAGE}`
+          : ACCOUNT_DELETION_UNKNOWN_MESSAGE;
+    return { status: 'confirm_unknown', attempt, nextAttemptAtMs: 0, message };
+  }
+}
+
+export function legacyAccountDeletionFlow(
+  client: AccountDeletionLegacyClient,
+): AccountDeletionFlow {
+  const retry = (attempt: AccountDeletionAttempt, session: ApiSession) =>
+    legacyConfirm(client, attempt, session, true);
+  return {
+    durable: false,
+    resume: async () => null,
+    request: (session, survey) => legacyRequest(client, session, survey),
+    retryRequest: (_attempt, session, survey) =>
+      legacyRequest(client, session, survey),
+    confirm: (attempt, session) =>
+      legacyConfirm(client, attempt, session, false),
+    recover: retry,
+    poll: retry,
+  };
+}
+
+/** The journaled deletion flow, or null when the local database cannot be
+ * opened or cannot host the journal (the screen then falls back to
+ * `legacyAccountDeletionFlow`, which never journals and so cannot resume). */
+export function durableAccountDeletionFlow(
+  openDb: () => LocalDb,
+): AccountDeletionFlow | null {
+  const foundation = durableDeletionFoundation(openDb);
+  return foundation ? durableFlow(foundation) : null;
 }
