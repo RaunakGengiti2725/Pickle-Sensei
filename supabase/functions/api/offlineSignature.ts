@@ -30,6 +30,46 @@ export interface OfflineGrantKey {
   readonly key: CryptoKey;
 }
 
+/** The previous signing key after a rotation: public half only, with the
+ * instant it stopped signing and the exclusive end of its overlap window. */
+export interface OfflineGrantRetiredKey extends OfflineGrantKey {
+  readonly retiredAtEpochSeconds: number;
+  readonly overlapEndsAtEpochSeconds: number;
+}
+
+/** The configured signing material: exactly one active key (private half for
+ * signing, public half for verification) and at most one retired key whose
+ * signatures are honoured only inside its bounded overlap window. */
+export interface OfflineGrantKeyRing {
+  readonly signingKey: OfflineGrantKey;
+  readonly activeKey: OfflineGrantKey;
+  readonly previousKey: OfflineGrantRetiredKey | null;
+  readonly allowedKeyIds: readonly string[];
+}
+
+export const OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION = 1;
+
+/** A retired key may keep verifying for at most one maximal lease: every
+ * grant it legitimately signed has expired by then, so a longer window only
+ * ever serves a compromised key. */
+export const OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS = OFFLINE_PRO_LEASE_MAX_SECONDS;
+
+/** Latest instant a ring may name (9999-12-31T23:59:59Z): the same
+ * Unix-seconds bound the offline contract applies to every timestamp it
+ * carries. A millisecond value or anything near MAX_SAFE_INTEGER is not a
+ * plausible retirement instant, so it is `invalid_key` rather than a window
+ * anchored some 56,000 years out. */
+export const OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS = 253_402_300_799;
+
+/** Slack around `retiredAtEpochSeconds` for the secret to propagate. The
+ * previous key still counts as an issuer for grants with `iat` at most this
+ * far after `retiredAt` (the route may sign a few more under the old secret
+ * before the ring lands), and the ring's previous key is honoured only once
+ * the trusted clock is within this many seconds of `retiredAt`: a
+ * retirement instant far in the future cannot keep the old key an accepted
+ * issuer indefinitely. Fifteen minutes; well under one maximal overlap. */
+export const OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS = 15 * 60;
+
 export interface OfflineGrantVerificationContext {
   readonly binding: OfflineGrantBinding;
   readonly release: OfflineReleasedArtifacts;
@@ -50,6 +90,7 @@ export class OfflineGrantCryptoError extends Error {
       | "invalid_transport"
       | "invalid_metadata"
       | "invalid_key"
+      | "retired_key"
       | "invalid_time"
       | "invalid_release_binding"
       | "invalid_signature"
@@ -82,13 +123,17 @@ export async function importOfflineGrantVerificationKey(
     ) {
       throw new OfflineGrantCryptoError("invalid_key");
     }
-    for (const coordinate of [jwk.x, jwk.y]) {
-      if (typeof coordinate !== "string") throw new OfflineGrantCryptoError("invalid_key");
+    const { x, y } = jwk;
+    if (typeof x !== "string" || typeof y !== "string") {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    for (const coordinate of [x, y]) {
       const decoded = base64url.decode(coordinate);
       if (decoded.byteLength !== 32 || base64url.encode(decoded) !== coordinate) {
         throw new OfflineGrantCryptoError("invalid_key");
       }
     }
+    if (!isP256Point(x, y)) throw new OfflineGrantCryptoError("invalid_key");
     const key = await importJWK({ ...jwk, ext: false }, "ES256");
     if (!(key instanceof CryptoKey)) throw new OfflineGrantCryptoError("invalid_key");
     const entry = Object.freeze({ purpose: OFFLINE_JWS_REQUIREMENTS.keyPurpose, kid, key });
@@ -99,11 +144,38 @@ export async function importOfflineGrantVerificationKey(
   }
 }
 
-/** Server-only signing key from configuration (a private P-256 JWK carrying
- * its `kid`). The key is imported non-extractable with the single `sign`
- * usage; anything else — a public key, a foreign curve, a missing kid, extra
- * members — is `invalid_key`. Provisioning and rotation happen outside. */
-export async function importOfflineGrantSigningKey(privateJwk: unknown): Promise<OfflineGrantKey> {
+// P-256 (secp256r1) domain parameters: field prime, curve constant b and group order.
+const P256_P = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
+const P256_B = BigInt("0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b");
+const P256_N = BigInt("0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551");
+
+function coordinateToBigInt(coordinate: string): bigint {
+  const bytes = base64url.decode(coordinate);
+  let hex = "";
+  for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+  return BigInt(`0x${hex === "" ? "0" : hex}`);
+}
+
+/** `(x, y)` is an affine point on P-256: both coordinates are field elements
+ * and `y² ≡ x³ − 3x + b (mod p)`. WebCrypto runtimes may defer this check
+ * until use; a key that can never verify must not import. */
+function isP256Point(x: string, y: string): boolean {
+  const fx = coordinateToBigInt(x);
+  const fy = coordinateToBigInt(y);
+  if (fx >= P256_P || fy >= P256_P) return false;
+  const lhs = (fy * fy) % P256_P;
+  const rhs = (((fx * fx * fx - 3n * fx) % P256_P) + P256_B + P256_P) % P256_P;
+  return lhs === rhs;
+}
+
+/** Signing key material is only usable when its private scalar `d` is a
+ * valid group element AND the public coordinates it carries belong to `d`:
+ * a signature produced with `d` must verify under `(x, y)`. Otherwise the key
+ * would sign grants that its own public half — and every verifier configured
+ * from it — rejects. */
+async function importSigningKeyPair(
+  privateJwk: unknown,
+): Promise<{ signingKey: OfflineGrantKey; activeKey: OfflineGrantKey }> {
   try {
     const jwk: JWK = JSON.parse(canonicalizeOfflineJson(privateJwk));
     const allowedFields = ["kty", "crv", "x", "y", "d", "alg", "use", "key_ops", "kid", "ext"];
@@ -121,25 +193,144 @@ export async function importOfflineGrantSigningKey(privateJwk: unknown): Promise
     ) {
       throw new OfflineGrantCryptoError("invalid_key");
     }
-    for (const coordinate of [jwk.x, jwk.y, jwk.d]) {
-      if (typeof coordinate !== "string") throw new OfflineGrantCryptoError("invalid_key");
+    const { x, y, d } = jwk;
+    if (typeof x !== "string" || typeof y !== "string" || typeof d !== "string") {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    for (const coordinate of [x, y, d]) {
       const decoded = base64url.decode(coordinate);
       if (decoded.byteLength !== 32 || base64url.encode(decoded) !== coordinate) {
         throw new OfflineGrantCryptoError("invalid_key");
       }
     }
+    const scalar = coordinateToBigInt(d);
+    if (scalar === 0n || scalar >= P256_N || !isP256Point(x, y)) {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
     const key = await importJWK({ ...jwk, ext: false }, "ES256");
     if (!(key instanceof CryptoKey)) throw new OfflineGrantCryptoError("invalid_key");
-    const entry = Object.freeze({
+    const signingKey = Object.freeze({
       purpose: OFFLINE_JWS_REQUIREMENTS.keyPurpose,
       kid: jwk.kid,
       key,
     });
-    requireKey(entry, "sign");
-    return entry;
+    requireKey(signingKey, "sign");
+    const activeKey = await importOfflineGrantVerificationKey(jwk.kid, {
+      kty: "EC",
+      crv: "P-256",
+      x,
+      y,
+      kid: jwk.kid,
+    });
+    const probe = new TextEncoder().encode(
+      `${OFFLINE_JWS_REQUIREMENTS.keyPurpose}:key-consistency:${jwk.kid}`,
+    );
+    const algorithm = { name: "ECDSA", hash: "SHA-256" };
+    const signature = await crypto.subtle.sign(algorithm, signingKey.key, probe);
+    if (!(await crypto.subtle.verify(algorithm, activeKey.key, signature, probe))) {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    return { signingKey, activeKey };
   } catch {
     throw new OfflineGrantCryptoError("invalid_key");
   }
+}
+
+/** Server-only signing key from configuration (a private P-256 JWK carrying
+ * its `kid`). The key is imported non-extractable with the single `sign`
+ * usage; anything else — a public key, a foreign curve, a missing kid, extra
+ * members — is `invalid_key`. Provisioning and rotation happen outside. */
+export async function importOfflineGrantSigningKey(privateJwk: unknown): Promise<OfflineGrantKey> {
+  return (await importSigningKeyPair(privateJwk)).signingKey;
+}
+
+/** Server-only key ring from configuration. Accepts either a bare private
+ * P-256 JWK (a ring with no previous key) or
+ * `{ schemaVersion: 1, active: <private JWK>, previous: null | { jwk: <public
+ * JWK>, retiredAtEpochSeconds, overlapEndsAtEpochSeconds } }` where the
+ * window is `retiredAt ≤ overlapEndsAt ≤ retiredAt + MAX_OVERLAP` and both
+ * instants are Unix seconds no later than `MAX_EPOCH_SECONDS`. Private
+ * material for the previous key, a previous kid equal to the active kid,
+ * a previous key sharing the active key's `x` coordinate (the same point or
+ * its negation, both controlled by the active scalar), an active key whose
+ * public coordinates do not belong to its `d`, coordinates off the curve,
+ * unknown members or an unbounded window are `invalid_key`. */
+export async function importOfflineGrantKeyRing(configured: unknown): Promise<OfflineGrantKeyRing> {
+  if (!isPlainRecord(configured)) throw new OfflineGrantCryptoError("invalid_key");
+  let activeJwk: unknown = configured;
+  let previousEntry: unknown = null;
+  if (!("kty" in configured)) {
+    const allowedFields = ["schemaVersion", "active", "previous"];
+    if (
+      Object.keys(configured).some((key) => !allowedFields.includes(key)) ||
+      configured.schemaVersion !== OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION ||
+      !("active" in configured) ||
+      !("previous" in configured)
+    ) {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    activeJwk = configured.active;
+    previousEntry = configured.previous;
+  }
+  const { signingKey, activeKey } = await importSigningKeyPair(activeJwk);
+  const previousKey =
+    previousEntry === null ? null : await importRetiredKey(previousEntry, publicHalfOf(activeJwk));
+  return Object.freeze({
+    signingKey,
+    activeKey,
+    previousKey,
+    allowedKeyIds: Object.freeze(
+      previousKey === null ? [signingKey.kid] : [signingKey.kid, previousKey.kid],
+    ),
+  });
+}
+
+function publicHalfOf(privateJwk: unknown): { kid: string; x: string; y: string } {
+  if (
+    !isPlainRecord(privateJwk) ||
+    typeof privateJwk.kid !== "string" ||
+    typeof privateJwk.x !== "string" ||
+    typeof privateJwk.y !== "string"
+  ) {
+    throw new OfflineGrantCryptoError("invalid_key");
+  }
+  return { kid: privateJwk.kid, x: privateJwk.x, y: privateJwk.y };
+}
+
+const isEpochSeconds = (value: unknown): value is number =>
+  Number.isSafeInteger(value) &&
+  !Object.is(value, -0) &&
+  (value as number) >= 0 &&
+  (value as number) <= OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS;
+
+async function importRetiredKey(
+  entry: unknown,
+  active: { kid: string; x: string; y: string },
+): Promise<OfflineGrantRetiredKey> {
+  const allowedFields = ["jwk", "retiredAtEpochSeconds", "overlapEndsAtEpochSeconds"];
+  if (
+    !isPlainRecord(entry) ||
+    Object.keys(entry).some((key) => !allowedFields.includes(key)) ||
+    !isPlainRecord(entry.jwk) ||
+    !isKeyIdentifier(entry.jwk.kid) ||
+    entry.jwk.kid === active.kid ||
+    !isEpochSeconds(entry.retiredAtEpochSeconds) ||
+    !isEpochSeconds(entry.overlapEndsAtEpochSeconds) ||
+    entry.overlapEndsAtEpochSeconds < entry.retiredAtEpochSeconds ||
+    entry.overlapEndsAtEpochSeconds - entry.retiredAtEpochSeconds >
+      OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS
+  ) {
+    throw new OfflineGrantCryptoError("invalid_key");
+  }
+  const key = await importOfflineGrantVerificationKey(entry.jwk.kid, entry.jwk);
+  if (coordinateToBigInt(entry.jwk.x as string) === coordinateToBigInt(active.x)) {
+    throw new OfflineGrantCryptoError("invalid_key");
+  }
+  return Object.freeze({
+    ...key,
+    retiredAtEpochSeconds: entry.retiredAtEpochSeconds,
+    overlapEndsAtEpochSeconds: entry.overlapEndsAtEpochSeconds,
+  });
 }
 
 /** What the server already established about the caller and the release
@@ -336,9 +527,18 @@ export async function signOfflineExecutionGrant(
   return transport.value;
 }
 
+/** Verifies a signed grant against either a static list of verification keys
+ * (every entry allowlisted by the binding) or a configured key ring (the
+ * binding's allowlist may narrow the ring to a subset of its keys). A key
+ * that carries a retirement window — the ring's previous key, whether it is
+ * consulted through the ring or handed over as a list entry — is honoured
+ * only for a grant issued no later than `retiredAtEpochSeconds` plus the
+ * propagation grace, verified strictly before `overlapEndsAtEpochSeconds`
+ * and no earlier than one grace before `retiredAtEpochSeconds`; otherwise
+ * it is `retired_key`. */
 export async function verifyOfflineExecutionGrant(
   raw: unknown,
-  verificationKeys: readonly OfflineGrantKey[],
+  verificationKeys: OfflineGrantKeyRing | readonly OfflineGrantKey[],
   expected: OfflineGrantVerificationContext,
 ): Promise<VerifiedOfflineGrantEnvelope> {
   const parsed = validateOfflineSignedGrantShape(raw);
@@ -350,7 +550,11 @@ export async function verifyOfflineExecutionGrant(
   const context = snapshotContext(expected);
   validateBoundClaims(header, claims, context);
   const kid = (header as OfflineGrantProtectedHeader).kid;
-  const keys = verificationKeyMap(verificationKeys, context.binding.allowedKeyIds);
+  const entries = isKeyList(verificationKeys)
+    ? verificationKeys
+    : ringVerificationKeys(verificationKeys, context.binding.allowedKeyIds);
+  const retirements = retirementWindows(entries);
+  const keys = verificationKeyMap(entries, context.binding.allowedKeyIds);
   const key = keys.get(kid);
   if (!key) throw new OfflineGrantCryptoError("invalid_key");
   let verified;
@@ -369,6 +573,17 @@ export async function verifyOfflineExecutionGrant(
     throw new OfflineGrantCryptoError("invalid_signature");
   }
   const verifiedClaims = validateBoundClaims(verified.protectedHeader, verified.payload, context);
+  const retired = retirements.get(kid);
+  if (
+    retired !== undefined &&
+    (context.nowEpochSeconds >= retired.overlapEndsAtEpochSeconds ||
+      retired.retiredAtEpochSeconds >
+        context.nowEpochSeconds + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS ||
+      verifiedClaims.iat >
+        retired.retiredAtEpochSeconds + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS)
+  ) {
+    throw new OfflineGrantCryptoError("retired_key");
+  }
   return Object.freeze({
     verification: "signature_and_bindings_only",
     transport,
@@ -444,6 +659,59 @@ function requireKey(entry: OfflineGrantKey, usage: "sign" | "verify"): CryptoKey
     throw new OfflineGrantCryptoError("invalid_key");
   }
   return entry.key;
+}
+
+function isKeyList(
+  value: OfflineGrantKeyRing | readonly OfflineGrantKey[],
+): value is readonly OfflineGrantKey[] {
+  return Array.isArray(value);
+}
+
+/** The ring's keys the binding still allowlists. The allowlist can only
+ * narrow the ring; a kid it names that the ring does not hold is simply
+ * absent (and `invalid_key` when a grant presents it). */
+function ringVerificationKeys(
+  ring: OfflineGrantKeyRing,
+  allowedKeyIds: readonly string[],
+): readonly OfflineGrantKey[] {
+  if (!isPlainRecord(ring) || !ring.activeKey || !Array.isArray(allowedKeyIds)) {
+    throw new OfflineGrantCryptoError("invalid_key");
+  }
+  const held = ring.previousKey === null ? [ring.activeKey] : [ring.activeKey, ring.previousKey];
+  return held.filter((entry) => isPlainRecord(entry) && allowedKeyIds.includes(entry.kid));
+}
+
+type RetirementWindow = Readonly<
+  Pick<OfflineGrantRetiredKey, "retiredAtEpochSeconds" | "overlapEndsAtEpochSeconds">
+>;
+
+/** Snapshot of every retirement window the presented keys carry, taken
+ * before any asynchronous cryptography so a key object mutated
+ * mid-verification cannot widen it. A window must be complete and bounded. */
+function retirementWindows(entries: readonly OfflineGrantKey[]): Map<string, RetirementWindow> {
+  const windows = new Map<string, RetirementWindow>();
+  if (!Array.isArray(entries)) throw new OfflineGrantCryptoError("invalid_key");
+  for (const entry of entries) {
+    if (!isPlainRecord(entry)) throw new OfflineGrantCryptoError("invalid_key");
+    const candidate: Partial<OfflineGrantRetiredKey> = entry;
+    const retiredAt = candidate.retiredAtEpochSeconds;
+    const overlapEndsAt = candidate.overlapEndsAtEpochSeconds;
+    if (retiredAt === undefined && overlapEndsAt === undefined) continue;
+    if (
+      !isKeyIdentifier(candidate.kid) ||
+      !isEpochSeconds(retiredAt) ||
+      !isEpochSeconds(overlapEndsAt) ||
+      overlapEndsAt < retiredAt ||
+      overlapEndsAt - retiredAt > OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS
+    ) {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    windows.set(candidate.kid, {
+      retiredAtEpochSeconds: retiredAt,
+      overlapEndsAtEpochSeconds: overlapEndsAt,
+    });
+  }
+  return windows;
 }
 
 function verificationKeyMap(

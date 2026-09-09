@@ -89,11 +89,11 @@ import {
 } from "./releasePolicy.ts";
 import { canonicalizeOfflineJson, digestCanonicalOfflineJson } from "./canonicalDigest.ts";
 import {
-  importOfflineGrantSigningKey,
+  importOfflineGrantKeyRing,
   offlineGrantClaimsFromIssuance,
   OfflineGrantIssuanceError,
   signOfflineExecutionGrant,
-  type OfflineGrantKey,
+  type OfflineGrantKeyRing,
 } from "./offlineSignature.ts";
 import type { OfflineReleasedArtifacts } from "../../../packages/shared-types/src/offlineAuthorization.ts";
 import {
@@ -4737,8 +4737,8 @@ function emitOfflineGrantAudit(entry: {
 /** The configured private signing JWK, imported once per distinct secret
  * value (rotation = new value = fresh import). A missing or unusable secret
  * is `null`: the route answers 503 and spends nothing. */
-let offlineSigningKeyCache: { raw: string; key: OfflineGrantKey } | null = null;
-async function offlineGrantSigningKey(): Promise<OfflineGrantKey | null> {
+let offlineSigningKeyCache: { raw: string; key: OfflineGrantKeyRing } | null = null;
+async function offlineGrantKeyRing(): Promise<OfflineGrantKeyRing | null> {
   const raw = Deno.env.get(OFFLINE_GRANT_SIGNING_JWK_ENV) ?? "";
   if (raw.trim() === "") return null;
   if (offlineSigningKeyCache?.raw === raw) return offlineSigningKeyCache.key;
@@ -4749,7 +4749,7 @@ async function offlineGrantSigningKey(): Promise<OfflineGrantKey | null> {
     return null;
   }
   try {
-    const key = await importOfflineGrantSigningKey(parsed);
+    const key = await importOfflineGrantKeyRing(parsed);
     offlineSigningKeyCache = { raw, key };
     return key;
   } catch {
@@ -4887,10 +4887,11 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
     );
   }
 
-  const signingKey = await offlineGrantSigningKey();
-  if (!signingKey) {
+  const keyRing = await offlineGrantKeyRing();
+  if (!keyRing) {
     return serviceUnavailable("Offline grant issuance", { name: "SigningKeyUnavailable" });
   }
+  const signingKey = keyRing.signingKey;
 
   const release = await chargeableReleaseAdmission();
   if (release.status === "unavailable") {
@@ -4943,7 +4944,7 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
     const grant = await signOfflineExecutionGrant(claims, signingKey, {
       binding: {
         issuer: OFFLINE_GRANT_ISSUER,
-        allowedKeyIds: [signingKey.kid],
+        allowedKeyIds: keyRing.allowedKeyIds,
         ownerId: authed.id,
         installationKeyId,
       },

@@ -27,12 +27,19 @@ import {
 } from "../../../packages/shared-types/src/offlineAuthorization.ts";
 import { digestOfflineGrantTransport } from "./canonicalDigest.ts";
 import {
+  OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION,
+  OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS,
+  OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS,
+  OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS,
   OFFLINE_SIGNATURE_TRUST_BOUNDARY,
   OfflineGrantCryptoError,
+  importOfflineGrantKeyRing,
+  importOfflineGrantSigningKey,
   importOfflineGrantVerificationKey,
   signOfflineExecutionGrant,
   verifyOfflineExecutionGrant,
   type OfflineGrantKey,
+  type OfflineGrantKeyRing,
   type OfflineGrantVerificationContext,
 } from "./offlineSignature.ts";
 
@@ -255,6 +262,408 @@ Deno.test("configured key rotation requires the exact purpose and kid allowlist"
   await rejectGrant(signed, "invalid_metadata");
   await rejectGrant(signed, "invalid_key", rotatedContext, [publicKey]);
 });
+
+// --- Key rotation with a bounded overlap window -----------------------------
+// `keyPair` (KID) is the key being retired; `rotatedPair` (ROTATED_KID) is the
+// new active key. Grants under KID were issued at NOW, so they stay unexpired
+// until NOW + 7d, which is exactly the longest overlap a ring may declare.
+// The previous key is honoured only while `retiredAt` is at most GRACE ahead
+// of the trusted clock and for grants with `iat <= retiredAt + GRACE`.
+
+const GRACE = OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS;
+
+const ROTATED_PRIVATE_JWK = { ...(await exportJWK(rotatedPair.privateKey)), kid: ROTATED_KID };
+const RETIRED_PUBLIC_JWK = { ...publicJwk, kid: KID };
+
+function ringDocument(retiredAt: number, overlapEndsAt: number): Record<string, unknown> {
+  return {
+    schemaVersion: OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION,
+    active: ROTATED_PRIVATE_JWK,
+    previous: {
+      jwk: RETIRED_PUBLIC_JWK,
+      retiredAtEpochSeconds: retiredAt,
+      overlapEndsAtEpochSeconds: overlapEndsAt,
+    },
+  };
+}
+
+function ringContext(
+  ring: OfflineGrantKeyRing,
+  nowEpochSeconds: number,
+): OfflineGrantVerificationContext {
+  return {
+    ...context(),
+    binding: { ...context().binding, allowedKeyIds: ring.allowedKeyIds },
+    nowEpochSeconds,
+  };
+}
+
+Deno.test(
+  "key ring: the previous key verifies only inside [issuance ≤ retiredAt + grace, retiredAt - grace ≤ now < overlapEndsAt]",
+  async () => {
+    const retiredAt = NOW + GRACE + 1;
+    const overlapEndsAt = retiredAt + 86_400;
+    const ring = await importOfflineGrantKeyRing(ringDocument(retiredAt, overlapEndsAt));
+    assert.deepEqual(ring.allowedKeyIds, [ROTATED_KID, KID]);
+    assert.equal(ring.signingKey.kid, ROTATED_KID);
+    assert.equal(ring.activeKey.key.type, "public");
+    assert.equal(ring.previousKey?.kid, KID);
+    assert.equal(Object.isFrozen(ring), true);
+    assert.equal(Object.isFrozen(ring.previousKey), true);
+    assert.equal(Object.isFrozen(ring.allowedKeyIds), true);
+
+    // `valid` was signed under KID at NOW (before retirement). NOW + 1 is
+    // exactly one grace before retiredAt: the earliest instant the ring is in force.
+    for (const now of [NOW + 1, retiredAt, retiredAt + GRACE, overlapEndsAt - 1]) {
+      const verified = await verifyOfflineExecutionGrant(valid, ring, ringContext(ring, now));
+      assert.equal(verified.protectedHeader.kid, KID);
+      assert.deepEqual(verified.claims, freeClaims());
+    }
+    for (const now of [overlapEndsAt, overlapEndsAt + 1]) {
+      await assert.rejects(verifyOfflineExecutionGrant(valid, ring, ringContext(ring, now)), {
+        name: "OfflineGrantCryptoError",
+        code: "retired_key",
+      });
+    }
+    // A ring whose retirement instant lies more than a grace ahead of the
+    // trusted clock is not yet in force: the previous key verifies nothing.
+    await assert.rejects(verifyOfflineExecutionGrant(valid, ring, ringContext(ring, NOW)), {
+      code: "retired_key",
+    });
+
+    // Signed under the retired key but issued more than a grace AFTER it was
+    // retired: never valid, even inside the overlap window (the old key must
+    // not mint new grants once the secret has propagated).
+    const late = await signOfflineExecutionGrant(
+      { ...freeClaims(), iat: retiredAt + GRACE + 1, exp: retiredAt + GRACE + 1 + 3600 },
+      signingKey,
+      ringContext(ring, retiredAt + GRACE + 1),
+    );
+    await assert.rejects(
+      verifyOfflineExecutionGrant(late, ring, ringContext(ring, retiredAt + GRACE + 2)),
+      { code: "retired_key" },
+    );
+    // …whereas one issued at the last second of the grace is still honoured.
+    const insideGrace = await signOfflineExecutionGrant(
+      { ...freeClaims(), iat: retiredAt + GRACE, exp: retiredAt + GRACE + 3600 },
+      signingKey,
+      ringContext(ring, retiredAt + GRACE),
+    );
+    await verifyOfflineExecutionGrant(insideGrace, ring, ringContext(ring, retiredAt + GRACE + 1));
+
+    // The active key has no window; forged bytes under the retired kid are a
+    // signature failure, not a rotation verdict.
+    const underActive = await signOfflineExecutionGrant(
+      freeClaims(),
+      ring.signingKey,
+      ringContext(ring, NOW),
+    );
+    for (const now of [NOW, overlapEndsAt, NOW + OFFLINE_PRO_LEASE_MAX_SECONDS - 1]) {
+      assert.equal(
+        (await verifyOfflineExecutionGrant(underActive, ring, ringContext(ring, now)))
+          .protectedHeader.kid,
+        ROTATED_KID,
+      );
+    }
+    await assert.rejects(
+      verifyOfflineExecutionGrant(
+        tamperedSegment(2, base64url.encode(new Uint8Array(64))),
+        ring,
+        ringContext(ring, overlapEndsAt + 1),
+      ),
+      { code: "invalid_signature" },
+    );
+
+    // The static key-list path is unchanged and carries no window of its own.
+    await verifyOfflineExecutionGrant(valid, [publicKey, rotatedKey], ringContext(ring, NOW));
+  },
+);
+
+Deno.test("key ring: overlap is bounded and the previous key is public-only", async () => {
+  assert.equal(OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS, OFFLINE_PRO_LEASE_MAX_SECONDS);
+  assert.equal(OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS, 253_402_300_799);
+  assert.equal(GRACE, 15 * 60);
+  await importOfflineGrantKeyRing(ringDocument(NOW, NOW));
+  await importOfflineGrantKeyRing(
+    ringDocument(NOW, NOW + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS),
+  );
+  await importOfflineGrantKeyRing(
+    ringDocument(OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS, OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS),
+  );
+  const legacy = await importOfflineGrantKeyRing({ ...PRIVATE_JWK, kid: KID });
+  assert.equal(legacy.previousKey, null);
+  assert.deepEqual(legacy.allowedKeyIds, [KID]);
+  assert.equal(legacy.signingKey.key.type, "private");
+  assert.equal(legacy.activeKey.key.type, "public");
+  assert.equal(legacy.activeKey.key.extractable, false);
+
+  const base = ringDocument(NOW, NOW + 3600);
+  const previous = base.previous as Record<string, unknown>;
+  for (const [name, document] of [
+    [
+      "overlap past the bound",
+      ringDocument(NOW, NOW + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS + 1),
+    ],
+    ["overlap ending before retirement", ringDocument(NOW + 1, NOW)],
+    ["negative retirement", ringDocument(-1, 0)],
+    ["fractional instant", ringDocument(NOW, NOW + 0.5)],
+    ["non-integer instant", ringDocument(NOW, Number.NaN)],
+    ["unsafe instant", ringDocument(NOW, Number.MAX_SAFE_INTEGER + 1)],
+    ["retirement in milliseconds", ringDocument(NOW * 1000, NOW * 1000 + 3600)],
+    ["overlap end in milliseconds", ringDocument(NOW, (NOW + 3600) * 1000)],
+    [
+      "retirement past 9999-12-31",
+      ringDocument(
+        OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS + 1,
+        OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS + 1,
+      ),
+    ],
+    [
+      "overlap end past 9999-12-31",
+      ringDocument(
+        OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS,
+        OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS + 1,
+      ),
+    ],
+    [
+      "retirement near MAX_SAFE_INTEGER",
+      ringDocument(
+        Number.MAX_SAFE_INTEGER - OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS,
+        Number.MAX_SAFE_INTEGER,
+      ),
+    ],
+    [
+      "private previous key",
+      { ...base, previous: { ...previous, jwk: { ...PRIVATE_JWK, kid: KID } } },
+    ],
+    [
+      "previous kid equal to active kid",
+      { ...base, previous: { ...previous, jwk: { ...publicJwk, kid: ROTATED_KID } } },
+    ],
+    ["previous key without kid", { ...base, previous: { ...previous, jwk: publicJwk } }],
+    [
+      "previous key with a remote URL",
+      {
+        ...base,
+        previous: { ...previous, jwk: { ...RETIRED_PUBLIC_JWK, jku: "https://attacker.invalid" } },
+      },
+    ],
+    ["previous entry with extra member", { ...base, previous: { ...previous, d: PRIVATE_JWK.d } }],
+    [
+      "previous entry missing overlap",
+      { ...base, previous: { jwk: RETIRED_PUBLIC_JWK, retiredAtEpochSeconds: NOW } },
+    ],
+    ["previous entry undefined", { schemaVersion: 1, active: ROTATED_PRIVATE_JWK }],
+    ["previous entry as array", { ...base, previous: [previous] }],
+    ["active public", { ...base, active: { ...publicJwk, kid: ROTATED_KID } }],
+    ["active without kid", { ...base, active: await exportJWK(rotatedPair.privateKey) }],
+    ["unknown schema", { ...base, schemaVersion: 2 }],
+    ["schema as string", { ...base, schemaVersion: "1" }],
+    ["extra top-level member", { ...base, keys: [] }],
+    ["legacy public JWK", publicJwk],
+    ["array", [ROTATED_PRIVATE_JWK]],
+    ["string", JSON.stringify(base)],
+    ["null", null],
+    ["undefined", undefined],
+  ] as readonly (readonly [string, unknown])[]) {
+    await assert.rejects(importOfflineGrantKeyRing(document), { code: "invalid_key" }, name);
+  }
+});
+
+Deno.test(
+  "key ring: verification snapshots the previous key's window before asynchronous cryptography",
+  async () => {
+    const frozen = await importOfflineGrantKeyRing(ringDocument(NOW, NOW + 3600));
+    const previous = { ...frozen.previousKey! };
+    const ring: OfflineGrantKeyRing = { ...frozen, previousKey: previous };
+    const pending = verifyOfflineExecutionGrant(valid, ring, ringContext(ring, NOW + 3600));
+    previous.overlapEndsAtEpochSeconds = NOW + 86_400;
+    await assert.rejects(pending, { code: "retired_key" });
+
+    const widened = {
+      ...frozen,
+      previousKey: {
+        ...frozen.previousKey!,
+        overlapEndsAtEpochSeconds: NOW + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS + 1,
+      },
+    };
+    await assert.rejects(verifyOfflineExecutionGrant(valid, widened, ringContext(widened, NOW)), {
+      code: "invalid_key",
+    });
+    const bogus = {
+      ...frozen,
+      previousKey: { ...frozen.previousKey!, retiredAtEpochSeconds: "0" as unknown as number },
+    };
+    await assert.rejects(verifyOfflineExecutionGrant(valid, bogus, ringContext(bogus, NOW)), {
+      code: "invalid_key",
+    });
+    const milliseconds = {
+      ...frozen,
+      previousKey: {
+        ...frozen.previousKey!,
+        retiredAtEpochSeconds: NOW * 1000,
+        overlapEndsAtEpochSeconds: NOW * 1000 + 3600,
+      },
+    };
+    await assert.rejects(
+      verifyOfflineExecutionGrant(valid, milliseconds, ringContext(milliseconds, NOW)),
+      { code: "invalid_key" },
+    );
+  },
+);
+
+Deno.test(
+  "key ring: the binding allowlist narrows the ring, and the previous key's window travels with the key object",
+  async () => {
+    const retiredAt = NOW + GRACE + 1;
+    const overlapEndsAt = retiredAt + 86_400;
+    const ring = await importOfflineGrantKeyRing(ringDocument(retiredAt, overlapEndsAt));
+    const underActive = await signOfflineExecutionGrant(
+      freeClaims(),
+      ring.signingKey,
+      ringContext(ring, NOW),
+    );
+    const activeOnly = { ...ringContext(ring, NOW + 1), binding: { ...context().binding } };
+    assert.deepEqual(activeOnly.binding.allowedKeyIds, [KID]);
+    // `valid` (under KID, the retired key) verifies with a KID-only allowlist inside the window;
+    // the active-key grant is refused there by the metadata contract, never widened in.
+    assert.equal(
+      (await verifyOfflineExecutionGrant(valid, ring, activeOnly)).protectedHeader.kid,
+      KID,
+    );
+    await assert.rejects(verifyOfflineExecutionGrant(underActive, ring, activeOnly), {
+      code: "invalid_metadata",
+    });
+    const rotatedOnly = {
+      ...ringContext(ring, NOW + 1),
+      binding: { ...context().binding, allowedKeyIds: [ROTATED_KID] },
+    };
+    assert.equal(
+      (await verifyOfflineExecutionGrant(underActive, ring, rotatedOnly)).protectedHeader.kid,
+      ROTATED_KID,
+    );
+    await assert.rejects(verifyOfflineExecutionGrant(valid, ring, rotatedOnly), {
+      code: "invalid_metadata",
+    });
+
+    // The same key objects as a list keep the window the previous key carries.
+    const list: readonly OfflineGrantKey[] = [ring.activeKey, ring.previousKey!];
+    assert.equal(
+      (await verifyOfflineExecutionGrant(valid, list, ringContext(ring, overlapEndsAt - 1)))
+        .protectedHeader.kid,
+      KID,
+    );
+    for (const now of [overlapEndsAt, overlapEndsAt + 86_400]) {
+      await assert.rejects(verifyOfflineExecutionGrant(valid, list, ringContext(ring, now)), {
+        code: "retired_key",
+      });
+    }
+    // A list entry whose retirement instant lies more than a grace ahead of
+    // the trusted clock verifies nothing yet.
+    await assert.rejects(verifyOfflineExecutionGrant(valid, list, ringContext(ring, NOW)), {
+      code: "retired_key",
+    });
+    // A list entry with a partial, unbounded or implausible window is a malformed key.
+    for (const previous of [
+      { ...ring.previousKey!, overlapEndsAtEpochSeconds: undefined as unknown as number },
+      {
+        ...ring.previousKey!,
+        overlapEndsAtEpochSeconds: retiredAt + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS + 1,
+      },
+      {
+        ...ring.previousKey!,
+        retiredAtEpochSeconds: OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS + 1,
+        overlapEndsAtEpochSeconds: OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS + 1,
+      },
+    ]) {
+      await assert.rejects(
+        verifyOfflineExecutionGrant(valid, [ring.activeKey, previous], ringContext(ring, NOW)),
+        { code: "invalid_key" },
+      );
+    }
+  },
+);
+
+Deno.test(
+  "key ring: import refuses an active key whose public point does not belong to d, off-curve points and a previous key repeating (or negating) the active material",
+  async () => {
+    const retiredPrivateJwk = { ...(await exportJWK(keyPair.privateKey)), kid: ROTATED_KID };
+    const rotatedPublicJwk = await exportJWK(rotatedPair.publicKey);
+    const zero = base64url.encode(new Uint8Array(32));
+    const one = base64url.encode(new Uint8Array([...new Uint8Array(31), 1]));
+    // P-256 group order n, big-endian.
+    const order = Uint8Array.from(
+      "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+        .match(/.{2}/g)!
+        .map((byte) => Number.parseInt(byte, 16)),
+    );
+    assert.equal(order.byteLength, 32);
+    const orderMinusOne = new Uint8Array(order);
+    orderMinusOne[31] -= 1;
+    // P-256 field prime p; -P = (x, p - y) is on the curve and controlled by n - d.
+    const fieldPrime = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
+    const rotatedY = BigInt(
+      `0x${Array.from(base64url.decode(rotatedPublicJwk.y!), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("")}`,
+    );
+    const negatedY = base64url.encode(
+      Uint8Array.from(
+        (fieldPrime - rotatedY)
+          .toString(16)
+          .padStart(64, "0")
+          .match(/.{2}/g)!
+          .map((byte) => Number.parseInt(byte, 16)),
+      ),
+    );
+    // Sanity: the negated point is a genuine P-256 point the bare importer accepts.
+    await importOfflineGrantVerificationKey(KID, { ...rotatedPublicJwk, y: negatedY });
+
+    // Sanity: the genuine key pair round-trips and the same check runs for the bare importer.
+    await importOfflineGrantSigningKey(ROTATED_PRIVATE_JWK);
+    for (const [name, active] of [
+      ["x/y of another key", { ...ROTATED_PRIVATE_JWK, x: publicJwk.x, y: publicJwk.y }],
+      ["x of another key", { ...ROTATED_PRIVATE_JWK, x: publicJwk.x }],
+      ["y of another key", { ...ROTATED_PRIVATE_JWK, y: publicJwk.y }],
+      ["d of another key", { ...ROTATED_PRIVATE_JWK, d: retiredPrivateJwk.d }],
+      ["off-curve point", { ...ROTATED_PRIVATE_JWK, x: zero, y: zero }],
+      ["zero scalar", { ...ROTATED_PRIVATE_JWK, d: zero }],
+      ["scalar equal to the group order", { ...ROTATED_PRIVATE_JWK, d: base64url.encode(order) }],
+      [
+        "scalar n-1 with the wrong point",
+        { ...ROTATED_PRIVATE_JWK, d: base64url.encode(orderMinusOne) },
+      ],
+      ["scalar one with the wrong point", { ...ROTATED_PRIVATE_JWK, d: one }],
+    ] as readonly (readonly [string, Record<string, unknown>])[]) {
+      await assert.rejects(importOfflineGrantSigningKey(active), { code: "invalid_key" }, name);
+      await assert.rejects(importOfflineGrantKeyRing(active), { code: "invalid_key" }, name);
+      await assert.rejects(
+        importOfflineGrantKeyRing({ ...ringDocument(NOW, NOW + 3600), active }),
+        { code: "invalid_key" },
+        name,
+      );
+    }
+
+    const base = ringDocument(NOW, NOW + 3600);
+    const previous = base.previous as Record<string, unknown>;
+    for (const [name, jwk] of [
+      ["previous point off the curve", { ...RETIRED_PUBLIC_JWK, x: zero, y: zero }],
+      ["previous y of another key", { ...RETIRED_PUBLIC_JWK, y: rotatedPublicJwk.y }],
+      ["previous is the active public half", { ...rotatedPublicJwk, kid: KID }],
+      ["previous is the negated active point", { ...rotatedPublicJwk, kid: KID, y: negatedY }],
+    ] as readonly (readonly [string, Record<string, unknown>])[]) {
+      await assert.rejects(
+        importOfflineGrantKeyRing({ ...base, previous: { ...previous, jwk } }),
+        { code: "invalid_key" },
+        name,
+      );
+    }
+    await assert.rejects(
+      importOfflineGrantVerificationKey(KID, { ...publicJwk, x: zero, y: zero }),
+      { code: "invalid_key" },
+    );
+  },
+);
 
 const HEADER_INJECTIONS: readonly (readonly [string, Record<string, unknown>])[] = [
   ["jku", { jku: "https://attacker.invalid/keys.json" }],
