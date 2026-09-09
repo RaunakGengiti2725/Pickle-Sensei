@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.8"
+LIB_VERSION = "2026-09-08.9"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -349,7 +349,24 @@ PROCEDURE:
 Fill `acceptance_results` with one object per acceptance id: {ACCEPTANCE_ITEM_DOC}{prior_block}"""
 
 
-def review_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict, serial_group_paths: dict | None = None) -> str:
+def coordinator_evidence_block(evidence: list[dict] | None) -> str:
+    """Mac-plane (kind=manual) criteria are proven by the coordinator's own
+    `scripts/mac-full-verify.sh --remote` run, never by a worker. The block
+    tells reviewer/adversary which exact-SHA artifact stands for which
+    criterion so they grade the artifact instead of trying to run Xcode."""
+    if not evidence:
+        return ""
+    return (
+        "\nCOORDINATOR-OWNED EVIDENCE (manual/Mac-plane criteria — do NOT run these commands and never push `ci/mac-*`; "
+        "instead verify each artifact: the GitHub Actions run URL must show conclusion=success on EXACTLY the candidate sha, "
+        "and the linked summary.json must have ok=true with every stage passed; record the criterion in `acceptance_reverified` "
+        "with status PASS, exit_code 0, executed/passed/failed/skipped 0 and the artifact URL only if that holds, otherwise FAIL):\n"
+        + dump(evidence)
+        + "\n"
+    )
+
+
+def review_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict, serial_group_paths: dict | None = None, coordinator_evidence: list[dict] | None = None) -> str:
     serial_group_paths = serial_group_paths or {}
     return f"""{common_rules(base_sha, integration_branch)}
 
@@ -360,7 +377,7 @@ WORK PACKAGE (frozen manifest entry):
 {dump({k: pkg[k] for k in ('id', 'title', 'objective', 'severity', 'write_paths', 'additive_shared_paths', 'acceptance', 'invariants')})}
 IMPLEMENTER CLAIMS (verify, do not copy):
 {dump({k: impl.get(k) for k in ('approach', 'files_changed', 'out_of_scope_files', 'acceptance_results', 'regression_tests_added', 'baseline_failures_observed', 'residual_risks', 'summary')})}
-
+{coordinator_evidence_block(coordinator_evidence)}
 PROCEDURE:
 1. `git diff --stat {base_sha}..{impl['head_sha']}` — every changed file must be under write_paths, an additive edit inside additive_shared_paths, or a justified minimal wiring edit listed in the implementer's `out_of_scope_files` that is NOT under a serial-group path this package does not hold (serial groups held: {dump(pkg.get('serial_groups', []))}; group paths: {dump(serial_group_paths)}). Set `scope_violation` accordingly and name the offending file in `blocking_issues`.
 1b. The objective must be met as shipped behaviour: if the candidate adds a module that no shipping code path calls, that is a blocking issue, not a note.
@@ -370,7 +387,7 @@ PROCEDURE:
 5. `verdict`: `approve` only if scope is clean, every criterion re-verified PASS with executed>0, failed==0 and skipped==0 (or, only for a criterion that lists `documented_skips`, skipped <= that many with each skipped item named in your note), regression proof holds, and there are zero blocking issues. Otherwise `request_changes` (fixable) or `reject` (wrong approach). Each blocking issue must be concrete: file:line, what is wrong, how to reproduce."""
 
 
-def adversary_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict) -> str:
+def adversary_prompt(pkg: dict, base_sha: str, integration_branch: str, impl: dict, coordinator_evidence: list[dict] | None = None) -> str:
     return f"""{common_rules(base_sha, integration_branch)}
 
 ROLE: ADVERSARIAL TESTER for work package {pkg['id']}. Try to BREAK the candidate at its failure boundaries with reproducible tests — not generic criticism.
@@ -379,7 +396,7 @@ CANDIDATE: branch `{impl['branch']}` at sha `{impl['head_sha']}` (fetch and chec
 WORK PACKAGE:
 {dump({k: pkg[k] for k in ('id', 'title', 'objective', 'write_paths', 'acceptance', 'invariants')})}
 IMPLEMENTER SUMMARY: {impl.get('summary', '')}
-
+{coordinator_evidence_block(coordinator_evidence)}
 ATTACK SURFACE (pick what applies, try at least 6 distinct attacks): concurrency/reentrancy (double submit, interleaved account switch, crash between steps), replay and duplicate identities, boundary values (empty, max, negative, NaN, far-future/past clocks, clock rollback), corrupt/partial persisted state, network failure at each step (timeout, 429 + Retry-After, 5xx, redirect), unauthorised roles (anon, other user, service) for new SQL/Edge surfaces (allowed AND denied paths), free-rating conservation (partial/replayed outcomes must not charge), copy/accessibility violations, process death and restart.
 PROCEDURE: write each attack as a real test (Jest / Deno test / SQL) on branch `devin/pp/{pkg['id'].lower()}/attack-{impl['head_sha'][:8]}`, run it against the candidate, push the branch, record `attack_branch_sha`. Report every confirmed break as an object {{severity, title, repro, observed, expected, test_file}}. Severity: P0 = money/data loss/leak/security/crash on a supported path; P1 = incorrect behaviour on a supported path; P2/P3 = minor. An attack that did not break anything is still reported in `attacks_tried`. Do not modify the candidate's own tests or production code."""
 
@@ -668,6 +685,105 @@ INTEGRATION_AREAS: dict[str, dict] = {
         "surface": "sign-in -> capture/import -> analysis -> result -> sync -> relaunch -> history; account switch mid-journey; offline start; paywall -> purchase pending -> fulfilment; deletion -> re-sign-in; repeated actions and double taps",
     },
 }
+
+
+async def run_candidate_verification(
+    *,
+    package_id: str,
+    base_sha: str,
+    integration_branch: str,
+    manifest_path: str,
+    out_root: str,
+    runtime: Runtime,
+    wave_id: str,
+    impl: dict,
+    coordinator_evidence: list[dict],
+    mode: str | None = None,
+    register: bool = True,
+) -> dict:
+    """Judge an EXISTING candidate: independent reviewer ‖ adversary on `impl['head_sha']`, then
+    the deterministic judge. Used for Mac-plane packages whose implementer round could not be
+    graded on Linux: the coordinator runs the Mac slot itself, fills the manual criterion in
+    `impl['acceptance_results']` with that exact-SHA artifact, and passes the same artifact as
+    `coordinator_evidence` so reviewer and adversary grade the artifact instead of the command.
+    No implementer is launched; nothing here mutates the integration branch."""
+    if not SHA_RE.match(base_sha):
+        raise ValueError(f"base_sha must be a full 40-hex sha, got {base_sha!r}")
+    head = str(impl.get("head_sha", "")).lower()
+    if not SHA_RE.match(head):
+        raise ValueError(f"impl.head_sha must be a full 40-hex sha, got {impl.get('head_sha')!r}")
+    if not coordinator_evidence:
+        raise ValueError("coordinator_evidence must name at least one exact-SHA artifact")
+    for ev in coordinator_evidence:
+        if str(ev.get("head_sha", "")).lower() != head:
+            raise ValueError(f"coordinator evidence {ev.get('criterion_id')} is for {ev.get('head_sha')}, not candidate {head}")
+    manifest = load_manifest(manifest_path)
+    pkg = find_package(manifest, package_id)
+    pre = grade_acceptance(pkg, impl.get("acceptance_results"))
+    if pre:
+        raise ValueError(f"candidate acceptance_results incomplete before verification: {pre}")
+    sg_paths = manifest.get("serial_group_paths", {})
+    out_dir = os.path.join(out_root, package_id, wave_id)
+    ledger: list[dict] = []
+    record: dict[str, Any] = {
+        "lib_version": LIB_VERSION,
+        "manifest_version": manifest["manifest_version"],
+        "manifest_sha256": manifest["manifest_sha256"],
+        "package_id": package_id,
+        "wave_id": wave_id,
+        "base_sha": base_sha,
+        "integration_branch": integration_branch,
+        "kind": "candidate_verification",
+        "coordinator_evidence": coordinator_evidence,
+        "rounds": [],
+        "agents": ledger,
+        "status": "RUNNING",
+    }
+    _save(out_dir, "record.json", record)
+    minutes = max(1, min(60, int(pkg.get("estimate_minutes", 60))))
+    if register:
+        await runtime.register_workflow(
+            {
+                "name": f"pickle-sensei-program-{package_id.lower()}-verify",
+                "description": f"{package_id}: independent review ‖ adversary ‖ judge of existing candidate {head[:12]} with coordinator Mac evidence (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
+                "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
+                "soft_time_limit_minutes": minutes,
+                "phases": wave_phases(1)[1:],
+            }
+        )
+    round_no = int(impl.get("round") or 1)
+    rnd: dict[str, Any] = {"round": round_no, "implement": impl, "review": None, "adversary": None, "decision": None}
+    record["rounds"].append(rnd)
+    runtime.log(f"{package_id} verifying existing candidate {head[:12]} ({impl.get('branch')}) — reviewer ‖ adversary")
+    rev, adv = await asyncio.gather(
+        _call(runtime, ledger, "reviewer", review_prompt(pkg, base_sha, integration_branch, impl, sg_paths, coordinator_evidence), REVIEW_SCHEMA, f"review-{package_id}-v{head[:8]}", "review", minutes, mode),
+        _call(runtime, ledger, "adversary", adversary_prompt(pkg, base_sha, integration_branch, impl, coordinator_evidence), ADVERSARY_SCHEMA, f"adversary-{package_id}-v{head[:8]}", "adversary", minutes, mode),
+    )
+    rnd["review"] = rev
+    rnd["adversary"] = adv
+    if rev is None or adv is None:
+        rnd["decision"] = {"accepted": False, "reasons": ["reviewer or adversary session failed"], "criteria_examined": []}
+        final_status = "REQUEUE"
+    else:
+        decision = judge(pkg, impl, rev, adv)
+        rnd["decision"] = decision.as_dict()
+        if decision.accepted:
+            record["candidate"] = {"branch": impl["branch"], "head_sha": head, "round": round_no, "lane": 1}
+            final_status = "ACCEPTED"
+            runtime.log(f"{package_id} ACCEPTED at {head[:12]} ({impl['branch']})")
+        else:
+            final_status = "REQUEUE"
+            runtime.log(f"{package_id} candidate {head[:12]} REJECTED: " + "; ".join(decision.reasons[:6]))
+    record["status"] = final_status
+    record["agent_counts"] = {
+        "requested": len(ledger),
+        "launched": len(ledger),
+        "completed": sum(1 for e in ledger if e["status"] == "completed"),
+        "failed": sum(1 for e in ledger if e["status"] == "failed"),
+    }
+    _save(out_dir, "record.json", record)
+    runtime.log(f"{package_id} FINAL {final_status} agents={record['agent_counts']}")
+    return record
 
 
 def integration_adversary_prompt(area_id: str, area: dict, head_sha: str, integration_branch: str) -> str:

@@ -1,0 +1,13 @@
+{
+  "tool": "mac-full-verify",
+  "git_sha": "64f7353e186fdf110606a0b1b88c56833d2ed092",
+  "started_utc": "20260909T042525Z",
+  "host": "26.7 arm64",
+  "xcode": "Xcode 26.4.1 Build version 17E202",
+  "ok": true,
+  "stages": [
+    {"name": "environment", "status": "passed", "seconds": 8, "note": "", "log": "environment.log"},
+    {"name": "swift-native", "status": "passed", "seconds": 96, "note": "", "log": "swift-native.log"},
+    {"name": "ios-app", "status": "passed", "seconds": 607, "note": "", "log": "ios-app.log"}
+  ]
+}
