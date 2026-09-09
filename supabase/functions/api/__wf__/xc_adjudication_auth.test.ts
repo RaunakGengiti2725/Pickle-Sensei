@@ -665,7 +665,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "per-credential auth-failure budget (30/5 min): a co-tenant's refused dead-session bearers throttle their own REPLAY, never the VALID bearers, bootstrap and refresh of the same address",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -677,6 +677,7 @@ Deno.test(
 
     // Co-tenant on the same NAT address presents 30 garbage session tokens.
     const now = Math.floor(Date.now() / 1000);
+    const junkBearers: string[] = [];
     for (let i = 0; i < 30; i += 1) {
       const junk = jwt({
         iss: `${SUPABASE_URL}/auth/v1`,
@@ -684,6 +685,7 @@ Deno.test(
         exp: now + 3600,
         jti: `junk-${i}`,
       });
+      junkBearers.push(junk);
       assertEquals(
         (await call("GET", PROBE_ROUTE, { token: junk, ip })).status,
         401,
@@ -693,19 +695,59 @@ Deno.test(
 
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
-      429,
-      "victim's VALID cached bearer → 429",
+      200,
+      "victim's VALID cached bearer → 200",
     );
-    const bootstrapBlocked = await call("POST", "/v1/account/bootstrap", {
-      token: googleIdToken(VICTIM),
-      ip,
-      body: {},
-    });
-    assertEquals(bootstrapBlocked.status, 429, "sign-in from the address → 429");
+    const minted = await bootstrap(VICTIM, ip);
     assertEquals(
-      (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
-      429,
-      "refresh from the address → 429",
+      (await call("GET", PROBE_ROUTE, { token: minted.accessToken, ip })).status,
+      200,
+      "sign-in from the address → 200 and the just-minted access token reads",
+    );
+    const h = await boot();
+    const refreshed = await h(
+      new Request("http://edge.adjudicate.test/functions/v1/api/v1/auth/refresh", {
+        method: "POST",
+        headers: { "x-forwarded-for": ip, "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      }),
+    );
+    assertEquals(refreshed.status, 200, "refresh from the address → 200");
+    const rotated = ((await refreshed.json()) as { session: { accessToken: string } }).session;
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: rotated.accessToken, ip })).status,
+      200,
+      "…and the rotated access token reads",
+    );
+
+    // Auth judged every junk bearer a session that does not exist (a dead
+    // credential, not a forgery), so only that bearer's own budget is spent:
+    // replaying one of them 30 times in the window is what gets throttled.
+    for (let i = 1; i < 30; i += 1) {
+      assertEquals(
+        (await call("GET", PROBE_ROUTE, { token: junkBearers[0], ip })).status,
+        401,
+        `junk bearer 0 replay ${i} → 401`,
+      );
+    }
+    upstreamCalls.length = 0;
+    const throttled = await call("GET", PROBE_ROUTE, { token: junkBearers[0], ip });
+    assertEquals(throttled.status, 429, "the 31st presentation of one refused bearer → 429");
+    assert(Number(throttled.headers.get("Retry-After")) >= 1, "429 carries a Retry-After");
+    assertEquals(
+      upstreamCalls.filter((c) => c === "auth:getUser").length,
+      0,
+      "…before Supabase Auth",
+    );
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: junkBearers[1], ip })).status,
+      401,
+      "another refused bearer still has its own budget",
+    );
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: rotated.accessToken, ip })).status,
+      200,
+      "the victim is untouched",
     );
   },
 );

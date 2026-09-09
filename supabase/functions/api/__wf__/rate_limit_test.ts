@@ -113,37 +113,42 @@ const chargedFailures = async (ip: string): Promise<number> => {
 };
 
 Deno.test(
-  "authfail: 31 genuinely invalid bearers from one IP → 30 × 401 then 429 on the 31st (lockout preserved)",
+  "authfail: 30 genuinely invalid bearers from one IP → 30 × 401, then every one of them REPLAYED is 429 before Auth (lockout preserved per credential)",
   async () => {
     const h = await loadHarness();
     const ip = "10.7.0.31";
+    const stuffed = Array.from({ length: 30 }, (_, i) => supabaseBearer(`stuffed-${i}`));
     const statuses: number[] = [];
+    const replays: number[] = [];
+    let judged = 0;
     await withAuthUpstream(
-      onUserEndpoint(() =>
-        jsonResponse(401, {
+      onUserEndpoint(() => {
+        judged += 1;
+        return jsonResponse(401, {
           code: 401,
           msg: "invalid JWT: unable to parse or verify signature",
-        }),
-      ),
+        });
+      }),
       async () => {
-        for (let i = 0; i < 31; i += 1) {
-          const response = await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`));
-          statuses.push(response.status);
-          if (i === 30) {
-            const retryAfter = Number(response.headers.get("Retry-After"));
-            assert(
-              Number.isInteger(retryAfter) &&
-                retryAfter >= 1 &&
-                retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
-              `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
-            );
-          }
+        for (const bearer of stuffed) statuses.push((await getMe(h.handler, ip, bearer)).status);
+        assertEquals(judged, 30, "each distinct bearer was judged by Auth once");
+        for (const bearer of stuffed) {
+          const response = await getMe(h.handler, ip, bearer);
+          replays.push(response.status);
+          const retryAfter = Number(response.headers.get("Retry-After"));
+          assert(
+            Number.isInteger(retryAfter) &&
+              retryAfter >= 1 &&
+              retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
+            `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
+          );
         }
+        assertEquals(judged, 30, "no replay reached Auth");
       },
     );
-    assertEquals(statuses.slice(0, 30), new Array(30).fill(401));
-    assertEquals(statuses[30], 429, "the 31st invalid bearer must be locked out");
-    assertEquals(await chargedFailures(ip), 30);
+    assertEquals(statuses, new Array(30).fill(401));
+    assertEquals(replays, new Array(30).fill(429), "every refused bearer is locked out on replay");
+    assertEquals(await chargedFailures(ip), 30, "one charge per DISTINCT invalid bearer");
   },
 );
 

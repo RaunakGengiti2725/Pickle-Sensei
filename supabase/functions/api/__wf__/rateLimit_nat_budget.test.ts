@@ -279,6 +279,7 @@ async function stuffEgress(h: Harness, ip: string): Promise<Set<string>> {
   const forged = new Set(Array.from({ length: LIMIT }, (_, i) => supabaseBearer(`forged-${i}`)));
   respondWith(h, (call) => (isUserCall(call) && forged.has(bearerOfCall(call)) ? badJwt() : null));
   const mark = h.calls.length;
+  const charged = await egressCharged(ip);
   const statuses: number[] = [];
   for (const bearer of forged) statuses.push((await readMe(h.handler, ip, bearer)).status);
   assert(
@@ -286,7 +287,7 @@ async function stuffEgress(h: Harness, ip: string): Promise<Set<string>> {
     `every guess is judged and refused by Auth: ${statuses.join(",")}`,
   );
   assertEquals(authCallsSince(h, mark).length, LIMIT, "each distinct guess reached Auth once");
-  assertEquals(await egressCharged(ip), LIMIT, "the egress is under stuffing");
+  assertEquals(await egressCharged(ip), charged + LIMIT, "the egress is under stuffing");
   return forged;
 }
 
@@ -591,11 +592,15 @@ Deno.test(
       [...limited.headers.keys()].sort(),
       [
         "cache-control",
+        "content-security-policy",
         "content-type",
         "ratelimit-limit",
         "ratelimit-remaining",
         "retry-after",
+        "strict-transport-security",
         "x-content-type-options",
+        "x-frame-options",
+        "x-request-id",
       ],
       "no classification or digest header",
     );

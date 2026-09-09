@@ -74,19 +74,33 @@ Deno.test("an already-expired provider token is refused before any verification"
 });
 
 Deno.test(
-  "repeated auth failures from one IP trip the auth-failure budget with a bucket-bounded Retry-After",
+  "repeated pre-auth 401s (no bearer, malformed, expired) from one IP never trip the auth-failure budget: no credential was judged",
   async () => {
     const ip = `10.9.1.${Math.floor(Math.random() * 250)}`;
     const limit = 30;
-    const windowSeconds = 300;
-    for (let i = 0; i < limit; i += 1) {
+    const locals = [
+      () => ({}),
+      () => ({ Authorization: "Bearer not-a-jwt" }),
+      () => ({
+        Authorization: `Bearer ${fakeIdToken({
+          iss: "https://accounts.google.com",
+          exp: Math.floor(Date.now() / 1_000) - 60,
+        })}`,
+      }),
+    ];
+    for (let i = 0; i < limit + 1; i += 1) {
       const response = await handle(
-        new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": ip } }),
+        new Request(`${BASE}/v1/me`, {
+          headers: { "x-forwarded-for": ip, ...locals[i % locals.length]() },
+        }),
       );
-      assertEquals(response.status, 401, `failure ${i + 1} should still reach auth`);
+      assertEquals(response.status, 401, `pre-auth refusal ${i + 1} is decided locally`);
       await response.body?.cancel();
     }
-    const blocked = await handle(
+    // A real bearer from the same address is still eligible for Auth: the
+    // request leaves the pre-auth gate (SUPABASE_URL is unreachable here, so
+    // the verification itself is reported as unavailable, never as 429).
+    const judged = await handle(
       new Request(`${BASE}/v1/me`, {
         headers: {
           "x-forwarded-for": ip,
@@ -94,17 +108,9 @@ Deno.test(
         },
       }),
     );
-    assertEquals(blocked.status, 429);
-    const retryAfter = Number(blocked.headers.get("Retry-After"));
-    assertEquals(Number.isInteger(retryAfter), true);
-    assertEquals(retryAfter >= 1 && retryAfter <= windowSeconds, true);
-    await blocked.body?.cancel();
-
-    const other = await handle(
-      new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": "10.9.2.2" } }),
-    );
-    assertEquals(other.status, 401);
-    await other.body?.cancel();
+    assertEquals(judged.status, 503);
+    assertEquals(judged.headers.get("RateLimit-Limit"), null);
+    await judged.body?.cancel();
   },
 );
 
