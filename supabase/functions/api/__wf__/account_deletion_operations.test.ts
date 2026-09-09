@@ -91,6 +91,8 @@ function fixture() {
       await providerCall("auth_delete", { ownerId });
       return { error: results.get("auth_error") };
     },
+    // an owner with no rows anywhere: every namespace page is empty
+    readOwnerNamespacePage: () => Promise.resolve({ data: [], error: null, status: 200 }),
   };
   const confirm = (body: unknown = { challenge: CHALLENGE, operationId: OPERATION }) =>
     confirmAccountDeletionOperation(rpc, dependencies, OWNER, body);

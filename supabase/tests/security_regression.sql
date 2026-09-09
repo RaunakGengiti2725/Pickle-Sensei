@@ -7282,6 +7282,130 @@ begin
     or has_any_column_privilege('service_role', 'public.account_external_credentials', 'INSERT,UPDATE') then
     raise exception 'M2: direct credential writes must stay revoked';
   end if;
+  -- W08-06: the completion receipt is certified by the sweeping worker, never
+  -- forged. While the identity is still present certification is refused, the
+  -- durable row is untouched, and no role may reach the row or the lock
+  -- helper directly.
+  if public.certify_account_deletion_completion(u, operation_id, lease_token)->>'outcome' <> 'stale_lease'
+    or public.certify_account_deletion_completion(u, operation_id, gen_random_uuid())->>'outcome' <> 'stale_lease' then
+    raise exception 'M2: certification must be refused while the Auth identity is present';
+  end if;
+  if public.read_account_deletion_receipt(u, operation_id)->'completionReceipt' <> 'null'::jsonb
+    or public.read_account_deletion_receipt(u, operation_id)->>'state' <> 'in_progress' then
+    raise exception 'M2: a refused certification must not leave a receipt behind';
+  end if;
+  begin
+    perform api_private.lock_account_deletion_certification(u, operation_id, lease_token);
+    raise exception 'M2: the service role must not reach the private certification lock helper';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update api_private.account_deletion_operations set completed_at = clock_timestamp(), phase = 'completed'
+      where id = operation_id;
+    raise exception 'M2: the service role must not forge a receipt with direct DML';
+  exception when insufficient_privilege then null;
+  end;
+  -- W08-06 round 6: the status capability the app keeps after its session is
+  -- gone can only move a post-Auth phase, and the owner residue count is
+  -- fenced exactly like certification — never while the identity is present.
+  if public.claim_account_deletion_status_work(operation_id, sha256(convert_to('M2 synthetic status capability', 'UTF8')))->>'outcome' <> 'blocked'
+    or public.claim_account_deletion_status_work(operation_id, sha256(convert_to('M2 forged status capability', 'UTF8')))->>'outcome' <> 'invalid'
+    or public.claim_account_deletion_status_work(gen_random_uuid(), sha256(convert_to('M2 synthetic status capability', 'UTF8')))->>'outcome' <> 'invalid' then
+    raise exception 'M2: the status capability must not claim work while the Auth identity is present';
+  end if;
+  if public.read_account_deletion_owner_residue(u, operation_id, lease_token)->>'outcome' <> 'stale_lease'
+    or public.read_account_deletion_owner_residue(u, operation_id, gen_random_uuid())->>'outcome' <> 'stale_lease' then
+    raise exception 'M2: the owner residue count must be refused while the Auth identity is present';
+  end if;
+  if public.read_account_deletion_receipt(u, operation_id)->'completionReceipt' <> 'null'::jsonb
+    or public.read_account_deletion_receipt(u, operation_id)->>'state' <> 'in_progress'
+    or public.read_account_deletion_status(operation_id, sha256(convert_to('M2 synthetic status capability', 'UTF8')))->>'state' <> 'in_progress' then
+    raise exception 'M2: a refused status-capability claim must not move the durable row';
+  end if;
+  begin
+    perform api_private.account_deletion_owner_namespaces();
+    raise exception 'M2: the service role must not reach the private owner namespace catalog';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+do $$
+declare f oid; r text;
+begin
+  foreach r in array array['claim_account_deletion_status_work|p_operation_id uuid, p_status_capability_hash bytea',
+    'read_account_deletion_owner_residue|p_owner_id uuid, p_operation_id uuid, p_lease_token uuid'] loop
+    select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = split_part(r, '|', 1)
+        and pg_get_function_identity_arguments(p.oid) = split_part(r, '|', 2);
+    if f is null then
+      raise exception 'M2: % must exist with its full binding', split_part(r, '|', 1);
+    end if;
+    if not has_function_privilege('service_role', f, 'EXECUTE')
+      or has_function_privilege('anon', f, 'EXECUTE') or has_function_privilege('authenticated', f, 'EXECUTE') then
+      raise exception 'M2: % must be executable by service_role only', split_part(r, '|', 1);
+    end if;
+    if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+      where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE')
+      or not exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']) then
+      raise exception 'M2: % must be a definer with a fixed empty search_path and no PUBLIC execute', split_part(r, '|', 1);
+    end if;
+  end loop;
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'api_private' and p.proname = 'account_deletion_owner_namespaces'
+      and pg_get_function_identity_arguments(p.oid) = '';
+  if f is null then
+    raise exception 'M2: the private owner namespace catalog must exist';
+  end if;
+  foreach r in array array['anon','authenticated','service_role'] loop
+    if has_function_privilege(r, f, 'EXECUTE') then
+      raise exception 'M2: the private owner namespace catalog must not be executable by %', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE')
+    or not exists (select 1 from pg_proc p where p.oid = f and not p.prosecdef and p.proconfig @> array['search_path=""']) then
+    raise exception 'M2: the private owner namespace catalog must be an invoker with a fixed empty search_path and no PUBLIC execute';
+  end if;
+end $$;
+do $$
+declare f oid; r text;
+begin
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'certify_account_deletion_completion'
+      and pg_get_function_identity_arguments(p.oid) = 'p_owner_id uuid, p_operation_id uuid, p_lease_token uuid';
+  if f is null then
+    raise exception 'M2: certification RPC must exist with the owner, operation and lease binding';
+  end if;
+  if not has_function_privilege('service_role', f, 'EXECUTE') then
+    raise exception 'M2: certification requires an explicit service-role execution grant';
+  end if;
+  foreach r in array array['anon','authenticated'] loop
+    if has_function_privilege(r, f, 'EXECUTE') then
+      raise exception 'M2: clients cannot certify account deletion (%)', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+    raise exception 'M2: PUBLIC must not certify account deletion';
+  end if;
+  if not exists (select 1 from pg_proc p where p.oid = f and p.prosecdef and p.proconfig @> array['search_path=""']) then
+    raise exception 'M2: certification must be a definer with a fixed empty search_path';
+  end if;
+  select p.oid into f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'api_private' and p.proname = 'lock_account_deletion_certification'
+      and pg_get_function_identity_arguments(p.oid) = 'p_owner_id uuid, p_operation_id uuid, p_lease_token uuid';
+  if f is null then
+    raise exception 'M2: the private certification lock helper must exist with the owner, operation and lease binding';
+  end if;
+  foreach r in array array['anon','authenticated','service_role'] loop
+    if has_function_privilege(r, f, 'EXECUTE') then
+      raise exception 'M2: the private certification lock helper must not be executable by %', r;
+    end if;
+  end loop;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f and a.grantee = 0 and a.privilege_type = 'EXECUTE')
+    or not exists (select 1 from pg_proc p where p.oid = f and not p.prosecdef and p.proconfig @> array['search_path=""']) then
+    raise exception 'M2: the private certification lock helper must be an invoker with a fixed empty search_path and no PUBLIC execute';
+  end if;
 end $$;
 
 do $$

@@ -78,7 +78,11 @@ To permanently delete a synced account, open Settings, Account, Manage account,
 then Delete account. The exit survey is optional and may be skipped. Deleting
 an account does not cancel an Apple subscription, and it does not restore free
 ratings that were already used: signing in again with the same Apple or Google
-account continues from the free ratings already spent.
+account continues from the free ratings already spent. Only a one-way hash of
+that sign-in identity and its scored-analysis count is kept for this purpose;
+it contains no email address, name, or account identifier and is described in
+Section 7 of the Privacy Policy. What deletion removes and what may be
+retained is described in Sections 7 and 8 of the Privacy Policy.
 
 To request access to, correction of, deletion of, or a portable copy of your
 personal information, email ${SUPPORT_EMAIL}. You may also ask to object to or
@@ -390,10 +394,32 @@ We use the following retention rules:
   completes, except as specifically stated below.
 • A pending deletion challenge expires after 15 minutes and stale challenge
   records are scheduled for deletion after expiration.
+• When you request account deletion, we keep a deletion operation record for
+  7 days after the request so that a deletion interrupted by a network or
+  service failure can be resumed rather than repeated, so the app can show
+  you the outcome for 24 hours, and so we can demonstrate that the deletion
+  was carried out. This record holds the internal account identifier, the
+  timestamps of each step, the outcome of the Sign in with Apple and
+  RevenueCat clean-up steps, and any error codes recorded along the way. It
+  does not contain your email address, name, clips, or analysis data, cannot
+  be used to restore the account, and is restricted to service
+  administration and security purposes. It is scheduled for deletion when
+  the 7 days end.
 • Short-lived cache and rate-limit records normally expire within ten
   minutes.
 • RevenueCat webhook audit records are scheduled for deletion after 90 days.
   They are restricted to service administration and security purposes.
+• When RevenueCat reports that a store purchase was transferred from one
+  Pickle Sensei account to another, we keep a purchase transfer reconciliation
+  record: the transfer identifier, the internal account identifier of each
+  account involved, RevenueCat's verified entitlement answer for each of them,
+  and an append-only audit trail of each reconciliation step with timestamps.
+  Because it documents which account a purchase was moved from and to, the
+  record is not removed when one of those accounts is deleted; the deleted
+  account is marked as no longer present instead. It contains no email
+  address, name, clips, or analysis data, is not automatically deleted, and
+  is kept for billing dispute resolution, fraud prevention, and security
+  purposes only, restricted to service administration.
 • If you submit the optional exit survey and then delete your account, the
   account identifier is removed from that response during deletion. The
   resulting de-identified survey entry, including the coarse context listed
@@ -409,6 +435,19 @@ We use the following retention rules:
   the legitimate-interest basis of preventing free-tier abuse, survives
   account deletion for that reason, and is not used to contact you or to
   recreate your account.
+• When a free rating is allocated to your device for use while it is
+  disconnected, we keep an append-only offline allocation record so that the
+  allocation cannot be counted twice, cannot be reclaimed from a disconnected
+  device, and can be recovered by the same installation. Each entry holds the
+  internal account identifier, device and grant identifiers, the allocation
+  ticket identifier, an installation key identifier, the same one-way
+  (SHA-256) sign-in identity hashes as the free-rating record, whether the
+  ticket was allocated, consumed for one scored analysis, or released, and a
+  timestamp. It contains no email address, name, clips, or analysis data,
+  cannot be turned back into your sign-in identifier, and survives account
+  deletion so that the allocation follows the sign-in identity exactly as the
+  free-rating record does. It is retained on the same legitimate-interest
+  basis of preventing free-tier abuse and is not used to contact you.
 • Raw clips and other device-only data remain in app-private storage until
   removed by normal app cleanup or until you delete the app. Deleting your
   server account does not itself erase a clip file already stored on the
@@ -644,7 +683,10 @@ Free accounts may receive a limited number of full technique ratings. The
 current allowance, included Pro features, plan duration, localized price,
 trial terms, and any introductory terms are displayed in the app before you
 confirm a purchase. Feature descriptions are part of the offer only as shown
-on the purchase screen at that time.
+on the purchase screen at that time. The free allowance is offered once per
+sign-in identity: free ratings already used are not restored by deleting the
+account and signing in again with the same Apple or Google account (see
+Section 7 of the Privacy Policy).
 
 Pickle Sensei Pro may be offered as an auto-renewing monthly subscription, an
 auto-renewing yearly subscription, or a one-time lifetime product. Availability
@@ -735,13 +777,13 @@ You may stop using the Service at any time. A synced account can be
 permanently deleted through Settings → Manage account → Delete account. The
 optional survey may be skipped. Account deletion removes associated data as
 described in the Privacy Policy but does not cancel a subscription, issue a
-refund, erase a clip stored only on your phone, or delete your Apple or Google
-account. The backend also deletes the canonical RevenueCat customer record and,
-for Sign in with Apple accounts with a stored revocation credential, revokes
-the app's Apple authorization. A legacy Apple account without that credential
-is still deleted and the app directs you to disconnect Pickle Sensei manually
-in Apple Account settings. Cancel any auto-renewing subscription through the
-applicable store.
+refund, erase a clip stored only on your phone, restore free ratings already
+used, or delete your Apple or Google account. The backend also deletes the
+canonical RevenueCat customer record and, for Sign in with Apple accounts with
+a stored revocation credential, revokes the app's Apple authorization. A
+legacy Apple account without that credential is still deleted and the app
+directs you to disconnect Pickle Sensei manually in Apple Account settings.
+Cancel any auto-renewing subscription through the applicable store.
 
 We may suspend or terminate access if you materially or repeatedly violate
 these Terms, create security or legal risk, or use the Service fraudulently.
