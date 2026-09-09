@@ -51,17 +51,30 @@
 --   4. Conservation. offline_hold_count() = tickets allocated to the caller's
 --      account or identities that were never CONSUMED (a released ticket
 --      stays part of the entitlement: returning a ticket is not a re-credit).
---      online_reservation_count() = every permit apply_synced_shot() would
---      still honour (permit_backs_sync: reserved at any age, or swept to
---      released/expired) that no shot has settled yet. ONE budget rule at
---      EVERY decision point — access_state(), reserve_analysis_permit(),
---      issue_offline_grant(), the shots write gate for a direct client INSERT
---      and apply_synced_shot()'s free-limit backstop — all under the SAME
+--      online_reservation_count() = the caller's LIVE online reservations —
+--      permits still 'reserved' and younger than 24 hours, exactly the set
+--      access_state().reserved_count and reserve_analysis_permit() have
+--      always counted (20260902150000; ADV-9, matrix N0/S1) — that no shot
+--      has settled yet. A permit the clock or the hourly sweep has walked out
+--      of that window is NOT a reservation to any decision point: its late
+--      sync is honoured by apply_synced_shot() only while the budget is still
+--      there (permit_backs_sync + the backstop below; matrix section N), so
+--      it is displaceable by a fresh reservation or an offline allocation and
+--      is then refused as access.paywall_required rather than becoming a
+--      third rating. ONE reservation reader at EVERY decision point —
+--      access_state(), reserve_analysis_permit(), issue_offline_grant() and
+--      the shots write gate for a direct client INSERT — all under the SAME
 --      pg_advisory_xact_lock(access_lock_key(uid)):
---        lifetime_scored_count() + online reservations + offline holds ≤ 2
---      for a free identity, at every instant. Nothing here — no cron, no
---      expiry check, no cascade — ever releases an allocation automatically:
---      an expired grant, a swept permit, a reinstall, a key replacement or an
+--        lifetime_scored_count() + live online reservations + offline holds ≤ 2
+--      and, enforced by every row-creating path (apply_synced_shot()'s
+--      backstop, consume_offline_ticket(), the shots gate):
+--        lifetime_scored_count() + offline holds ≤ 2
+--      for a free identity, at every instant. (Round 5, competing lane
+--      A01/A09: the allocator counting every syncable permit while the
+--      online path counted only live ones let one permit be honoured by one
+--      path and ignored by the other.) Nothing here — no cron, no expiry
+--      check, no cascade — ever releases an allocation automatically: an
+--      expired grant, a swept permit, a reinstall, a key replacement or an
 --      account deletion leaves the hold in place until the ticket is consumed
 --      or returned.
 --   5. Access. The client role may SELECT its own rows through the API and
@@ -593,16 +606,17 @@ comment on function public.offline_hold_count() is
 revoke all on function public.offline_hold_count() from public, anon, service_role;
 grant execute on function public.offline_hold_count() to authenticated;
 
--- Online reservations the caller still holds: every permit apply_synced_shot()
--- would honour (permit_backs_sync — 'reserved' at ANY age, or swept to
--- released/expired; section N of the matrix) that no shot has settled yet.
--- The clock and the hourly sweep walk a permit out of a 24-hour window while
--- its late sync stays acceptable, so a time window is not a reservation
--- count: counting only "reserved AND < 24h" here while the allocator counts
--- every syncable permit let a stale or swept permit be spent twice — once by
--- the online reservation it did not block, once by its own late sync.
--- Invoker: permits and shots are owner-readable, and every read is scoped to
--- auth.uid().
+-- Live online reservations of the caller: permits still 'reserved' and
+-- younger than 24 hours — byte-for-byte the predicate access_state() and
+-- reserve_analysis_permit() have counted since 20260902150000 — that no shot
+-- has settled yet. A stale or swept permit is deliberately NOT counted: its
+-- late sync is only honoured while the budget remains (apply_synced_shot()'s
+-- backstop, section N of the matrix), so it can never become a rating beside
+-- the reservations and holds counted here. What matters is that EVERY
+-- decision point reads this one function — the round-5 competing-lane break
+-- (A01/A09) was the allocator counting a stale permit the online path did
+-- not. Invoker: permits and shots are owner-readable, and every read is
+-- scoped to auth.uid().
 create or replace function public.online_reservation_count()
 returns integer
 language sql
@@ -616,7 +630,8 @@ as $$
       select count(*)::int
       from public.analysis_permits p
       where p.user_id = (select auth.uid())
-        and public.permit_backs_sync(p.status, p.outcome)
+        and p.status = 'reserved'
+        and p.created_at > now() - interval '24 hours'
         and not exists (
           select 1 from public.shots s where s.analysis_permit_id = p.id
         )
@@ -625,7 +640,7 @@ as $$
 $$;
 
 comment on function public.online_reservation_count() is
-  'Online reservations of the caller: permits permit_backs_sync() still honours (reserved at any age, or released/expired) that no shot has settled. The ONE reservation count every free-rating decision point uses — access_state(), reserve_analysis_permit(), issue_offline_grant(), the shots write gate for a direct client INSERT.';
+  'Live online reservations of the caller: permits still reserved and younger than 24 hours (the predicate access_state()/reserve_analysis_permit() have always used) that no shot has settled. A stale or swept permit is not a reservation — its late sync answers to apply_synced_shot()''s backstop. The ONE reservation count every free-rating decision point uses — access_state(), reserve_analysis_permit(), issue_offline_grant(), the shots write gate for a direct client INSERT.';
 
 revoke all on function public.online_reservation_count() from public, anon, service_role;
 grant execute on function public.online_reservation_count() to authenticated;
@@ -710,9 +725,10 @@ begin
 
   -- IDENTITY LEDGER: the scored count is the identity-aware
   -- lifetime_scored_count(), never the raw shots count of this account row.
-  -- Reservations are every permit a late sync could still spend
-  -- (online_reservation_count) plus every outstanding offline ticket
-  -- (offline_hold_count) — the same three terms issue_offline_grant() adds.
+  -- Reservations are the live online permits (online_reservation_count —
+  -- the pre-existing "reserved AND < 24h" rule) plus every outstanding
+  -- offline ticket (offline_hold_count) — the same three terms
+  -- issue_offline_grant() adds.
   select
     coalesce((
       select b.premium and (b.expires_at is null or b.expires_at > now())
@@ -934,11 +950,13 @@ begin
   end if;
 
   -- The live permit that admits this row is the slot the row spends; every
-  -- OTHER reservation a late sync could still settle and every outstanding
-  -- offline ticket is a rating already promised elsewhere. The row fits only
-  -- if scored + those + this one stay within the allowance — so one live
-  -- permit backs one direct rating, and never one beside a ticket that
-  -- already holds the last unit.
+  -- OTHER live reservation and every outstanding offline ticket is a rating
+  -- already promised elsewhere. The row fits only if scored + those + this
+  -- one stay within the allowance — so one live permit backs one direct
+  -- rating, and never one beside a ticket that already holds the last unit
+  -- (round-5 A01: this gate used to see only the lifetime count and a live
+  -- permit, so a free identity kept an outstanding ticket beside two scored
+  -- ratings).
   if not v_premium
      and public.lifetime_scored_count()
        + (public.online_reservation_count() - 1)
@@ -954,7 +972,7 @@ end;
 $$;
 
 comment on function public.enforce_scored_shot_permit() is
-  'BEFORE INSERT gate on public.shots. analysis_permit_id may only be the permit apply_synced_shot() vouches for (pickle.sync_permit_id) and offline_ticket_id only the ticket consume_offline_ticket() vouches for (pickle.offline_ticket_id); a direct client INSERT must leave both NULL (42501 otherwise), and no row carries both. A scored row written from a client session must be backed by: under the ticket vouch, THAT outstanding ticket of the caller (check_violation otherwise — the budget was decided at allocation); under the permit vouch, THAT permit alone (permit_backs_sync; PKP01) and lifetime scored + outstanding offline tickets < 2 (PKP02); as a direct INSERT, a live reserved permit (< 24h) and lifetime scored + online reservations + outstanding offline tickets < 2 (42501). Premium bypasses the allowance, never a permit or a ticket. Runs under the same per-user advisory lock as every other free-rating decision point.';
+  'BEFORE INSERT gate on public.shots. analysis_permit_id may only be the permit apply_synced_shot() vouches for (pickle.sync_permit_id) and offline_ticket_id only the ticket consume_offline_ticket() vouches for (pickle.offline_ticket_id); a direct client INSERT must leave both NULL (42501 otherwise), and no row carries both. A scored row written from a client session must be backed by: under the ticket vouch, THAT outstanding ticket of the caller (check_violation otherwise — the budget was decided at allocation); under the permit vouch, THAT permit alone (permit_backs_sync; PKP01) and lifetime scored + outstanding offline tickets < 2 (PKP02); as a direct INSERT, a live reserved permit (< 24h) and lifetime scored + other live online reservations + outstanding offline tickets < 2 (42501). Premium bypasses the allowance, never a permit or a ticket. Runs under the same per-user advisory lock as every other free-rating decision point.';
 
 revoke execute on function public.enforce_scored_shot_permit()
   from public, anon, authenticated;
@@ -1388,12 +1406,12 @@ begin
   -- or one of its sign-in identities are re-issued (the original installation
   -- of a deleted-and-re-created account recovers its ticket here — the
   -- device row is gone, the ledger's installation key is not); new tickets
-  -- come only out of what lifetime scored + online reservations + every
-  -- outstanding offline hold leave of the 2 lifetime free ratings. An online
-  -- reservation is every permit apply_synced_shot() would still honour
-  -- (permit_backs_sync: reserved at any age, or swept to released/expired)
-  -- that no shot has settled yet — the sweep and the clock walk a permit out
-  -- of a time window while its late sync stays acceptable.
+  -- come only out of what lifetime scored + live online reservations + every
+  -- outstanding offline hold leave of the 2 lifetime free ratings, read
+  -- through the SAME online_reservation_count() the online path uses — a
+  -- stale or swept permit is a reservation to neither, and its late sync is
+  -- then refused by apply_synced_shot()'s backstop beside the tickets issued
+  -- here (never a third rating).
   select coalesce(array_agg(a.ticket_id order by a.created_at, a.id), '{}'::uuid[])
   into v_outstanding
   from public.offline_allocation_ledger a
@@ -1407,14 +1425,7 @@ begin
 
   select
     public.lifetime_scored_count(),
-    (
-      select count(*)::int
-      from public.analysis_permits p
-      left join public.shots s on s.analysis_permit_id = p.id
-      where p.user_id = v_uid
-        and public.permit_backs_sync(p.status, p.outcome)
-        and s.id is null
-    ),
+    public.online_reservation_count(),
     public.offline_hold_count()
   into v_scored, v_reserved, v_held;
 
@@ -1464,7 +1475,7 @@ end;
 $$;
 
 comment on function public.issue_offline_grant(text, integer) is
-  'Issues the next-generation offline grant for one attested device of the caller (live API session required), under access_lock_key(uid). Pro: a lease ending at min(now + 7 days, verified entitlement expiry), no tickets. Free: re-issues the installation''s outstanding tickets owned by the caller''s account or sign-in identities (original-installation recovery across account re-creation) and allocates new ones only within lifetime_scored_count() + reservations (every permit permit_backs_sync() still honours, at any age, not yet settled by a shot) + offline holds ≤ 2. Returns accepted | access.paywall_required | offline.device_not_registered | offline.device_not_attested | offline.invalid_input.';
+  'Issues the next-generation offline grant for one attested device of the caller (live API session required), under access_lock_key(uid). Pro: a lease ending at min(now + 7 days, verified entitlement expiry), no tickets. Free: re-issues the installation''s outstanding tickets owned by the caller''s account or sign-in identities (original-installation recovery across account re-creation) and allocates new ones only within lifetime_scored_count() + live online reservations (online_reservation_count(): reserved, < 24h, not yet settled by a shot — the same reader the online path uses) + offline holds ≤ 2. Returns accepted | access.paywall_required | offline.device_not_registered | offline.device_not_attested | offline.invalid_input.';
 
 revoke all on function public.issue_offline_grant(text, integer) from public, anon, service_role;
 grant execute on function public.issue_offline_grant(text, integer) to authenticated;
