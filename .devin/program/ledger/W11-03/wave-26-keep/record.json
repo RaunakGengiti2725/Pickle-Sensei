@@ -1,0 +1,216 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W11-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "2f97ee5d6cff40e587dba14bfeb3e397acec1f323ef84a6a7ad13140477f7f6d",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W11-03-r1",
+      "phase": "review",
+      "prompt_sha256": "cdf3dc1d97dd11152a8a4b476524e676fa9466fd2cb331ccc1f76804a5542926",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W11-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "d5b406259970fdf6e0c5a7a791f460c5bc22e9aa80e3e56db59224e55ccbeac6",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "2e09b1547626423b693f82934af2bc68f4c3962b",
+  "candidate": {
+    "branch": "devin/pp/w11-03/impl-r1",
+    "head_sha": "577a2ce387f599aad86966be82155b6d81a2143a",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W11-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f5b2fa7-fcb0-49bd-ab66-513ce3e798d0/w11-03-attack-evidence.tgz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/533d9988-cb8f-479f-a4d1-3a2e1061a56a/EVIDENCE_INDEX.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bfaeaef8-5cc6-4551-807f-46ac38be5977/attack_cand_run8.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a4453bd7-524b-4d08-8502-7df75113f912/attack_cron_run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/afdb2312-8be2-454e-beb2-7dbff669fc21/attack_base_premise_run5.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/26dc08b1-1f5c-4fa9-a67e-b1b00bbd74a7/ac1_candidate_run_rls_tests.log"
+        ],
+        "attack_branch": "devin/pp/w11-03/attack-577a2ce3",
+        "attack_branch_sha": "b72e77862d704d6a1bc331fca60b3db56bfef1ac",
+        "attacked_sha": "577a2ce387f599aad86966be82155b6d81a2143a",
+        "attacks_tried": 10,
+        "breaks": [
+          {
+            "expected": "AC2 criterion text 'sweep reclaims offline allocation on base' implies a behavioural regression that fails on base for a behavioural reason. The real base→candidate deltas are: named owner-only definer function, FOR UPDATE SKIP LOCKED (non-blocking behind late sync), batch bound, and matrix coverage — not offline-allocation reclamation. Judge/reviewer should score AC2 as a structural (not behavioural) fail-on-base and read the implementer's 'preserves offline allocations' as a non-regression pin rather than a fix.",
+            "observed": "VERIFIED exit 0: B1 api_private.sweep_stale_analysis_permits absent; B2 the base anonymous UPDATE (byte-for-byte from 20260831000000) over the same fixture the candidate's A6/section V use (device with one consumed + one HELD ticket, stale online permit) releases only the online permit and leaves offline_devices/offline_grants/offline_allocation_ledger/settlement_receipts/offline_receipt_settlements/free_rating_ledger byte-identical, hold=1 scored=1, ticket re-issued to the device; B3 the base sweep BLOCKS behind an in-flight FOR UPDATE (lock_timeout fires) while the candidate's SKIP LOCKED sweep does not (attack_w11_03.sql A4 on cand). Candidate section V fails on base at V1 = 'function does not exist' (attack_main_on_base_run1.log exit 3 for the same reason).",
+            "repro": "docker exec atk-pg psql -U postgres -d base -v ON_ERROR_STOP=1 -f /attack_w11_03_base_premise.sql  (db `base` = shim_auth.sql + the 43 migrations at BASE_SHA 2e09b154)",
+            "severity": "P3",
+            "test_file": "supabase/tests/attack_w11_03_base_premise.sql",
+            "title": "AC2 premise does not reproduce: the BASE sweep never reclaimed offline allocations or receipts either; the candidate matrix fails on base only structurally (V1: function absent)"
+          },
+          {
+            "expected": "Static pins should target the statement pg_cron actually runs (the function body / cron.job command) so a future predicate or plan regression in api_private.sweep_stale_analysis_permits() is caught. Hygiene only; candidate behaviour is correct.",
+            "observed": "VERIFIED 23 passed / 0 failed on the candidate, but 'permit sweep: the pg_cron predicate and the partial index stay in step' reads only statementsOf(chain, SCALE_AND_SECURITY) and the audit step 'FIXED (low): pg_cron stale-permit sweep predicate is index-backed' EXPLAINs the literal old UPDATE. Neither pins api_private.sweep_stale_analysis_permits(), which is now the only statement pg_cron runs (cron.job command verified on a real pg_cron build). Plan of the function's own UPDATE checked independently on a populated table (attack_w11_03.sql A8, 1503 users x 15 permits): Index Scan using analysis_permits_reserved_created_idx for limit null/1/10000 — no seq scan, so no runtime defect today; the pins just no longer guard the shipping statement.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts db_migrations_rls_indexes.audit.test.ts; grep -n \"expire-stale-analysis-permits\\|where status = 'reserved' and created_at\" db_migrations_rls_indexes.test.ts db_migrations_rls_indexes.audit.test.ts",
+            "severity": "P3",
+            "test_file": "supabase/tests/attack_w11_03.sql (A8 covers the plan on the candidate; the stale-pin observation is from reading __wf__ tests, no candidate test modified)",
+            "title": "__wf__ static pins for the sweep still EXPLAIN/inspect the superseded anonymous UPDATE in 20260831000000, not the shipping function body"
+          }
+        ],
+        "package_id": "W11-03",
+        "summary": "Candidate 577a2ce3 (api_private.sweep_stale_analysis_permits + cron rewire) survived every behavioural attack; no P0/P1/P2 reproduced. Attack tests pushed to devin/pp/w11-03/attack-577a2ce3 @ b72e7786 (3 new files under supabase/tests/, no candidate migration/test/production code touched, no PR, plain push). All SQL ran on disposable Docker postgres:16 (container atk-pg: db cand = candidate 44 migrations, db base = BASE_SHA 43 migrations; container atk-cron: postgres:16 + postgresql-16-cron, cron.database_name=cand).\n\nAC1 VERIFIED: `./supabase/tests/run_rls_tests.sh` on candidate -> EXIT=0, 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 suites, 4x 'Analysis release policy authority: PASS' (ac1_candidate_run_rls_tests.log). Candidate security_regression.sql also passed inside the real pg_cron database ('SECURITY REGRESSION MATRIX: ALL CASES PASSED', cron_cand_security_regression.log).\n\nAttacks (10 distinct, all VERIFIED):\n A1 cron execution context (owner session, no API proof, no JWT): batch 1 takes the OLDEST stale permit, unbounded sweep takes the rest and leaves the live reservation, second sweep = 0, updated_at moves. PASS.\n A2 boundaries: created_at exactly now()-24h is NOT swept (strict <), -24h-1µs swept, -24h+1µs not, far-future not, 1970 swept; p_limit -1/0/10001/INT_MIN/INT_MAX -> 22023 with nothing swept; 10000 and NULL accepted. PASS.\n A3 corrupt/partial state: every settled outcome aged >24h (scored, low_confidence, partial, cancelled, failed, unsupported, incorrect_recognition, free_limit_exceeded, expired) is terminal (byte-identical after sweep); only the one stale reserved row moves; a shot-linked stale reserved permit moves without touching the shot/receipt. PASS.\n A4 concurrency via dblink (3 sessions): sweep holds the row lock while apply_synced_shot() arrives -> sync waits, then ACCEPTED against released/expired (finalized/scored, receipt written, ledger +1 exactly once); LIMIT 1 skips a locked row and takes the next; two overlapping sweeps partition the batch, no double release. PASS.\n A5 roles: anon / authenticated (API proof + active session) / service_role -> 42501 on schema or function; no client role holds EXECUTE; definer owned by the cron user; SECURITY DEFINER + search_path=''. PASS.\n A6 conservation: device with one consumed and one HELD ticket + stale online permit -> sweep releases the online permit; offline_devices/grants/allocation_ledger/settlement_receipts/offline_receipt_settlements/free_rating_ledger digests byte-identical; hold=1, scored=1, access_state reserved_count=1, device re-obtains exactly its outstanding ticket. PASS.\n A7 live pg_cron worker (attack_w11_03_cron.sql on atk-cron): exactly one 'expire-stale-analysis-permits' job, command 'select api_private.sweep_stale_analysis_permits()', schedule 17 * * * *, username = function owner, no anonymous UPDATE scheduled; a 5-second copy ran from the worker to status=succeeded and released the stale permit, live untouched. The real job 5 also fired on its own at 22:17:00 -> succeeded, '1 row'. PASS (exit 0, attack_cron_run3.log).\n A8 plan on a populated table (1503 users x 15 permits): the function's own UPDATE (lifted from pg_get_functiondef) uses analysis_permits_reserved_created_idx for limit null/1/10000, no Seq Scan (negative control with enable_indexscan=off fails the assertion). PASS.\n A9 migration re-run/idempotence: candidate migration applied a second time on the pg_cron db and on the no-pg_cron db -> exit 0, still exactly 1 job, ACL {postgres=X/postgres}, prosecdef t. PASS.\n A10 AC2 base probe: attack_w11_03.sql on base -> exit 3 at A1 (function absent); attack_w11_03_base_premise.sql on base -> exit 0 (B1 absent, B2 base sweep preserves offline state, B3 base sweep blocks behind FOR UPDATE). -> P3 finding: AC2's 'reclaims offline allocation on base' premise does not reproduce; fail-on-base is structural.\n\nCommands: `docker exec atk-pg psql -U postgres -d cand -v ON_ERROR_STOP=1 -f /attack_w11_03.sql` exit 0 ('W11-03 ATTACK MATRIX: NO BREAK REPRODUCED', attack_cand_run8.log; same on atk-cron exit 0 attack_cron_main_run4.log); `docker exec atk-cron psql ... -f /attack_w11_03_cron.sql` exit 0; `docker exec atk-pg psql -d base ... -f /attack_w11_03_base_premise.sql` exit 0 (run5, run6). Static: `git diff --check --cached` exit 0; *.sql is prettier-ignored (.prettierignore) so format:check is not applicable to the new files; deno static pins 23 passed/0 failed (deno_static_pins_cand.log); candidate migration 20260910110300 sorts after every existing migration (latest base 20260909230000). Harness-development iterations (attack_cand_run1-7 etc.) failed only on attack-harness defects (authenticated lacks SELECT on offline_receipt_settlements; identity free_rating_ledger persists across runs by design; dblink already installed in w07_probe; cron.job row must be committed before the launcher sees it; dblink_exec rejects result-returning SQL) — none was a candidate failure. UNKNOWN/not exercised: production pg_cron version (tested pg_cron 1.6.x from postgresql-16-cron on postgres:16), hosted Supabase role ownership of cron.job (tested owner=postgres). Evidence bundle: w11-03-attack-evidence.tgz + EVIDENCE_INDEX.txt (attachment_urls)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c26779b-f6a5-4b90-a2f2-303c9312ffb2/run_rls_tests_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-03-AC1",
+            "note": "VERIFIED on HEAD 577a2ce3 (clean tree) with Docker postgres:16. Counts = 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) × 3 suites (security_regression.sql, analysis_release_policy.sql, account_deletion_operations.sql) = 12 suite runs, 12 'ALL CASES PASSED' lines, 0 failures, 0 skips. The new migration applied on every history ('<history> pending 20260910110300_cron_offline_allocation_safe.sql'). Stock postgres:16 has no pg_cron, so the migration's reschedule DO block took its guarded NOTICE path there and V1 emitted 'pg_cron is not installed here' for the cron.job check only — the function itself was exercised directly in all 4 histories. The cron.job wiring was additionally VERIFIED on a pg_cron-capable build (see AC2 note / pgcron_fresh_build.log).",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7bbfba90-c930-4cfb-86d1-c6cb3a373710/regress_head_pgcron.log",
+            "command": "BASE: git worktree add <dir> 2e09b154…; cp HEAD supabase/tests/security_regression.sql over it; build DB from BASE migrations (shim_auth.sql + every supabase/migrations/*.sql in order, Docker postgres:16); psql -v ON_ERROR_STOP=1 -f supabase/tests/security_regression.sql. HEAD: ./supabase/tests/run_rls_tests.sh (4 histories) + psql -v ON_ERROR_STOP=1 -f supabase/tests/security_regression.sql on a fresh HEAD build with real pg_cron 1.6.4 loaded (shared_preload_libraries=pg_cron, cron.database_name set).",
+            "executed": 5,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-03-AC2",
+            "note": "PROOF exit 0: new test FAILS on BASE and PASSES on candidate. BASE run (VERIFIED): psql exit code 3, executed 1 suite / passed 0 / failed 1 / skipped 0; first error at security_regression.sql:11100 — 'ERROR: V1: the stale-permit sweep must be a named function, api_private.sweep_stale_analysis_permits(), not an anonymous cron statement' (every pre-existing section A–U passed before V; the failure is in the new W11-03 section). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/3fd6d9f9-d4a3-4970-8b16-dfcec22333e9/regress_base_final.log . CANDIDATE runs (VERIFIED, HEAD 577a2ce3): executed = 4 security_regression.sql runs inside run_rls_tests.sh (exit 0, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c26779b-f6a5-4b90-a2f2-303c9312ffb2/run_rls_tests_head.log ) + 1 run on the pg_cron-capable fresh build (psql exit 0, 'SECURITY REGRESSION MATRIX: ALL CASES PASSED', no 'pg_cron is not installed' notice → the cron.job assertion executed; artifact above) = 5 passed / 0 failed / 0 skipped. Section V is 13 DO blocks / 34 assertions. On the pg_cron build cron.job showed 'expire-stale-analysis-permits | update public.analysis_permits set … ' BEFORE the new migration and '17 * * * * | select api_private.sweep_stale_analysis_permits() | active=t' AFTER (https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bc95173-fae0-486a-aed8-20e817f25cf3/pgcron_fresh_build.log ). Honesty on the criterion wording 'sweep reclaims offline allocation on base': INFERRED from code, on BASE the anonymous UPDATE only touches public.analysis_permits; offline tickets live in public.offline_allocation_ledger/shots.offline_ticket_id, so the base sweep does not literally delete an offline allocation. The base defect the test pins is that the sweep was an anonymous, unrevokable SQL string in cron.job (20260831000000_scale_and_security.sql:361-365) with no owner-only function, no lock-skipping, and NO matrix coverage that the sweep leaves offline devices/grants/ledger/settled receipts byte-identical or that a swept permit still backs its late sync — the test fails on base at the first of those checks (function absent) and would also fail if any later behavioural check regressed (mutation-tested: dropping SKIP LOCKED, deleting expired offline grants, widening the stale predicate, granting service_role EXECUTE each fail section V).",
+            "passed": 5,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first, two commits. (1) cd2b6a56 test(sql): security_regression.sql section V (W11-03) — runs THE shipping sweep function api_private.sweep_stale_analysis_permits() against a full offline fixture (Vera: allocated+consumed ticket with recorded receipt and an outstanding ticket under a HELD receipt; Vic: expired Pro lease; Vito: settled permit + settlement receipt, two stale reserved permits, a fresh reservation, a released abstention) and digests offline_devices / offline_grants / offline_allocation_ledger / settlement_receipts / offline_receipt_settlements before and after; checks the function shape (SECURITY DEFINER, search_path='', EXECUTE revoked from anon/authenticated/service_role), the cron.job command when pg_cron is installed, late sync through a swept permit (permit_backs_sync) with receipt retention, FOR UPDATE SKIP LOCKED via a dblink second connection under lock_timeout, idempotency and batch-bound validation. (2) 577a2ce3 feat(sql): new forward migration 20260910110300_cron_offline_allocation_safe.sql defines api_private.sweep_stale_analysis_permits(p_limit integer default null) — plpgsql SECURITY DEFINER, search_path='', updates ONLY public.analysis_permits reserved rows older than 24h to released/expired via a FOR UPDATE SKIP LOCKED subselect (never waits on an in-flight apply_synced_shot()/settlement row lock), optional 1..10000 batch bound, returns row_count; revokes EXECUTE from public/anon/authenticated/service_role; then, guarded on pg_extension pg_cron, unschedules the existing 'expire-stale-analysis-permits' job and reschedules it at '17 * * * *' as 'select api_private.sweep_stale_analysis_permits()'. Existing 20260831000000_scale_and_security.sql untouched. Verified: run_rls_tests.sh (4 histories), pnpm format:check (exit 0), git diff --check (exit 0), base-vs-HEAD regress proof, and a real pg_cron 1.6.4 build (compiled from source into postgres:16-alpine) proving the cron.job rewrite.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c26779b-f6a5-4b90-a2f2-303c9312ffb2/run_rls_tests_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3fd6d9f9-d4a3-4970-8b16-dfcec22333e9/regress_base_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0eb5fab8-388e-469d-9e63-f0d331ba5418/regress_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7bbfba90-c930-4cfb-86d1-c6cb3a373710/regress_head_pgcron.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bc95173-fae0-486a-aed8-20e817f25cf3/pgcron_fresh_build.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29b25710-82ca-4a3c-aee7-baa27b08bd17/format_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/162178d1-d5a8-495f-804f-993be0539f91/git_diff_check.log"
+        ],
+        "base_sha": "2e09b1547626423b693f82934af2bc68f4c3962b",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w11-03/impl-r1",
+        "files_changed": [
+          "supabase/migrations/20260910110300_cron_offline_allocation_safe.sql",
+          "supabase/tests/security_regression.sql"
+        ],
+        "head_sha": "577a2ce387f599aad86966be82155b6d81a2143a",
+        "out_of_scope_files": [
+          "supabase/migrations/20260910110300_cron_offline_allocation_safe.sql — the manifest's write_path `supabase/migrations/20260908160000_cron_offline_allocation_safe.sql` cannot be used: (VERIFIED) `20260908160000_offline_device_grants.sql` already exists, so the manifest name would duplicate the migration version `20260908160000` (Supabase CLI tracks history by that 14-digit version — INFERRED from AGENTS.md 'remote history is tracked'), and (VERIFIED) migrations up to `20260909230000_offline_receipt_contradictory_evidence.sql` already exist, so the HARD RULE 'add a new file with a LATER timestamp than every existing one' forbids 20260908160000. Same description slug, same serial group `sql` (held by this package), fresh later timestamp, additive new file only."
+        ],
+        "package_id": "W11-03",
+        "regression_tests_added": [
+          "supabase/tests/security_regression.sql — section V (W11-03), V1–V6: 13 DO blocks / 34 assertions (function shape + EXECUTE denial + cron.job command when pg_cron is installed; offline device/grant/ledger/settlement-receipt/offline_receipt_settlements digests unchanged across the sweep; exactly the two stale reserved online permits become released/expired; Vera's offline hold count and held ticket survive; Vic's expired Pro lease survives; Vito's late sync through a swept permit with its settlement receipt is accepted and both receipts survive a further sweep; FOR UPDATE SKIP LOCKED proven via dblink second connection under lock_timeout=5s; idempotent re-run; batch bound 0/10001 refused; anon/authenticated/service_role get 42501)"
+        ],
+        "residual_risks": [
+          "Migration filename is 20260910110300_cron_offline_allocation_safe.sql, not the manifest's 20260908160000_… (a duplicate version + earlier-than-existing timestamp, both disallowed). The reviewer/integrator should accept the later timestamp; if another W11 package also lands a 202609101103xx migration, ordering is by filename and this file has no dependency on anything after 20260909230000.",
+          "pg_cron path VERIFIED only on a locally compiled pg_cron 1.6.4 in postgres:16-alpine, not on the hosted Supabase image; CI's run_rls_tests.sh (stock postgres:16) exercises the guarded NOTICE branch and calls the function directly, so the cron.job rewrite is not re-proven in CI.",
+          "Production rollout still requires `supabase db push` (coordinated, human-approved); the existing cron.job row is replaced in place (unschedule + schedule under the same jobname), so the hourly cadence and job name are unchanged.",
+          "Section V's V5 uses dblink (already used by the W07 section) and lock_timeout=5s; on a heavily loaded CI runner a >5s scheduler stall would surface as a V5 failure rather than a hang (by design)."
+        ],
+        "summary": "Defect/gap on BASE_SHA 2e09b154: the hourly stale-permit sweep is an anonymous SQL string handed to pg_cron in supabase/migrations/20260831000000_scale_and_security.sql:361-365 (`update public.analysis_permits set status='released', outcome='expired' where status='reserved' and created_at < now() - interval '24 hours'`). It is not a schema-owned function (nothing to REVOKE, nothing the matrix can invoke — supabase/tests/security_regression.sql on base has zero coverage of what the cron sweep does to public.offline_devices / offline_grants / offline_allocation_ledger (20260908160000_offline_device_grants.sql) or public.settlement_receipts / offline_receipt_settlements (20260908110000_settlement_receipt_lineage.sql, 20260909220000_offline_receipt_settlement.sql)), it takes plain row locks so it waits behind an in-flight apply_synced_shot() FOR UPDATE, and no test pins that a swept permit still backs its late sync with its settlement receipt retained. Fix (2 commits on devin/pp/w11-03/impl-r1, HEAD 577a2ce387f599aad86966be82155b6d81a2143a): regression section V added first (cd2b6a56, fails on base at V1: function absent), then forward migration 20260910110300_cron_offline_allocation_safe.sql (577a2ce3) adding api_private.sweep_stale_analysis_permits() — owner-only SECURITY DEFINER, search_path pinned, writes exactly the online stale-permit transition and nothing else, FOR UPDATE SKIP LOCKED, optional batch bound — and rewiring the shipping cron job 'expire-stale-analysis-permits' to call it (guarded when pg_cron is absent). Evidence: ./supabase/tests/run_rls_tests.sh exit 0 (12/12 suite runs across fresh + 3 historical upgrade paths); pnpm format:check exit 0; git diff --check exit 0; base proof exit 3 (V1 fails) vs candidate exit 0; on a real pg_cron 1.6.4 build cron.job command changed from the anonymous UPDATE to 'select api_private.sweep_stale_analysis_permits()' and the full matrix (including the cron.job assertion) passed. No PR opened; only devin/pp/w11-03/impl-r1 pushed (plain push, new branch). Migration filename deviates from the manifest's 20260908160000 (see out_of_scope_files: that version already exists and the HARD RULE requires a later timestamp than every existing migration)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fe15cdfd-0199-440b-84fa-308f5b338754/run_rls_tests_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-03-AC1",
+            "note": "VERIFIED by reviewer on clean checkout of 577a2ce3 (git status clean), Docker postgres:16 via the script itself. 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 suites (security_regression.sql, account_deletion_operations.sql, analysis_release_policy.sql) = 12 suite runs; 12 'ALL CASES PASSED' lines, 0 ERROR, script EXIT=0. New migration applied as pending on every history. Stock postgres:16 has no pg_cron so the migration's reschedule block took its guarded NOTICE path and V1 emitted 'pg_cron is not installed here' for the cron.job check only; the sweep function itself was exercised in all 4 histories. Cron wiring separately VERIFIED (see AC2 note).",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b75a906d-2b9d-4493-9bae-855fa20fd43a/pgcron_fresh_build.log",
+            "command": "BASE: git worktree add /home/ubuntu/w11-03-review/base 2e09b1547626423b693f82934af2bc68f4c3962b && cp <HEAD>/supabase/tests/security_regression.sql base/supabase/tests/ && (cd base && ./supabase/tests/run_rls_tests.sh); HEAD: ./supabase/tests/run_rls_tests.sh on 577a2ce3 + fresh postgres:16 build with pg_cron 1.6.8 (postgresql-16-cron, shared_preload_libraries=pg_cron, cron.database_name set) running psql -v ON_ERROR_STOP=1 -f supabase/tests/security_regression.sql",
+            "executed": 5,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-03-AC2",
+            "note": "PROOF exit 0: new section V FAILS on BASE and PASSES on candidate. BASE run (VERIFIED, only supabase/tests/security_regression.sql copied onto 2e09b154, worktree status 'M supabase/tests/security_regression.sql'): run_rls_tests.sh EXIT=3, executed 1 suite / passed 0 / failed 1 / skipped 0; sections A-U passed, first error 'psql:/tests/security_regression.sql:11100: ERROR: V1: the stale-permit sweep must be a named function, api_private.sweep_stale_analysis_permits(), not an anonymous cron statement'. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/9fa390cb-8ef5-48f1-888e-e034a9aa773c/run_rls_tests_base_with_new_test.log . CANDIDATE: 4 security_regression.sql runs inside run_rls_tests.sh (exit 0, AC1 log) + 1 run on a pg_cron-capable fresh build (psql exit 0, 'SECURITY REGRESSION MATRIX: ALL CASES PASSED', no 'pg_cron is not installed' notice so the cron.job assertion executed) = 5/5. On the pg_cron build cron.job BEFORE the new migration: 'expire-stale-analysis-permits | 17 * * * * | active=t | update public.analysis_permits set status = ''released'' ...'; AFTER: 'expire-stale-analysis-permits | 17 * * * * | active=t | select api_private.sweep_stale_analysis_permits()' (jobid 1 -> 5, same jobname/cadence). Reviewer mutation tests on fresh builds (https://la-hacks-rttothemoon.devinenterprise.com/attachments/38a15713-e80b-4071-8677-6aed960f0d13/pgcron_mutations.log): dropping SKIP LOCKED -> V5 fails with lock timeout (exit 3); widening the predicate to all reserved -> 'V3: exactly the two stale reserved permits are swept (got 3)'; adding 'delete from public.offline_grants where expires_at < now()' to the sweep -> 'V3: the sweep must not touch an offline device, grant, ledger event or receipt (changed: public.offline_grants)'; granting EXECUTE to service_role -> 'V1: service_role must not hold EXECUTE on the sweep'. Criterion wording 'sweep reclaims offline allocation on base': INFERRED from code (20260831000000_scale_and_security.sql:361-365) the base anonymous UPDATE writes only public.analysis_permits and does not literally delete offline_allocation_ledger rows; the base gap the test pins is an anonymous unrevokable cron string with plain row locks and zero matrix coverage that the sweep leaves offline devices/grants/ledger/settled receipts untouched — section V fails on base at its first check and the mutation runs show the offline-preservation checks have teeth.",
+            "passed": 5,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fe15cdfd-0199-440b-84fa-308f5b338754/run_rls_tests_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9fa390cb-8ef5-48f1-888e-e034a9aa773c/run_rls_tests_base_with_new_test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b75a906d-2b9d-4493-9bae-855fa20fd43a/pgcron_fresh_build.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/38a15713-e80b-4071-8677-6aed960f0d13/pgcron_mutations.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21f39374-9eb0-4feb-8846-f7fd08f692b3/deno_static_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5583f4e8-bcdd-4f49-84e8-5c0cf5b5d9c9/test_diff.patch"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Migration filename is supabase/migrations/20260910110300_cron_offline_allocation_safe.sql rather than the manifest's 20260908160000_cron_offline_allocation_safe.sql. VERIFIED: 20260908160000_offline_device_grants.sql already exists on base (duplicate 14-digit version) and base migrations extend to 20260909230000, so the hard rule 'later timestamp than every existing migration' forbids the manifest name; the file is inside the `sql` serial group this package holds, same slug, additive only. Judged justified wiring (scope_violation=false). Integrator should watch for other W11 packages landing 202609101103xx migrations (ordering is by filename; this one depends on nothing after 20260909230000).",
+          "Reschedule is unschedule+schedule, so the cron.job jobid changes (1 -> 5 in the pg_cron build) while jobname/schedule stay identical; cron.job_run_details history for the old jobid is orphaned. Cosmetic; pg_cron >= 1.4 would also accept cron.schedule(jobname,...) as an in-place upsert.",
+          "Section V is inserted before the existing W07 section (which is the file's final section) rather than appended after it; existing sections keep their relative order and W07 still runs and passes, so this is not a reorder of existing tests.",
+          "CI's run_rls_tests.sh uses stock postgres:16 (no pg_cron), so the cron.job rewrite is only proven outside CI (reviewer: postgresql-16-cron 1.6.8 on postgres:16; implementer: pg_cron 1.6.4 compiled). The migration's guarded NOTICE branch is what CI exercises; the hosted Supabase image ships pg_cron so production will take the reschedule branch.",
+          "V5 relies on dblink + lock_timeout=5s / statement_timeout=5s; a >5s scheduler stall on a loaded CI runner would surface as a V5 failure by design rather than a hang."
+        ],
+        "package_id": "W11-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "577a2ce387f599aad86966be82155b6d81a2143a",
+        "scope_violation": false,
+        "summary": "APPROVE W11-03 candidate devin/pp/w11-03/impl-r1 @ 577a2ce387f599aad86966be82155b6d81a2143a (2 commits over base 2e09b154). Scope: `git diff --stat` shows exactly 2 files, 598 insertions, 0 deletions — supabase/tests/security_regression.sql (one additive hunk, section V, no existing test edited/reordered/weakened; patch attached) and the new forward migration supabase/migrations/20260910110300_cron_offline_allocation_safe.sql. The filename deviates from the manifest write_path 20260908160000_… but VERIFIED that version already exists (20260908160000_offline_device_grants.sql) and base migrations run to 20260909230000, so the hard rule forces a later timestamp; the file is inside the held `sql` serial group → justified wiring, scope_violation=false. No applied migration edited (20260831000000_scale_and_security.sql untouched), no comment edits, no grants widened (EXECUTE revoked from public/anon/authenticated/service_role; SECURITY DEFINER with search_path=''; writes only public.analysis_permits reserved rows >24h via FOR UPDATE SKIP LOCKED; batch bound 1..10000 or 22023), no RLS/session-check changes, no user-facing copy, no mobile/edge/billing files. Objective met as shipped behaviour: the existing cron job 'expire-stale-analysis-permits' is rewired to call the function (VERIFIED on a real pg_cron 1.6.8 build: command changed from the anonymous UPDATE to 'select api_private.sweep_stale_analysis_permits()', cadence 17 * * * *, active). AC1 VERIFIED: ./supabase/tests/run_rls_tests.sh exit 0, 12/12 suite runs (4 histories x 3 suites), 0 fail, 0 skip. AC2 VERIFIED: with only the new test file copied onto BASE the matrix fails at V1 (exit 3, security_regression.sql:11100, sections A–U pass first); on HEAD it passes in all 4 histories plus the pg_cron build where the cron.job assertion executes (5/5). Reviewer mutation runs prove the behavioural checks are not vacuous: removing SKIP LOCKED, widening the stale predicate, deleting expired offline grants inside the sweep, or granting service_role EXECUTE each fail section V. Static pins (supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts) still pass on HEAD: 22 passed / 0 failed; `git diff --check` exit 0. Zero blocking issues; non-blocking notes: filename vs manifest, jobid changes on reschedule, cron rewrite not re-proven by CI's stock postgres:16, V5's 5s lock_timeout by design. No PR opened, nothing pushed, no production action.",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-26-keep"
+}
