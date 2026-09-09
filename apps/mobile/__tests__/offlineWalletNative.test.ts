@@ -196,6 +196,118 @@ describe('offline wallet native bridge', () => {
     await expectFailure(discardCorruptOfflineWallet(OWNER), 'not_corrupt');
   });
 
+  it('refuses a snapshot for any owner other than the one requested', async () => {
+    const otherOwner = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
+    for (const ownerId of [otherOwner, OWNER.toUpperCase(), ` ${OWNER}`]) {
+      mockLoadWallet.mockResolvedValueOnce({ ...snapshot, ownerId });
+      const error = await expectFailure(
+        loadOfflineWallet(OWNER),
+        'bridge_contract',
+      );
+      expect(error.message).toContain('ownerId mismatch');
+      mockReplaceWallet.mockResolvedValueOnce({ ...snapshot, ownerId });
+      await expectFailure(
+        replaceOfflineWallet(OWNER, 3, { grants: [], receipts: [] }),
+        'bridge_contract',
+      );
+    }
+    mockLoadWallet.mockResolvedValueOnce(snapshot);
+    expect((await loadOfflineWallet(OWNER))?.ownerId).toBe(OWNER);
+  });
+
+  it('refuses snapshots that break the native shape and capacity rules', async () => {
+    const grant = (grantId: string) => ({ grantId, compactJws: 'a.b.c' });
+    const receipt = (receiptId: string, payloadJson = '{}') => ({
+      receiptId,
+      kind: 'result',
+      payloadJson,
+    });
+    const cases: Array<[string, unknown]> = [
+      [
+        'duplicate grantId',
+        { ...snapshot, grants: [grant('dup'), grant('dup')] },
+      ],
+      [
+        'duplicate receiptId',
+        { ...snapshot, receipts: [receipt('dup'), receipt('dup')] },
+      ],
+      ['empty grant field', { ...snapshot, grants: [grant('')] }],
+      [
+        'empty grant field',
+        { ...snapshot, grants: [{ grantId: 'g', compactJws: '' }] },
+      ],
+      ['empty receiptId', { ...snapshot, receipts: [receipt('')] }],
+      [
+        'grant count',
+        {
+          ...snapshot,
+          grants: Array.from({ length: 9 }, (_, i) => grant(`g${i}`)),
+        },
+      ],
+      [
+        'receipt count',
+        {
+          ...snapshot,
+          receipts: Array.from({ length: 65 }, (_, i) => receipt(`r${i}`)),
+        },
+      ],
+      [
+        'receipt payloadJson is not a JSON object',
+        { ...snapshot, receipts: [receipt('r', '[1,2]')] },
+      ],
+      [
+        'receipt payloadJson is not a JSON object',
+        { ...snapshot, receipts: [receipt('r', '"text"')] },
+      ],
+      [
+        'receipt payloadJson is not a JSON object',
+        { ...snapshot, receipts: [receipt('r', 'null')] },
+      ],
+      [
+        'receipt payloadJson is not a JSON object',
+        { ...snapshot, receipts: [receipt('r', '{not json')] },
+      ],
+      [
+        'receipt payloadJson is not a JSON object',
+        { ...snapshot, receipts: [receipt('r', '')] },
+      ],
+    ];
+    for (const [detail, malformed] of cases) {
+      mockLoadWallet.mockResolvedValueOnce(malformed);
+      const error = await expectFailure(
+        loadOfflineWallet(OWNER),
+        'bridge_contract',
+      );
+      expect(error.message).toContain(detail);
+    }
+
+    const atLimit = {
+      ...snapshot,
+      grants: Array.from({ length: 8 }, (_, i) => grant(`g${i}`)),
+      receipts: Array.from({ length: 64 }, (_, i) => receipt(`r${i}`)),
+    };
+    mockLoadWallet.mockResolvedValueOnce(atLimit);
+    expect(await loadOfflineWallet(OWNER)).toEqual(atLimit);
+  });
+
+  it('only accepts unreadable-state failures as a discard outcome', async () => {
+    for (const outcome of OFFLINE_WALLET_NATIVE_FAILURES) {
+      mockDiscardCorruptWallet.mockResolvedValueOnce(outcome);
+      if (isOfflineWalletUnreadable(outcome)) {
+        expect(await discardCorruptOfflineWallet(OWNER)).toBe(outcome);
+      } else {
+        await expectFailure(
+          discardCorruptOfflineWallet(OWNER),
+          'bridge_contract',
+        );
+      }
+    }
+    for (const outcome of ['', null, undefined, 1, { failure: 'tampered' }]) {
+      mockDiscardCorruptWallet.mockResolvedValueOnce(outcome);
+      await expectFailure(discardCorruptOfflineWallet(OWNER), 'bridge_contract');
+    }
+  });
+
   it('classifies unreadable and retryable failures', () => {
     expect(isOfflineWalletUnreadable('tampered')).toBe(true);
     expect(isOfflineWalletUnreadable('integrity_key_missing')).toBe(true);
