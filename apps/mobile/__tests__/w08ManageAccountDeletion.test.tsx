@@ -876,7 +876,10 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     });
     const renderer = renderScreen();
     try {
-      await loseConfirmation(renderer);
+      await armDeletion(renderer);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+      expectUnknownOutcome(renderer);
+      expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
       await pressWhenArmed(renderer, 'Retry deletion');
       expect(calls('delete-status')).toHaveLength(1);
       const text = allText(renderer);
