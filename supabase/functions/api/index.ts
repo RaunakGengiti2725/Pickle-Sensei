@@ -101,7 +101,22 @@ import {
   redisConfigured,
   sha256Hex,
 } from "./cache.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import {
+  authCredentialDead,
+  authErrorRefusalKind,
+  authFailureIdentity,
+  authRefusal,
+  authRefusalKind,
+  type AuthRefusalKind,
+  authRefusalOf,
+  authVouchTtlSeconds,
+  chargeAuthFailure,
+  enforceRateLimit,
+  peekAuthFailureBudget,
+  rateLimitResponse,
+  vouchAuthCredential,
+  vouchAuthSession,
+} from "./rateLimit.ts";
 import {
   accessLogEntry,
   clientIp,
@@ -749,7 +764,12 @@ function authUpstreamTimeoutMs(): number {
 
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; detail: ReturnType<typeof failureDetail> }
+  | {
+      kind: "refused";
+      status: number;
+      detail: ReturnType<typeof failureDetail>;
+      refusal: AuthRefusalKind;
+    }
   | { kind: "unavailable"; detail: ReturnType<typeof failureDetail>; retryAfterSeconds: number };
 
 interface AuthUserLike {
@@ -969,6 +989,7 @@ async function authRequest<T>(
       kind: "refused",
       status: answer.status,
       detail: authResponseErrorDetail(answer.status, body),
+      refusal: authRefusalKind(body),
     };
   }
   if (answer.status >= 200 && answer.status < 300) {
@@ -1148,8 +1169,11 @@ async function authenticateProviderToken(request: Request): Promise<
     if (isRetryableAuthError(signIn.error)) {
       return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
     }
-    return errorJson(401, "The identity token could not be verified.");
+    return authRefusal(errorJson(401, "The identity token could not be verified."), {
+      kind: authErrorRefusalKind(signIn.error),
+    });
   }
+  await vouchAuthSession(signIn.data.session);
   return {
     authed: {
       id: signIn.data.user.id,
@@ -1194,9 +1218,16 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const cacheKey = await authCacheKey(token);
   const cached = await readAuthCache(cacheKey, provider, sessionId);
   if (cached.revoked) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: "liveness",
+    });
   }
   if (cached.authed) return cached.authed;
+  if (await authCredentialDead(token)) {
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: "liveness",
+    });
+  }
 
   if (provider) {
     const signIn = await anonAuthClient(request)
@@ -1206,8 +1237,14 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
       if (isRetryableAuthError(signIn.error)) {
         return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
       }
-      return errorJson(401, "The identity token could not be verified.");
+      return authRefusal(errorJson(401, "The identity token could not be verified."), {
+        kind: authErrorRefusalKind(signIn.error),
+      });
     }
+    await Promise.all([
+      vouchAuthCredential(token, authVouchTtlSeconds(payload?.exp)),
+      vouchAuthSession(signIn.data.session),
+    ]);
     await writeAuthCache(
       cacheKey,
       {
@@ -1234,19 +1271,27 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     });
   }
   if (verified.kind === "refused") {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: verified.refusal,
+    });
   }
   const user = verified.value;
   const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
-    return errorJson(401, "The session does not belong to a Google or Apple account.");
+    return authRefusal(
+      errorJson(401, "The session does not belong to a Google or Apple account."),
+      { kind: "liveness" },
+    );
   }
   // The session may have been logged out while getUser() was in flight: a
   // verification that raced its own revocation must neither be served nor
   // cached. (Revocation is fenced again on every later read regardless.)
   if (sessionId && (await cacheIsRevoked(authRevokedKey(sessionId))) === true) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: "liveness",
+    });
   }
+  await vouchAuthCredential(token, authVouchTtlSeconds(payload?.exp));
   await writeAuthCache(
     cacheKey,
     {
@@ -1314,6 +1359,15 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
+  const identity = await authFailureIdentity(refreshToken);
+  const budget = await peekAuthFailureBudget(clientIp(request), identity, AUTH_FAILURE_LIMIT);
+  if (!budget.allowed) return rateLimitResponse(budget);
+  if (await authCredentialDead(refreshToken)) {
+    return authRefusal(errorJson(401, "The session could not be refreshed. Sign in again."), {
+      kind: "liveness",
+      identity,
+    });
+  }
   const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
     return serviceUnavailable("Session refresh", rotated.detail, {
@@ -1321,8 +1375,12 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
     });
   }
   if (rotated.kind === "refused") {
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+    return authRefusal(errorJson(401, "The session could not be refreshed. Sign in again."), {
+      kind: rotated.refusal,
+      identity,
+    });
   }
+  await vouchAuthSession(rotated.value);
   return json(200, { session: sessionView(rotated.value) });
 }
 
@@ -4995,12 +5053,8 @@ async function handleRequest(request: Request): Promise<Response> {
   // probing) — those never even reach Supabase Auth once tripped.
   const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
-  const authFailures = await peekRateLimit(
-    "authfail",
-    ip,
-    AUTH_FAILURE_LIMIT.limit,
-    AUTH_FAILURE_LIMIT.windowSeconds,
-  );
+  const bearerIdentity = await authFailureIdentity(bearerOf(request));
+  const authFailures = await peekAuthFailureBudget(ip, bearerIdentity, AUTH_FAILURE_LIMIT);
   if (!authFailures.allowed) return rateLimitResponse(authFailures);
 
   // The gateway may present the pathname as /functions/v1/api/v1/… or /api/v1/…
@@ -5013,12 +5067,16 @@ async function handleRequest(request: Request): Promise<Response> {
 
   // Atomic INCR on the aligned auth-failure window (peeked above) — never a
   // read-then-write, so concurrent bad bearers cannot under-count.
-  const recordAuthFailure = () =>
-    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+  const recordAuthFailure = (refused: Response) =>
+    chargeAuthFailure(ip, bearerIdentity, authRefusalOf(refused), AUTH_FAILURE_LIMIT);
 
   if (isAccountDeletionStatusCapability(bearerOf(request))) {
-    await recordAuthFailure();
-    return errorJson(401, "A deletion status capability cannot authorize this route.");
+    const refused = authRefusal(
+      errorJson(401, "A deletion status capability cannot authorize this route."),
+      { kind: "credential" },
+    );
+    await recordAuthFailure(refused);
+    return refused;
   }
 
   // ── Session establishment and rotation run BEFORE general authentication:
@@ -5036,7 +5094,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
-      if (exchanged.status === 401) await recordAuthFailure();
+      if (exchanged.status === 401) await recordAuthFailure(exchanged);
       return exchanged;
     }
     const userLimit = await enforceRateLimit(
@@ -5062,13 +5120,13 @@ async function handleRequest(request: Request): Promise<Response> {
     );
     if (!rl.allowed) return rateLimitResponse(rl);
     const refreshed = await refreshSessionRoute(request);
-    if (refreshed.status === 401) await recordAuthFailure();
+    if (refreshed.status === 401) await recordAuthFailure(refreshed);
     return refreshed;
   }
 
   const authed = await authenticate(request);
   if (authed instanceof Response) {
-    if (authed.status === 401) await recordAuthFailure();
+    if (authed.status === 401) await recordAuthFailure(authed);
     return authed;
   }
 
