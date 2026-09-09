@@ -53,7 +53,7 @@ LIB_VERSION = {lib_version!r}
 async def main():
     if program_lib.LIB_VERSION != LIB_VERSION:
         raise SystemExit(f"program_lib {{program_lib.LIB_VERSION}} != launcher {{LIB_VERSION}}; regenerate")
-    runtime = program_lib.Runtime(register_workflow=register_workflow, agent=agent, log=log, agent_error=AgentError)
+    runtime = program_lib.Runtime(register_workflow=register_workflow, agent=agent, log=log, agent_error=WorkflowAgentError)
     record = await program_lib.run_candidate_verification(
         package_id=PACKAGE_ID,
         base_sha=BASE_SHA,
