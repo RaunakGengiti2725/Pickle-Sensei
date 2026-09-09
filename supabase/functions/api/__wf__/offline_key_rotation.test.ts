@@ -20,6 +20,14 @@
 //     rotated ring inside the overlap and not after it, and a malformed ring
 //     (private previous key, unbounded overlap, colliding kids, unknown
 //     schema) is refused with a generic 503 before any grant is spent.
+//
+// Key-material consistency: the ring is only usable if every key in it is
+// what it claims to be. An active private JWK whose public coordinates do
+// not belong to its private scalar `d` would sign grants that the ring's own
+// public half rejects; a previous public JWK that is not a P-256 point, or
+// that repeats the active key's material under another kid, is a rotation
+// that verifies nothing or does not rotate. All of these are `invalid_key`
+// at import, so the route answers 503 and spends nothing.
 
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { exportJWK, generateKeyPair } from "jose";
@@ -63,6 +71,11 @@ const previousPrivateJwk = { ...(await exportJWK(previousPair.privateKey)), kid:
 const previousPublicJwk = { ...(await exportJWK(previousPair.publicKey)), kid: PREVIOUS_KID };
 const activePrivateJwk = { ...(await exportJWK(activePair.privateKey)), kid: ACTIVE_KID };
 const activePublicJwk = { ...(await exportJWK(activePair.publicKey)), kid: ACTIVE_KID };
+const unknownPublicJwk = await exportJWK(unknownPair.publicKey);
+/** Private scalar of the active key, public coordinates of another key. */
+const mismatchedActiveJwk = { ...activePrivateJwk, x: unknownPublicJwk.x, y: unknownPublicJwk.y };
+/** base64url of 32 zero bytes: (0, 0) is not on P-256. */
+const ZERO_COORDINATE = "A".repeat(43);
 
 const previousSigningKey: OfflineGrantKey = {
   purpose: "offline_execution_grant",
@@ -457,6 +470,162 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "key ring import refuses an active private JWK whose public coordinates do not belong to d (legacy and schema-1 forms)",
+  async () => {
+    const rotation = await loadRotation();
+    // Sanity: the consistent key imports and round-trips through its own ring.
+    const consistent = await rotation.importOfflineGrantKeyRing(activePrivateJwk);
+    const signed = await signOfflineExecutionGrant(
+      moduleClaims(NOW),
+      consistent.signingKey,
+      moduleContext(consistent.allowedKeyIds, NOW),
+    );
+    await rotation.verifyOfflineExecutionGrant(
+      signed,
+      consistent,
+      moduleContext(consistent.allowedKeyIds, NOW),
+    );
+
+    const rejected: readonly (readonly [string, unknown])[] = [
+      ["legacy form, coordinates of another key", mismatchedActiveJwk],
+      ["schema-1 form, coordinates of another key", ringDocument({ active: mismatchedActiveJwk })],
+      [
+        "schema-1 form with a previous key, coordinates of another key",
+        ringDocument({ active: mismatchedActiveJwk, retiredAt: NOW }),
+      ],
+      ["legacy form, x of another key", { ...activePrivateJwk, x: unknownPublicJwk.x }],
+      ["legacy form, y of another key", { ...activePrivateJwk, y: unknownPublicJwk.y }],
+      [
+        "legacy form, coordinates not on the curve",
+        { ...activePrivateJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE },
+      ],
+      [
+        "schema-1 form, coordinates not on the curve",
+        ringDocument({ active: { ...activePrivateJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE } }),
+      ],
+    ];
+    for (const [name, document] of rejected) {
+      await rejectWith("invalid_key", () => rotation.importOfflineGrantKeyRing(document), name);
+    }
+  },
+);
+
+Deno.test(
+  "key ring import refuses a previous public JWK that is not a P-256 point or that repeats the active key's material",
+  async () => {
+    const rotation = await loadRotation();
+    const rejected: readonly (readonly [string, unknown])[] = [
+      [
+        "previous coordinates not on the curve",
+        ringDocument({
+          previous: {
+            jwk: { ...previousPublicJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE },
+            retiredAtEpochSeconds: NOW,
+            overlapEndsAtEpochSeconds: NOW + DAY,
+          },
+        }),
+      ],
+      [
+        "previous y of another key",
+        ringDocument({
+          previous: {
+            jwk: { ...previousPublicJwk, y: unknownPublicJwk.y },
+            retiredAtEpochSeconds: NOW,
+            overlapEndsAtEpochSeconds: NOW + DAY,
+          },
+        }),
+      ],
+      [
+        "previous entry is the active public half under another kid",
+        ringDocument({
+          previous: {
+            jwk: { ...activePublicJwk, kid: PREVIOUS_KID },
+            retiredAtEpochSeconds: NOW,
+            overlapEndsAtEpochSeconds: NOW + DAY,
+          },
+        }),
+      ],
+    ];
+    for (const [name, document] of rejected) {
+      await rejectWith("invalid_key", () => rotation.importOfflineGrantKeyRing(document), name);
+    }
+  },
+);
+
+Deno.test(
+  "a binding that allowlists only the active kid still verifies active-key grants through a ring with a previous key",
+  async () => {
+    const rotation = await loadRotation();
+    const retiredAt = NOW + DAY;
+    const ring = await rotation.importOfflineGrantKeyRing(
+      ringDocument({ retiredAt, overlapEndsAt: retiredAt + 2 * DAY }),
+    );
+    const underActive = await signOfflineExecutionGrant(
+      moduleClaims(NOW),
+      activeSigningKey,
+      moduleContext(ring.allowedKeyIds, NOW),
+    );
+    const underPrevious = await signOfflineExecutionGrant(
+      moduleClaims(NOW),
+      previousSigningKey,
+      moduleContext(ring.allowedKeyIds, NOW),
+    );
+    const narrow = await rotation.verifyOfflineExecutionGrant(
+      underActive,
+      ring,
+      moduleContext([ACTIVE_KID], NOW + 1),
+    );
+    assertEquals(narrow.protectedHeader.kid, ACTIVE_KID);
+    // Narrowing never widens: the previous kid stays refused by the allowlist.
+    await rejectWith("invalid_metadata", () =>
+      rotation.verifyOfflineExecutionGrant(
+        underPrevious,
+        ring,
+        moduleContext([ACTIVE_KID], NOW + 1),
+      ),
+    );
+  },
+);
+
+Deno.test(
+  "the previous key's window travels with the key object: handed to the verifier as a list entry it still refuses receipts after overlapEndsAt",
+  async () => {
+    const rotation = await loadRotation();
+    const retiredAt = NOW + DAY;
+    const overlapEndsAt = retiredAt + DAY;
+    const ring = await rotation.importOfflineGrantKeyRing(
+      ringDocument({ retiredAt, overlapEndsAt }),
+    );
+    const previousKey = ring.previousKey;
+    assert(previousKey !== null);
+    const underPrevious = await signOfflineExecutionGrant(
+      moduleClaims(NOW),
+      previousSigningKey,
+      moduleContext(ring.allowedKeyIds, NOW),
+    );
+    const list: readonly OfflineGrantKey[] = [ring.activeKey, previousKey];
+    const inside = await rotation.verifyOfflineExecutionGrant(
+      underPrevious,
+      list,
+      moduleContext(ring.allowedKeyIds, overlapEndsAt - 1),
+    );
+    assertEquals(inside.protectedHeader.kid, PREVIOUS_KID);
+    for (const now of [overlapEndsAt, overlapEndsAt + DAY]) {
+      await rejectWith(
+        "retired_key",
+        () =>
+          rotation.verifyOfflineExecutionGrant(
+            underPrevious,
+            list,
+            moduleContext(ring.allowedKeyIds, now),
+          ),
+        String(now),
+      );
+    }
+  },
+);
+
 // ---------------------------------------------------------------------------
 // The real edge handler
 // ---------------------------------------------------------------------------
@@ -648,6 +817,50 @@ Deno.test(
 
     // The same account issues normally once the ring is well-formed again.
     reset(ringDocument({ retiredAt: now }));
+    const ok = await issue(user.token);
+    assertEquals(ok.status, 200);
+    assertEquals(((await ok.json()) as { keyId: string }).keyId, ACTIVE_KID);
+    assertEquals(h.callsTo(GRANT_RPC).length, 1);
+  },
+);
+
+Deno.test(
+  "POST /v1/offline/grants under an active key whose coordinates do not belong to d answers 503 and spends no grant",
+  async () => {
+    const user = freshUser();
+    const now = nowSeconds();
+    for (const document of [
+      mismatchedActiveJwk,
+      ringDocument({ active: mismatchedActiveJwk, previous: null }),
+      ringDocument({ active: mismatchedActiveJwk, retiredAt: now - 60 }),
+      { ...activePrivateJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE },
+      ringDocument({
+        previous: {
+          jwk: { ...previousPublicJwk, x: ZERO_COORDINATE, y: ZERO_COORDINATE },
+          retiredAtEpochSeconds: now - 60,
+          overlapEndsAtEpochSeconds: now + DAY,
+        },
+      }),
+      ringDocument({
+        previous: {
+          jwk: { ...activePublicJwk, kid: PREVIOUS_KID },
+          retiredAtEpochSeconds: now - 60,
+          overlapEndsAtEpochSeconds: now + DAY,
+        },
+      }),
+    ]) {
+      reset(document);
+      const response = await issue(user.token);
+      assertEquals(response.status, 503, JSON.stringify(document));
+      const text = await response.text();
+      assert(!text.includes("compactJws"));
+      assert(!text.includes(SIGNING_ENV));
+      assert(!text.includes(ACTIVE_KID) && !text.includes(PREVIOUS_KID));
+    }
+    assertEquals(h.callsTo(GRANT_RPC).length, 0);
+
+    // The consistent key issues normally for the same account.
+    reset(activePrivateJwk);
     const ok = await issue(user.token);
     assertEquals(ok.status, 200);
     assertEquals(((await ok.json()) as { keyId: string }).keyId, ACTIVE_KID);
