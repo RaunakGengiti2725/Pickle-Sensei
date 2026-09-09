@@ -136,6 +136,7 @@ import {
   isAccountDeletionStatusCapability,
   isIntendedAuthUserNotFound,
   isIntendedRevenueCatCustomerNotFound,
+  ownerNamespaceSelectColumns,
   postgrestKeysetAfter,
   postgrestKeysetBefore,
   readAccountDeletionResponseBody,
@@ -4228,7 +4229,25 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
       },
       deleteRevenueCatCustomer: deleteAccountRevenueCatCustomer,
       deleteAuthUser: deleteAccountAuthUser,
-      onFailure: (code, status) => console.error("[api] Account deletion:", { code, status }),
+      readOwnerNamespacePage: (namespace, ownerId, before, limit) => {
+        // Every namespace is read AS the deleting user (RLS `*_select_own`,
+        // the only SELECT granted on client-owned tables) — never the service
+        // role. `is_api_request()` needs only the JWT subject and the API key,
+        // so the sweep still reads after the Auth identity is gone.
+        const owned = authed.db
+          .from(namespace.table)
+          .select(ownerNamespaceSelectColumns(namespace))
+          .eq(namespace.ownerColumn, ownerId);
+        return namespace.keyColumns
+          .reduce(
+            (page, column) => page.order(column, { ascending: false }),
+            before === null ? owned : owned.or(before),
+          )
+          .limit(limit)
+          .abortSignal(AbortSignal.timeout(10_000));
+      },
+      onFailure: (code, status, detail) =>
+        console.error("[api] Account deletion:", { code, status, ...detail }),
     },
     authed.id,
     body,

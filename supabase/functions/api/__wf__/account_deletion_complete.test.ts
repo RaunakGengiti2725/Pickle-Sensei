@@ -192,54 +192,50 @@ function seedHistory(db: FakeDatabase, ownerId: string, shots: number): void {
     })),
   );
   db.seed("billing_entitlements", [{ user_id: ownerId, premium: false }]);
-  db.seed("account_external_credentials", [{ user_id: ownerId }]);
 }
 
 // ─── Registry shape ──────────────────────────────────────────────────────────
 
-Deno.test("owner namespace registry: every account-owned table has exactly one reader", () => {
+Deno.test("owner namespace registry: every account-owned table is read once, as the owner", () => {
   const tables = ACCOUNT_OWNER_NAMESPACES.map((namespace) => namespace.table);
   assertEquals(new Set(tables).size, tables.length, "duplicate namespace");
   for (const namespace of ACCOUNT_OWNER_NAMESPACES) {
     assert(namespace.keyColumns.length > 0, `${namespace.table} has no keyset`);
-    assert(["owner", "server"].includes(namespace.reader), `${namespace.table} reader`);
     assert(Object.isFrozen(namespace) && Object.isFrozen(namespace.keyColumns));
     const select = ownerNamespaceSelectColumns(namespace).split(",");
     assert(select.includes(namespace.ownerColumn), `${namespace.table} select lacks owner`);
     for (const column of namespace.keyColumns) assert(select.includes(column));
     assertEquals(new Set(select).size, select.length, `${namespace.table} select repeats`);
   }
-  // The service role is granted SELECT on billing/credential rows only
-  // (20260905190106_api_only_database_access.sql); everything else is read
-  // as the owner under RLS.
-  assertEquals(
-    ACCOUNT_OWNER_NAMESPACES.filter((namespace) => namespace.reader === "server")
-      .map((namespace) => namespace.table)
-      .sort(),
-    ["account_external_credentials", "billing_entitlements"],
-  );
-  for (const table of [
-    "profiles",
-    "sessions",
-    "shots",
-    "shot_phases",
-    "shot_measurements",
-    "shot_checkpoints",
-    "captures",
+  // Every namespace the deleting user can SELECT under RLS (`*_select_own`,
+  // 20260905190106_api_only_database_access.sql); no service-role reads.
+  assertEquals(tables.slice().sort(), [
+    "analysis_feedback",
     "analysis_permits",
+    "billing_entitlements",
+    "captures",
     "consent_records",
     "evaluation_trials",
-    "analysis_feedback",
-    "user_saved_drills",
     "player_rank_state",
-    "account_deletion_requests",
-  ]) {
-    assertEquals(namespaceOf(table).reader, "owner", table);
-  }
+    "profiles",
+    "sessions",
+    "shot_checkpoints",
+    "shot_measurements",
+    "shot_phases",
+    "shots",
+    "user_saved_drills",
+  ]);
+  assertEquals(namespaceOf("profiles").ownerColumn, "id");
   for (const table of Object.keys(ACCOUNT_DELETION_UNREAD_TABLES)) {
     assert(!tables.includes(table), `${table} is both read and declared unread`);
   }
   assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.free_rating_ledger, "retained");
+  assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.webhook_events, "retained");
+  // The challenge and credential rows are fenced behind the deletion RPC
+  // family (account_external_cleanup.test.ts pins zero PostgREST reads of
+  // either); they leave with the auth cascade.
+  assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.account_deletion_requests, "rpc_owned");
+  assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.account_external_credentials, "rpc_owned");
   assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.analysis_permit_tombstones, "cascade_only");
   assertEquals(ACCOUNT_DELETION_UNREAD_TABLES.account_deletion_feedback, "cascade_only");
 });
@@ -508,6 +504,8 @@ Deno.test(
     h.results.set("confirm_account_deletion_operation", {
       ...(h.results.get("confirm_account_deletion_operation") as Record<string, unknown>),
       appleCompleted: true,
+      appleAction: "revoked",
+      appleRefreshTokenEncrypted: null,
       revenueCatCompleted: true,
     });
     h.db.denied.add("consent_records");
@@ -672,7 +670,7 @@ async function ownerKeyedTables(sql: Sql): Promise<Set<string>> {
 }
 
 Deno.test({
-  name: "live PG: the namespace registry covers every account-keyed table, and each reader holds exactly the grant it relies on",
+  name: "live PG: the namespace registry covers every account-keyed table, and the owner holds exactly the grant the sweep relies on",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 1, onnotice: () => {} });
@@ -699,13 +697,15 @@ Deno.test({
                      and table_name = '${namespace.table}' and column_name = '${namespace.ownerColumn}') as owner_type`,
         );
         assertEquals(priv.owner_type, "uuid", `${namespace.table}.${namespace.ownerColumn}`);
-        if (namespace.reader === "server") {
-          assertEquals(priv.server, true, `${namespace.table}: service_role SELECT`);
-        } else {
-          assertEquals(priv.server, false, `${namespace.table}: service_role must not hold SELECT`);
-          assertEquals(priv.owner_grant, true, `${namespace.table}: authenticated SELECT`);
-          assertEquals(priv.owner_policy, true, `${namespace.table}: owner SELECT policy`);
-        }
+        assertEquals(priv.owner_grant, true, `${namespace.table}: authenticated SELECT`);
+        assertEquals(priv.owner_policy, true, `${namespace.table}: owner SELECT policy`);
+        // the service role holds SELECT on the billing row only; a raw
+        // service-role sweep of the client-owned tables is 42501 (r1 finding)
+        assertEquals(
+          priv.server,
+          namespace.table === "billing_entitlements",
+          `${namespace.table}: service_role SELECT`,
+        );
         // the keyset is the primary key (minus the owner column when it is
         // part of the key, since the owner filter already fixes it)
         const pk = String(priv.pk).split(",");
@@ -717,15 +717,44 @@ Deno.test({
         );
       }
       for (const [table, reason] of Object.entries(ACCOUNT_DELETION_UNREAD_TABLES)) {
-        const qualified = table.includes(".") ? table : `public.${table}`;
+        const [schema, name] = table.includes(".") ? table.split(".") : ["public", table];
         const [priv] = await sql.unsafe(
-          `select has_table_privilege('service_role', '${qualified}', 'SELECT') as server,
-                  has_table_privilege('authenticated', '${qualified}', 'SELECT') as owner_grant`,
+          `select has_table_privilege('service_role', '${schema}.${name}', 'SELECT') as server,
+                  has_table_privilege('authenticated', '${schema}.${name}', 'SELECT') as owner_grant,
+                  (select string_agg(rc.delete_rule, ',')
+                     from information_schema.table_constraints tc
+                     join information_schema.referential_constraints rc
+                       on rc.constraint_name = tc.constraint_name and rc.constraint_schema = tc.constraint_schema
+                     join information_schema.constraint_column_usage ccu
+                       on ccu.constraint_name = rc.unique_constraint_name
+                      and ccu.constraint_schema = rc.unique_constraint_schema
+                    where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = '${schema}'
+                      and tc.table_name = '${name}'
+                      and (ccu.table_schema, ccu.table_name, ccu.column_name)
+                          in (('public', 'profiles', 'id'), ('auth', 'users', 'id'))) as account_fk`,
+        );
+        if (reason === "retained") {
+          assertEquals(priv.account_fk, null, `${table} must not cascade with the account`);
+          continue;
+        }
+        // the account key detaches or removes the row with the account
+        assert(
+          priv.account_fk === "CASCADE" || priv.account_fk === "SET NULL",
+          `${table}: account FK delete rule ${priv.account_fk}`,
         );
         if (reason === "cascade_only") {
-          // no Edge actor may read it — the moment a grant appears, this pin
-          // fails so the table moves into the read registry
-          assertEquals([priv.server, priv.owner_grant], [false, false], `${table} became readable`);
+          // the deleting user cannot read it — the moment an owner grant
+          // appears, this pin fails so the table moves into the read registry
+          assertEquals(priv.owner_grant, false, `${table} became owner-readable`);
+          assertEquals(priv.server, false, `${table}: service_role SELECT`);
+        } else {
+          // rpc_owned: the service role reads only the credential row, and
+          // only through the fenced RPC family
+          assertEquals(
+            priv.server,
+            table === "account_external_credentials",
+            `${table}: service_role SELECT`,
+          );
         }
       }
     } finally {
@@ -764,7 +793,6 @@ Deno.test({
         await asOwner(tx as unknown as Tx, PG_OWNER, PG_SESSION);
         const out: Record<string, number> = {};
         for (const namespace of ACCOUNT_OWNER_NAMESPACES) {
-          if (namespace.reader !== "owner") continue;
           const rows = await tx.unsafe(
             `select ${ownerNamespaceSelectColumns(namespace)} from public.${namespace.table}
               where ${namespace.ownerColumn} = '${PG_OWNER}' limit 1`,
@@ -776,6 +804,18 @@ Deno.test({
       assertEquals(before.profiles, 1);
       assertEquals(before.sessions, 1);
       assertEquals(before.user_saved_drills, 1);
+      assertEquals(before.billing_entitlements, 1);
+      // the r1 sweep read these tables as service_role: denied by the grants
+      const denied = await sql
+        .begin(async (tx) => {
+          await tx.unsafe(`set local role service_role`);
+          await tx.unsafe(`select id from public.shots where user_id = '${PG_OWNER}' limit 1`);
+        })
+        .then(
+          () => null,
+          (error: unknown) => (error as { code?: string }).code ?? null,
+        );
+      assertEquals(denied, "42501", "service_role SELECT on shots");
 
       await sql.unsafe(`delete from auth.users where id = '${PG_OWNER}'`);
       const sessions = await sql.unsafe(
@@ -788,7 +828,6 @@ Deno.test({
         await asOwner(tx as unknown as Tx, PG_OWNER, PG_SESSION);
         const out: Record<string, number> = {};
         for (const namespace of ACCOUNT_OWNER_NAMESPACES) {
-          if (namespace.reader !== "owner") continue;
           const rows = await tx.unsafe(
             `select ${ownerNamespaceSelectColumns(namespace)} from public.${namespace.table}
               where ${namespace.ownerColumn} = '${PG_OWNER}'
@@ -799,24 +838,11 @@ Deno.test({
         }
         return out;
       });
+      assertEquals(Object.keys(after).length, ACCOUNT_OWNER_NAMESPACES.length);
       for (const [table, count] of Object.entries(after)) assertEquals(count, 0, table);
-      const server = await sql.begin(async (tx) => {
-        await tx.unsafe(`set local role service_role`);
-        const out: Record<string, number> = {};
-        for (const namespace of ACCOUNT_OWNER_NAMESPACES) {
-          if (namespace.reader !== "server") continue;
-          const rows = await tx.unsafe(
-            `select ${ownerNamespaceSelectColumns(namespace)} from public.${namespace.table}
-              where ${namespace.ownerColumn} = '${PG_OWNER}' limit ${INVENTORY_PAGE_ROWS}`,
-          );
-          out[namespace.table] = rows.length;
-        }
-        return out;
-      });
-      assertEquals(server, { account_external_credentials: 0, billing_entitlements: 0 });
-      // the cascade-only tables hold nothing for the owner either (superuser view)
+      // the unread cascading tables hold nothing for the owner either (superuser view)
       for (const [table, reason] of Object.entries(ACCOUNT_DELETION_UNREAD_TABLES)) {
-        if (reason !== "cascade_only") continue;
+        if (reason === "retained") continue;
         const qualified = table.includes(".") ? table : `public.${table}`;
         const rows = await sql.unsafe(`select 1 from ${qualified} where user_id = '${PG_OWNER}'`);
         assertEquals(rows.length, 0, table);
