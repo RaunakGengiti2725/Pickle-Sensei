@@ -467,7 +467,9 @@ final class OfflineWalletTests: XCTestCase {
     for badLength in [0, 31, 33, 64] {
       store.items = [OfflineWallet.integrityKeyAccount(ownerId: ownerA): Data(repeating: 0xAB, count: badLength)]
 
-      XCTAssertNil(try wallet.load(ownerId: ownerA), "nothing stored is still nothing stored")
+      assertFailure(.tampered, "load with a \(badLength)-byte key: the fence cannot be verified, so nothing is known") {
+        try wallet.load(ownerId: ownerA)
+      }
       assertFailure(.tampered, "replace with a \(badLength)-byte key") {
         try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
       }
@@ -518,7 +520,7 @@ final class OfflineWalletTests: XCTestCase {
     try wallet.clear(ownerId: ownerA, expectedRevision: 1)
     store.items.removeValue(forKey: OfflineWallet.integrityKeyAccount(ownerId: ownerA))
 
-    XCTAssertNil(try wallet.load(ownerId: ownerA))
+    assertFailure(.integrityKeyMissing) { try wallet.load(ownerId: ownerA) }
     assertFailure(.integrityKeyMissing) {
       try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
     }
@@ -1000,7 +1002,7 @@ final class OfflineWalletTests: XCTestCase {
     assertFailure(.tampered) { try wallet.load(ownerId: ownerA) }
   }
 
-  func testClearCommitsTheFenceBeforeTheDeleteInExactlyTwoStoreMutations() throws {
+  func testClearCommitsTheFenceBeforeAndAfterTheDeleteInExactlyThreeStoreMutations() throws {
     let store = MemoryWalletStore()
     let wallet = OfflineWallet(store: store)
     let walletAccount = OfflineWallet.walletAccount(ownerId: ownerA)
@@ -1008,62 +1010,84 @@ final class OfflineWalletTests: XCTestCase {
     _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
     let writesBefore = store.writeOrder.count
 
-    var observed: [OfflineWalletFence] = []
-    var walletStillPresentAtCommit = false
+    var observed: [(fence: OfflineWalletFence, walletPresent: Bool)] = []
     store.onWrite = { [self] account in
       guard account == fenceAccount else { return }
-      observed.append(try storedFence(store, ownerId: ownerA))
-      walletStillPresentAtCommit = store.items[walletAccount] != nil
+      observed.append((try storedFence(store, ownerId: ownerA), store.items[walletAccount] != nil))
     }
     try wallet.clear(ownerId: ownerA, expectedRevision: 1)
     store.onWrite = nil
 
-    XCTAssertEqual(Array(store.writeOrder.dropFirst(writesBefore)), [fenceAccount], "one fence write")
-    XCTAssertEqual(store.deleteOrder, [walletAccount], "then one wallet delete")
-    XCTAssertEqual(observed, [OfflineWalletFence(revision: 1, slot: .cleared)], "the fence retires the revision before the wallet goes")
-    XCTAssertTrue(walletStillPresentAtCommit)
+    XCTAssertEqual(Array(store.writeOrder.dropFirst(writesBefore)), [fenceAccount, fenceAccount], "two fence writes")
+    XCTAssertEqual(store.deleteOrder, [walletAccount], "one wallet delete between them")
+    XCTAssertEqual(observed.map(\.fence), [
+      OfflineWalletFence(revision: 1, slot: .clearing),
+      OfflineWalletFence(revision: 1, slot: .cleared),
+    ], "the fence commits the clear before the wallet goes and finishes it after")
+    XCTAssertEqual(observed.map(\.walletPresent), [true, false])
     XCTAssertNil(store.items[walletAccount])
   }
 
-  func testInterruptedClearAfterTheFenceCommitLeavesAnUnreadableRemnantNotCurrentState() throws {
+  func testInterruptedClearBeforeTheDeleteLeavesARemnantThatIsNeverCurrentState() throws {
     let store = MemoryWalletStore()
     let account = OfflineWallet.walletAccount(ownerId: ownerA)
-    let keyAccount = OfflineWallet.integrityKeyAccount(ownerId: ownerA)
     let crashed = OfflineWallet(store: store)
     _ = try crashed.replace(
       ownerId: ownerA, expectedRevision: 0,
       contents: OfflineWalletContents(grants: [grant(id: "grant-spent")], receipts: [receipt(id: "receipt-submitted")]))
     let revisionOneBytes = try XCTUnwrap(store.items[account])
-    let oldKey = try XCTUnwrap(store.items[keyAccount])
 
     store.crashAfterWrite(1)
-    XCTAssertThrowsError(try crashed.clear(ownerId: ownerA, expectedRevision: 1), "dies after the fence commit, before the delete")
+    XCTAssertThrowsError(try crashed.clear(ownerId: ownerA, expectedRevision: 1), "dies after the first fence commit, before the delete")
     store.clearCrash()
     XCTAssertEqual(store.items[account], revisionOneBytes, "the envelope is still on disk")
-    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared), "but its revision is retired")
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .clearing), "but its clear is committed")
 
     let relaunched = OfflineWallet(store: store)
     let writes = store.writeCount
-    let error = assertFailure(.tampered, "the retired envelope never reads as current state") { try relaunched.load(ownerId: ownerA) }
-    XCTAssertTrue(error?.detail.contains("rolled back") ?? false, error?.detail ?? "")
-    assertFailure(.tampered) {
+    XCTAssertNil(try relaunched.load(ownerId: ownerA), "the remnant reads as the cleared wallet it is, not as current state")
+    XCTAssertEqual(store.writeCount, writes, "load never writes")
+    assertFailure(.notCorrupt, "a remnant is committed state, nothing to discard") { try relaunched.discardCorrupt(ownerId: ownerA) }
+    assertFailure(.revisionConflict, "the spent envelope cannot be built on") {
       try relaunched.replace(ownerId: ownerA, expectedRevision: 1, contents: OfflineWalletContents(grants: [], receipts: []))
     }
-    assertFailure(.tampered) {
-      try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
-    }
-    assertFailure(.tampered) { try relaunched.clear(ownerId: ownerA, expectedRevision: 1) }
-    assertFailure(.tampered) { try relaunched.clear(ownerId: ownerA, expectedRevision: 0) }
-    XCTAssertEqual(store.writeCount, writes, "faults never write")
+    assertFailure(.revisionConflict) { try relaunched.clear(ownerId: ownerA, expectedRevision: 1) }
+    XCTAssertEqual(store.items[account], revisionOneBytes, "refusals never write")
 
-    XCTAssertEqual(try relaunched.discardCorrupt(ownerId: ownerA), .tampered)
-    XCTAssertTrue(store.items.isEmpty)
+    try relaunched.clear(ownerId: ownerA, expectedRevision: 0)
+    XCTAssertNil(store.items[account], "clearing nothing finishes the interrupted clear")
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared))
     XCTAssertNil(try relaunched.load(ownerId: ownerA))
-    XCTAssertEqual(
-      try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 1)
-    XCTAssertNotEqual(store.items[keyAccount], oldKey)
     store.items[account] = revisionOneBytes
-    assertFailure(.tampered, "the old history never verifies under the fresh key") { try relaunched.load(ownerId: ownerA) }
+    assertFailure(.tampered, "once the clear is finished the same envelope is a rollback") { try relaunched.load(ownerId: ownerA) }
+    store.items.removeValue(forKey: account)
+    XCTAssertEqual(
+      try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 2,
+      "the retired revision is never handed out again")
+  }
+
+  func testReplaceOverARemnantSwapsItOutAtomicallyWithAStrictlyNewerRevision() throws {
+    let store = MemoryWalletStore()
+    let account = OfflineWallet.walletAccount(ownerId: ownerA)
+    let crashed = OfflineWallet(store: store)
+    _ = try crashed.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    _ = try crashed.replace(ownerId: ownerA, expectedRevision: 1, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    let revisionTwoBytes = try XCTUnwrap(store.items[account])
+    store.crashAfterWrite(1)
+    XCTAssertThrowsError(try crashed.clear(ownerId: ownerA, expectedRevision: 2))
+    store.clearCrash()
+
+    let relaunched = OfflineWallet(store: store)
+    XCTAssertNil(try relaunched.load(ownerId: ownerA))
+    let unsent = receipt(id: "receipt-unsent")
+    let next = try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [unsent]))
+    XCTAssertEqual(next.revision, 3, "strictly newer than the revision the clear retired")
+    XCTAssertEqual(store.deleteCount, 0, "the remnant was swapped, not deleted first (no window with nothing on disk)")
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 3, slot: .present))
+    XCTAssertEqual(try relaunched.load(ownerId: ownerA), next)
+
+    store.items[account] = revisionTwoBytes
+    assertFailure(.tampered, "the retired envelope is behind the committed revision") { try relaunched.load(ownerId: ownerA) }
   }
 
   func testClearIsCompleteOnceTheWalletIsDeletedEvenIfTheCallerNeverHeard() throws {
@@ -1074,24 +1098,53 @@ final class OfflineWalletTests: XCTestCase {
     let revisionOneBytes = try XCTUnwrap(store.items[account])
 
     store.crashAfterWrite(2)
-    XCTAssertThrowsError(try crashed.clear(ownerId: ownerA, expectedRevision: 1), "dies right after the delete")
+    XCTAssertThrowsError(try crashed.clear(ownerId: ownerA, expectedRevision: 1), "dies right after the delete, before the final fence write")
     store.clearCrash()
     XCTAssertNil(store.items[account])
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .clearing))
 
     let relaunched = OfflineWallet(store: store)
     XCTAssertNil(try relaunched.load(ownerId: ownerA))
-    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared))
     assertFailure(.notCorrupt) { try relaunched.discardCorrupt(ownerId: ownerA) }
-    try relaunched.clear(ownerId: ownerA, expectedRevision: 0)
     assertFailure(.revisionConflict) { try relaunched.clear(ownerId: ownerA, expectedRevision: 1) }
 
     store.items[account] = revisionOneBytes
-    assertFailure(.tampered, "the deleted envelope never replays") { try relaunched.load(ownerId: ownerA) }
+    XCTAssertNil(try relaunched.load(ownerId: ownerA), "the deleted envelope put back is the remnant again, never current state")
+    assertFailure(.revisionConflict) {
+      try relaunched.replace(ownerId: ownerA, expectedRevision: 1, contents: OfflineWalletContents(grants: [], receipts: []))
+    }
+    store.items.removeValue(forKey: account)
+
+    try relaunched.clear(ownerId: ownerA, expectedRevision: 0)
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared), "clearing nothing finishes the fence")
+    store.items[account] = revisionOneBytes
+    assertFailure(.tampered, "and from then on the envelope is a rollback") { try relaunched.load(ownerId: ownerA) }
     store.items.removeValue(forKey: account)
 
     XCTAssertEqual(
       try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 2)
     XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 2, slot: .present))
+  }
+
+  func testAFinishedClearNeverReadsTheRetiredEnvelopeEvenWhenOnlyTheWalletItemIsRestored() throws {
+    let store = MemoryWalletStore()
+    let account = OfflineWallet.walletAccount(ownerId: ownerA)
+    let wallet = OfflineWallet(store: store)
+    _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    let revisionOneBytes = try XCTUnwrap(store.items[account])
+    try wallet.clear(ownerId: ownerA, expectedRevision: 1)
+    XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared))
+
+    store.items[account] = revisionOneBytes
+    assertFailure(.tampered) { try wallet.load(ownerId: ownerA) }
+    assertFailure(.tampered) { try wallet.clear(ownerId: ownerA, expectedRevision: 0) }
+    assertFailure(.tampered) { try wallet.clear(ownerId: ownerA, expectedRevision: 1) }
+    assertFailure(.tampered) {
+      try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+    }
+    XCTAssertEqual(store.items[account], revisionOneBytes, "the rolled-back bytes stay for reconciliation")
+    XCTAssertEqual(try wallet.discardCorrupt(ownerId: ownerA), .tampered)
+    XCTAssertTrue(store.items.isEmpty)
   }
 
   // MARK: - Lost or discarded fence history retires the integrity key
@@ -1141,7 +1194,7 @@ final class OfflineWalletTests: XCTestCase {
     let revisionThreeBytes = try XCTUnwrap(store.items[account])
     let oldKey = try XCTUnwrap(store.items[keyAccount])
 
-    store.items[fenceAccount] = Data(repeating: 0xEE, count: 40)
+    store.items[fenceAccount] = Data([OfflineWallet.envelopeVersion]) + Data(repeating: 0xEE, count: 40)
     assertFailure(.tampered) { try wallet.load(ownerId: ownerA) }
     XCTAssertEqual(try wallet.discardCorrupt(ownerId: ownerA), .tampered)
     XCTAssertTrue(store.items.isEmpty, "wallet, fence and key are retired together")
@@ -1279,7 +1332,7 @@ final class OfflineWalletTests: XCTestCase {
   }
 
   func testCrashAfterEveryPersistedWriteOfAClearNeverReplaysTheDeletedEnvelope() throws {
-    for crashAt in 1...2 {
+    for crashAt in 1...3 {
       let store = MemoryWalletStore()
       let account = OfflineWallet.walletAccount(ownerId: ownerA)
       let wallet = OfflineWallet(store: store)
@@ -1288,23 +1341,31 @@ final class OfflineWalletTests: XCTestCase {
       store.crashAfterWrite(crashAt)
       XCTAssertThrowsError(try wallet.clear(ownerId: ownerA, expectedRevision: 1), "clear, crash after write \(crashAt)")
       store.clearCrash()
-      XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 1, slot: .cleared), "write \(crashAt)")
+      XCTAssertEqual(
+        try storedFence(store, ownerId: ownerA),
+        OfflineWalletFence(revision: 1, slot: crashAt < 3 ? .clearing : .cleared), "write \(crashAt)")
+      XCTAssertEqual(store.items[account] != nil, crashAt == 1, "write \(crashAt)")
 
       let relaunched = OfflineWallet(store: store)
-      if crashAt == 1 {
-        assertFailure(.tampered, "write \(crashAt): the retired envelope is a remnant, not a wallet") { try relaunched.load(ownerId: ownerA) }
-        XCTAssertEqual(try relaunched.discardCorrupt(ownerId: ownerA), .tampered, "write \(crashAt)")
-        XCTAssertTrue(store.items.isEmpty, "write \(crashAt)")
-        XCTAssertNil(try relaunched.load(ownerId: ownerA), "write \(crashAt)")
-        XCTAssertEqual(
-          try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 1,
-          "write \(crashAt): fresh history under a fresh key")
+      XCTAssertNil(try relaunched.load(ownerId: ownerA), "write \(crashAt): the clear is committed, so the post-state is read")
+      assertFailure(.notCorrupt, "write \(crashAt): a committed clear is never a fault") { try relaunched.discardCorrupt(ownerId: ownerA) }
+      assertFailure(.revisionConflict, "write \(crashAt)") { try relaunched.clear(ownerId: ownerA, expectedRevision: 1) }
+
+      store.items[account] = revisionOneBytes
+      if crashAt < 3 {
+        XCTAssertNil(try relaunched.load(ownerId: ownerA), "write \(crashAt): the envelope put back is the remnant, not a wallet")
+        assertFailure(.revisionConflict, "write \(crashAt)") {
+          try relaunched.replace(ownerId: ownerA, expectedRevision: 1, contents: OfflineWalletContents(grants: [], receipts: []))
+        }
       } else {
-        XCTAssertNil(try relaunched.load(ownerId: ownerA), "write \(crashAt): the wallet is gone")
-        XCTAssertEqual(
-          try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 2,
-          "write \(crashAt): revisions continue")
+        assertFailure(.tampered, "write \(crashAt): the deleted envelope never replays") { try relaunched.load(ownerId: ownerA) }
       }
+      store.items.removeValue(forKey: account)
+
+      XCTAssertEqual(
+        try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 2,
+        "write \(crashAt): revisions continue past the retired one")
+      XCTAssertEqual(try storedFence(store, ownerId: ownerA), OfflineWalletFence(revision: 2, slot: .present), "write \(crashAt)")
       store.items[account] = revisionOneBytes
       assertFailure(.tampered, "write \(crashAt): the deleted envelope never replays") { try relaunched.load(ownerId: ownerA) }
     }
