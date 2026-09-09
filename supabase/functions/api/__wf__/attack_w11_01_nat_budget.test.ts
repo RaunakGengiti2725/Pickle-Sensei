@@ -370,8 +370,9 @@ Deno.test(
     // Each peer's own token: correctly signed, `exp` still 2 s in the future
     // by the edge clock, judged expired by Auth (skew / in-flight expiry).
     const expiring = new Set(
-      Array.from({ length: LIMIT }, (_, i) =>
-        supabaseBearer(`expiring-${i}`, Math.floor(Date.now() / 1000) + 2),
+      Array.from(
+        { length: LIMIT },
+        (_, i) => supabaseBearer(`expiring-${i}`, Math.floor(Date.now() / 1000) + 2),
       ),
     );
     h.respond = (call) =>
@@ -407,7 +408,9 @@ Deno.test(
       return null;
     };
     const signIns: number[] = [];
-    for (const token of bannedSignIns) signIns.push((await postBootstrap(h.handler, ip, token)).status);
+    for (const token of bannedSignIns) {
+      signIns.push((await postBootstrap(h.handler, ip, token)).status);
+    }
     assert(allEqual(signIns, 401), `a banned account's sign-in is 401: ${signIns.join(",")}`);
     const reads: number[] = [];
     for (const token of goneOldBuilds) reads.push((await readMe(h.handler, ip, token)).status);
@@ -433,8 +436,9 @@ Deno.test(
     const h = await loadHarness();
     h.tables.profiles = [profile()];
     const ip = freshIp();
-    const malformed = await repeat(AUTH_ROUTE_LIMIT.limit, () =>
-      send(h.handler, refreshRequest(ip, {})),
+    const malformed = await repeat(
+      AUTH_ROUTE_LIMIT.limit,
+      () => send(h.handler, refreshRequest(ip, {})),
     );
     assert(allEqual(malformed, 400), `an empty body is a validation error: ${malformed.join(",")}`);
     assertEquals(h.calls.filter(isRefreshCall).length, 0, "nothing reached Auth");
@@ -443,7 +447,9 @@ Deno.test(
     assertEquals(
       peer.status,
       200,
-      `a peer's live refresh must rotate; got ${peer.status} Retry-After=${peer.headers.get("Retry-After")}`,
+      `a peer's live refresh must rotate; got ${peer.status} Retry-After=${
+        peer.headers.get("Retry-After")
+      }`,
     );
   },
 );
@@ -454,8 +460,9 @@ Deno.test(
     const h = await loadHarness();
     h.tables.profiles = [profile()];
     const ip = freshIp();
-    const junk = await repeat(AUTH_ROUTE_LIMIT.limit, () =>
-      postBootstrap(h.handler, ip, `junk-${crypto.randomUUID()}`),
+    const junk = await repeat(
+      AUTH_ROUTE_LIMIT.limit,
+      () => postBootstrap(h.handler, ip, `junk-${crypto.randomUUID()}`),
     );
     assert(allEqual(junk, 401), `junk is refused locally: ${junk.join(",")}`);
     assertEquals(h.calls.filter(isIdTokenCall).length, 0, "nothing reached Auth");
@@ -464,7 +471,9 @@ Deno.test(
     assertEquals(
       peer.status,
       200,
-      `a peer's real sign-in must be served; got ${peer.status} Retry-After=${peer.headers.get("Retry-After")}`,
+      `a peer's real sign-in must be served; got ${peer.status} Retry-After=${
+        peer.headers.get("Retry-After")
+      }`,
     );
   },
 );
@@ -484,7 +493,11 @@ Deno.test(
     await withClock(async (tick) => {
       await stuffEgress(h, ip);
       const novelSession = await readMe(h.handler, ip, supabaseBearer("novel"));
-      assertEquals(novelSession.status, 429, "session-route guesses are gated (candidate pins this)");
+      assertEquals(
+        novelSession.status,
+        429,
+        "session-route guesses are gated (candidate pins this)",
+      );
       tick(60_000); // fresh minute: the 30/min route budgets are not what is under test
       const refreshRefused = () =>
         jsonResponse(400, {
@@ -506,14 +519,15 @@ Deno.test(
       };
       const refreshBefore = h.calls.filter(isRefreshCall).length;
       const idTokenBefore = h.calls.filter(isIdTokenCall).length;
-      const refreshGuesses = await repeat(20, () =>
-        postRefresh(h.handler, ip, `rt-guess-${crypto.randomUUID()}`),
+      const refreshGuesses = await repeat(
+        20,
+        () => postRefresh(h.handler, ip, `rt-guess-${crypto.randomUUID()}`),
       );
-      const idTokenGuesses = await repeat(20, () =>
-        postBootstrap(h.handler, ip, googleIdToken(OTHER_USER_ID)),
+      const idTokenGuesses = await repeat(
+        20,
+        () => postBootstrap(h.handler, ip, googleIdToken(OTHER_USER_ID)),
       );
-      const reachedAuth =
-        h.calls.filter(isRefreshCall).length -
+      const reachedAuth = h.calls.filter(isRefreshCall).length -
         refreshBefore +
         (h.calls.filter(isIdTokenCall).length - idTokenBefore);
       assertEquals(
@@ -572,8 +586,13 @@ Deno.test(
     );
     for (const response of attacker) {
       const text = await response.text();
-      const wire = `${[...response.headers.entries()].map(([k, v]) => `${k}:${v}`).join("\n")}\n${text}`;
-      assert(!/authfail|shard|liveness|credential/i.test(wire), `internal vocabulary leaked: ${wire}`);
+      const wire = `${
+        [...response.headers.entries()].map(([k, v]) => `${k}:${v}`).join("\n")
+      }\n${text}`;
+      assert(
+        !/authfail|shard|liveness|credential/i.test(wire),
+        `internal vocabulary leaked: ${wire}`,
+      );
       assert(!digests.some((d) => wire.includes(d)), "a credential digest leaked on the wire");
     }
   },
@@ -752,7 +771,9 @@ Deno.test(
         "",
       ];
       const statuses: number[] = [];
-      for (const body of odd) statuses.push((await send(h.handler, refreshRequest(ip, body))).status);
+      for (const body of odd) {
+        statuses.push((await send(h.handler, refreshRequest(ip, body))).status);
+      }
       assert(
         statuses.every((s) => s >= 400 && s < 500),
         `boundary bodies are client errors, never 5xx: ${statuses.join(",")}`,
@@ -765,10 +786,10 @@ Deno.test(
       h.respond = (call) =>
         isRefreshCall(call) && bodyField(call, "refresh_token") === bogus
           ? jsonResponse(400, {
-              error: "invalid_grant",
-              error_description: "Invalid Refresh Token: Refresh Token Not Found",
-              error_code: "refresh_token_not_found",
-            })
+            error: "invalid_grant",
+            error_description: "Invalid Refresh Token: Refresh Token Not Found",
+            error_code: "refresh_token_not_found",
+          })
           : null;
       const padded = [bogus, ` ${bogus}`, `${bogus} `, `\t${bogus}\n`];
       const replays: number[] = [];
