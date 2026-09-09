@@ -367,7 +367,12 @@ function durableRespond(call: RecordedCall): Response | null {
       delivery: "settled",
       status: "result_recorded",
       reason_code: null,
-      financial_disposition: params.p_receipt.ticket === null ? "not_applicable" : "consumed",
+      financial_disposition:
+        params.p_receipt.ticket === null
+          ? "not_applicable"
+          : params.p_receipt.billingDisposition === "joint_verification_required"
+            ? "consumed"
+            : "reserved",
       result_id: String(params.p_receipt.resultId),
     };
     durable.set(key, { sha256: params.p_receipt_sha256, row });
@@ -723,6 +728,7 @@ Deno.test(
     assertEquals(out[0].delivery, "settled");
     assertEquals(out[0].reconciliation?.financialDisposition, "not_applicable");
     assertEquals(out[1].delivery, "settled");
+    assertEquals(out[1].reconciliation?.financialDisposition, "reserved");
     const params = settleCalls();
     assertEquals(params.length, 2);
     assertEquals(params[0].p_receipt.ticket, null);
@@ -827,7 +833,12 @@ Deno.test(
     const message = (body.error as { message: string }).message;
     assert(!message.includes("XX000") && !message.includes("injected"), message);
     assert(
-      logs.some((line) => line.includes("[api]")),
+      logs.some(
+        (entry) =>
+          entry.level === "error" &&
+          typeof entry.args[0] === "string" &&
+          entry.args[0].includes("[api]"),
+      ),
       "failure detail belongs in the logs",
     );
     assertEquals(h.callsTo(RELEASE_RPC).length, 0);
@@ -1113,29 +1124,25 @@ Deno.test({
       assertEquals(settledE.delivery, "settled");
       assertEquals(await ledgerEvents(sql, ticketB), ["allocated", "consumed"]);
 
-      // The owner reads every verdict of its own; the table itself takes no
-      // client writes and no session-less call settles anything.
-      const own = await inTx(sql, 1, (tx) =>
-        tx.unsafe<{ receipt_id: string; status: string }[]>(
-          `select receipt_id, status from public.offline_receipt_settlements order by id`,
-        ),
+      // Every verdict is durable, in delivery order (superuser view); the
+      // table itself takes no client reads or writes — the RPC is its only
+      // reader and writer — and no session-less call settles anything.
+      const rows = await sql.unsafe<{ receipt_id: string; status: string; user_id: string }[]>(
+        `select receipt_id, status, user_id from public.offline_receipt_settlements
+         where user_id = '${U(1)}' order by id`,
       );
       assertEquals(
-        own.map((r) => r.status),
+        rows.map((r) => [r.receipt_id, r.status]),
         [
-          "result_recorded",
-          "reconciliation_required",
-          "reconciliation_required",
-          "reconciliation_required",
-          "result_recorded",
+          [recA.receiptId, "result_recorded"],
+          [recB.receiptId, "reconciliation_required"],
+          [recC.receiptId, "reconciliation_required"],
+          [recD.receiptId, "reconciliation_required"],
+          [recE.receiptId, "result_recorded"],
         ],
       );
-      await createUser(sql, 2);
-      const foreign = await inTx(sql, 2, (tx) =>
-        tx.unsafe(`select 1 from public.offline_receipt_settlements`),
-      );
-      assertEquals(foreign.length, 0);
       for (const statement of [
+        `select 1 from public.offline_receipt_settlements`,
         `insert into public.offline_receipt_settlements (receipt_id, receipt_sha256, user_id, owner_id, installation_key_id, grant_id, grant_jws_sha256, operation_id, result_id, full_output_sha256, billing_disposition, lifecycle_sequence, status, financial_disposition, receipt)
          values ('x', '${"0".repeat(64)}', '${U(1)}', '${U(1)}', 'k', '${GRANT_ID}', '${"0".repeat(64)}', 'op', 'res', '${"0".repeat(64)}', 'not_chargeable', 1, 'result_recorded', 'not_applicable', '{}'::jsonb)`,
         `update public.offline_receipt_settlements set status = 'result_recorded' where receipt_id = '${recB.receiptId}'`,
