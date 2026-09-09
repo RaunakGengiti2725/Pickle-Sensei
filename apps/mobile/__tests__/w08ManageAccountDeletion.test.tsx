@@ -2724,38 +2724,38 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
           } finally {
             act(() => first.unmount());
           }
+
+          // The Keychain answers again on a later launch: the journaled
+          // operation is the one that is armed and confirmed — no second
+          // request beside it.
           keychain.up();
+          await advance(60_000);
+          const second = renderScreen();
+          try {
+            await openDeleteSheet(second);
+            expect(allText(second)).toContain('Delete your account?');
+            await pressWhenArmed(second, 'Permanently delete');
+            await act(async () => {});
+            expect(calls('delete-request')).toHaveLength(1);
+            expect(calls('delete-confirm')).toHaveLength(1);
+            expect(bodyOf(calls('delete-confirm')[0]!)).toMatchObject({
+              operationId: deletionId(10),
+            });
+            expect(journalRows()).toMatchObject([
+              { operation_id: deletionId(10), phase: 'receipt_verified' },
+            ]);
+            expectDeleted(second);
+          } finally {
+            act(() => second.unmount());
+          }
         } finally {
           keychain.restore();
-        }
-
-        // The Keychain answers again on a later launch: the journaled
-        // operation is the one that is armed and confirmed — no second
-        // request beside it.
-        await advance(60_000);
-        const second = renderScreen();
-        try {
-          await openDeleteSheet(second);
-          expect(allText(second)).toContain('Delete your account?');
-          await pressWhenArmed(second, 'Permanently delete');
-          await act(async () => {});
-          expect(calls('delete-request')).toHaveLength(1);
-          expect(calls('delete-confirm')).toHaveLength(1);
-          expect(bodyOf(calls('delete-confirm')[0]!)).toMatchObject({
-            operationId: deletionId(10),
-          });
-          expect(journalRows()).toMatchObject([
-            { operation_id: deletionId(10), phase: 'receipt_verified' },
-          ]);
-          expectDeleted(second);
-        } finally {
-          act(() => second.unmount());
         }
       });
     });
 
     describe('a 409 deletion_in_progress refusal is re-checked once its pacing has passed', () => {
-      it('stands within the server\'s Retry-After; afterwards the sheet re-asks under the same job and arms the challenge it is given', async () => {
+      it("stands within the server's Retry-After; afterwards the sheet re-asks under the same job and arms the challenge it is given", async () => {
         let requests = 0;
         route({
           'delete-request': () => {
@@ -2829,7 +2829,11 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
             expectAlreadyConfirmed(again);
             expectNotDeleted(again);
             expect(journalRows()).toMatchObject([
-              { owner_id: OWNER_A, operation_id: null, phase: 'request_unknown' },
+              {
+                owner_id: OWNER_A,
+                operation_id: null,
+                phase: 'request_unknown',
+              },
             ]);
             expect(journalDocument(journalRows()[0]!).jobId).toBe(jobId);
           } finally {
@@ -2839,7 +2843,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       });
     });
 
-    it('one failed status read after the server said "in progress" keeps "Deletion in progress" and the next poll completes from the receipt', async () => {
+    it('one failed status read after the server said "in progress" is unknown — never re-armed, never "nothing deleted", never deleted — and the paced retry completes only from the receipt', async () => {
       let polls = 0;
       route({
         'delete-request': () => reply('delete-request', requestPayload()),
@@ -2871,24 +2875,42 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         expect(allText(renderer)).toContain(IN_PROGRESS_TITLE);
         expect(journalRows()).toMatchObject([{ phase: 'observing' }]);
 
-        // The first poll fails to read the status; the server's last word
-        // was "in progress", and a failed read does not unsay it.
+        // The first poll fails to read the status. The confirmation was
+        // sent and the server has not said what became of it since: the
+        // outcome is unknown — not "nothing deleted", not a re-armed
+        // challenge, not deleted — and the same operation stays journaled.
         await advance(3_000);
         expect(calls('delete-status')).toHaveLength(1);
-        expect(allText(renderer)).toContain(IN_PROGRESS_TITLE);
-        expect(allText(renderer)).not.toContain(UNKNOWN_TITLE);
-        expect(allText(renderer)).not.toContain('may have completed');
-        expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
-        expect(buttonLabels(renderer)).toEqual(['Close']);
+        const text = allText(renderer);
+        expect(text).toContain(UNKNOWN_TITLE);
+        expect(text).not.toContain('Delete your account?');
+        expect(text).not.toContain('Nothing was deleted');
+        expect(text).not.toContain(SURVEY_TITLE);
+        expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(0);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'observing' },
+        ]);
+        expect(journalDocument(journalRows()[0]!)).toMatchObject({
+          serverState: 'unknown',
+        });
         expectNotDeleted(renderer);
 
-        // Polling continues on its own and completes only from the receipt.
-        await advance(3_000);
+        // The retry is paced by the journal and re-asks the SAME operation;
+        // the server's "in progress" resumes observing, and only the
+        // receipt completes it.
+        const paced = journalDocument(journalRows()[0]!);
+        expect(Number(paced.nextAttemptAtMs)).toBeGreaterThan(Date.now());
+        await pressWhenArmed(renderer, 'Retry deletion');
         expect(calls('delete-status')).toHaveLength(2);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(allText(renderer)).toContain(IN_PROGRESS_TITLE);
         expectNotDeleted(renderer);
         await advance(3_000);
         expect(calls('delete-status')).toHaveLength(3);
-        expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'receipt_verified' },
+        ]);
         expectDeleted(renderer);
       } finally {
         act(() => renderer.unmount());
