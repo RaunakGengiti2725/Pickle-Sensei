@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W08-06-r1",
@@ -18,6 +24,27 @@
       "label": "adversary-W08-06-r1",
       "phase": "adversary",
       "prompt_sha256": "ad73ff66e7000d384ef57996ac92601478c4ebae2cff91a93ce7e04427477233",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W08-06-r2",
+      "phase": "implement",
+      "prompt_sha256": "1956b9de8798fd1e39f77c1785d0e0e683682274c0433fdce6a21a506e0e7a4b",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W08-06-r2",
+      "phase": "review",
+      "prompt_sha256": "b2950ceab76072c63711b82cdc5e5d943e543590572d4c0b6d4fc30e0803514c",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W08-06-r2",
+      "phase": "adversary",
+      "prompt_sha256": "da925a7830b9719f0cbdf08fea69e3d4dd4b7736b0ebbef0a2085b2dd6323c4b",
       "role": "adversary",
       "status": "completed"
     }
@@ -224,9 +251,184 @@
         "verdict": "request_changes"
       },
       "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21ee874c-bdf6-4a9b-a371-eda7de181457/attack_e2e_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6668c6e5-b4af-4591-a156-55b3a8a3961a/attack_boundaries_final.log"
+        ],
+        "attack_branch": "devin/pp/w08-06/attack-4d7ccb87",
+        "attack_branch_sha": "089b32b92222c09c0c0633f9c89b649c2729c9c0",
+        "attacked_sha": "4d7ccb87e21143947eb00eb7595d66c04436583c",
+        "attacks_tried": 17,
+        "breaks": [
+          {
+            "expected": "Per the package objective and AGENTS.md ('unknown/corrupt state never becomes ... successful deletion'): a deletion the worker refused to certify must not be reported as completed with a receipt through another surface. Either the durable row carries last_error_code=completion_unverified (so /delete-status reports it) or the receipt is withheld until the residue is cleared/inventoried by a service-side path. The candidate's own re-verification guards only the confirm/claim surface, not /delete-status.",
+            "observed": "VERIFIED on 4d7ccb87 through the real Edge handler + real PostgREST v12.2.3 + disposable Postgres: after Apple revoke, RevenueCat delete and auth.users DELETE, the post-Auth sweep finds a player_rank_state row → POST /v1/me/delete-confirm answers 503 with no `deleted`/`completionReceipt`, logs completion_unverified/player_rank_state. But api_private.account_deletion_operations already reads phase=completed, completed_at set, lease_token=null, last_error_code=null (the auth.users AFTER DELETE trigger record_account_deletion_auth_absence() marks completed and clears the lease, so fail_account_deletion_operation() returns stale_lease and never records completion_unverified). GET /v1/me/delete-status (the capability the app polls after a 503) returns 200 state=completed with a completionReceipt; the owner's bearer now gets 401 so the sweep can never be re-run. AssertionError: worker withheld completion (residue in player_rank_state) but durable phase=completed last_error_code=null and /delete-status state=completed with a receipt",
+            "repro": "cd supabase/functions/api/__wf__ && ./xc_pg_up.sh (or any disposable postgres:16 with all migrations applied, XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres) && XC_PG_URL=... ./attack_w0806_r2_pgrst_up.sh && XC_PG_URL=... XC_PGRST_URL=http://127.0.0.1:3011 XC_PGRST_JWT_SECRET=w0806-attack-jwt-secret-at-least-32-bytes-long deno test -A --config deno.json --filter \"r2 #2 \" attack_w0806_r2_e2e.test.ts  (exit 1)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w0806_r2_e2e.test.ts (ATTACK W08-06 r2 #2)",
+            "title": "Residue found after Auth deletion: confirm reply withholds completion (503, no receipt) but the durable operation is already `completed`, /delete-status hands the receipt out, and no trace of `completion_unverified` is recorded"
+          },
+          {
+            "expected": "The sweep's retry budget should be bounded at the wire level (INVENTORY_READ_ATTEMPTS reads, or SDK retries disabled/accounted for) so a single degraded namespace cannot hold the confirm reply past the client's deadline; the 10 s per-page abortSignal does not cover SDK-level retry backoff.",
+            "observed": "VERIFIED: one namespace (consent_records) answering a bare 503 (no Retry-After) after Auth deletion costs 12 GET reads on the wire (installed @supabase/postgrest-js@2.112.4 retries idempotent GETs on 503 with ~1 s/2 s/4 s backoff — read from node_modules, not assumed — and INVENTORY_READ_ATTEMPTS=3 multiplies that) and holds the confirm reply for 21050 ms; the durable row already says `completed` (same root cause as break #2). apps/mobile ManageAccount/deletion transport deadline is 15 s (MOBILE_CONFIRM_TIMEOUT_MS in the test mirrors the app constant), so the app times out client-side while the server is still sweeping. With 429 + Retry-After (attack #3) the SDK does NOT retry and the budget is exactly 3 reads — the retry budget is therefore inconsistent across upstream failure modes.",
+            "repro": "same env as above; cd supabase/functions/api/__wf__ && XC_PG_URL=... XC_PGRST_URL=http://127.0.0.1:3011 XC_PGRST_JWT_SECRET=w0806-attack-jwt-secret-at-least-32-bytes-long deno test -A --config deno.json --filter \"r2 #3b\" attack_w0806_r2_e2e.test.ts  (exit 1, ~21 s)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w0806_r2_e2e.test.ts (ATTACK W08-06 r2 #3b)",
+            "title": "Steady 503 on one namespace page: SDK retries × worker attempts = 12 wire reads and ~21 s before the confirm reply, past the mobile confirm request timeout (15 s)"
+          },
+          {
+            "expected": "The package objective is 'legal.ts/support copy match the retained ... behaviour'; every table the candidate itself labels retained-after-deletion should be disclosed (what is kept, for how long) in Privacy §7, or the classification should not be `retained`.",
+            "observed": "VERIFIED: ACCOUNT_DELETION_UNREAD_TABLES marks free_rating_ledger, webhook_events and api_private.account_deletion_operations as `retained`. PRIVACY_POLICY_TEXT §7 discloses the identity ledger and the webhook/billing audit log, but contains no statement about the deletion operation record (owner id, timestamps, error codes) that survives account deletion. AssertionError: Privacy §7 does not disclose the post-deletion retention of api_private.account_deletion_operations. Free-rating wording parity across Privacy/Terms/support/in-app copy and prohibited-term checks PASSED within the same test.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=... XC_PGRST_URL=... XC_PGRST_JWT_SECRET=... deno test -A --config deno.json --filter \"r2 #9\" attack_w0806_r2_e2e.test.ts  (exit 1; the copy assertions need no DB but the file gates all tests on the env)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w0806_r2_e2e.test.ts (ATTACK W08-06 r2 #9)",
+            "title": "Retention disclosure parity gap: Privacy §7 does not disclose the retained api_private.account_deletion_operations record, although the candidate classifies it as `retained`"
+          }
+        ],
+        "package_id": "W08-06",
+        "summary": "Attacked W08-06 candidate 4d7ccb87 (branch devin/pp/w08-06/impl-r2; `git rev-parse HEAD` = 4d7ccb87e21143947eb00eb7595d66c04436583c) with 17 fresh executable attacks pushed (no force) to devin/pp/w08-06/attack-4d7ccb87 @ 089b32b92222c09c0c0633f9c89b649c2729c9c0 (3 new files only: __wf__/attack_w0806_r2_e2e.test.ts, __wf__/attack_w0806_r2_boundaries.test.ts, __wf__/attack_w0806_r2_pgrst_up.sh; no production code or candidate-owned tests touched; no PR; production Supabase untouched — disposable postgres:16 @127.0.0.1:55433 + postgrest/postgrest:v12.2.3 @127.0.0.1:3011).\n\nCandidate acceptance re-run before attacking (VERIFIED, earlier in session): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0; AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=... PICKLE_AUDIT_PG_URL=... deno task test` → 859 passed | 0 failed | 0 ignored, exit 0 (with only XC_PG_URL set, 12 tests are ignored — AC2 needs both env vars to reach ignored==0).\n\nFinal attack runs (VERIFIED, logs attached):\n(a) wire-level, real Edge handler through real PostgREST + real SQL RPCs/triggers: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres XC_PGRST_URL=http://127.0.0.1:3011 XC_PGRST_JWT_SECRET=w0806-attack-jwt-secret-at-least-32-bytes-long deno test -A --config deno.json attack_w0806_r2_e2e.test.ts` → exit 1, 10 executed | 7 passed | 3 failed | 0 ignored (21 s). Every test asserts the EXPECTED invariant, so the 3 failures are the 3 confirmed breaks (#2 P1, #3b P2, #9 P3).\n(b) in-memory boundary suite against the exported inventory/keyset functions: `deno test -A --config deno.json attack_w0806_r2_boundaries.test.ts` → exit 0, 7 executed | 7 passed | 0 failed | 0 ignored. `deno fmt --check`, `deno check`, `deno lint` on both files: exit 0.\n\nAttack categories covered (≥6): concurrency/double submit (#7), corrupt/partial persisted state after crash-equivalent Auth cascade (#2), network failure at each step — 429+Retry-After (#3), 5xx (#3b), redirect (#8), fetch rejection/retry budget (#14) — boundary values (#4 1,500 rows/3 pages, #6 1,003 rows with hostile keyset values, #10 invalid page sizes, #11 malformed/overflowing pages, #12 replayed cursor rows, #13 INVENTORY_MAX_PAGES exhaustion), replay/duplicate identities (#1 same provider identity re-signup inherits spent ratings, #12), unauthorised roles allowed AND denied paths on real RLS (#5 owner+API key allowed; other user, bearer w/o API key → empty page; anon and service_role → denied on client-owned tables), keyset/filter injection (#15 column-name injection, #16 owner UUID canonicalisation/rejection), free-rating conservation (#1), copy parity (#9).\n\nSurvived (14 of 17): clean deletion sweeps all 14 namespaces as the owner bearer with API key and the free_rating_ledger + re-signup inheritance is conserved (#1); steady 429 costs exactly 3 reads, 503 generic (#3); 1,500- and 1,003-row residue paged correctly with the `or=(…)` keyset, no repeat/miss, residue withheld (#4, #6); RLS isolation (#5); concurrent double-confirm performs Apple/RC/Auth deletion once with one receipt (#7); 302 on a pre-flight probe is not followed, nothing irreversible runs, lease released with completion_unverified, same bearer recovers (#8); all in-memory boundary/corruption/replay/injection attacks fail closed as `unread`/throw (#10–#16). Invalid assumptions I discarded (not counted as breaks): an early 429/503 mix test that mis-modelled SDK retries; a 503 with Retry-After:1 that the SDK honoured (so the delay is honoured, not ignored).\n\nNote for the reviewer: on the attack branch `deno task test` will additionally pick up the 7 boundary tests and report the 10 e2e tests as ignored unless XC_PG_URL/XC_PGRST_URL/XC_PGRST_JWT_SECRET are set (same env-gating pattern as the repo's existing live-PG tests). INFERRED (not run): the P1 root cause is the AFTER DELETE trigger record_account_deletion_auth_absence() clearing lease_token, which makes fail_account_deletion_operation() return stale_lease — read from supabase/migrations/20260907001500_account_deletion_operations.sql."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ee09132-da0e-42f2-bd1f-fd1175bb44e4/cand_ac1.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED at HEAD 4d7ccb87 (repo root). Output: `Check file:///…/supabase/functions/api/index.ts`, exit 0 (plus the pre-existing workspace-root nodeModulesDir warning). Base run at 8ba4849d also exit 0: https://la-hacks-rttothemoon.devinenterprise.com/attachments/bfacf70f-c6a7-44f2-9ede-11dd8c4fa096/base_ac1.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f0aa010-a17b-423b-9fe6-63dc30f6df75/cand_ac2.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 859,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED at HEAD 4d7ccb87 against disposable docker postgres:16 (container pickle-xc-pg, shim_auth.sql + all migrations). Summary line `ok | 859 passed (31 steps) | 0 failed (1m49s)` — no `ignored` count (PICKLE_AUDIT_PG_URL supplied so the W06 live-parity tests run instead of being ignored; db_migrations_rls_indexes.audit boots its own docker container). Base run at 8ba4849d: `ok | 843 passed (31 steps) | 0 failed`, exit 0: https://la-hacks-rttothemoon.devinenterprise.com/attachments/b91d5285-6cec-4d41-8045-d1fae780607e/base_ac2.log. Regression proof: account_deletion_complete.test.ts on BASE_SHA => exit 1, `FAILED | 0 passed | 1 failed` (SyntaxError: module does not provide export ACCOUNT_DELETION_UNREAD_TABLES) https://la-hacks-rttothemoon.devinenterprise.com/attachments/7eac1e7b-9779-4334-82f0-921fea812554/regress_base.log; on HEAD `ok | 16 passed | 0 failed`. One earlier AC2 attempt failed environmentally (audit test's docker pg_isready race: `connection to server on socket … failed` while the container was still initialising) and was re-run unchanged; both subsequent full runs passed 859/0. Also VERIFIED: `pnpm format:check` exit 0, `git diff --check` exit 0.",
+            "passed": 859,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: committed account_deletion_complete.test.ts (fails on base with a missing-export SyntaxError, exit 1), then implemented inside write_paths with the single edge-index wiring hunk. Reused from r1 only the sound parts (namespace registry idea, Apple→RevenueCat→Auth order, legal wording direction); replaced the service-role reader with authenticated owner reads and added pre-flight probing + completed-claim re-verification per the round-1 findings. Verified with the exact acceptance commands, pnpm format:check, git diff --check, plus live PostgreSQL inspection of grants, RLS policies, FK delete rules and is_api_request()/is_active_session().",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ee09132-da0e-42f2-bd1f-fd1175bb44e4/cand_ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f0aa010-a17b-423b-9fe6-63dc30f6df75/cand_ac2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bfacf70f-c6a7-44f2-9ede-11dd8c4fa096/base_ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b91d5285-6cec-4d41-8045-d1fae780607e/base_ac2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7eac1e7b-9779-4334-82f0-921fea812554/regress_base.log"
+        ],
+        "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w08-06/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/accountDeletionOperations.ts",
+          "supabase/functions/api/legal.ts",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts",
+          "supabase/functions/api/__wf__/account_routes.test.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts"
+        ],
+        "head_sha": "4d7ccb87e21143947eb00eb7595d66c04436583c",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — edge-index serial group (held by this package): single additive wiring hunk passing `readOwnerNamespacePage` (authenticated owner client, RLS *_select_own) into the deletion worker deps and forwarding the namespace failure detail to the existing console.error diagnostics; one import line added.",
+          "supabase/functions/api/__wf__/account_deletion_operations.test.ts — test fixture only: default `readOwnerNamespacePage` (empty inventory) so legacy unit fixtures satisfy the new mandatory dependency; no assertion weakened.",
+          "supabase/functions/api/__wf__/account_routes.test.ts — test fixture only: route fixture seeds every registered owner namespace and answers paged owner-inventory GETs with owner filtering / PostgREST ordering / service-role denial; no assertion weakened.",
+          "supabase/functions/api/__wf__/routesHarness.ts — shared test harness: models owner-filtered paged reads, service-role denial on client-owned tables and the Auth-delete cascade across registered owner namespaces; required for the existing route suites to exercise the new production wiring."
+        ],
+        "package_id": "W08-06",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/account_deletion_complete.test.ts (commit 899c202e; 16 tests: registry completeness/uniqueness/key+select columns, unread/retained classification, residue withheld, clean cascade, pagination clamp => unread, page errors retried then unread, malformed/cross-owner rows => unread, invalid owner, pre-flight probe blocks Apple/RevenueCat/Auth, completed-claim re-verification, diagnostics detail, legal/support/Terms ledger parity, live-PG grants/FK-rule/schema coverage, live-PG cascade + free_rating_ledger survival + post-deletion owner read)"
+        ],
+        "residual_risks": [
+          "SQL-owned completion checkpoint (INFERRED from supabase/migrations/20260907001500_account_deletion_operations.sql, trigger api_private.record_account_deletion_auth_absence): the durable operation row still flips to phase='completed'/completed_at when auth.users disappears, before the Edge post-Auth sweep runs. The Edge confirm/claim surfaces now re-verify before exposing `deleted:true` (and the same-bearer 401 after Auth deletion is avoided by the pre-flight probe), but GET /v1/account/delete-status reads `completed_at` via read_account_deletion_status and can still report `completed` if residue appears between the pre-flight probe and the post-Auth sweep. Closing that fully needs a NEW migration (sql serial group, not held by W08-06) that defers completed_at until an Edge-recorded inventory checkpoint; flagged for coordinator routing.",
+          "Hosted-Supabase parity is INFERRED: the owner reads are exercised live against the shim + migrations on docker postgres:16 (RLS depends on JWT sub + x-pickle-api-key only, not on auth.users/auth.sessions), but no test hits hosted PostgREST; if the hosted JWT verifier rejects a token whose auth.users row is gone, the post-Auth sweep would return page errors and the confirm would answer a retryable 503 (completion_unverified) rather than a false `deleted:true`.",
+          "Fixed inventory page budget: an owner with more rows than the W07-06 page budget in one namespace is reported `unread` (retryable 503) rather than silently truncated; a service-side claim retry reruns the sweep after cascades complete.",
+          "One AC2 attempt failed environmentally (db_migrations_rls_indexes.audit's pg_isready race against a freshly started docker postgres); rerun unchanged passed twice. Not caused by this package."
+        ],
+        "summary": "Defect on BASE_SHA (8ba4849d): supabase/functions/api/accountDeletionOperations.ts (runClaimedDeletion, ~L440-520 on base) returned `deleted:true` as soon as the SQL receipt reported `completed`; nothing in the Edge path inventoried the owner's namespaces, so residue rows (e.g. a leftover `shots` row) were reported as a completed deletion; there was no owner-namespace registry or pagination (W07-06 `readOwnerInventory` existed but was unused by deletion); index.ts (~L4215-4240) wired no inventory reader; legal.ts support page / Terms 8 / Terms 12 did not state that deletion leaves used free ratings spent nor what the identity ledger retains (Privacy §7/§8 did). The r1 candidate additionally read 16 tables with the service-role PostgREST client, which the migrations' privilege model forbids (service_role SELECT only on billing_entitlements/account_external_credentials/webhook_events) — VERIFIED on the disposable DB.\n\nFix (HEAD 4d7ccb87, two commits: 899c202e test-first, 4d7ccb87 implementation): (1) `ACCOUNT_OWNER_NAMESPACES` registers all 14 owner-scoped, owner-readable tables with owner + key columns; `ACCOUNT_DELETION_UNREAD_TABLES` classifies every other account-linked table as cascade_only (analysis_permit_tombstones, account_deletion_feedback ON DELETE SET NULL, api_private.billing_verification_tickets), rpc_owned (account_deletion_requests, account_external_credentials — fenced behind the deletion RPCs) or retained (free_rating_ledger, webhook_events, api_private.account_deletion_operations), and the live-PG test asserts this partition covers every FK to auth.users plus the ledger. (2) `verifyOwnerNamespacesEmpty` runs the W07-06 keyset-paginated `readOwnerInventory` per namespace: page errors are retried up to 3 times then `unread`; clamped/oversized pages, repeated cursors, malformed or cross-owner rows and budget exhaustion are `unread`; only a complete, empty inventory is `empty`; anything else withholds completion (`completion_unverified`, retryable 503). (3) A pre-flight one-row readability probe of every namespace runs BEFORE Apple revocation, RevenueCat deletion and the Auth-delete intent, so an unreadable inventory can never be discovered only after the caller's session has been destroyed (resolves adversary break #2: the sweep that can block now runs while the bearer is still valid). (4) After Auth deletion the full sweep runs again before `deleted:true`, and an already-`completed` claim is re-verified before its receipt is handed out (resolves adversary break #1 for the confirm/claim surface). (5) index.ts wires `readOwnerNamespacePage` through the deleting user's authenticated client (`authed.db`, RLS `*_select_own` + restrictive `api_requests_only`, which depend only on the JWT `sub` and the API key — VERIFIED from pg_policies / is_api_request() on the disposable DB), never the service role, so no grant/RLS change is needed and REVIEW.md's service-role boundary is respected. Order stays Apple revoke → RevenueCat delete → Auth delete. (6) legal.ts support page, Terms §8 and Terms §12 now say deletion does not restore used free ratings, that only a one-way hash of the sign-in identity + scored count is kept (no email/name/account id), and point at Privacy §7/§8 (APP_STORE_SUBMISSION.md-compliant wording; no new product claims). Test harness/fixtures were extended to model owner-filtered paged reads, service-role denial and the Auth cascade so the existing 843 tests still pass alongside the 16 new ones (859/0/0)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2722bf06-6999-4285-aef9-8940960a8bbb/cand_ac1.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei && npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC1",
+            "note": "VERIFIED at 4d7ccb87 (repo root, Deno 2.5.6 via npx). Output `Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts`, exit 0; only the pre-existing workspace-root `lock`/`nodeModulesDir` warnings. Also VERIFIED: `npx prettier --check` (3.9.6) on all 7 changed files exit 0; `git diff --check 8ba4849d..4d7ccb87` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ea4257e-94ac-4b0f-9ccd-f4f0480219ae/cand_ac2.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 859,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-06-AC2",
+            "note": "VERIFIED at 4d7ccb87 against a disposable docker postgres:16 (container w0806-review-pg, port 55433) initialised with the repo helper `XC_PG_CONTAINER=w0806-review-pg XC_PG_PORT=55433 ./supabase/functions/api/__wf__/xc_pg_up.sh` (shim_auth.sql + every migration, exit 0). Summary line `ok | 859 passed (31 steps) | 0 failed (1m39s)`; no `| N ignored` segment (the 8 grep hits for 'ignored' in the log are test names such as 'limit ignored'/'body ignored'). account_deletion_complete.test.ts contributes 16/16 incl. both live-PG tests. Regression proof (kind=test package has no regress id, recorded here): base worktree at 8ba4849d with ONLY account_deletion_complete.test.ts copied over, `deno test -A --no-check --config deno.json account_deletion_complete.test.ts` -> exit 1, `FAILED | 0 passed | 1 failed` (SyntaxError: '../accountDeletionOperations.ts' does not provide export 'ACCOUNT_DELETION_UNREAD_TABLES') https://la-hacks-rttothemoon.devinenterprise.com/attachments/2fa9ba64-ab7f-43f6-96db-c05788ebac2a/regress_base_newfile.log; same file on the candidate -> exit 0, `ok | 16 passed | 0 failed` https://la-hacks-rttothemoon.devinenterprise.com/attachments/1cb303e6-68af-4a2d-bb07-1aceb5a52ddb/regress_cand_newfile.log.",
+            "passed": 859,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2722bf06-6999-4285-aef9-8940960a8bbb/cand_ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ea4257e-94ac-4b0f-9ccd-f4f0480219ae/cand_ac2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2fa9ba64-ab7f-43f6-96db-c05788ebac2a/regress_base_newfile.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1cb303e6-68af-4a2d-bb07-1aceb5a52ddb/regress_cand_newfile.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Residual (pre-existing, not introduced by this package; INFERRED from supabase/migrations/20260907001500_account_deletion_operations.sql L427-456): the trigger api_private.record_account_deletion_auth_absence flips the durable operation row to phase='completed'/completed_at when auth.users disappears, before the Edge post-Auth sweep. The confirm/claim surfaces now re-verify before answering deleted:true, but POST /v1/me/delete-status (read_account_deletion_status) still reports completed from completed_at. Closing it needs a NEW migration in the `sql` serial group (not held by W08-06); route to the coordinator.",
+          "Hosted-Supabase parity UNKNOWN: the post-Auth owner sweep relies on PostgREST accepting the deleting user's still-valid access token after auth.users is gone. VERIFIED on disposable postgres:16 that RLS (`*_select_own` + restrictive `api_requests_only` -> is_api_request()) depends only on JWT sub + x-pickle-api-key, so rows are neither hidden nor refused; if the hosted gateway rejected the JWT instead, the confirm answers a retryable 503 completion_unverified (fail-closed), never a false deleted:true.",
+          "After the post-Auth sweep finds residue, fail_account_deletion_operation is called on a row whose lease_token the SQL trigger already cleared; the RPC answers {outcome:'stale_lease'} (no throw) and the worker still returns 503 completion_unverified. Behaviour is correct (fail-closed) but the lease-release call is a no-op in that path.",
+          "Header comment of the new test file (account_deletion_complete.test.ts L13-15) says billing/credential tables are read by the service role; the implementation reads billing_entitlements as the owner and never reads account_external_credentials via PostgREST. Comment-only inaccuracy in a new file.",
+          "The two live-PG tests in account_deletion_complete.test.ts use Deno's `ignore` when XC_PG_URL/PICKLE_AUDIT_PG_URL is unset (same convention as the existing W06 live-parity suites); AC2 was run with both set, summary line carries no `ignored` count."
+        ],
+        "package_id": "W08-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4d7ccb87e21143947eb00eb7595d66c04436583c",
+        "scope_violation": false,
+        "summary": "APPROVE W08-06 at 4d7ccb87e21143947eb00eb7595d66c04436583c (base 8ba4849d).\n\nSCOPE (VERIFIED, `git diff --stat 8ba4849d..4d7ccb87`, 7 files, +1315/-31): 3 files in write_paths; supabase/functions/api/index.ts is the `edge-index` serial group HELD by this package and the edit is a single wiring hunk (+1 import, +readOwnerNamespacePage through `authed.db`, onFailure detail spread); the 3 other __wf__ files (account_deletion_operations.test.ts +2 fixture lines, account_routes.test.ts, routesHarness.ts) are under no serial group and are the minimal fixture/harness changes required because `readOwnerNamespacePage` became a mandatory worker dependency and the route suites exercise the real handler. No migrations, no supabase/tests, no mobile files touched. scope_violation=false.\n\nSHIPPED BEHAVIOUR (VERIFIED by reading index.ts L4206-4250): confirmAccountDeletion passes readOwnerNamespacePage built on the deleting user's authenticated client (Bearer access token + apikey + x-pickle-api-key), so the new registry/probe/sweep runs in the production confirm path; not dead code.\n\nACCEPTANCE (both re-run by me): AC1 exit 0; AC2 `ok | 859 passed (31 steps) | 0 failed`, ignored==0, on disposable postgres:16 built by xc_pg_up.sh. Regression: new test fails on base (exit 1, missing export) and passes on candidate (16/16).\n\nINVARIANTS (VERIFIED): no removed lines are comments anywhere in the diff (existing comments untouched); no `any`/@ts-ignore/eslint-disable/`|| true`/.only/sanitize flags added; no test assertions weakened (the removed stand-alone GET stubs for account_deletion_requests/profiles in account_routes.test.ts are replaced by the generic owner-table handler; account_deletion_requests is now unstubbed, which is stricter). Service-role boundary respected: pg_policies on the disposable DB show every one of the 14 namespaces has `*_select_own` (auth.uid()) + restrictive `api_requests_only` (is_api_request(): JWT sub + x-pickle-api-key only, no auth.users/auth.sessions dependency), and the live-PG pin asserts service_role has SELECT only on billing_entitlements/account_external_credentials/webhook_events. free_rating_ledger stays service-only, no FK, classified `retained`; the live-PG test seeds scored_count=2, deletes auth.users, and asserts the ledger row survives — free-rating conservation across deletion preserved. Order Apple revoke -> RevenueCat delete -> Auth delete preserved and pinned. Fail-closed: unread/malformed/clamped/cross-owner/over-budget inventory => `completion_unverified` (503), never deleted:true; pre-flight probe blocks all irreversible steps while the bearer is still valid; already-completed claims are re-verified. `completion_unverified` is an accepted p_error_code in fail_account_deletion_operation (migration L412-414). Keyset `or` filter format matches the existing index.ts uses (L2668/L2676). Legal copy: added support/Terms text uses only disclosed facts (one-way hash + scored count, no email/name/account id; points to Privacy §7/§8), contains no Android/Google Play/guest mode/Live Court/DUPR/competitor/accuracy/superlative terms.\n\nNON-BLOCKING: delete-status route can still report `completed` from the SQL completed_at before the Edge sweep (pre-existing; needs a `sql`-group migration — coordinator routing); hosted PostgREST acceptance of the deleted user's JWT is UNKNOWN but fails closed; stale header comment in the new test file. Mac verification not applicable (Edge + test harness only). Disposable container and base worktree removed after review; no push, no PR, no production touch.",
+        "verdict": "approve"
+      },
+      "round": 2
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "REQUEUE",
   "wave_id": "wave-7-keep"
 }

@@ -1,0 +1,59 @@
+{
+  "agents": [],
+  "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W01-05",
+  "requeued_from": {
+    "branch": "devin/pp/w01-05/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w01-05/attack-b7b9ac7f",
+      "adversary_breaks": [
+        {
+          "expected": "purgeOwnerData resolves and leaves zero rows for the owner in every owner-scoped table including analysis_reservation_refusal; PRAGMA foreign_key_check empty.",
+          "observed": "VERIFIED: after one partial outcome, purgeOwnerData(db, owner) rejects with 'Error: FOREIGN KEY constraint failed' (transaction rolled back); remaining rows for the deleted owner: local_capture=1, local_analysis_record=1, analysis_run_journal=1, analysis_reservation_refusal=1. INFERRED from src/auth/authStore.ts:1866-1878: the deletion flow retries LOCAL_PURGE_ATTEMPTS times against the same deterministic FK failure and reports localPurge='failed', so a server-confirmed account deletion leaves every capture/record/journal row on the device. Regression introduced by b7b9ac7f (new table in runJournalSchema.ts with FOREIGN KEY (owner_key, operation_id) REFERENCES analysis_run_journal but not added to src/data/repository.ts OWNER_SCOPED_TABLES).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A7 account deletion'",
+          "severity": "P0",
+          "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+          "title": "Account deletion local purge fails whenever the owner has a settled refusal: analysis_reservation_refusal is missing from OWNER_SCOPED_TABLES and its FK to analysis_run_journal aborts purgeOwnerData, so ALL of the deleted owner's local data survives on the device"
+        },
+        {
+          "expected": "Same-operation retry returns {kind:'partial'} (mechanics record stored, completion_kind 'partial', capture 'analyzed') exactly as the plain path does after the same fault (candidate test 'a same-operation resume after a failed record write never reserves again').",
+          "observed": "VERIFIED: runOriginalCaptureAnalysis with failNext('INTO local_analysis_record') after the 409 refusal -> attempt is terminal/permitId=null/terminalReason=reservation_rejected/technicalFailure=null; after reconcileOriginalCaptureAnalysis, two further runOriginalCaptureAnalysis calls both return {kind:'unavailable', cause:'recovery_pending'}; finalRecordId=null, records=0, capture status 'awaiting_model', reservations=1 (no re-reserve, no charge — billing invariants hold, but the user can never obtain the mechanics partial for this capture).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A3 process death'",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+          "title": "Shipping original-operation path: a record write failure after the settled refusal strands the operation forever (recovery_pending on every retry, capture stays awaiting_model) — the 'resume without reserving again' fix only works on the plain runCaptureAnalysis path"
+        },
+        {
+          "expected": "A durable, replayable outcome (a mechanics-only partial or at least the technique-confirmation record) for the settled refusal; the same operation must not stay 'unavailable'/recovery_pending forever.",
+          "observed": "VERIFIED: first run -> {kind:'unavailable', cause:null} (runCaptureAnalysis.ts guard `if (withheld && record.kind === 'needs_technique_confirmation') return { kind: 'unavailable', reason: withheld.message }`), attempt terminal/permit-less/reservation_rejected, records=0, finalRecordId=null, capture 'awaiting_model'; second run -> {kind:'unavailable', cause:'recovery_pending'}. reservations=1, shots=0, access snapshot unchanged (no charge).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A4 AUTO DETECT'",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+          "title": "Shipping original-operation path with AUTO DETECT (declaredStroke=null) + typed refusal: mechanics are discarded ({kind:'unavailable'}), nothing is stored, and every subsequent run of the same operation is recovery_pending — permanent dead end"
+        }
+      ],
+      "judge": [
+        "reviewer verdict 'request_changes'",
+        "reviewer blocking issues: 1",
+        "invariant violations: 1",
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [
+        "apps/mobile/src/analysis/runJournalSchema.ts:94-104 (new table `analysis_reservation_refusal`, written by apps/mobile/src/analysis/partialOutcome.ts:135 saveReservationRefusal) breaks local account-deletion purge for every owner who has ever received a partial. The table has a non-deferred `FOREIGN KEY (owner_key, operation_id) REFERENCES analysis_run_journal(owner_key, operation_id)` with no ON DELETE action, the production DB runs with `PRAGMA foreign_keys = ON` (apps/mobile/src/data/db.ts:286), and the table is NOT in OWNER_SCOPED_TABLES (apps/mobile/src/data/repository.ts:104-114). purgeOwnerData() therefore fails at repository.ts:145 (`DELETE FROM analysis_run_journal WHERE owner_key = ?`) with `FOREIGN KEY constraint failed` (SQLITE_CONSTRAINT_FOREIGNKEY, errcode 787) and rolls back the WHOLE owner purge — shots, captures, analysis records, journal and refusal rows all survive on the device after the server confirms account deletion; authStore.ts:1870-1878 retries LOCAL_PURGE_ATTEMPTS times (deterministic failure) and settles localPurge='failed'. VERIFIED (reviewer probe, not committed): runPartial() from the candidate's own suite, then purgeOwnerData(db, owner) → Error 'FOREIGN KEY constraint failed', journalAfter=1, refusalAfter=1; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/34fa7d0b-27ac-4e2e-94f4-f4af27a8dcdd/probe-purge-fk.log, probe source https://la-hacks-rttothemoon.devinenterprise.com/attachments/92363bbb-552e-4d21-bdfa-9a07d11858e1/probe-purge.test.tsx.txt (local artifacts/review-w01-05/). Existing accountDeletion.test.ts uses a mocked db so it cannot catch this. Violates the purge contract (repository.ts:133-137) and owner/cross-account isolation. Fixable inside write_paths (mobile-data group is not held): e.g. declare the FK `ON DELETE CASCADE` (or drop the FK and bind by identity checks, or store the refusal metadata in the existing local_analysis_record row) so `DELETE FROM analysis_run_journal WHERE owner_key=?` removes the owner's refusal rows; add a regression test in w01PartialOutcome.test.tsx that runs a partial and then purgeOwnerData() against the real migrated SQLite harness and asserts zero owner rows in analysis_reservation_refusal and analysis_run_journal."
+      ],
+      "review_invariants": [
+        "Owner isolation / account deletion: after any partial outcome, purgeOwnerData() fails with FOREIGN KEY constraint failed and the deleted owner's entire local bucket persists on the device (see blocking_issues[0]; VERIFIED)."
+      ]
+    },
+    "head_sha": "b7b9ac7f11d8b5ae3ef0f73710ef2e978664b93a"
+  },
+  "rounds": [],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-10-keep"
+}

@@ -1,0 +1,65 @@
+{
+  "agents": [
+    {
+      "label": "implement-W04-01-r7",
+      "phase": "implement",
+      "prompt_sha256": "bc1cbf2c9ce059a32cc411ccaa28828b8b010f61ecd61f3a5839775ad32f51e4",
+      "role": "implementer",
+      "status": "launched"
+    },
+    {
+      "label": "implement-W04-01-r7-c2",
+      "phase": "implement",
+      "prompt_sha256": "b149763ad5e86645acb3afb1474472e57d6ee035ebde165a5129cbc773d3e0bf",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-01",
+  "requeued_from": {
+    "branch": "devin/pp/w04-01/impl-r6",
+    "findings": {
+      "adversary_branch": "devin/pp/w04-01/attack-4a082970",
+      "adversary_breaks": [
+        {
+          "evidence": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/baf6bf0b-d648-4859-bcb3-cb897acbf5a0/deno_ATK-05_run1.log",
+          "expected": "Exactly one terminal event per ticket; the loser returns offline.ticket_consumed / offline.ticket_released. Root cause (INFERRED from the migration): both RPCs and guard_offline_ledger_event() serialise only on pg_advisory_xact_lock(access_lock_key(v_uid)) — a per-CALLER lock — while identity recovery makes one ticket owned by two uids; the unique key is (ticket_id, event), so 'consumed' and 'released' rows never collide and the trigger's 'already has a terminal event' check is read-committed. The same shape (two callers, different locks) is what enforce_scored_shot_permit/consume rely on for conservation, so the ticket lock must be per ticket (or the ledger needs a one-terminal-per-ticket unique index).",
+          "observed": "Account A (identity I) and account B (identity J) are both recreated after the original account (I+J) that allocated ticket T is deleted; both re-register the installation key and both recover T through issue_offline_grant(). consume_offline_ticket(T) on B overlapping release_offline_ticket(T) on A: consume=accepted, release=accepted, ledger for T = allocated,consumed,released (a scored shot exists AND a released row exists for the same ticket).",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres with shim_auth.sql + all migrations> deno test -A --no-check --config deno.json --filter \"ATK-05\" attack_w04_01_offline_grants_adversary.test.ts  (VERIFIED: exit 1, 0 passed / 1 failed, deterministic across 3 runs)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_01_offline_grants_adversary.test.ts",
+          "title": "Two terminal events on one ticket (consumed AND released) when recovered sibling accounts settle it concurrently"
+        },
+        {
+          "evidence": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9c2a3dc2-7f78-419a-b13c-f6d7c44bfcb6/deno_ATK-01_run1.log",
+          "expected": "The RPC is documented 'Idempotent device registration'; both submits return result=accepted with the same device_id and one row exists. The select ... for update on a row that does not exist yet does not serialise the two inserts (no per-user advisory lock or on conflict path in register_offline_device()).",
+          "observed": "Two overlapping transactions for the same (user, installation key) with no existing row: one returns accepted; the other raises SQLSTATE 23505 duplicate key value violates unique constraint \"offline_devices_user_id_installation_key_id_key\" (the Edge fn would surface this as a 5xx).",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres> deno test -A --no-check --config deno.json --filter \"ATK-01\" attack_w04_01_offline_grants_adversary.test.ts  (VERIFIED: exit 1, 0 passed / 1 failed, deterministic across 3 runs)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_01_offline_grants_adversary.test.ts",
+          "title": "register_offline_device() is not idempotent under a double submit: the second overlapping call raises 23505 instead of returning accepted"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "4a082970d28de651965a657d36ae2fff07be34be"
+  },
+  "rounds": [
+    {
+      "round": 7
+    }
+  ],
+  "start_round": 7,
+  "status": "RUNNING",
+  "wave_id": "wave-11-keep"
+}

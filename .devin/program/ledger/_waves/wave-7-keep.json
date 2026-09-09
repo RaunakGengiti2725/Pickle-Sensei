@@ -1,0 +1,88 @@
+{
+  "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+  "integration_order": {
+    "sql": [
+      "W07-03",
+      "W04-01"
+    ]
+  },
+  "packages": {
+    "W04-01": {
+      "agent_counts": {
+        "completed": 12,
+        "failed": 0,
+        "launched": 12,
+        "requested": 12
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W05-01": {
+      "agent_counts": {
+        "completed": 2,
+        "failed": 0,
+        "launched": 2,
+        "requested": 2
+      },
+      "candidate": null,
+      "status": "BLOCKED_EXTERNAL"
+    },
+    "W05-02": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w05-02/impl-r4",
+        "head_sha": "473ae596339d1e63b29aa4a124fbdeab27e4ccc8",
+        "lane": 1,
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    },
+    "W07-03": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w07-03/impl-r3",
+        "head_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+        "lane": 1,
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "W07-07": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w07-07/impl-r1",
+        "head_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+        "lane": 1,
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W08-06": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-7-keep"
+}

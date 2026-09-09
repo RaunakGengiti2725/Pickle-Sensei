@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W01-05-r1",
@@ -18,6 +24,27 @@
       "label": "adversary-W01-05-r1",
       "phase": "adversary",
       "prompt_sha256": "f86b95ff5aef69b5aa2992549dc6012dd80e3d619b41683787b947378ba9f760",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W01-05-r2",
+      "phase": "implement",
+      "prompt_sha256": "662bea967fc5c510114288138594e6796fff9f00b3a398f34f761b5e49e4e732",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-05-r2",
+      "phase": "review",
+      "prompt_sha256": "225ee6d86cd298fb2254fb4f70bb0aed26662a73a26b86725a7780511b5e1c96",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-05-r2",
+      "phase": "adversary",
+      "prompt_sha256": "7d86ed03c4aefab495b87734ab369bdf054c3f350c7b5d368cfa8f2b28f6eeeb",
       "role": "adversary",
       "status": "completed"
     }
@@ -254,9 +281,265 @@
         "verdict": "approve"
       },
       "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/08c1fe59-d4fc-4d1e-8bcf-8684ec62bd00/attack-final-d493ab2a.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/210ba337-f79b-4aa3-bcd7-22e49a0bc61f/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6293e961-9d93-4a1e-abd0-a5ab55b106dd/ac3-tsc-with-attack.log"
+        ],
+        "attack_branch": "devin/pp/w01-05/attack-b7b9ac7f",
+        "attack_branch_sha": "d493ab2aa0a9ee28247bef8c9f97b61785705f00",
+        "attacked_sha": "b7b9ac7f11d8b5ae3ef0f73710ef2e978664b93a",
+        "attacks_tried": 15,
+        "breaks": [
+          {
+            "expected": "purgeOwnerData resolves and leaves zero rows for the owner in every owner-scoped table including analysis_reservation_refusal; PRAGMA foreign_key_check empty.",
+            "observed": "VERIFIED: after one partial outcome, purgeOwnerData(db, owner) rejects with 'Error: FOREIGN KEY constraint failed' (transaction rolled back); remaining rows for the deleted owner: local_capture=1, local_analysis_record=1, analysis_run_journal=1, analysis_reservation_refusal=1. INFERRED from src/auth/authStore.ts:1866-1878: the deletion flow retries LOCAL_PURGE_ATTEMPTS times against the same deterministic FK failure and reports localPurge='failed', so a server-confirmed account deletion leaves every capture/record/journal row on the device. Regression introduced by b7b9ac7f (new table in runJournalSchema.ts with FOREIGN KEY (owner_key, operation_id) REFERENCES analysis_run_journal but not added to src/data/repository.ts OWNER_SCOPED_TABLES).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A7 account deletion'",
+            "severity": "P0",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Account deletion local purge fails whenever the owner has a settled refusal: analysis_reservation_refusal is missing from OWNER_SCOPED_TABLES and its FK to analysis_run_journal aborts purgeOwnerData, so ALL of the deleted owner's local data survives on the device"
+          },
+          {
+            "expected": "Same-operation retry returns {kind:'partial'} (mechanics record stored, completion_kind 'partial', capture 'analyzed') exactly as the plain path does after the same fault (candidate test 'a same-operation resume after a failed record write never reserves again').",
+            "observed": "VERIFIED: runOriginalCaptureAnalysis with failNext('INTO local_analysis_record') after the 409 refusal -> attempt is terminal/permitId=null/terminalReason=reservation_rejected/technicalFailure=null; after reconcileOriginalCaptureAnalysis, two further runOriginalCaptureAnalysis calls both return {kind:'unavailable', cause:'recovery_pending'}; finalRecordId=null, records=0, capture status 'awaiting_model', reservations=1 (no re-reserve, no charge — billing invariants hold, but the user can never obtain the mechanics partial for this capture).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A3 process death'",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Shipping original-operation path: a record write failure after the settled refusal strands the operation forever (recovery_pending on every retry, capture stays awaiting_model) — the 'resume without reserving again' fix only works on the plain runCaptureAnalysis path"
+          },
+          {
+            "expected": "A durable, replayable outcome (a mechanics-only partial or at least the technique-confirmation record) for the settled refusal; the same operation must not stay 'unavailable'/recovery_pending forever.",
+            "observed": "VERIFIED: first run -> {kind:'unavailable', cause:null} (runCaptureAnalysis.ts guard `if (withheld && record.kind === 'needs_technique_confirmation') return { kind: 'unavailable', reason: withheld.message }`), attempt terminal/permit-less/reservation_rejected, records=0, finalRecordId=null, capture 'awaiting_model'; second run -> {kind:'unavailable', cause:'recovery_pending'}. reservations=1, shots=0, access snapshot unchanged (no charge).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A4 AUTO DETECT'",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Shipping original-operation path with AUTO DETECT (declaredStroke=null) + typed refusal: mechanics are discarded ({kind:'unavailable'}), nothing is stored, and every subsequent run of the same operation is recovery_pending — permanent dead end"
+          },
+          {
+            "expected": "{kind:'unavailable', cause:'recovery_pending'} (or another typed hold) — unknown/corrupt state never becomes an unhandled exception on the analysis path.",
+            "observed": "VERIFIED: after truncating the stored record JSON, runCaptureAnalysis rejects with the raw SQLite UNIQUE error (readPartialReplay returns null, readReservationRefusal resumes, saveAnalysisRecord INSERTs over the existing primary key). No re-reserve, no shot, access unchanged. INFERRED from AnalyzeScreen.tsx:1942-1958: the plain path surfaces error.message verbatim to the user and retries hit the same exception.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A6c corrupt state'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Corrupt stored partial record (torn JSON) makes same-operation replay throw a raw SQLite 'UNIQUE constraint failed: local_analysis_record.owner_key, local_analysis_record.id' error instead of a typed hold"
+          },
+          {
+            "expected": "partialOutcomeMarker falls back to RELEASE_NOT_AUTHORIZED_MESSAGE when the body's message is not a non-blank string (ApiError.message is already coerced by api.ts, so the marker must validate rather than trust it).",
+            "observed": "VERIFIED (5 cases): stored partialOutcome.message = '[object Object]' (rendered on Result), '42', 'not,a,sentence', '   ', and 'HTTP 409' (rendered on Result) for bodies whose error.message is an object/number/array/whitespace/null. Billing/state invariants hold in all cases. Mitigation: the production edge function (supabase/functions/api/index.ts:1520-1527) always sends the string message, so this only reaches users through a non-conforming intermediary.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A5 boundary'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Non-string / blank / absent 409 refusal message is coerced and stored as the authority's statement ('[object Object]', '42', 'not,a,sentence', '   ', 'HTTP 409') and rendered on Result"
+          },
+          {
+            "expected": "Only the exact typed code access.release_not_authorized is a partial; other metadata is unknown state and should hold ({kind:'unavailable'}).",
+            "observed": "VERIFIED: after a refusal whose record write failed, changing analysis_reservation_refusal.reason_code to 'access.paywall_required' makes the resume return {kind:'partial'} with partialOutcome.reasonCode='access.paywall_required' (no re-reserve, no charge). Requires local DB tampering; not reachable from the network.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'A6b corrupt state'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "readReservationRefusal trusts any stored reason_code: durable refusal metadata carrying 'access.paywall_required' is replayed as a partial with a foreign reasonCode"
+          }
+        ],
+        "package_id": "W01-05",
+        "summary": "Attacked candidate b7b9ac7f with 15 real Jest cases (8 attack families) in apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx on branch devin/pp/w01-05/attack-b7b9ac7f @ d493ab2aa0a9ee28247bef8c9f97b61785705f00 (pushed, no force, no PR; candidate production code and tests untouched). Command `cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx` -> exit 1, 15 total, 5 passed, 10 failed, 0 skipped (attack-final-d493ab2a.log). HELD (VERIFIED): A1 concurrent double submit under refusal (1 reservation, 1 partial, replay converges), A2 x2 interleaved account switch after refusal metadata write and during record commit (account_changed, nothing lands for either owner, original owner later resumes to partial without re-reserving), A6a journal later claiming a permit is no longer treated as settled refusal (holds, no re-reserve), A8 offline restart replay + Result render with zero network calls and honest copy. BROKEN: P0 A7 — purgeOwnerData rejects with FOREIGN KEY constraint failed because analysis_reservation_refusal (new in candidate, FK to analysis_run_journal) is absent from OWNER_SCOPED_TABLES, so a server-confirmed account deletion leaves every local row of the deleted owner on the device (authStore retries then reports localPurge='failed'); P1 A3 — original path: record-write failure after settled refusal leaves the operation recovery_pending forever (plain path recovers, original does not); P1 A4 — original path + AUTO DETECT + refusal returns unavailable, stores nothing, then recovery_pending forever; P2 A6c — torn stored record makes replay throw a raw SQLite UNIQUE error (surfaced verbatim by AnalyzeScreen); P3 A5 x5 — non-string/blank/absent 409 message coerced into the authority statement ('[object Object]', 'HTTP 409'…) though production edge fn always sends a string; P3 A6b — tampered reason_code replayed as partial. In every attack (held or broken) the billing invariants held: exactly 1 reservation, 0 local_shot, 0 outbox, accessStore snapshot byte-identical. Acceptance re-runs on candidate: AC1 `npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx` exit 0, 3 suites / 85 tests passed (ac1-candidate.log); AC3 `npx tsc --noEmit` exit 0 on candidate and with the attack file (ac3-tsc-with-attack.log); root `npx eslint` + `npx prettier --check` on the attack file exit 0. UNKNOWN: Apple runtime behaviour (not run — Mac runner off-limits per instructions)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "invariant violations: 1",
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3acd4528-388e-4db0-9848-427f0ac2727a/ac1.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx",
+            "executed": 85,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC1",
+            "note": "VERIFIED on HEAD b7b9ac7f: Test Suites 3 passed/3; Tests 85 passed/85. Local copy at artifacts/w01-05-r2/ac1.log (artifacts/ is git-ignored, hence the uploaded URL).",
+            "passed": 85,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a685278f-5a81-4a4b-954e-01fd3e4954ab/ac2-candidate.log",
+            "command": "git worktree add --detach /home/ubuntu/basewt 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp apps/mobile/__tests__/w01PartialOutcome.test.tsx <basewt>/apps/mobile/__tests__/ && cd <basewt>/apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx  # then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx",
+            "executed": 17,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC2",
+            "note": "PROOF VERIFIED. BASE run (5c1859a8 + ONLY the new test file copied over, node_modules symlinked): command `cd /home/ubuntu/basewt/apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx`, exit_code 1, Test Suites 1 failed/1, Tests 11 failed / 6 passed / 0 skipped / 17 total; base log https://la-hacks-rttothemoon.devinenterprise.com/attachments/b0c39dc4-a869-49a3-a502-64f828cd3c22/ac2-base.log. The 11 base failures are every partial-settlement/replay/Result/free-rating-unchanged/original-path/continuation/message-boundary/local-write-failure test; the 6 that pass on base are the existing-behaviour-preserving cases (transport, 429, 5xx, paywall, unrelated 409, malformed 409). CANDIDATE run on HEAD b7b9ac7f: exit 0, 17 passed/17 (artifact URL).",
+            "passed": 17,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/43fefa09-db67-4f3c-b51d-5f0808738bb2/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC3",
+            "note": "VERIFIED on the final working tree (identical to HEAD b7b9ac7f for all .ts/.tsx sources): no diagnostics, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5297b91c-431e-4d2a-87d2-5c4ad85b81de/ac4-changed-files.log",
+            "command": "npx eslint apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/originalAnalysisOperations.ts apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/analysis/runJournalSchema.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx && npx prettier --check <same 7 files> && pnpm format:check && git diff --check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC4",
+            "note": "VERIFIED: root eslint on all 7 changed files exit 0; prettier --check on the same 7 files exit 0 ('All matched files use Prettier code style!'); root `pnpm format:check` exit 0 and `git diff --check` exit 0 (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/c0e7d0c2-592d-4f00-8385-ab0c8dd6e575/ac4-root.log). The test file's final label tweak was re-checked with prettier before its commit.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: 17-test regression suite committed alone (6d37d563) and proven failing on a pristine BASE_SHA worktree with only that file copied over. Then a minimal general fix confined to apps/mobile/src/analysis/ + ResultScreen.tsx, plus one 7-line AnalyzeScreen routing hunk (declared in out_of_scope_files). Partial is gated on the exact typed refusal only, and every partial commit re-reads the journal row inside the transaction and requires a terminal, permit-less reservation_rejected state so nothing half-settled can be presented as a partial.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3acd4528-388e-4db0-9848-427f0ac2727a/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b0c39dc4-a869-49a3-a502-64f828cd3c22/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a685278f-5a81-4a4b-954e-01fd3e4954ab/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/43fefa09-db67-4f3c-b51d-5f0808738bb2/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5297b91c-431e-4d2a-87d2-5c4ad85b81de/ac4-changed-files.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c0e7d0c2-592d-4f00-8385-ab0c8dd6e575/ac4-root.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6fde5339-97cd-4e3c-aebd-7f50a7b097d9/full-jest.log"
+        ],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w01-05/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/w01PartialOutcome.test.tsx",
+          "apps/mobile/src/analysis/originalAnalysisOperations.ts",
+          "apps/mobile/src/analysis/partialOutcome.ts",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/src/analysis/runJournalSchema.ts",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx",
+          "apps/mobile/src/screens/ResultScreen.tsx"
+        ],
+        "head_sha": "b7b9ac7f11d8b5ae3ef0f73710ef2e978664b93a",
+        "out_of_scope_files": [
+          "apps/mobile/src/screens/AnalyzeScreen.tsx — 7-line additive hunk in publishOutcome() routing `outcome.kind === 'partial'` straight to Result. Not under any serial_group_paths prefix. Required for the objective as behaviour: without it a partial (result:null) falls through to strokeIntentPresentation(), which for a declared/observed disagreement or a predicted_l3 read shows an 'analyzed' phase claiming scoring ran, with showResult:false (hasResult is false), so the honest 'RESULT · BENCHMARK UNAVAILABLE' page would be unreachable on those paths."
+        ],
+        "package_id": "W01-05",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w01PartialOutcome.test.tsx (17 tests; commits 6d37d563 test-first, 01248238 test-only assertion fix)"
+        ],
+        "residual_risks": [
+          "runJournalSchema DDL edits use CREATE TABLE/TRIGGER IF NOT EXISTS: a device whose local DB was created by the 2026-09-07 build (commit 5e2e0052, one day before BASE) keeps the old completion_kind CHECK/trigger, so on THAT device an original-operation partial commit would fail its CHECK and roll back to the pre-existing recovery hold (non-chargeable, no half-delivery) rather than render the partial. No App Store build carries that schema (INFERRED from git history: analysis_logical_operations was introduced 2026-09-07). A table-rebuild migration lives under apps/mobile/src/data/ (mobile-data serial group, not held by this package).",
+          "A typed refusal on a run whose mechanics come back as needs_technique_confirmation returns {kind:'unavailable', reason:<authority message>} (no half-settled confirmation is stored); a replay of the same operation re-runs mechanics without a second reservation and yields the same answer. Intentional: a confirmation continuation needs a live reservation to settle.",
+          "Base/candidate logs are uploaded attachments because artifacts/ is git-ignored in this repo; nothing non-functional was committed.",
+          "Not exercised: real device/iOS runtime (native iOS excluded; UI-driven testing excluded)."
+        ],
+        "summary": "Defects on BASE_SHA (5c1859a8): (1) runCaptureAnalysis.ts mapped an exact typed HTTP 409 access.release_not_authorized from permits.reserve() to {kind:'unavailable'} on every path — mechanics were discarded, nothing was stored, the capture stayed awaiting_model and Result had nothing to render (adversary ATTACK 1 on the AnalyzeScreen original-operation path; the prior candidate guarded it with `if (original || !isReleaseNotAuthorized(error))`). (2) The techniqueConfirmation continuation gate (runCaptureAnalysis.ts, the `existing` branches ≈L1262 and ≈L1475) returned recoveryPendingOutcome() for any row that was not committed/low_confidence before any partial replay could be read, so a settled partial replayed as recovery_pending forever (ATTACK 2). Fix (commit b7b9ac7f): new apps/mobile/src/analysis/partialOutcome.ts (exact typed-refusal predicate, strict PartialOutcomeMarker, result:null conversion, isSettledRefusalRun, durable refusal metadata in a new analysis_reservation_refusal table); runCaptureAnalysis settles the refusal + refusal metadata in one transaction, runs mechanics, stores a result:null record with partialOutcome and marks the capture analyzed with no local_shot/outbox/saveAnalysis/release, for BOTH ordinary and original operations; originalAnalysisOperations gains completion_kind 'partial' (trigger-guarded to a terminal, permit-less reservation_rejected attempt) and validated partial replay in loadCompletion; both continuation gates check readPartialReplay()/readReservationRefusal() before generic hold classification, and a same-operation resume after a failed record write never reserves again; ResultScreen renders 'RESULT · BENCHMARK UNAVAILABLE' with TECHNIQUE_BENCHMARK_UNAVAILABLE + 'RATING NOT CONSUMED' and no score/confidence/range; AnalyzeScreen routes partial to Result. accessStore needed no change: the local free-rating view is only decremented by scored/synced shots, and the tests assert the snapshot is byte-identical before/after a partial (VERIFIED). Non-refusal errors (TypeError, 408/429/5xx, paywall, unrelated 409, malformed body) keep base behaviour (VERIFIED by 6 tests). Commits: 6d37d563 (tests, proven failing on base: 11 failed/6 passed), 01248238 (test-only assertion fix), b7b9ac7f (implementation). Full mobile suite `cd apps/mobile && npx jest --ci --silent`: exit 0, 315 suites passed + 1 skipped (importedRealFootageAnalysis.test.ts, documented in docs/devin/TEST_MATRIX.md), 6081 passed / 1 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6fde5339-97cd-4e3c-aebd-7f50a7b097d9/full-jest.log). No PR opened; pushed without force."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8852e5c2-5e29-464c-821b-a32eb96c01a5/ac1.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx",
+            "executed": 85,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC1",
+            "note": "VERIFIED by reviewer on HEAD b7b9ac7f after `cd apps/mobile && npm ci` (exit 0): Test Suites 3 passed/3; Tests 85 passed/85/0 skipped. Local copy artifacts/review-w01-05/ac1.log (artifacts/ is git-ignored).",
+            "passed": 85,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3d740616-af47-4373-a383-2501d0221689/ac2-candidate.log",
+            "command": "git worktree add --detach /home/ubuntu/basewt 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp apps/mobile/__tests__/w01PartialOutcome.test.tsx /home/ubuntu/basewt/apps/mobile/__tests__/ && (cd /home/ubuntu/basewt/apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx); cd apps/mobile && npx jest --ci __tests__/w01PartialOutcome.test.tsx",
+            "executed": 17,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC2",
+            "note": "PROOF VERIFIED. BASE run (5c1859a8 detached worktree + ONLY apps/mobile/__tests__/w01PartialOutcome.test.tsx copied; no source copied; node_modules symlinked): exit_code 1, Test Suites 1 failed/1, Tests 11 failed / 6 passed / 0 skipped / 17 total; base log https://la-hacks-rttothemoon.devinenterprise.com/attachments/09da92a6-f68a-4803-9bee-f76519ba8b64/ac2-base.log (local artifacts/review-w01-05/ac2-base.log). The 6 base passes are the existing-behaviour-preserving negative cases (transport/429/503/paywall/unrelated 409/malformed 409). CANDIDATE run on HEAD b7b9ac7f: exit 0, 17 passed/17 (local artifacts/review-w01-05/ac2-candidate.log).",
+            "passed": 17,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4097a7e7-8222-45d5-a766-487739551d67/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC3",
+            "note": "VERIFIED on HEAD b7b9ac7f: no diagnostics, exit 0. (A first run before `npm ci` failed only on missing @sentry/* modules — environment, not candidate; after `npm ci` exit 0.) Local artifacts/review-w01-05/ac3-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b340f61-4fe2-4389-b0e9-c3cbddb54517/ac4.log",
+            "command": "npx eslint apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/originalAnalysisOperations.ts apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/analysis/runJournalSchema.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx && npx prettier --check <same 7 files> && git diff --check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC4",
+            "note": "VERIFIED from repo root on HEAD b7b9ac7f: ESLINT_EXIT=0; prettier 'All matched files use Prettier code style!' PRETTIER_EXIT=0; git diff --check exit 0. Local artifacts/review-w01-05/ac4.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8852e5c2-5e29-464c-821b-a32eb96c01a5/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/09da92a6-f68a-4803-9bee-f76519ba8b64/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3d740616-af47-4373-a383-2501d0221689/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4097a7e7-8222-45d5-a766-487739551d67/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b340f61-4fe2-4389-b0e9-c3cbddb54517/ac4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34fa7d0b-27ac-4e2e-94f4-f4af27a8dcdd/probe-purge-fk.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/92363bbb-552e-4d21-bdfa-9a07d11858e1/probe-purge.test.tsx.txt"
+        ],
+        "blocking_issues": [
+          "apps/mobile/src/analysis/runJournalSchema.ts:94-104 (new table `analysis_reservation_refusal`, written by apps/mobile/src/analysis/partialOutcome.ts:135 saveReservationRefusal) breaks local account-deletion purge for every owner who has ever received a partial. The table has a non-deferred `FOREIGN KEY (owner_key, operation_id) REFERENCES analysis_run_journal(owner_key, operation_id)` with no ON DELETE action, the production DB runs with `PRAGMA foreign_keys = ON` (apps/mobile/src/data/db.ts:286), and the table is NOT in OWNER_SCOPED_TABLES (apps/mobile/src/data/repository.ts:104-114). purgeOwnerData() therefore fails at repository.ts:145 (`DELETE FROM analysis_run_journal WHERE owner_key = ?`) with `FOREIGN KEY constraint failed` (SQLITE_CONSTRAINT_FOREIGNKEY, errcode 787) and rolls back the WHOLE owner purge — shots, captures, analysis records, journal and refusal rows all survive on the device after the server confirms account deletion; authStore.ts:1870-1878 retries LOCAL_PURGE_ATTEMPTS times (deterministic failure) and settles localPurge='failed'. VERIFIED (reviewer probe, not committed): runPartial() from the candidate's own suite, then purgeOwnerData(db, owner) → Error 'FOREIGN KEY constraint failed', journalAfter=1, refusalAfter=1; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/34fa7d0b-27ac-4e2e-94f4-f4af27a8dcdd/probe-purge-fk.log, probe source https://la-hacks-rttothemoon.devinenterprise.com/attachments/92363bbb-552e-4d21-bdfa-9a07d11858e1/probe-purge.test.tsx.txt (local artifacts/review-w01-05/). Existing accountDeletion.test.ts uses a mocked db so it cannot catch this. Violates the purge contract (repository.ts:133-137) and owner/cross-account isolation. Fixable inside write_paths (mobile-data group is not held): e.g. declare the FK `ON DELETE CASCADE` (or drop the FK and bind by identity checks, or store the refusal metadata in the existing local_analysis_record row) so `DELETE FROM analysis_run_journal WHERE owner_key=?` removes the owner's refusal rows; add a regression test in w01PartialOutcome.test.tsx that runs a partial and then purgeOwnerData() against the real migrated SQLite harness and asserts zero owner rows in analysis_reservation_refusal and analysis_run_journal."
+        ],
+        "invariant_violations": [
+          "Owner isolation / account deletion: after any partial outcome, purgeOwnerData() fails with FOREIGN KEY constraint failed and the deleted owner's entire local bucket persists on the device (see blocking_issues[0]; VERIFIED)."
+        ],
+        "non_blocking_issues": [
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts (original-operation path): refusal metadata is only persisted for non-original runs (`refused && !original`), so a local record-write failure AFTER a settled typed refusal on the original path leaves the operation in a permanent recovery hold (candidate test 'a failed record write on the original-operation path…' asserts the retry never becomes partial). Non-chargeable and honest (HOLD), but asymmetric with the non-original path which resumes to the partial; consider persisting the refusal for analysis_execution_attempts too.",
+          "apps/mobile/src/screens/ResultScreen.tsx renders the server-supplied refusal `partial.message` verbatim (bounded to 512 chars). Copy governance for that string lives server-side; acceptable for a first-party authority, but note it is not covered by APP_STORE_SUBMISSION.md copy review.",
+          "runJournalSchema.ts changes use CREATE TABLE/TRIGGER IF NOT EXISTS: a device whose DB was created by the 2026-09-07 build keeps the old completion_kind CHECK/trigger, so an original-operation partial commit rolls back to the recovery hold there (implementer-acknowledged; INFERRED no shipped build carries that schema). Any FK fix for the blocking issue has the same IF NOT EXISTS caveat for already-created dev/TestFlight DBs.",
+          "apps/mobile/src/flow/sessionNative.ts:227-233 returns a partial (result:null) record as `status:'ready'`; this mirrors how AUTO DETECT abstained result:null records already flow, so no fabricated score, but session-flow consumers were not exercised by the new suite."
+        ],
+        "package_id": "W01-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "b7b9ac7f11d8b5ae3ef0f73710ef2e978664b93a",
+        "scope_violation": false,
+        "summary": "Independent review of W01-05 candidate b7b9ac7f vs BASE 5c1859a8. SCOPE: 7 files changed; 6 under write_paths; apps/mobile/src/screens/AnalyzeScreen.tsx is a 7-line additive routing hunk (outcome.kind==='partial' → Result), listed in out_of_scope_files, not under any unheld serial-group path, and genuinely required for the objective as behaviour → scope_violation=false. ACCEPTANCE (all re-run by reviewer): AC1 exit 0, 85/85; AC2 proof holds — base+only new test file: exit 1, 11 failed/6 passed/17; candidate: exit 0, 17/17; AC3 tsc exit 0; AC4 eslint+prettier+git diff --check exit 0. AUDIT: no test weakened/skipped/deleted (only a new 901-line suite added); no `any`/@ts-ignore/eslint-disable/|| true/timeouts; no existing comment lines modified; no migrations, native, ios, src/data or edge files touched; partial is gated on the exact typed 409 access.release_not_authorized only, settled transactionally, permit-less, no local_shot/outbox/saveAnalysis/release/finalize, free-rating snapshot byte-identical, replay never reserves again; Result copy ('RESULT · BENCHMARK UNAVAILABLE', 'MECHANICS RECORDED · RATING NOT CONSUMED', TECHNIQUE_BENCHMARK_UNAVAILABLE) shows no score/confidence/range and contains no prohibited terms. BLOCKING (VERIFIED by reviewer probe): the new `analysis_reservation_refusal` table has a non-deferred FK to analysis_run_journal with no ON DELETE action, foreign_keys=ON in production, and it is not in OWNER_SCOPED_TABLES (src/data, unheld group) — so after any partial, purgeOwnerData() fails with 'FOREIGN KEY constraint failed' and the whole owner purge rolls back; account deletion leaves the deleted owner's local data on the device (authStore localPurge='failed' deterministically). Fixable within write_paths (ON DELETE CASCADE / drop FK / store refusal in the record) plus a regression test against the real SQLite harness → verdict request_changes, not reject.",
+        "verdict": "request_changes"
+      },
+      "round": 2
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "REQUEUE",
   "wave_id": "wave-5"
 }
