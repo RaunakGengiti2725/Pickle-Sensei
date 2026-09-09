@@ -10270,6 +10270,66 @@ begin
     raise exception 'U3: a no-ticket receipt is recorded without touching the ledger (got %, %, %, %)',
       v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
   end if;
+  -- a Pro (no-ticket) receipt is judged against its output exactly like a
+  -- ticketed one: contradictory evidence HOLDs, it is never recorded
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12b', uri, 'uri-key-1', g, null, null, 'op-12b', '00000000-0000-4000-8000-000000004823', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004823', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket not_chargeable receipt beside a scored output is held (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, v.result_id;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12b', uri, 'uri-key-1', g, null, null, 'op-12b', '00000000-0000-4000-8000-000000004823', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004823', null, 'scored'), null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: the held no-ticket receipt replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12c', uri, 'uri-key-1', g, null, null, 'op-12c', '00000000-0000-4000-8000-000000004824', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004824', null, 'abstained'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket chargeable receipt beside an abstention is held (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12d', uri, 'uri-key-1', g, null, null, 'op-12d', '00000000-0000-4000-8000-000000004825', 'joint_verification_required'),
+    null, null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_missing'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket chargeable receipt without its output is held as evidence_missing (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12e', uri, 'uri-key-1', g, null, null, 'op-12e', '00000000-0000-4000-8000-000000004826', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004827', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket receipt whose output names another result is held (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  -- and consistent lease evidence is still recorded, with nothing financial
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12f', uri, 'uri-key-1', g, null, null, 'op-12f', '00000000-0000-4000-8000-000000004828', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004828' then
+    raise exception 'U3: a no-ticket not_chargeable receipt without an output is recorded (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, v.result_id;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12g', uri, 'uri-key-1', g, null, null, 'op-12g', '00000000-0000-4000-8000-000000004829', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004829', null, 'abstained'), null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004829' then
+    raise exception 'U3: a no-ticket not_chargeable receipt beside its abstention is recorded (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, v.result_id;
+  end if;
+  if u_probe.events(uri) <> 'allocated:2,consumed:2' then
+    raise exception 'U3: lease receipts never touch the allocation ledger (got %)', u_probe.events(uri);
+  end if;
 end $$;
 
 -- U4: the settlement table is closed to the owner role — no read, no write —
@@ -10322,7 +10382,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   perform set_config('request.jwt.claims', claims, true);
-  if u_probe.recorded(uri) <> 16 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
+  if u_probe.recorded(uri) <> 22 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
     raise exception 'U4: refused calls persist nothing (got %)', u_probe.settlements(uri);
   end if;
 end $$;
@@ -10386,7 +10446,7 @@ begin
     raise exception 'U5: a hold can never be recorded as consumed';
   exception when check_violation then null;
   end;
-  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 16
+  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 22
      or (select status || '/' || financial_disposition from public.offline_receipt_settlements
          where user_id = uri and receipt_id = 'rcpt-3') <> 'reconciliation_required/reserved' then
     raise exception 'U5: the refused writes leave every settlement intact';
