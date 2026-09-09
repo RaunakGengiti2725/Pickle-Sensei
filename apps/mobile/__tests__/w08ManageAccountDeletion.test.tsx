@@ -2539,6 +2539,504 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     });
   });
 
+  describe('unsent confirmations, stale refusals and Keychain items that say nothing', () => {
+    const UNKNOWN_TITLE = 'Deletion status unknown';
+    const IN_PROGRESS_TITLE = 'Deletion in progress';
+    const SURVEY_TITLE = "What's making you leave?";
+    const MAY_HAVE_COMPLETED = 'The request may have completed';
+    const UNREADABLE = 'could not be read';
+
+    function journalDocument(row: unknown): Record<string, unknown> {
+      const { document } = row as { document: string };
+      return JSON.parse(document) as Record<string, unknown>;
+    }
+
+    function resetCleanupSpies() {
+      useAuthStore.setState({
+        completeAccountDeletion: jest.fn(() => Promise.resolve()),
+      });
+      mockShowBrandNotice.mockClear();
+    }
+
+    /** The Keychain stops answering reads — the way
+     * errSecInteractionNotAllowed / errSecNotAvailable surface — from
+     * `down()` on; writes stay real so the request step itself succeeds. */
+    function keychainReadOutage() {
+      let down = false;
+      const get = jest
+        .spyOn(Keychain, 'getGenericPassword')
+        .mockImplementation(async options => {
+          if (down) throw new Error('errSecNotAvailable');
+          return realGetGenericPassword(options);
+        });
+      return {
+        down: () => {
+          down = true;
+        },
+        up: () => {
+          down = false;
+        },
+        restore: () => get.mockRestore(),
+      };
+    }
+
+    /** Nothing left the device for this challenge: no confirmation, no
+     * status check, the row still `ready` — and the sheet says so. */
+    function expectConfirmationUnsent(
+      renderer: TestRenderer.ReactTestRenderer,
+    ) {
+      expect(calls('delete-confirm')).toHaveLength(0);
+      expect(calls('delete-status')).toHaveLength(0);
+      expect(journalRows()).toMatchObject([
+        { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'ready' },
+      ]);
+      const text = allText(renderer);
+      expect(text).not.toContain(UNKNOWN_TITLE);
+      expect(text).not.toContain(MAY_HAVE_COMPLETED);
+      expect(text).not.toContain('may have completed');
+      expect(text).not.toContain('contact support');
+      expect(text).toContain('Nothing was deleted');
+      expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
+      expect(sheetButtons(renderer, 'Close')).toHaveLength(0);
+      expectNotDeleted(renderer);
+    }
+
+    /** Owner A's request is refused with 409 account.deletion_in_progress
+     * (another device confirmed a deletion). */
+    async function refusedAsInProgress() {
+      const renderer = renderScreen();
+      try {
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expectAlreadyConfirmed(renderer);
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: null, phase: 'request_unknown' },
+        ]);
+        expect(journalDocument(journalRows()[0])).toMatchObject({
+          lastIssue: 'in_progress',
+        });
+      } finally {
+        act(() => renderer.unmount());
+      }
+    }
+
+    async function completeNormally() {
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        await act(async () => {});
+        expect(journalRows()).toMatchObject([{ phase: 'receipt_verified' }]);
+        expectDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+      resetCleanupSpies();
+    }
+
+    function expectCompletedFromReceipt(
+      renderer: TestRenderer.ReactTestRenderer,
+    ) {
+      const text = allText(renderer);
+      expect(text).not.toContain(UNREADABLE);
+      expect(text).not.toContain('contact support');
+      expect(text).not.toContain('may have completed');
+      expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expectDeleted(renderer);
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).toHaveBeenCalledWith(expect.objectContaining({ ownerKey: OWNER_A }));
+    }
+
+    it('a Keychain read failure when "Permanently delete" is pressed sends nothing: the challenge stays armed with a nothing-deleted message, never "status unknown / may have completed", and the next press confirms once the Keychain answers', async () => {
+      const keychain = keychainReadOutage();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () => reply('delete-status', statusPayload('pending')),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        expect(journalRows()).toMatchObject([{ phase: 'ready' }]);
+        keychain.down();
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        await act(async () => {});
+
+        expectConfirmationUnsent(renderer);
+        expect(allText(renderer)).toContain('Delete your account?');
+        expect(sheetButtons(renderer, 'Keep my account')).toHaveLength(1);
+        expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+
+        // Whatever the sheet offers, it must never poll the status of a
+        // confirmation that was never sent.
+        await pressWhenArmed(renderer, 'Permanently delete');
+        await act(async () => {});
+        expectConfirmationUnsent(renderer);
+
+        // The Keychain answers again: the SAME challenge confirms, once.
+        keychain.up();
+        await pressWhenArmed(renderer, 'Permanently delete');
+        await act(async () => {});
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(bodyOf(calls('delete-confirm')[0]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'receipt_verified' },
+        ]);
+        expectDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+        keychain.restore();
+      }
+    });
+
+    it('re-entry over the row of an unsent confirmation agrees with the first presentation: no unknown outcome, no status call, and the same challenge once the Keychain answers', async () => {
+      const keychain = keychainReadOutage();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () => reply('delete-status', statusPayload('pending')),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        keychain.down();
+        await press(first, sheetButton(first, 'Permanently delete'));
+        await act(async () => {});
+        expectConfirmationUnsent(first);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      // Same launch, Keychain still down: the row says nothing was sent.
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectConfirmationUnsent(second);
+        expect(allText(second)).not.toContain(UNREADABLE);
+      } finally {
+        act(() => second.unmount());
+      }
+
+      // The Keychain answers again: the same operation resumes, armed.
+      keychain.up();
+      const third = renderScreen();
+      try {
+        await openDeleteSheet(third);
+        expect(allText(third)).not.toContain(SURVEY_TITLE);
+        expect(allText(third)).not.toContain(UNKNOWN_TITLE);
+        expect(calls('delete-request')).toHaveLength(1);
+        await pressWhenArmed(third, 'Permanently delete');
+        await act(async () => {});
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(bodyOf(calls('delete-confirm')[0]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expectDeleted(third);
+      } finally {
+        act(() => third.unmount());
+        keychain.restore();
+      }
+    });
+
+    it('a confirmation the server HAS received keeps its unknown outcome when the Keychain later fails to answer — the row proves the send', async () => {
+      const keychain = keychainReadOutage();
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('pending')),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        await act(async () => {});
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
+        expectUnknownOutcome(renderer);
+
+        keychain.down();
+        await pressWhenArmed(renderer, 'Retry deletion');
+        await act(async () => {});
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expectUnknownOutcome(renderer);
+        expect(allText(renderer)).not.toContain('Nothing was deleted');
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+        keychain.restore();
+      }
+    });
+
+    it('a 409 deletion_in_progress refusal is re-checked with the server once its retry window has passed: a later launch re-asks, and an accepted request mints a fresh operation for the same owner', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return requests === 1
+            ? reply('delete-request', deletionInProgressError(), 409)
+            : reply('delete-request', requestPayload(20));
+        },
+        'delete-confirm': () => reply('delete-confirm', completionPayload(20)),
+      });
+      await refusedAsInProgress();
+
+      // The server's confirmed operation ended `blocked` and was swept after
+      // its retention; a new request is accepted now.
+      await advance(8 * DAY_MS);
+      const reopened = renderScreen();
+      try {
+        await openDeleteSheet(reopened);
+        expect(calls('delete-request')).toHaveLength(2);
+        expect(headerOf(calls('delete-request')[1]!, 'Authorization')).toBe(
+          `Bearer ${BEARER_A}`,
+        );
+        const text = allText(reopened);
+        expect(text).not.toContain(IN_PROGRESS_TITLE);
+        expect(text).not.toContain(UNKNOWN_TITLE);
+        expect(text).toContain('Delete your account?');
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: deletionId(20), phase: 'ready' },
+        ]);
+        expectNotDeleted(reopened);
+
+        await pressWhenArmed(reopened, 'Permanently delete');
+        await act(async () => {});
+        expect(bodyOf(calls('delete-confirm')[0]!)).toEqual({
+          challenge: deletionId(21),
+          operationId: deletionId(20),
+        });
+        expectDeleted(reopened);
+      } finally {
+        act(() => reopened.unmount());
+      }
+    });
+
+    it('a 409 refusal the server repeats on a later launch is shown as in progress again, with only Close — and every launch after its window asks once more', async () => {
+      route({
+        'delete-request': () =>
+          reply('delete-request', deletionInProgressError(), 409),
+      });
+      await refusedAsInProgress();
+
+      for (let launch = 1; launch <= 3; launch += 1) {
+        await advance(30 * DAY_MS);
+        const again = renderScreen();
+        try {
+          await openDeleteSheet(again);
+          expect(calls('delete-request')).toHaveLength(1 + launch);
+          expectAlreadyConfirmed(again);
+          expectNotDeleted(again);
+          expect(journalRows()).toMatchObject([
+            { owner_id: OWNER_A, operation_id: null, phase: 'request_unknown' },
+          ]);
+        } finally {
+          act(() => again.unmount());
+        }
+      }
+    });
+
+    it('a 409 refusal is not re-asked inside its Retry-After window', async () => {
+      route({
+        'delete-request': () =>
+          reply('delete-request', deletionInProgressError(), 409, {
+            headers: { 'retry-after': '600' },
+          }),
+      });
+      await refusedAsInProgress();
+
+      await advance(5 * 60_000);
+      const early = renderScreen();
+      try {
+        await openDeleteSheet(early);
+        expect(calls('delete-request')).toHaveLength(1);
+        expectAlreadyConfirmed(early);
+      } finally {
+        act(() => early.unmount());
+      }
+
+      await advance(5 * 60_000);
+      const late = renderScreen();
+      try {
+        await openDeleteSheet(late);
+        expect(calls('delete-request')).toHaveLength(2);
+        expectAlreadyConfirmed(late);
+      } finally {
+        act(() => late.unmount());
+      }
+    });
+
+    it("a stale 409 refusal is owner A's alone: owner B gets the survey and never re-asks under A's row", async () => {
+      route({
+        'delete-request': () =>
+          reply('delete-request', deletionInProgressError(), 409),
+      });
+      await refusedAsInProgress();
+      await advance(8 * DAY_MS);
+
+      signIn(OWNER_B, BEARER_B, 'apple');
+      const renderer = renderScreen();
+      try {
+        await openDeleteSheet(renderer);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(allText(renderer)).toContain(SURVEY_TITLE);
+        expect(allText(renderer)).not.toContain(IN_PROGRESS_TITLE);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('a Keychain item that has become unparseable garbage over a journaled verified receipt still completes from the receipt — never "could not be read… contact support" with the deleted account left signed in', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () =>
+          reply('delete-status', statusPayload('completed')),
+      });
+      await completeNormally();
+
+      // The Keychain item is present but its payload is corrupt: it neither
+      // agrees nor disagrees with the journaled receipt — it says nothing.
+      expect(deletionKeychainStore.size).toBe(1);
+      for (const [service, item] of deletionKeychainStore) {
+        deletionKeychainStore.set(service, {
+          ...item,
+          password: '\u0000not-json\u0000',
+        });
+      }
+
+      await advance(60_000);
+      const relaunch = renderScreen();
+      try {
+        await openDeleteSheet(relaunch);
+        expectCompletedFromReceipt(relaunch);
+        expect(calls('delete-status')).toHaveLength(0);
+      } finally {
+        act(() => relaunch.unmount());
+      }
+    });
+
+    it('a Keychain item of an unsupported record version over a journaled verified receipt still completes from the receipt', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () =>
+          reply('delete-status', statusPayload('completed')),
+      });
+      await completeNormally();
+      for (const [service, item] of deletionKeychainStore) {
+        const record = JSON.parse(item.password) as Record<string, unknown>;
+        deletionKeychainStore.set(service, {
+          ...item,
+          password: JSON.stringify({ ...record, version: 2 }),
+        });
+      }
+
+      const relaunch = renderScreen();
+      try {
+        await openDeleteSheet(relaunch);
+        expectCompletedFromReceipt(relaunch);
+      } finally {
+        act(() => relaunch.unmount());
+      }
+    });
+
+    it('a 429 on the request paces "Retry request" by the Retry-After header, says nothing-deleted once, and the re-armed retry really sends', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return requests === 1
+            ? reply(
+                'delete-request',
+                { error: { message: 'Too many requests.' } },
+                429,
+                { headers: { 'retry-after': '60' } },
+              )
+            : reply('delete-request', requestPayload());
+        },
+      });
+      const renderer = renderScreen();
+      try {
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        const text = allText(renderer);
+        expect(text).toContain('Nothing has been deleted');
+        expect(text).not.toContain('Nothing was deleted');
+        expect(text).not.toContain(UNKNOWN_TITLE);
+        expect(sheetButton(renderer, 'Retry request').props.label).toBe(
+          'Retry request (60)',
+        );
+        expect(sheetButton(renderer, 'Retry request').props.disabled).toBe(
+          true,
+        );
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: null, phase: 'request_unknown' },
+        ]);
+
+        await pressWhenArmed(renderer, 'Retry request');
+        expect(calls('delete-request')).toHaveLength(2);
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'ready' },
+        ]);
+        expect(sheetButton(renderer, 'Permanently delete').props.label).toBe(
+          'Permanently delete (5)',
+        );
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('"Continue to delete" is disabled while the journal is still being read, and the press after the read sends exactly one request', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+      });
+      const gate = deferred<void>();
+      let gated = true;
+      const realTransaction = mockDatabase.db.transaction!.bind(
+        mockDatabase.db,
+      );
+      const transaction = jest
+        .spyOn(mockDatabase.db, 'transaction')
+        .mockImplementation(async operation => {
+          if (gated) await gate.promise;
+          return realTransaction(operation);
+        });
+      const renderer = renderScreen();
+      try {
+        await openReview(renderer);
+        expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
+          true,
+        );
+        gated = false;
+        gate.resolve();
+        await advance(0);
+        expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
+          false,
+        );
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        await advance(0);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'ready' },
+        ]);
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+        transaction.mockRestore();
+      }
+    });
+  });
+
   describe('fetchNoRedirect', () => {
     const url = `${ORIGIN}/v1/me/delete-request`;
     const init = {
