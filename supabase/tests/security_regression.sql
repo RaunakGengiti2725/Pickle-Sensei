@@ -2360,29 +2360,27 @@ grant execute on function pg_temp.n_shot(uuid, uuid, text) to authenticated;
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000016';
 
--- N0: every permit apply_synced_shot() would still honour is a reservation
--- to access_state() — reserved at any age (e1/e3/e5) AND swept to
--- released/expired (e2/e4) — because each one can still become a rating.
--- (Adversary round 5, competing lane A01/A09: counting only "reserved AND
--- < 24h" here while the allocator counted every syncable permit let a stale
--- or swept permit be spent twice.) reserve_analysis_permit() reads the same
--- count: nothing is left to reserve beside five live reservations.
+-- N0: reserve/access_state semantics are untouched — late holds do not count
+-- as reservations, so the slot is available to reserve again.
 do $$
-declare rec record; p record;
+declare rec record;
 begin
   select * into rec from public.access_state();
-  if rec.scored_count <> 0 or rec.reserved_count <> 5 then
-    raise exception 'N0: every still-syncable permit counts as a reservation (got %)', rec;
+  if rec.scored_count <> 0 or rec.reserved_count <> 0 then
+    raise exception 'N0: stale holds must not count as reservations (got %)', rec;
   end if;
-  if public.online_reservation_count() <> 5 then
-    raise exception 'N0: online_reservation_count() is that same count (got %)', public.online_reservation_count();
-  end if;
-  select * into p from public.reserve_analysis_permit('noor-online-extra');
-  if p.result <> 'access.paywall_required' then
-    raise exception 'N0: a new reservation beside five still-syncable permits is refused (got %)', p.result;
-  end if;
-  if exists (select 1 from public.analysis_permits where idempotency_key = 'noor-online-extra') then
-    raise exception 'N0: the refused reservation persisted nothing';
+end $$;
+
+-- N0b (W04-01): the one reservation reader every budget decision shares
+-- — reserve_analysis_permit(), access_state(), issue_offline_grant() and the
+-- shots gate — reports the same 0 for these five late holds: a stale or
+-- swept permit is displaceable by a fresh reservation (its late sync then
+-- answers to apply_synced_shot()'s backstop, N3), never a firm slot that
+-- one path honours and another ignores.
+do $$
+begin
+  if public.online_reservation_count() <> 0 then
+    raise exception 'N0b: online_reservation_count() must agree with access_state (got %)', public.online_reservation_count();
   end if;
 end $$;
 
@@ -3170,7 +3168,7 @@ insert into public.analysis_permits (id, user_id, idempotency_key, status, outco
 values
   ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000021', 'sam-p1', 'reserved', null, now()),
   ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000021', 'sam-p2', 'finalized', 'cancelled', now()),
-  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000021', 'sam-p3', 'released', 'free_limit_exceeded', now() - interval '25 hours');
+  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000021', 'sam-p3', 'released', 'expired', now() - interval '25 hours');
 
 -- Runs one statement as the current role and returns 'allowed <n>' or
 -- '<SQLSTATE>:<hint>'.
@@ -4108,8 +4106,8 @@ begin
     raise exception 'S1: a partial must not count toward lifetime_scored_count() (got %)', public.lifetime_scored_count();
   end if;
   select * into rec from public.access_state();
-  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 7 then
-    raise exception 'S1: access_state must report 0 scored and the 7 syncable reservations (got %, %, %)',
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 6 then
+    raise exception 'S1: access_state must report 0 scored and the 6 live reservations (got %, %, %)',
       rec.premium, rec.scored_count, rec.reserved_count;
   end if;
   if public.permit_backs_sync('released', 'partial') then
@@ -4525,13 +4523,25 @@ set local request.jwt.claim.sub = '';
 --     client cannot close it as support; support closes it through the table
 --     only in the identity's name; one delivered rating is charged exactly
 --     once (no dead hold, no lost rating)
--- T11 (adversary, round 2: R1/R2) conservation against LATE-SYNCABLE permits:
---     a permit apply_synced_shot() would still honour — reserved at ANY age,
---     or already swept to released/expired — is a reservation to the
---     allocator; a permit that can no longer back a sync (released/cancelled,
---     finalized) is not. Stale reserved: 1 ticket, not 2; the late sync then
---     lands within the budget. Swept pair: no ticket at all, both late syncs
---     still land. Budget used never exceeds 2.
+-- T11 (adversary, round 2: R1/R2; round 5 competing lane: A01/A09)
+--     conservation against LATE-SYNCABLE permits: the allocator reads the
+--     SAME online_reservation_count() as access_state() and
+--     reserve_analysis_permit() — live ('reserved', < 24 h) permits only, as
+--     the online path has always counted (N0/S1) — so no permit is a
+--     reservation to one decision point and not another. Two live
+--     reservations: no ticket. Stale reserved / swept pair: allocatable, and
+--     the late sync those permits were kept for then meets
+--     apply_synced_shot()'s backstop beside the tickets — refused as
+--     access.paywall_required, released/free_limit_exceeded, no shot, no
+--     ticket reclaimed — never a third rating; the online path is refused
+--     the same way after the allocation. Budget used never exceeds 2.
+-- T15 (adversary, round 5: A01/A02/A03; competing lane: A01/A09) the
+--     direct-INSERT write gate counts other live reservations and outstanding
+--     tickets; a ticket is settled only by the row consume_offline_ticket()
+--     writes for it (shots.offline_ticket_id) — never an online-paid row,
+--     never a pre-counted row whatever its client-supplied created_at says;
+--     stale/swept permits are reservations to no decision point and their
+--     late syncs are refused beside the tickets
 -- T12 (adversary, round 2: R7b) service_role can never pass as a user through
 --     the definer RPCs: with the API header, a user sub and a live session
 --     claim, every one of the four RPCs (and the hold reader) is 42501 for
@@ -4607,10 +4617,21 @@ $$;
 grant execute on function pg_temp.t_events(uuid) to authenticated;
 -- Conservation as the reviewer reads it: every ticket ever allocated is in
 -- exactly one of {outstanding, consumed, released}; tickets not consumed plus
--- the scored ratings plus every online permit that can still back a sync
--- (public.permit_backs_sync — reserved at any age, or swept to
--- released/expired — and not yet linked to a shot) never exceed the 2
--- lifetime free ratings.
+-- the scored ratings plus every LIVE online reservation (a permit still
+-- 'reserved' and younger than 24 h — the set access_state().reserved_count
+-- has always counted, N0/S1 — not yet linked to a shot) never exceed the 2
+-- lifetime free ratings. A stale or swept permit is not a reservation to any
+-- decision point; t_syncable_permits() counts those separately so the tests
+-- can show that such a permit's late sync is refused, never a third rating.
+create function pg_temp.t_live_permits(p_uid uuid) returns integer
+language sql security definer as $$
+  select count(*)::int from public.analysis_permits p
+  where p.user_id = p_uid
+    and p.status = 'reserved'
+    and p.created_at > now() - interval '24 hours'
+    and not exists (select 1 from public.shots s where s.analysis_permit_id = p.id);
+$$;
+grant execute on function pg_temp.t_live_permits(uuid) to authenticated;
 create function pg_temp.t_syncable_permits(p_uid uuid) returns integer
 language sql security definer as $$
   select count(*)::int from public.analysis_permits p
@@ -4638,7 +4659,7 @@ language sql security definer as $$
        and not exists (select 1 from public.offline_allocation_ledger t
                        where t.ticket_id = a.ticket_id and t.event = 'consumed'))
     + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
-    + pg_temp.t_syncable_permits(p_uid)
+    + pg_temp.t_live_permits(p_uid)
     <= 2;
 $$;
 grant execute on function pg_temp.t_conserved(uuid) to authenticated;
@@ -5468,7 +5489,7 @@ language sql security definer as $$
        and not exists (select 1 from public.offline_allocation_ledger t
                        where t.ticket_id = a.ticket_id and t.event = 'consumed'))
     + (select count(*) from public.shots where user_id = p_uid and result_kind = 'scored')
-    + pg_temp.t_syncable_permits(p_uid)
+    + pg_temp.t_live_permits(p_uid)
     <= 2;
 $$;
 grant execute on function pg_temp.t_identity_conserved(uuid, text, text) to authenticated;
@@ -5685,13 +5706,19 @@ reset role;
 set local request.jwt.claim.sub = '';
 set local request.jwt.claims = '';
 
--- T11: conservation against late-syncable permits (adversary round 2, R1/R2).
--- Tobias (free, Google) holds a permit still 'reserved' 25 h after it was
--- issued — the hourly sweep is best-effort — and a permit his client settled
--- as cancelled. Tina (free, Apple) reserved both ratings online and let them
--- age past the sweep. apply_synced_shot() honours a reserved permit at ANY
--- age and a swept released/expired one (permit_backs_sync; section N), so the
--- allocator must treat both as reservations.
+-- T11: conservation against late-syncable permits (adversary round 2, R1/R2;
+-- round 5 competing lane, A01/A09). Tobias (free, Google) holds a permit
+-- still 'reserved' 25 h after it was issued — the hourly sweep is
+-- best-effort — and a permit his client settled as cancelled. Tina (free,
+-- Apple) reserved both ratings online and let them age past the sweep.
+-- A stale or swept permit is NOT a reservation to any decision point —
+-- access_state().reserved_count has never counted one (N0), and the
+-- allocator reads the SAME online_reservation_count() the online path does,
+-- so the two can never disagree about a permit (A01/A09). Its late sync is
+-- honoured only while the budget is still there (section N): beside the
+-- tickets the device took, apply_synced_shot()'s backstop refuses it as
+-- access.paywall_required and releases the permit as free_limit_exceeded —
+-- it never becomes a third rating, and no ticket is reclaimed for it.
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
 values
   ('00000000-0000-4000-8000-000000000059', 'tobias@example.com',
@@ -5723,51 +5750,74 @@ begin
     raise exception 'T11 precondition: one live reservation beside the stale one (got %)', p.result;
   end if;
   update public.analysis_permits set status = 'released', outcome = 'cancelled' where id = p.permit_id;
-  if pg_temp.t_syncable_permits((select auth.uid())) <> 1 then
-    raise exception 'T11 precondition: exactly the stale reserved permit can still back a sync (got %)',
-      pg_temp.t_syncable_permits((select auth.uid()));
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 1 or pg_temp.t_live_permits((select auth.uid())) <> 0 then
+    raise exception 'T11 precondition: exactly the stale reserved permit can still back a sync, and it is not live (got %, %)',
+      pg_temp.t_syncable_permits((select auth.uid())), pg_temp.t_live_permits((select auth.uid()));
   end if;
   select * into g from public.register_offline_device('tobias-key', 'production', true);
   if g.result <> 'accepted' then
     raise exception 'T11 precondition: registration (got %)', g.result;
   end if;
-  -- R2: the stale reserved permit occupies one of the two ratings
+  -- every decision point reads the same reservation count: 0 (N0)
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 0 or public.online_reservation_count() <> 0 then
+    raise exception 'T11: a stale permit is a reservation to no decision point (got %, %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count, public.online_reservation_count();
+  end if;
+  -- R2/A01: the allocator sees exactly what the online path sees — both
+  -- ratings are free to allocate; the stale permit blocks neither
   select * into g from public.issue_offline_grant('tobias-key', 2);
-  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
-    raise exception 'T11: a still-reserved permit older than 24 h is a reservation to the allocator — 1 ticket, not 2 (got %, %)',
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T11: the allocator counts the same live reservations as reserve_analysis_permit() — 2 tickets beside a stale permit (got %, %)',
       g.result, g.ticket_ids;
   end if;
   insert into t_state values ('tobias-t', g.ticket_ids[1]);
-  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
-    raise exception 'T11: exactly one allocation is recorded (got %)', pg_temp.t_events((select auth.uid()));
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' then
+    raise exception 'T11: exactly two allocations are recorded (got %)', pg_temp.t_events((select auth.uid()));
   end if;
   if not pg_temp.t_conserved((select auth.uid())) then
-    raise exception 'T11: conservation violated by the allocation beside a stale reservation';
+    raise exception 'T11: conservation violated by the allocation beside a stale permit';
   end if;
-  -- the late sync the stale permit was kept for still lands (section N), inside the budget
+  -- A01: an online reservation AFTER the offline allocation is refused —
+  -- the two paths agree that the budget is spent
+  select * into p from public.reserve_analysis_permit('tobias-third');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T11: no online reservation beside two outstanding tickets (got %)', p.result;
+  end if;
+  if exists (select 1 from public.analysis_permits where idempotency_key = 'tobias-third') then
+    raise exception 'T11: the refused reservation persisted nothing';
+  end if;
+  -- the stale permit's late sync meets the backstop: the tickets hold both
+  -- ratings, so it is refused (section N3) and released — never a third rating
   v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000592', '00000000-0000-4000-8000-000000000591', 'scored'));
-  if v <> 'accepted' then
-    raise exception 'T11: the stale permit''s late sync is still honoured (got %)', v;
+  if v <> 'access.paywall_required' then
+    raise exception 'T11: a stale permit''s late sync beside two outstanding tickets is refused (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-000000000591';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded' then
+    raise exception 'T11: the refused late permit ends released/free_limit_exceeded (got %/%)', p.status, p.outcome;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000592') then
+    raise exception 'T11: the refused late sync wrote no shot';
+  end if;
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 0 then
+    raise exception 'T11: nothing is left that could still back a sync (got %)', pg_temp.t_syncable_permits((select auth.uid()));
   end if;
   select * into rec from public.access_state();
-  if rec.premium or rec.scored_count <> 1 or rec.reserved_count <> 1 then
-    raise exception 'T11: 1 scored + 1 outstanding ticket after the late sync (got %, %, %)',
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 2 then
+    raise exception 'T11: 0 scored + 2 outstanding tickets after the refused late sync (got %, %, %)',
       rec.premium, rec.scored_count, rec.reserved_count;
   end if;
   if not pg_temp.t_conserved((select auth.uid())) then
     raise exception 'T11: conservation violated after the late sync';
   end if;
-  -- nothing is left to allocate or reserve: the refresh re-issues the one ticket
+  -- no ticket was reclaimed for the refused sync: the refresh re-issues both
   select * into g2 from public.issue_offline_grant('tobias-key', 2);
   if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> g.ticket_ids then
-    raise exception 'T11: a refresh re-issues the single outstanding ticket and allocates nothing (got %, %, %)',
+    raise exception 'T11: a refresh re-issues the two outstanding tickets and allocates nothing (got %, %, %)',
       g2.result, g2.generation, g2.ticket_ids;
   end if;
-  select * into p from public.reserve_analysis_permit('tobias-third');
-  if p.result <> 'access.paywall_required' then
-    raise exception 'T11: no third rating online (got %)', p.result;
-  end if;
-  if pg_temp.t_events((select auth.uid())) <> 'allocated:1' or not pg_temp.t_conserved((select auth.uid())) then
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' or not pg_temp.t_conserved((select auth.uid())) then
     raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
   end if;
 end $$;
@@ -5792,9 +5842,13 @@ begin
   if g.result <> 'accepted' then
     raise exception 'T11 precondition: registration (got %)', g.result;
   end if;
+  -- R1: two live reservations leave no offline capacity
   select * into g from public.issue_offline_grant('tina-key', 2);
-  if g.result <> 'access.paywall_required' then
-    raise exception 'T11 precondition: two live reservations leave no offline capacity (got %, %)', g.result, g.ticket_ids;
+  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T11: two live reservations leave no offline capacity (got %, %)', g.result, g.ticket_ids;
+  end if;
+  if pg_temp.t_events((select auth.uid())) <> '' then
+    raise exception 'T11: a refused allocation writes nothing (got %)', pg_temp.t_events((select auth.uid()));
   end if;
 end $$;
 reset role;
@@ -5809,44 +5863,64 @@ set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000005a';
 set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000005a01"}';
 do $$
-declare g record; rec record; v text;
+declare g record; g2 record; p record; rec record; v text;
         p1 uuid := (select id from t_state where key = 'tina-p1');
         p2 uuid := (select id from t_state where key = 'tina-p2');
 begin
-  if pg_temp.t_syncable_permits((select auth.uid())) <> 2 then
-    raise exception 'T11 precondition: both swept permits can still back a sync (got %)',
-      pg_temp.t_syncable_permits((select auth.uid()));
+  if pg_temp.t_syncable_permits((select auth.uid())) <> 2 or pg_temp.t_live_permits((select auth.uid())) <> 0 then
+    raise exception 'T11 precondition: both swept permits can still back a sync and neither is live (got %, %)',
+      pg_temp.t_syncable_permits((select auth.uid())), pg_temp.t_live_permits((select auth.uid()));
+  end if;
+  -- A09: after the production sweep every decision point reports 0
+  -- reservations — access_state, the online path and the allocator alike
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 0 or public.online_reservation_count() <> 0 then
+    raise exception 'T11: swept permits are reservations to no decision point (got %, %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count, public.online_reservation_count();
   end if;
   select * into g from public.issue_offline_grant('tina-key', 2);
-  if g.result <> 'access.paywall_required' or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
-    raise exception 'T11: swept permits that can still back a sync are reservations to the allocator — no ticket (got %, %)',
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T11: the allocator sees what the online path sees — 2 tickets after the sweep (got %, %)',
       g.result, g.ticket_ids;
   end if;
-  if pg_temp.t_events((select auth.uid())) <> '' then
-    raise exception 'T11: a refused allocation writes nothing (got %)', pg_temp.t_events((select auth.uid()));
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' or not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T11: two allocations, conserved (got %)', pg_temp.t_events((select auth.uid()));
   end if;
-  -- the late syncs the sweep promised to honour
+  select * into p from public.reserve_analysis_permit('tina-online-3');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T11: no online reservation beside two outstanding tickets (got %)', p.result;
+  end if;
+  -- the late syncs the sweep kept acceptable meet the backstop: the device
+  -- holds both ratings, so neither lands, neither is a third rating, and no
+  -- ticket is reclaimed for them
   v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a2', p1, 'scored'));
-  if v <> 'accepted' then
-    raise exception 'T11: the first swept permit''s late sync is honoured (got %)', v;
+  if v <> 'access.paywall_required' then
+    raise exception 'T11: the first swept permit''s late sync is refused beside two tickets (got %)', v;
   end if;
   v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-0000000005a3', p2, 'scored'));
-  if v <> 'accepted' then
-    raise exception 'T11: the second swept permit''s late sync is honoured (got %)', v;
+  if v <> 'access.paywall_required' then
+    raise exception 'T11: the second swept permit''s late sync is refused beside two tickets (got %)', v;
+  end if;
+  if (select count(*) from public.analysis_permits where id in (p1, p2) and status = 'released' and outcome = 'free_limit_exceeded') <> 2 then
+    raise exception 'T11: both refused late permits end released/free_limit_exceeded';
+  end if;
+  if exists (select 1 from public.shots where id in ('00000000-0000-4000-8000-0000000005a2', '00000000-0000-4000-8000-0000000005a3')) then
+    raise exception 'T11: the refused late syncs wrote no shot';
   end if;
   select * into rec from public.access_state();
-  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
-    raise exception 'T11: both ratings scored, nothing outstanding (got %, %, %)',
+  if rec.premium or rec.scored_count <> 0 or rec.reserved_count <> 2 then
+    raise exception 'T11: nothing scored, both tickets outstanding (got %, %, %)',
       rec.premium, rec.scored_count, rec.reserved_count;
   end if;
   if not pg_temp.t_conserved((select auth.uid())) then
     raise exception 'T11: conservation violated after the late syncs';
   end if;
-  select * into g from public.issue_offline_grant('tina-key', 2);
-  if g.result <> 'access.paywall_required' then
-    raise exception 'T11: no offline ticket after both ratings were scored (got %, %)', g.result, g.ticket_ids;
+  select * into g2 from public.issue_offline_grant('tina-key', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> g.ticket_ids then
+    raise exception 'T11: the refresh re-issues the two outstanding tickets and allocates nothing (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
   end if;
-  if pg_temp.t_events((select auth.uid())) <> '' then
+  if pg_temp.t_events((select auth.uid())) <> 'allocated:2' then
     raise exception 'T11: budget used stays at 2 (got %)', pg_temp.t_events((select auth.uid()));
   end if;
 end $$;
@@ -5899,8 +5973,8 @@ do $$
 declare before text := pg_temp.t_service_probe('00000000-0000-4000-8000-000000000059');
         tobias_ticket uuid := (select id from t_state where key = 'tobias-t');
 begin
-  if before <> 'devices:1 ledger:1 grants:2' then
-    raise exception 'T12 precondition: Tobias holds one device, one allocation, two grants (got %)', before;
+  if before <> 'devices:1 ledger:2 grants:2' then
+    raise exception 'T12 precondition: Tobias holds one device, two allocations, two grants (got %)', before;
   end if;
   begin
     perform public.register_offline_device('service-key', 'production', true);
@@ -6303,13 +6377,16 @@ end $$;
 --
 -- Every free-rating decision point — access_state(), reserve_analysis_
 -- permit(), issue_offline_grant(), the shots write gate for a direct client
--- INSERT, apply_synced_shot()'s backstop — adds the SAME three terms:
--- lifetime scored ratings + online reservations (every permit
--- permit_backs_sync() still honours, at any age, not yet settled by a shot) +
--- outstanding offline tickets. A rating is settled offline ONLY by the row
--- consume_offline_ticket() writes for it, bound to the ticket on the row
--- (shots.offline_ticket_id) — never by a pre-existing row, whatever its
--- client-supplied created_at says.
+-- INSERT — adds the SAME three terms: lifetime scored ratings + live online
+-- reservations (online_reservation_count(): 'reserved', < 24 h, not yet
+-- settled by a shot — the set access_state() has always counted) +
+-- outstanding offline tickets; every row-creating path (apply_synced_shot()'s
+-- backstop, consume_offline_ticket(), the gate) keeps lifetime scored +
+-- outstanding tickets ≤ 2. A stale or swept permit is a reservation to none
+-- of them; its late sync is refused beside the tickets. A rating is settled
+-- offline ONLY by the row consume_offline_ticket() writes for it, bound to
+-- the ticket on the row (shots.offline_ticket_id) — never by a pre-existing
+-- row, whatever its client-supplied created_at says.
 reset role;
 set local request.jwt.claim.sub = '';
 set local request.jwt.claims = '';
@@ -6538,96 +6615,148 @@ begin
   end if;
 end $$;
 
--- A03: a rating counted BEFORE the ticket existed, written directly under a
--- live permit with created_at forged a year into the future, never settles
--- the later ticket. (T13 covers the owner-written shape; this is the client
--- shape end to end.)
+-- A03 / c2-A01 on Wanda: the stale (25 h, still 'reserved') permit is a
+-- reservation to NO decision point — access_state() never counted it (N0),
+-- and the allocator reads the same online_reservation_count() the online
+-- path does, so the two agree at every step (competing lane A01: the
+-- allocator counting it while reserve_analysis_permit() did not was the
+-- break). Its late sync then answers to the backstop beside the tickets.
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000073';
 set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007301"}';
 do $$
-declare p record; g record; v text; t1 uuid; rec record;
+declare p record; g record; g2 record; v text; t1 uuid; t2 uuid; rec record;
 begin
-  -- c2/A01: Wanda's 25 h-old permit is still 'reserved' → still a reservation
-  -- to every decision point, so a second reservation is refused...
   select * into rec from public.access_state();
-  if rec.scored_count <> 0 or rec.reserved_count <> 1 then
-    raise exception 'T15/c2-A01: a stale reserved permit is a reservation to access_state (got %)', rec;
+  if rec.scored_count <> 0 or rec.reserved_count <> 0 or public.online_reservation_count() <> 0 then
+    raise exception 'T15/c2-A01: a stale reserved permit is a reservation to no decision point (got %, online %)',
+      rec, public.online_reservation_count();
   end if;
   select * into g from public.register_offline_device('wanda-key-1', 'production', true);
   if g.result <> 'accepted' then
     raise exception 'T15/c2-A01: registration (got %)', g.result;
   end if;
+  -- the allocator agrees with the online path: both ratings are allocatable
   select * into g from public.issue_offline_grant('wanda-key-1', 2);
-  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
-    raise exception 'T15/c2-A01: the stale permit occupies one rating — 1 ticket, not 2 (got %, %)', g.result, g.ticket_ids;
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'T15/c2-A01: the allocator counts the same reservations reserve_analysis_permit() counts — 2 tickets (got %, %)', g.result, g.ticket_ids;
   end if;
   t1 := g.ticket_ids[1];
+  t2 := g.ticket_ids[2];
+  if not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T15/c2-A01: conservation violated by the allocation';
+  end if;
+  -- the attack: an online reservation AFTER the offline allocation
   select * into p from public.reserve_analysis_permit('wanda-online-2');
   if p.result <> 'access.paywall_required' then
-    raise exception 'T15/c2-A01: an online reservation beside a stale syncable permit and a hold is refused (got %)', p.result;
+    raise exception 'T15/c2-A01: an online reservation beside two outstanding tickets is refused (got %)', p.result;
   end if;
-  -- ...the stale permit's late sync still lands (its slot was kept for it)...
+  -- the stale permit's late sync meets the backstop: the tickets hold both
+  -- ratings, so it is refused and released — never a third rating
   v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000731', '00000000-0000-4000-8000-0000000007e1', 'scored'));
-  if v <> 'accepted' then
-    raise exception 'T15/c2-A01: the stale permit''s late sync lands (got %)', v;
+  if v <> 'access.paywall_required' then
+    raise exception 'T15/c2-A01: the stale permit''s late sync is refused beside two tickets (got %)', v;
   end if;
-  if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 or public.online_reservation_count() <> 0 then
-    raise exception 'T15/c2-A01: 1 scored + 1 held + 0 reserved (got %, %, %)',
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000007e1';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000731') then
+    raise exception 'T15/c2-A01: the refused late permit is released/free_limit_exceeded and wrote nothing (got %/%)', p.status, p.outcome;
+  end if;
+  if public.lifetime_scored_count() <> 0 or public.offline_hold_count() <> 2 or public.online_reservation_count() <> 0 then
+    raise exception 'T15/c2-A01: 0 scored + 2 held + 0 reserved (got %, %, %)',
       public.lifetime_scored_count(), public.offline_hold_count(), public.online_reservation_count();
   end if;
-  -- ...and the rendered offline rating settles the ticket: exactly 2 ratings.
+  -- the rendered offline ratings settle the tickets: exactly 2 ratings, and
+  -- the online path stays closed throughout
   v := public.consume_offline_ticket(t1, pg_temp.n_shot('00000000-0000-4000-8000-000000000732', null, 'scored'));
   if v <> 'accepted' then
-    raise exception 'T15/c2-A01: the ticket settles (got %)', v;
+    raise exception 'T15/c2-A01: the first ticket settles (got %)', v;
   end if;
-  if public.lifetime_scored_count() <> 2 or not pg_temp.t_conserved((select auth.uid())) then
-    raise exception 'T15/c2-A01: conservation violated (scored %)', public.lifetime_scored_count();
+  select * into p from public.reserve_analysis_permit('wanda-online-3');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T15/c2-A01: 1 scored + 1 outstanding ticket leave nothing to reserve (got %)', p.result;
+  end if;
+  v := public.consume_offline_ticket(t2, pg_temp.n_shot('00000000-0000-4000-8000-000000000733', null, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'T15/c2-A01: the second ticket settles (got %)', v;
+  end if;
+  if public.lifetime_scored_count() <> 2 or public.offline_hold_count() <> 0
+     or pg_temp.t_events((select auth.uid())) <> 'allocated:2,consumed:2'
+     or not pg_temp.t_conserved((select auth.uid())) then
+    raise exception 'T15/c2-A01: conservation violated (scored %, held %, events %)',
+      public.lifetime_scored_count(), public.offline_hold_count(), pg_temp.t_events((select auth.uid()));
+  end if;
+  select * into g2 from public.issue_offline_grant('wanda-key-1', 2);
+  if g2.result <> 'access.paywall_required' or coalesce(array_length(g2.ticket_ids, 1), 0) <> 0 then
+    raise exception 'T15/c2-A01: nothing is left to allocate after both settlements (got %, %)', g2.result, g2.ticket_ids;
   end if;
 end $$;
 
--- c2/A09 + A03 on Wes: the swept (released/expired) permit is a reservation
--- to every decision point; a forged-future direct row never settles a ticket.
+-- c2/A09 + A03 on Wes: the permit the production sweep flipped to
+-- released/expired is a reservation to no decision point either; and a
+-- rating counted BEFORE the ticket existed — written directly under a live
+-- permit with created_at forged a year into the future — never settles the
+-- later ticket (T13 covers the owner-written shape; this is the client shape
+-- end to end).
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000074';
 set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000007401"}';
 do $$
-declare p record; g record; v text; t1 uuid; rec record; a record;
+declare p record; g record; v text; t1 uuid; rec record; live uuid;
 begin
   select * into rec from public.access_state();
-  if rec.scored_count <> 0 or rec.reserved_count <> 1 then
-    raise exception 'T15/c2-A09: a swept-but-syncable permit is a reservation to access_state (got %)', rec;
+  if rec.scored_count <> 0 or rec.reserved_count <> 0 or public.online_reservation_count() <> 0 then
+    raise exception 'T15/c2-A09: a swept permit is a reservation to no decision point (got %, online %)',
+      rec, public.online_reservation_count();
   end if;
   select * into g from public.register_offline_device('wes-key-1', 'production', true);
   if g.result <> 'accepted' then
     raise exception 'T15/c2-A09: registration (got %)', g.result;
   end if;
-  select * into g from public.issue_offline_grant('wes-key-1', 2);
-  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
-    raise exception 'T15/c2-A09: the swept permit occupies one rating — 1 ticket (got %, %)', g.result, g.ticket_ids;
-  end if;
-  t1 := g.ticket_ids[1];
-  insert into t_state values ('wes-t1', t1);
-  select * into p from public.reserve_analysis_permit('wes-online-2');
-  if p.result <> 'access.paywall_required' then
-    raise exception 'T15/c2-A09: an online reservation beside a swept syncable permit and a hold is refused (got %)', p.result;
-  end if;
-  -- A03 (client shape): a direct row is refused beside the swept permit
-  -- (not live) — and with a live permit, only while the budget allows.
+  -- a swept permit is not a live permit for a direct INSERT (N8), whatever
+  -- created_at the client writes
   begin
     perform pg_temp.t_direct_scored('00000000-0000-4000-8000-000000000741', (select auth.uid()), now() + interval '1 year');
     raise exception 'T15/A03: a swept permit is not a live permit for a direct INSERT';
   exception when insufficient_privilege then null;
   end;
-  -- the swept permit's late sync lands (1 scored), leaving the ticket as the
-  -- identity's second rating
-  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000742', '00000000-0000-4000-8000-0000000007e2', 'scored'));
-  if v <> 'accepted' then
-    raise exception 'T15/c2-A09: the swept permit''s late sync lands (got %)', v;
+  -- A03: a live permit admits a direct row whose created_at lies a year in
+  -- the future; the row counts (lifetime 1) the moment it lands
+  select * into p from public.reserve_analysis_permit('wes-online-1');
+  if p.result <> 'accepted' then
+    raise exception 'T15/A03 precondition: a live permit (got %)', p.result;
   end if;
-  -- the online-paid rating, whatever created_at the client wrote for its
-  -- direct copy, is not the ticket's rating
-  v := public.consume_offline_ticket(t1, pg_temp.n_shot('00000000-0000-4000-8000-000000000742', null, 'scored'));
+  live := p.permit_id;
+  perform pg_temp.t_direct_scored('00000000-0000-4000-8000-000000000741', (select auth.uid()), now() + interval '1 year');
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'T15/A03 precondition: the forged-future row is counted (got %)', public.lifetime_scored_count();
+  end if;
+  -- the client cancels the permit it never synced (its allowed UPDATE)
+  update public.analysis_permits set status = 'released', outcome = 'cancelled' where id = live;
+  -- the ticket is allocated AFTER the row exists: 1 scored + 0 live → 1 ticket
+  select * into g from public.issue_offline_grant('wes-key-1', 2);
+  if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'T15/c2-A09: 1 scored beside a swept permit leaves exactly 1 ticket (got %, %)', g.result, g.ticket_ids;
+  end if;
+  t1 := g.ticket_ids[1];
+  insert into t_state values ('wes-t1', t1);
+  select * into p from public.reserve_analysis_permit('wes-online-2');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'T15/c2-A09: an online reservation beside 1 scored + 1 outstanding ticket is refused (got %)', p.result;
+  end if;
+  -- the swept permit's late sync meets the backstop beside the ticket
+  v := public.apply_synced_shot(pg_temp.n_shot('00000000-0000-4000-8000-000000000742', '00000000-0000-4000-8000-0000000007e2', 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'T15/c2-A09: the swept permit''s late sync is refused beside 1 scored + 1 ticket (got %)', v;
+  end if;
+  select * into p from public.analysis_permits where id = '00000000-0000-4000-8000-0000000007e2';
+  if p.status <> 'released' or p.outcome <> 'free_limit_exceeded'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000000742') then
+    raise exception 'T15/c2-A09: the refused late permit is released/free_limit_exceeded and wrote nothing (got %/%)', p.status, p.outcome;
+  end if;
+  -- A03: the pre-counted row, whatever created_at the client wrote for it,
+  -- is not the ticket's rating
+  v := public.consume_offline_ticket(t1, pg_temp.n_shot('00000000-0000-4000-8000-000000000741', null, 'scored'));
   if v <> 'offline.shot_not_chargeable' then
-    raise exception 'T15/A03: a rating counted before the settlement never settles the ticket (got %)', v;
+    raise exception 'T15/A03: a rating counted before the ticket existed never settles the ticket (got %)', v;
   end if;
   if public.offline_hold_count() <> 1 or pg_temp.t_events((select auth.uid())) <> 'allocated:1' then
     raise exception 'T15/A03: the refused settlement leaves the hold in place';
@@ -6652,7 +6781,7 @@ begin
   select * into a from public.offline_allocation_ledger where ticket_id = t1 and event = 'allocated';
   begin
     insert into public.offline_allocation_ledger (user_id, device_id, grant_id, generation, ticket_id, event, shot_id, identity_hashes)
-    values (a.user_id, a.device_id, a.grant_id, a.generation, t1, 'consumed', '00000000-0000-4000-8000-000000000742', a.identity_hashes);
+    values (a.user_id, a.device_id, a.grant_id, a.generation, t1, 'consumed', '00000000-0000-4000-8000-000000000741', a.identity_hashes);
     raise exception 'T15: the table never records a consumption for a rating that does not name the ticket';
   exception when check_violation then null;
   end;

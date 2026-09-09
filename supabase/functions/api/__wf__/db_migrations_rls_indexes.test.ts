@@ -1982,19 +1982,24 @@ Deno.test(
       "offline_hold_count() is granted to authenticated only — the service connection never reads as a user",
     );
 
-    // The ONE reservation reader (c2 A01/A09): every permit permit_backs_sync()
-    // still honours — reserved at ANY age, or swept to released/expired — that
-    // no shot has settled. Never a 24 h window.
+    // The ONE reservation reader (c2 A01/A09): the live permits — still
+    // 'reserved' and younger than 24 h, the set access_state() and
+    // reserve_analysis_permit() have always counted — not yet settled by a
+    // shot. Every budget decision reads THIS function, so no permit can be a
+    // reservation to the allocator and not to the online path (or vice versa);
+    // a stale/swept permit's late sync answers to apply_synced_shot()'s
+    // backstop instead.
     const [reservations] = functionBodies(raw, "online_reservation_count");
     ok(reservations, `${OFFLINE_DEVICE_GRANTS} must define public.online_reservation_count`);
     ok(
       reservations.includes("security invoker") &&
         reservations.includes("set search_path = ''") &&
-        reservations.includes("public.permit_backs_sync(p.status, p.outcome)") &&
+        /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(
+          reservations,
+        ) &&
         reservations.includes("select 1 from public.shots s where s.analysis_permit_id = p.id") &&
-        !reservations.includes("interval '24 hours'") &&
-        !/p\.status\s*=\s*'reserved'/.test(reservations),
-      "online_reservation_count() counts every syncable, unsettled permit at any age (stale reserved AND swept released/expired alike)",
+        !reservations.includes("permit_backs_sync"),
+      "online_reservation_count() counts the caller's live (reserved, < 24 h) permits not yet settled by a shot — the pre-existing reservation rule, never the late-backing rule",
     );
     ok(
       statements.includes(
@@ -2017,8 +2022,9 @@ Deno.test(
           body.includes("public.online_reservation_count()") &&
           body.includes("public.offline_hold_count()") &&
           !body.includes("interval '24 hours'") &&
-          !/p\.status\s*=\s*'reserved'/.test(body),
-        `public.${name} must count lifetime scored + every syncable online reservation + offline holds (no 24 h window)`,
+          !/p\.status\s*=\s*'reserved'/.test(body) &&
+          !body.includes("permit_backs_sync"),
+        `public.${name} must count lifetime scored + online_reservation_count() + offline holds — never its own permit predicate`,
       );
       ok(
         !/security\s+definer/.test(body.slice(0, body.indexOf("$$"))),
@@ -2087,14 +2093,15 @@ Deno.test(
         !/count\(\*\)[^;]*from public\.shots/.test(issue),
       "issue_offline_grant budgets through lifetime_scored_count() + offline holds + live reservations",
     );
-    // R1/R2: a reservation is every permit apply_synced_shot() would still
-    // honour — the canonical predicate, not a 24 h window that the sweep and
-    // the clock both walk permits out of while they stay syncable.
+    // c2 A01/A09: the allocator and the online path must never disagree about
+    // a permit, so the allocator reads the shared reservation reader rather
+    // than carrying a permit predicate of its own.
     ok(
-      issue.includes("public.permit_backs_sync(p.status, p.outcome)") &&
+      issue.includes("public.online_reservation_count()") &&
+        !issue.includes("permit_backs_sync") &&
         !issue.includes("interval '24 hours'") &&
         !/p\.status\s*=\s*'reserved'/.test(issue),
-      "issue_offline_grant counts every permit permit_backs_sync() still honours, at any age",
+      "issue_offline_grant counts reservations through online_reservation_count() — the same reader as access_state()/reserve_analysis_permit()",
     );
     ok(
       issue.includes("interval '7 days'") &&
