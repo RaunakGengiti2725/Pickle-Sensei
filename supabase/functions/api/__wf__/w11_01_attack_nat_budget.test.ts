@@ -352,7 +352,8 @@ Deno.test(
       h.tables.profiles = [profile()];
       const ip = freshIp();
       installAuth(h, {});
-      const valid = fakeSupabaseAccessToken(TEST_USER_ID);
+      // A session bearer no earlier request has cached (fresh session_id).
+      const valid = supabaseBearer(`valid-fanout-${crypto.randomUUID()}`);
 
       const statuses = (
         await Promise.all(Array.from({ length: 40 }, () => readMe(h.handler, ip, valid)))
