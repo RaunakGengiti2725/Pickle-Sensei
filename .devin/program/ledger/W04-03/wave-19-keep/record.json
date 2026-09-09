@@ -1,0 +1,712 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W04-03-r3",
+      "phase": "implement",
+      "prompt_sha256": "5e61324572c26c2364228d52ebad39fb7632283103193804f4a9815b5088fdec",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W04-03-r3-c2",
+      "phase": "implement",
+      "prompt_sha256": "5b980f044f26c7e0f3feda9be1840a15728c298b676767e04b01eacf351366fa",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-03-r3",
+      "phase": "review",
+      "prompt_sha256": "8e0c6b4a3f7c7fe238d8d9b83e26735d387917cb367d55a3b4c0a08fbfb4f872",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-03-r3",
+      "phase": "adversary",
+      "prompt_sha256": "5dd5e37c80a26d1c25466e05469eeb4b9ec7671263499bb2fbe46b27bc3e64d3",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-03-r3-c2",
+      "phase": "review",
+      "prompt_sha256": "1da3b63c1d33e5be2a16ebb4a6a2623d3d903dc8f213393f1559d5fa883d8873",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-03-r3-c2",
+      "phase": "adversary",
+      "prompt_sha256": "2c592a5a5fdf890a33044fbfba30ee5e5930f11f289713fc2a1f6c60a7093b75",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+  "candidate": {
+    "branch": "devin/pp/w04-03/impl-r3",
+    "head_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+    "lane": 1,
+    "round": 3
+  },
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-03",
+  "requeued_from": {
+    "branch": "devin/pp/w04-03/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w04-03/attack-feb7c412",
+      "adversary_breaks": [
+        {
+          "expected": "Import rejects (invalid_key) a retirement instant that is not a plausible Unix-seconds value (e.g. reject > year 2100 / > OFFLINE_GRANT_MAX_EPOCH like the rest of the offline contract), or verification bounds previous-key acceptance relative to a trusted instant; a previous-key grant minted more than one overlap bound after the rotation must be retired_key.",
+          "observed": "importOfflineGrantKeyRing({schemaVersion:1, active, previous:{jwk, retiredAtEpochSeconds:1788000000000, overlapEndsAtEpochSeconds:1788000604800}}) succeeds (overlap length 604800 s passes the bound check); a grant MINTED under the previous key at iat=1788604801 (604801 s after the real rotation at 1788000000, > OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS) verifies at now=1788604802 with kid=previous. Same for retiredAt=MAX_SAFE_INTEGER-604800. Only the length overlapEndsAt-retiredAt is bounded; retiredAt itself is unbounded (isEpochSeconds accepts any non-negative safe integer), so an operator ms/s slip makes the 'bounded overlap' unbounded for ~56,000 years and a compromised old key keeps minting 7-day grants indefinitely.",
+          "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json w04_03_attack_feb7c412.test.ts --filter 'A3'",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/w04_03_attack_feb7c412.test.ts",
+          "title": "Retirement instant is not validated against any plausible range: retiredAt given in milliseconds (or near MAX_SAFE_INTEGER) imports, so the 7-day overlap bound is relative to a bogus instant and the retired key never stops being an accepted issuer"
+        },
+        {
+          "expected": "A grant issued by the production server under a key the ring still lists, inside the overlap and before lease expiry, must verify. Either the runbook must prescribe retiredAt = a future instant (>= propagation slack) / after-the-fact from the audit log, the importer must refuse a retiredAt in the past relative to secret activation, or the iat<=retiredAt rule must allow the propagation window.",
+          "observed": "Real edge handler with legacy secret issues a grant (200, keyId=previous, issue_offline_grant spent) at iat = retiredAt+30 s, where retiredAt is the instant the operator read the clock per docs/runbooks/offline-key-rotation.md ('the instant you will set the secret (now)'). After the ring secret lands (route now signs with active), verifying that server-issued grant against the ring inside the overlap (86369 s left, lease unexpired) yields retired_key. Every grant issued between assembling the ring and `supabase secrets set` propagating (dry-import, typing, edge cold-start) is refused although the server charged the allocation and the device may be offline with it.",
+          "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json w04_03_attack_feb7c412.test.ts --filter 'A5'",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/w04_03_attack_feb7c412.test.ts",
+          "title": "Runbook + iat<=retiredAt rule: grants the server itself issues under the old key between ring assembly (retiredAt = 'now') and the secret taking effect are spent but unverifiable (retired_key) inside the overlap"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Import refuses (invalid_key) a previous key whose x coordinate equals the active key's x (P = ±Q ⇔ same x on P-256), exactly as it refuses the identical point.",
+          "observed": "A ring whose previous.jwk = {x: active.x, y: p - active.y, kid: previous} imports (allowedKeyIds=[active, previous]); a grant signed with d' = n - d (trivially derived from the active private key) under kid=previous verifies. The B3 'previous entry repeats the active key's material' check therefore does not achieve its stated goal: a single private key still controls both kids and the previous kid's retirement window can be exercised by whoever holds the active key.",
+          "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json w04_03_attack_feb7c412.test.ts --filter 'A4'",
+          "severity": "P2",
+          "test_file": "supabase/functions/api/__wf__/w04_03_attack_feb7c412.test.ts",
+          "title": "'previous repeats active material' refusal compares (x,y) exactly and is bypassed by the negated point (x, p-y): the active private scalar (n-d) then signs valid grants under the PREVIOUS kid"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "feb7c4127a74d8fda11717721483d8f3a30d0237"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8b338ae0-dc2e-4076-9ca9-ef83593e0226/attack-candidate-final.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6a74eff-533f-4210-b229-70eed2cb61fa/attack-base-run.txt"
+        ],
+        "attack_branch": "devin/pp/w04-03/attack-274a7d22",
+        "attack_branch_sha": "d82e56ce0b367f89abae3f64bbc80e4a3f38c628",
+        "attacked_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "A signed grant has exactly one verified transport identity: the verifier either refuses a non-canonical (high-S) signature encoding or canonicalises before digesting, so grantJwsSha256 is a stable identity for a given jti under a given key.",
+            "observed": "VERIFIED on 274a7d22: the original grant verifies; the same compact JWS with the signature's s replaced by n-s ALSO verifies (jose/WebCrypto ES256 does not enforce low-S), with identical claims and jti but a different grantJwsSha256. Assertion output: 'Expected actual: \"distinct_digest\" not to be: \"distinct_digest\": the mutated signature verifies AND is reported as a different grantJwsSha256: the same jti has two verified transport identities'. VERIFIED on BASE f9709ae5 with a scratch probe using base's single-key API (importOfflineGrantSigningKey / importOfflineGrantVerificationKey): outcome 'distinct_digest' — identical behaviour, so this is carried forward by W04-03, not a regression. INFERRED impact: grantJwsSha256 is the receipt-binding grant identity (OfflineReceiptBinding.grantJwsSha256; settlement lineage column grant_jws_sha256; mobile hold path rejects a same-grantId/different-digest re-hold as grant_id_reused). VERIFIED by grep that verifyOfflineExecutionGrant is not yet called from any shipping route in index.ts and the settlement lineage stores the client-claimed digest without recomputing it, so no money/data-loss path was demonstrated.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts --filter 'A1 '  (Deno 2.9.6; full-file run on candidate: exit 1, 12 executed / 10 passed / 2 failed / 0 ignored)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (test 'A1 a grant whose ECDSA signature is rewritten to (r, n - s) is either refused or yields the SAME grantJwsSha256 as the original')",
+            "title": "verifyOfflineExecutionGrant accepts the ECDSA (r, n-s) high-S twin of a valid signature, so one jti yields two distinct verified grantJwsSha256 identities (PRE-EXISTING on BASE, not introduced by W04-03)"
+          },
+          {
+            "expected": "The route never persists a grant it cannot deliver: either the signing context tolerates the DB-vs-isolate skew (e.g. anchor nowEpochSeconds at max(isolate now, claims.iat) or tolerate bounded skew), or the time check happens before the RPC spends.",
+            "observed": "VERIFIED on 274a7d22 (routes harness, valid rotated ring, RPC fixture returning issued_at = isolate now + 2 s): one issue_offline_grant call is made and accepted, then the route returns 503 and logs '{\"evt\":\"offline_grant_audit\",\"outcome\":\"refused\",\"reason\":\"signing_failed\",\"grantId\":\"55555555-…\",\"generation\":1,\"entitlementSource\":\"verified_store\",\"keyId\":\"attack-0403-key-2026-09\"}'. No signed grant is delivered although a grant row/generation was committed. VERIFIED on BASE f9709ae5 with a scratch probe (single legacy JWK secret, same fixture): 'status 503, rpc calls: 1' — identical behaviour. INFERRED from 20260908160000_offline_device_grants.sql: a retry re-issues outstanding free tickets and mints a new generation, so no free rating or Pro lease is permanently lost; the cost is an orphaned grant row/generation plus an availability failure whenever DB now() rounds to a later second than Date.now() in the isolate.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts --filter 'A2 '  (Deno 2.9.6; full-file run on candidate: exit 1, 12 executed / 10 passed / 2 failed / 0 ignored)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (test 'A2 POST /v1/offline/grants never spends a grant it does not deliver when the database clock is ahead of the isolate clock')",
+            "title": "POST /v1/offline/grants answers a generic 503 AFTER issue_offline_grant has accepted and persisted the grant when the database clock is ≥1 s ahead of the isolate clock (signOfflineExecutionGrant refuses nowEpochSeconds < claims.iat) — PRE-EXISTING on BASE, not introduced by W04-03"
+          }
+        ],
+        "package_id": "W04-03",
+        "summary": "W04-03 adversarial review of devin/pp/w04-03/impl-r3 @ 274a7d2237e589b492049bb7ce295e8d31c42b8b. Attack file supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (12 Deno tests, A1–A12) committed alone on devin/pp/w04-03/attack-274a7d22 @ d82e56ce0b367f89abae3f64bbc80e4a3f38c628 (pushed, no PR, no force-push; prettier --check, eslint and `deno check` on the file exit 0; no production code or candidate tests touched; scratch probes were kept outside the repo / deleted from the base worktree).\n\nVERIFIED on candidate (Deno 2.9.6, disposable postgres:16 at 127.0.0.1:55433): `cd supabase/functions/api/__wf__ && XC_PG_URL=… deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts` → exit 1, 12 executed / 10 passed / 2 failed / 0 ignored (log: attack-candidate-final.txt). VERIFIED on BASE f9709ae5 (same file copied into a base worktree, same command) → exit 1, 0 passed / 12 failed (A3–A12 fail with 'offlineSignature.ts must export the key ring importer and the rotation bounds' — the ring API does not exist on base; log: attack-base-run.txt), so AC3-style regress holds for every rotation attack that passes on HEAD.\n\nAttacks that did NOT break the candidate (all VERIFIED passing on 274a7d22): A3 verification clock boundaries (0, -1, 1.5, NaN, Infinity, > 253402300799, string, rolled-back clock; overlap end wins over lease end); A4 ring-import boundaries (9999-12-31 bound inclusive/exclusive, 7-day overlap bound, kid length/charset, other-curve/`use`/`key_ops`/`alg`/case-variant previous JWKs); A5 corrupt/partial secret (BOM, truncated, trailing garbage, array-wrapped, whitespace-only, NUL kid, duplicate JSON keys) → generic 503, zero issue_offline_grant calls; A6 ring-cache staleness across valid→malformed→valid→rollback-to-single-JWK→unset and 8 cold-cache concurrent issuances all signed with the active kid; A7 authorization (no bearer / garbage bearer → 401, no spend; cross-owner and cross-installation verification refused under both keys); A8 kid confusion (signature under one key with the other kid, kid reuse on fresh material, dropped-for-compromise previous key) all refused; A9 reentrancy (getter that widens on re-read, allowlist mutated mid-verification, 24 interleaved verifications) never widens acceptance; A10 double rotation while the first overlap is open refuses the oldest key; A11 no key material/secret/bearer/owner id/installation key/signed grant in 503 bodies or logs; A12 RPC 500/503/429 under a rotated ring → generic 5xx with no grant/keyId/signed payload.\n\nConfirmed breaks: two, both reproduce identically on BASE and are therefore pre-existing behaviour the candidate carries forward rather than W04-03 regressions: (P2) ES256 high-S signature malleability gives one jti two verified grantJwsSha256 identities in verifyOfflineExecutionGrant (offlineSignature.ts is in write_paths); (P3) the route commits a grant via issue_offline_grant and then 503s with signing_failed when the DB clock is ahead of the isolate clock (index.ts, outside write_paths). Neither is money loss, data loss, leakage, or a crash on a supported path; the W04-03 objective (kid-tagged signatures, bounded overlap, previous-key acceptance only inside the overlap with the propagation grace) held under every attack tried. Candidate acceptance re-checked earlier this session: AC1 frozen deno@2.5.6 check exit 0 (VERIFIED); AC2 full __wf__ suite 932 passed / 0 failed / 0 ignored under Deno 2.9.6 (VERIFIED; a frozen deno@2.5.6 test run is blocked before executing tests because __wf__/deno.json has no import-map entries for bare `canonicalize`/`jose` — UNKNOWN under 2.5.6, not treated as a pass)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab400f79-514e-4746-ad8b-7b63c0cf8ef7/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC1",
+            "note": "VERIFIED at HEAD 274a7d22 (repo root). `Check file:///…/supabase/functions/api/index.ts`, exit 0, lockfile untouched (`git status` clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d86c624-1e24-4963-9e2e-a71c45f3d806/ac2-edge-suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+            "executed": 932,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC2",
+            "note": "VERIFIED at HEAD 274a7d22: `ok | 932 passed (31 steps) | 0 failed`, ignored == 0. Disposable DB = container `w0403pg` (postgres:16 on 127.0.0.1:55432) provisioned by `XC_PG_CONTAINER=w0403pg XC_PG_PORT=55432 ./xc_pg_up.sh` (shim_auth.sql + every migration, BASE-identical migrations dir). The manifest placeholder `XC_PG_URL=<url>` was substituted with the real URL; its documented alias `PICKLE_AUDIT_PG_URL` (read by w06_01_golden_parity.test.ts, which does not fall back to XC_PG_URL) was set to the SAME disposable URL so the 12 W06-01 SQL-plane tests run rather than ignore (with XC_PG_URL alone the run reports `12 ignored`). Never pointed at a hosted project. Also VERIFIED: `pnpm format:check` exit 0 (All matched files use Prettier code style) and `git diff --check` exit 0.",
+            "passed": 932,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0876092-7906-49b4-afd1-4558d44dfdc0/ac3-head.log",
+            "command": "git worktree add --detach /home/ubuntu/w0403-base f9709ae5ef76b53bc89d8aced75308a5f43f9729 && cp supabase/functions/api/__wf__/offline_key_rotation.test.ts <worktree>/supabase/functions/api/__wf__/ && (cd <worktree>/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # BASE → must FAIL;  (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # HEAD → must PASS",
+            "executed": 19,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC3",
+            "note": "PROOF exit 0. New test file supabase/functions/api/__wf__/offline_key_rotation.test.ts (added relative to BASE) copied alone onto BASE_SHA f9709ae5: exit 1, `FAILED | 0 passed | 19 failed` (offlineSignature.ts on BASE exports no importOfflineGrantKeyRing / rotation bounds), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/183f9eb7-4176-47cb-ad84-0e035645893e/ac3-base.log. Same file on the previous candidate r2 (feb7c412): exit 1, `FAILED | 11 passed | 8 failed` — the 8 failures are exactly the r3 additions (A3 instants, A4 negated point, A5 propagation grace, malformed-ring 503, server-issued-during-propagation, runbook wording), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/52485c25-652c-482a-8222-7eaf7181cae3/ac3-r2.log. On HEAD 274a7d22: exit 0, `ok | 19 passed | 0 failed`. Criterion 'receipt under retired key outside overlap rejected' is pinned by `receipt signed under the retired key verifies inside the overlap and is rejected at/after overlapEndsAt (retired_key)` plus the route-level `rotation procedure: …` tests. Supplementary: the adversary's own file w04_03_attack_feb7c412.test.ts (from origin/devin/pp/w04-03/attack-feb7c412, run ad hoc on HEAD, not committed) → A3, A4, A5 all `ok`; 7 passed / 2 failed, the 2 (A1 and the last assertion of A6) assert the r2 rule `iat > retiredAt ⇒ retired_key` at iat = retiredAt+1, which A5's own 'expected' text asks to relax for the propagation window (now retired_key only when iat > retiredAt + 900 s); A6's TOCTOU loop itself passes. Log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ecf4309-e90a-40dc-a420-2dab9d7f8ecc/adversary-on-head.log.",
+            "passed": 19,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: r3 tests committed before the fix and shown failing on r2 (11 passed | 8 failed) and on BASE (0 | 19). Minimal general fix inside write_paths: (1) one new constant + one extra clause in the existing `isEpochSeconds` predicate covers import and verify-time list mode; (2) a fixed 15-minute propagation grace applied symmetrically (`retiredAt ≤ now + grace` and `iat ≤ retiredAt + grace`) rather than making retiredAt optional or reading it from an audit log — keeps the ring self-describing, keeps overlap strictly bounded by `overlapEndsAt ≤ retiredAt + 7 d`, and never trusts a token-supplied instant; (3) same-x comparison via the existing `coordinateToBigInt` helper. Wiring reuse: index.ts hunk from r2 kept byte-identical for clean integration.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab400f79-514e-4746-ad8b-7b63c0cf8ef7/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d86c624-1e24-4963-9e2e-a71c45f3d806/ac2-edge-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/183f9eb7-4176-47cb-ad84-0e035645893e/ac3-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52485c25-652c-482a-8222-7eaf7181cae3/ac3-r2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0876092-7906-49b4-afd1-4558d44dfdc0/ac3-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ecf4309-e90a-40dc-a420-2dab9d7f8ecc/adversary-on-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ebc1d0d3-e894-4796-9e15-93cba69e8e77/format-check.log"
+        ],
+        "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+        "baseline_failures_observed": [
+          "None inside the Edge suite on the migrated disposable DB. Environmental note (not a code failure): `cd supabase/functions/api/__wf__ && XC_PG_URL=… deno task test` against a NON-migrated postgres:16 (plain `docker run … postgres:16` without ./xc_pg_up.sh) yields 49 failed (`relation \"auth.users\" does not exist`) and 12 ignored — the suite requires shim_auth.sql + every migration applied (./xc_pg_up.sh) and PICKLE_AUDIT_PG_URL for the W06-01 SQL-plane tests."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w04-03/impl-r3",
+        "files_changed": [
+          "supabase/functions/api/offlineSignature.ts",
+          "supabase/functions/api/offlineSignature.test.ts",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts",
+          "docs/runbooks/offline-key-rotation.md",
+          "supabase/functions/api/index.ts"
+        ],
+        "head_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — inherited unchanged from the r2 candidate (cherry-picked d2c5f875): the smallest wiring hunk under the `edge-index` serial group this package HOLDS (`offlineGrantKeyRing()` cache + `POST /v1/offline/grants` signs with the active kid, binds allowedKeyIds, answers a generic 503 before the grant-spending RPC on a malformed ring). No r3 edits touched it."
+        ],
+        "package_id": "W04-03",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'key ring import refuses retirement instants outside the Unix-seconds contract: milliseconds, near MAX_SAFE_INTEGER, past 9999-12-31' (A3)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'a previous key whose retiredAt lies more than the propagation grace ahead of the trusted clock is retired_key: the old key cannot stay an accepted issuer' (A3)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'previous-key grants minted inside the propagation grace after retiredAt verify; one second later they are retired_key for good' (A5)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'key ring import refuses a previous key that is the negation of the active point (same x): n - d would sign under the previous kid' (A4)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'POST /v1/offline/grants answers 503 and spends no grant for a ring whose previous key is the negated active point or whose instants are not Unix seconds' (A3+A4, route)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'rotation procedure: a grant the SERVER issued under the old key after retiredAt but inside the propagation grace verifies inside the overlap; one issued after the grace does not' (A5, route)",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'runbook: the rotation procedure names the propagation grace and the Unix-seconds bound, and no longer sets retiredAt at ring assembly' (A5 docs)",
+          "supabase/functions/api/offlineSignature.test.ts — import-time Unix-seconds bound cases, negated-point refusal, grace-window verdicts and list-mode bounded-window / future-retiredAt checks (unit)"
+        ],
+        "residual_risks": [
+          "Semantics change vs r2 for the previous key: grants with retiredAt < iat ≤ retiredAt + 900 s now verify (needed for A5). The adversary's A1/A6 assertions written against the r2 rule (iat = retiredAt + 1 ⇒ retired_key) therefore fail on HEAD by design; the bound is still absolute (retired_key for iat > retiredAt + 900 s, now ≥ overlapEndsAt, or retiredAt > now + 900 s) and the runbook documents the new verdict table.",
+          "The 15-minute grace is a fixed code constant; a secret rollout that takes longer than 15 minutes must be re-assembled with a later retiredAt (documented in the runbook). Not configurable by design so an operator cannot widen it via the secret.",
+          "AC2 needed `PICKLE_AUDIT_PG_URL` set alongside `XC_PG_URL` (w06_01_golden_parity.test.ts reads only the former) to reach ignored == 0; with the manifest's literal `XC_PG_URL=… deno task test` alone the suite reports 932−12 passed / 12 ignored. Both were pointed at the same disposable DB.",
+          "docs/runbooks/offline-key-rotation.md is a new operator document; no code path enforces the runbook's planning step beyond the grace/bounds checks."
+        ],
+        "summary": "W04-03 round 3 on devin/pp/w04-03/impl-r3 (HEAD 274a7d22, 10 commits over BASE f9709ae5; the four sound r2 commits d53819be..ea208294 cherry-picked unchanged, then r3 tests first (19e83ca5, 19e17ad7) and the fix (274a7d22)). Gap on BASE_SHA: supabase/functions/api/offlineSignature.ts had a single-key signer/verifier — no `kid` in the protected header, no ring, no overlap (offline_key_rotation.test.ts fails 19/19 there). Gaps on r2 (feb7c412) resolved: (A3) `isEpochSeconds` (offlineSignature.ts) accepted any non-negative safe integer, so a millisecond or near-MAX_SAFE_INTEGER `retiredAtEpochSeconds` imported and anchored a '7-day' overlap ~56,000 years out — now bounded by the new `OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS` = 253402300799 (9999-12-31T23:59:59Z, the offline contract's bound) at import AND in the verifier's `retirementWindows()` snapshot; a route ring with such instants is a generic 503 with zero `issue_offline_grant` calls. (A5) the verifier refused any previous-key grant with iat > retiredAt while the runbook told operators to set retiredAt = 'now' at ring assembly, so grants the SERVER itself issued under the old secret while `supabase secrets set` propagated were spent but unverifiable — now `OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS` = 900: the previous key verifies only when `retiredAt − grace ≤ now < overlapEndsAt` and `iat ≤ retiredAt + grace`; the trusted-clock anchor also means a far-future retiredAt verifies nothing (closes the other half of A3). Route-level regression: the real handler issues under the legacy secret at retiredAt+30 s, the ring lands, that grant verifies inside the overlap; the same key after the grace is retired_key. (A4) previous-vs-active equality compared (x,y) exactly, bypassed by the negated point (x, p−y) signed with n−d — `importRetiredKey` now refuses any previous key whose x equals the active x (P-256: same x ⇔ P = ±Q); regression signs with n−d and expects invalid_key at import and 503/no-spend at the route. Runbook docs/runbooks/offline-key-rotation.md rewritten for the Unix-seconds bound, the propagation grace (retiredAt = the planned `secrets set` instant, ±15 min tolerance, re-assemble if the operation slips), the same-x refusal, and the corrected verdict table; a runbook-consistency test pins the wording. Shipping path unchanged from r2: index.ts `offlineGrantKeyRing()` + `POST /v1/offline/grants` (active kid only, allowedKeyIds bound, malformed ring ⇒ 503 before spending). All acceptance commands VERIFIED: AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite 932 passed / 0 failed / 0 ignored against a disposable migrated postgres:16; AC3 base 0/19 → r2 11/19 → HEAD 19/19; `pnpm format:check` and `git diff --check` exit 0. No PR opened, no force-push, no Mac run, no production/secrets touched, no test weakened or removed, no comments modified."
+      },
+      "lanes": [
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8b338ae0-dc2e-4076-9ca9-ef83593e0226/attack-candidate-final.txt",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6a74eff-533f-4210-b229-70eed2cb61fa/attack-base-run.txt"
+            ],
+            "attack_branch": "devin/pp/w04-03/attack-274a7d22",
+            "attack_branch_sha": "d82e56ce0b367f89abae3f64bbc80e4a3f38c628",
+            "attacked_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+            "attacks_tried": 12,
+            "breaks": [
+              {
+                "expected": "A signed grant has exactly one verified transport identity: the verifier either refuses a non-canonical (high-S) signature encoding or canonicalises before digesting, so grantJwsSha256 is a stable identity for a given jti under a given key.",
+                "observed": "VERIFIED on 274a7d22: the original grant verifies; the same compact JWS with the signature's s replaced by n-s ALSO verifies (jose/WebCrypto ES256 does not enforce low-S), with identical claims and jti but a different grantJwsSha256. Assertion output: 'Expected actual: \"distinct_digest\" not to be: \"distinct_digest\": the mutated signature verifies AND is reported as a different grantJwsSha256: the same jti has two verified transport identities'. VERIFIED on BASE f9709ae5 with a scratch probe using base's single-key API (importOfflineGrantSigningKey / importOfflineGrantVerificationKey): outcome 'distinct_digest' — identical behaviour, so this is carried forward by W04-03, not a regression. INFERRED impact: grantJwsSha256 is the receipt-binding grant identity (OfflineReceiptBinding.grantJwsSha256; settlement lineage column grant_jws_sha256; mobile hold path rejects a same-grantId/different-digest re-hold as grant_id_reused). VERIFIED by grep that verifyOfflineExecutionGrant is not yet called from any shipping route in index.ts and the settlement lineage stores the client-claimed digest without recomputing it, so no money/data-loss path was demonstrated.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts --filter 'A1 '  (Deno 2.9.6; full-file run on candidate: exit 1, 12 executed / 10 passed / 2 failed / 0 ignored)",
+                "severity": "P2",
+                "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (test 'A1 a grant whose ECDSA signature is rewritten to (r, n - s) is either refused or yields the SAME grantJwsSha256 as the original')",
+                "title": "verifyOfflineExecutionGrant accepts the ECDSA (r, n-s) high-S twin of a valid signature, so one jti yields two distinct verified grantJwsSha256 identities (PRE-EXISTING on BASE, not introduced by W04-03)"
+              },
+              {
+                "expected": "The route never persists a grant it cannot deliver: either the signing context tolerates the DB-vs-isolate skew (e.g. anchor nowEpochSeconds at max(isolate now, claims.iat) or tolerate bounded skew), or the time check happens before the RPC spends.",
+                "observed": "VERIFIED on 274a7d22 (routes harness, valid rotated ring, RPC fixture returning issued_at = isolate now + 2 s): one issue_offline_grant call is made and accepted, then the route returns 503 and logs '{\"evt\":\"offline_grant_audit\",\"outcome\":\"refused\",\"reason\":\"signing_failed\",\"grantId\":\"55555555-…\",\"generation\":1,\"entitlementSource\":\"verified_store\",\"keyId\":\"attack-0403-key-2026-09\"}'. No signed grant is delivered although a grant row/generation was committed. VERIFIED on BASE f9709ae5 with a scratch probe (single legacy JWK secret, same fixture): 'status 503, rpc calls: 1' — identical behaviour. INFERRED from 20260908160000_offline_device_grants.sql: a retry re-issues outstanding free tickets and mints a new generation, so no free rating or Pro lease is permanently lost; the cost is an orphaned grant row/generation plus an availability failure whenever DB now() rounds to a later second than Date.now() in the isolate.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts --filter 'A2 '  (Deno 2.9.6; full-file run on candidate: exit 1, 12 executed / 10 passed / 2 failed / 0 ignored)",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (test 'A2 POST /v1/offline/grants never spends a grant it does not deliver when the database clock is ahead of the isolate clock')",
+                "title": "POST /v1/offline/grants answers a generic 503 AFTER issue_offline_grant has accepted and persisted the grant when the database clock is ≥1 s ahead of the isolate clock (signOfflineExecutionGrant refuses nowEpochSeconds < claims.iat) — PRE-EXISTING on BASE, not introduced by W04-03"
+              }
+            ],
+            "package_id": "W04-03",
+            "summary": "W04-03 adversarial review of devin/pp/w04-03/impl-r3 @ 274a7d2237e589b492049bb7ce295e8d31c42b8b. Attack file supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts (12 Deno tests, A1–A12) committed alone on devin/pp/w04-03/attack-274a7d22 @ d82e56ce0b367f89abae3f64bbc80e4a3f38c628 (pushed, no PR, no force-push; prettier --check, eslint and `deno check` on the file exit 0; no production code or candidate tests touched; scratch probes were kept outside the repo / deleted from the base worktree).\n\nVERIFIED on candidate (Deno 2.9.6, disposable postgres:16 at 127.0.0.1:55433): `cd supabase/functions/api/__wf__ && XC_PG_URL=… deno test -A --no-check --config deno.json attack_w04_03_key_rotation.test.ts` → exit 1, 12 executed / 10 passed / 2 failed / 0 ignored (log: attack-candidate-final.txt). VERIFIED on BASE f9709ae5 (same file copied into a base worktree, same command) → exit 1, 0 passed / 12 failed (A3–A12 fail with 'offlineSignature.ts must export the key ring importer and the rotation bounds' — the ring API does not exist on base; log: attack-base-run.txt), so AC3-style regress holds for every rotation attack that passes on HEAD.\n\nAttacks that did NOT break the candidate (all VERIFIED passing on 274a7d22): A3 verification clock boundaries (0, -1, 1.5, NaN, Infinity, > 253402300799, string, rolled-back clock; overlap end wins over lease end); A4 ring-import boundaries (9999-12-31 bound inclusive/exclusive, 7-day overlap bound, kid length/charset, other-curve/`use`/`key_ops`/`alg`/case-variant previous JWKs); A5 corrupt/partial secret (BOM, truncated, trailing garbage, array-wrapped, whitespace-only, NUL kid, duplicate JSON keys) → generic 503, zero issue_offline_grant calls; A6 ring-cache staleness across valid→malformed→valid→rollback-to-single-JWK→unset and 8 cold-cache concurrent issuances all signed with the active kid; A7 authorization (no bearer / garbage bearer → 401, no spend; cross-owner and cross-installation verification refused under both keys); A8 kid confusion (signature under one key with the other kid, kid reuse on fresh material, dropped-for-compromise previous key) all refused; A9 reentrancy (getter that widens on re-read, allowlist mutated mid-verification, 24 interleaved verifications) never widens acceptance; A10 double rotation while the first overlap is open refuses the oldest key; A11 no key material/secret/bearer/owner id/installation key/signed grant in 503 bodies or logs; A12 RPC 500/503/429 under a rotated ring → generic 5xx with no grant/keyId/signed payload.\n\nConfirmed breaks: two, both reproduce identically on BASE and are therefore pre-existing behaviour the candidate carries forward rather than W04-03 regressions: (P2) ES256 high-S signature malleability gives one jti two verified grantJwsSha256 identities in verifyOfflineExecutionGrant (offlineSignature.ts is in write_paths); (P3) the route commits a grant via issue_offline_grant and then 503s with signing_failed when the DB clock is ahead of the isolate clock (index.ts, outside write_paths). Neither is money loss, data loss, leakage, or a crash on a supported path; the W04-03 objective (kid-tagged signatures, bounded overlap, previous-key acceptance only inside the overlap with the propagation grace) held under every attack tried. Candidate acceptance re-checked earlier this session: AC1 frozen deno@2.5.6 check exit 0 (VERIFIED); AC2 full __wf__ suite 932 passed / 0 failed / 0 ignored under Deno 2.9.6 (VERIFIED; a frozen deno@2.5.6 test run is blocked before executing tests because __wf__/deno.json has no import-map entries for bare `canonicalize`/`jose` — UNKNOWN under 2.5.6, not treated as a pass)."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab400f79-514e-4746-ad8b-7b63c0cf8ef7/ac1-deno-check.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC1",
+                "note": "VERIFIED at HEAD 274a7d22 (repo root). `Check file:///…/supabase/functions/api/index.ts`, exit 0, lockfile untouched (`git status` clean).",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d86c624-1e24-4963-9e2e-a71c45f3d806/ac2-edge-suite.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+                "executed": 932,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC2",
+                "note": "VERIFIED at HEAD 274a7d22: `ok | 932 passed (31 steps) | 0 failed`, ignored == 0. Disposable DB = container `w0403pg` (postgres:16 on 127.0.0.1:55432) provisioned by `XC_PG_CONTAINER=w0403pg XC_PG_PORT=55432 ./xc_pg_up.sh` (shim_auth.sql + every migration, BASE-identical migrations dir). The manifest placeholder `XC_PG_URL=<url>` was substituted with the real URL; its documented alias `PICKLE_AUDIT_PG_URL` (read by w06_01_golden_parity.test.ts, which does not fall back to XC_PG_URL) was set to the SAME disposable URL so the 12 W06-01 SQL-plane tests run rather than ignore (with XC_PG_URL alone the run reports `12 ignored`). Never pointed at a hosted project. Also VERIFIED: `pnpm format:check` exit 0 (All matched files use Prettier code style) and `git diff --check` exit 0.",
+                "passed": 932,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0876092-7906-49b4-afd1-4558d44dfdc0/ac3-head.log",
+                "command": "git worktree add --detach /home/ubuntu/w0403-base f9709ae5ef76b53bc89d8aced75308a5f43f9729 && cp supabase/functions/api/__wf__/offline_key_rotation.test.ts <worktree>/supabase/functions/api/__wf__/ && (cd <worktree>/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # BASE → must FAIL;  (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # HEAD → must PASS",
+                "executed": 19,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC3",
+                "note": "PROOF exit 0. New test file supabase/functions/api/__wf__/offline_key_rotation.test.ts (added relative to BASE) copied alone onto BASE_SHA f9709ae5: exit 1, `FAILED | 0 passed | 19 failed` (offlineSignature.ts on BASE exports no importOfflineGrantKeyRing / rotation bounds), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/183f9eb7-4176-47cb-ad84-0e035645893e/ac3-base.log. Same file on the previous candidate r2 (feb7c412): exit 1, `FAILED | 11 passed | 8 failed` — the 8 failures are exactly the r3 additions (A3 instants, A4 negated point, A5 propagation grace, malformed-ring 503, server-issued-during-propagation, runbook wording), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/52485c25-652c-482a-8222-7eaf7181cae3/ac3-r2.log. On HEAD 274a7d22: exit 0, `ok | 19 passed | 0 failed`. Criterion 'receipt under retired key outside overlap rejected' is pinned by `receipt signed under the retired key verifies inside the overlap and is rejected at/after overlapEndsAt (retired_key)` plus the route-level `rotation procedure: …` tests. Supplementary: the adversary's own file w04_03_attack_feb7c412.test.ts (from origin/devin/pp/w04-03/attack-feb7c412, run ad hoc on HEAD, not committed) → A3, A4, A5 all `ok`; 7 passed / 2 failed, the 2 (A1 and the last assertion of A6) assert the r2 rule `iat > retiredAt ⇒ retired_key` at iat = retiredAt+1, which A5's own 'expected' text asks to relax for the propagation window (now retired_key only when iat > retiredAt + 900 s); A6's TOCTOU loop itself passes. Log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ecf4309-e90a-40dc-a420-2dab9d7f8ecc/adversary-on-head.log.",
+                "passed": 19,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Regression-first: r3 tests committed before the fix and shown failing on r2 (11 passed | 8 failed) and on BASE (0 | 19). Minimal general fix inside write_paths: (1) one new constant + one extra clause in the existing `isEpochSeconds` predicate covers import and verify-time list mode; (2) a fixed 15-minute propagation grace applied symmetrically (`retiredAt ≤ now + grace` and `iat ≤ retiredAt + grace`) rather than making retiredAt optional or reading it from an audit log — keeps the ring self-describing, keeps overlap strictly bounded by `overlapEndsAt ≤ retiredAt + 7 d`, and never trusts a token-supplied instant; (3) same-x comparison via the existing `coordinateToBigInt` helper. Wiring reuse: index.ts hunk from r2 kept byte-identical for clean integration.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab400f79-514e-4746-ad8b-7b63c0cf8ef7/ac1-deno-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d86c624-1e24-4963-9e2e-a71c45f3d806/ac2-edge-suite.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/183f9eb7-4176-47cb-ad84-0e035645893e/ac3-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52485c25-652c-482a-8222-7eaf7181cae3/ac3-r2.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f0876092-7906-49b4-afd1-4558d44dfdc0/ac3-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7ecf4309-e90a-40dc-a420-2dab9d7f8ecc/adversary-on-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ebc1d0d3-e894-4796-9e15-93cba69e8e77/format-check.log"
+            ],
+            "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+            "baseline_failures_observed": [
+              "None inside the Edge suite on the migrated disposable DB. Environmental note (not a code failure): `cd supabase/functions/api/__wf__ && XC_PG_URL=… deno task test` against a NON-migrated postgres:16 (plain `docker run … postgres:16` without ./xc_pg_up.sh) yields 49 failed (`relation \"auth.users\" does not exist`) and 12 ignored — the suite requires shim_auth.sql + every migration applied (./xc_pg_up.sh) and PICKLE_AUDIT_PG_URL for the W06-01 SQL-plane tests."
+            ],
+            "blocked": false,
+            "blocked_reason": "",
+            "branch": "devin/pp/w04-03/impl-r3",
+            "files_changed": [
+              "supabase/functions/api/offlineSignature.ts",
+              "supabase/functions/api/offlineSignature.test.ts",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts",
+              "docs/runbooks/offline-key-rotation.md",
+              "supabase/functions/api/index.ts"
+            ],
+            "head_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+            "out_of_scope_files": [
+              "supabase/functions/api/index.ts — inherited unchanged from the r2 candidate (cherry-picked d2c5f875): the smallest wiring hunk under the `edge-index` serial group this package HOLDS (`offlineGrantKeyRing()` cache + `POST /v1/offline/grants` signs with the active kid, binds allowedKeyIds, answers a generic 503 before the grant-spending RPC on a malformed ring). No r3 edits touched it."
+            ],
+            "package_id": "W04-03",
+            "regression_tests_added": [
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'key ring import refuses retirement instants outside the Unix-seconds contract: milliseconds, near MAX_SAFE_INTEGER, past 9999-12-31' (A3)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'a previous key whose retiredAt lies more than the propagation grace ahead of the trusted clock is retired_key: the old key cannot stay an accepted issuer' (A3)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'previous-key grants minted inside the propagation grace after retiredAt verify; one second later they are retired_key for good' (A5)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'key ring import refuses a previous key that is the negation of the active point (same x): n - d would sign under the previous kid' (A4)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'POST /v1/offline/grants answers 503 and spends no grant for a ring whose previous key is the negated active point or whose instants are not Unix seconds' (A3+A4, route)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'rotation procedure: a grant the SERVER issued under the old key after retiredAt but inside the propagation grace verifies inside the overlap; one issued after the grace does not' (A5, route)",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 'runbook: the rotation procedure names the propagation grace and the Unix-seconds bound, and no longer sets retiredAt at ring assembly' (A5 docs)",
+              "supabase/functions/api/offlineSignature.test.ts — import-time Unix-seconds bound cases, negated-point refusal, grace-window verdicts and list-mode bounded-window / future-retiredAt checks (unit)"
+            ],
+            "residual_risks": [
+              "Semantics change vs r2 for the previous key: grants with retiredAt < iat ≤ retiredAt + 900 s now verify (needed for A5). The adversary's A1/A6 assertions written against the r2 rule (iat = retiredAt + 1 ⇒ retired_key) therefore fail on HEAD by design; the bound is still absolute (retired_key for iat > retiredAt + 900 s, now ≥ overlapEndsAt, or retiredAt > now + 900 s) and the runbook documents the new verdict table.",
+              "The 15-minute grace is a fixed code constant; a secret rollout that takes longer than 15 minutes must be re-assembled with a later retiredAt (documented in the runbook). Not configurable by design so an operator cannot widen it via the secret.",
+              "AC2 needed `PICKLE_AUDIT_PG_URL` set alongside `XC_PG_URL` (w06_01_golden_parity.test.ts reads only the former) to reach ignored == 0; with the manifest's literal `XC_PG_URL=… deno task test` alone the suite reports 932−12 passed / 12 ignored. Both were pointed at the same disposable DB.",
+              "docs/runbooks/offline-key-rotation.md is a new operator document; no code path enforces the runbook's planning step beyond the grace/bounds checks."
+            ],
+            "summary": "W04-03 round 3 on devin/pp/w04-03/impl-r3 (HEAD 274a7d22, 10 commits over BASE f9709ae5; the four sound r2 commits d53819be..ea208294 cherry-picked unchanged, then r3 tests first (19e83ca5, 19e17ad7) and the fix (274a7d22)). Gap on BASE_SHA: supabase/functions/api/offlineSignature.ts had a single-key signer/verifier — no `kid` in the protected header, no ring, no overlap (offline_key_rotation.test.ts fails 19/19 there). Gaps on r2 (feb7c412) resolved: (A3) `isEpochSeconds` (offlineSignature.ts) accepted any non-negative safe integer, so a millisecond or near-MAX_SAFE_INTEGER `retiredAtEpochSeconds` imported and anchored a '7-day' overlap ~56,000 years out — now bounded by the new `OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS` = 253402300799 (9999-12-31T23:59:59Z, the offline contract's bound) at import AND in the verifier's `retirementWindows()` snapshot; a route ring with such instants is a generic 503 with zero `issue_offline_grant` calls. (A5) the verifier refused any previous-key grant with iat > retiredAt while the runbook told operators to set retiredAt = 'now' at ring assembly, so grants the SERVER itself issued under the old secret while `supabase secrets set` propagated were spent but unverifiable — now `OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS` = 900: the previous key verifies only when `retiredAt − grace ≤ now < overlapEndsAt` and `iat ≤ retiredAt + grace`; the trusted-clock anchor also means a far-future retiredAt verifies nothing (closes the other half of A3). Route-level regression: the real handler issues under the legacy secret at retiredAt+30 s, the ring lands, that grant verifies inside the overlap; the same key after the grace is retired_key. (A4) previous-vs-active equality compared (x,y) exactly, bypassed by the negated point (x, p−y) signed with n−d — `importRetiredKey` now refuses any previous key whose x equals the active x (P-256: same x ⇔ P = ±Q); regression signs with n−d and expects invalid_key at import and 503/no-spend at the route. Runbook docs/runbooks/offline-key-rotation.md rewritten for the Unix-seconds bound, the propagation grace (retiredAt = the planned `secrets set` instant, ±15 min tolerance, re-assemble if the operation slips), the same-x refusal, and the corrected verdict table; a runbook-consistency test pins the wording. Shipping path unchanged from r2: index.ts `offlineGrantKeyRing()` + `POST /v1/offline/grants` (active kid only, allowedKeyIds bound, malformed ring ⇒ 503 before spending). All acceptance commands VERIFIED: AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite 932 passed / 0 failed / 0 ignored against a disposable migrated postgres:16; AC3 base 0/19 → r2 11/19 → HEAD 19/19; `pnpm format:check` and `git diff --check` exit 0. No PR opened, no force-push, no Mac run, no production/secrets touched, no test weakened or removed, no comments modified."
+          },
+          "lane": 1,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/711a2a39-1831-4b82-9fd7-46ccf4898de5/ac1-deno-check.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC1",
+                "note": "VERIFIED at 274a7d22 from repo root: `Check file:///…/supabase/functions/api/index.ts`, exit 0; only the two known deno.json workspace warnings (\"lock\"/\"nodeModulesDir\" field) printed; working tree clean after the run. Also VERIFIED: `cd supabase/functions/api && deno check cache.ts rateLimit.ts http.ts legal.ts` exit 0; `npx prettier --check` on all 5 changed files exit 0; `git diff --check f9709ae5..274a7d22` exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a1334a-c7d7-4743-8cb6-dfe64af29127/ac2-edge-suite.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test",
+                "executed": 932,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC2",
+                "note": "VERIFIED at 274a7d22: `ok | 932 passed (31 steps) | 0 failed`, ignored == 0 (no `N ignored` token in the summary line; grep confirmed). Disposable DB = my own postgres:16 container `w0403rev` on 127.0.0.1:55434 provisioned via `XC_PG_CONTAINER=w0403rev XC_PG_PORT=55434 ./xc_pg_up.sh` (shim_auth.sql + every migration). PICKLE_AUDIT_PG_URL set to the same disposable URL so the 12 W06-01 SQL-plane tests execute rather than ignore. The new file runs inside the suite: `running 19 tests from ./offline_key_rotation.test.ts`. No hosted project touched; container removed afterwards.",
+                "passed": 932,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/db78eb8d-329b-4d20-946a-973e67ed8ad1/ac3-head-wf.log",
+                "command": "git worktree add --detach /home/ubuntu/w0403-base f9709ae5ef76b53bc89d8aced75308a5f43f9729 && cp supabase/functions/api/__wf__/offline_key_rotation.test.ts /home/ubuntu/w0403-base/supabase/functions/api/__wf__/ && cp supabase/functions/api/offlineSignature.test.ts /home/ubuntu/w0403-base/supabase/functions/api/ && (cd /home/ubuntu/w0403-base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # BASE must FAIL; (cd /home/ubuntu/w0403-base && deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts)  # BASE must FAIL; then on HEAD 274a7d22: (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts) && deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts  # must PASS",
+                "executed": 19,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC3",
+                "note": "PROOF exit 0 (VERIFIED, my own runs). BASE f9709ae5 with ONLY the two candidate test files copied over (git status in the worktree: `M offlineSignature.test.ts`, `?? __wf__/offline_key_rotation.test.ts`): (a) __wf__/offline_key_rotation.test.ts → exit 1, `FAILED | 0 passed | 19 failed` — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7504f9d3-f4ef-49e5-b08e-738b81739dd3/ac3-base-wf.log; (b) offlineSignature.test.ts → exit 1, fails type-check (TS2305: BASE exports no OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION / OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS / OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS / OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS / importOfflineGrantKeyRing) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf93beab-fba8-499e-8037-e61ebfbf613a/ac3-base-unit.log; with --no-check it is exit 1, `FAILED | 0 passed | 1 failed` (module load fails) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd613e8c-91d6-48fb-9126-a861e887bfc5/ac3-base-unit-nocheck.log. HEAD 274a7d22: __wf__/offline_key_rotation.test.ts → exit 0, `ok | 19 passed | 0 failed` (artifact above); offlineSignature.test.ts (type-checked, frozen lock) → exit 0, `ok | 157 passed | 0 failed` — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e780501-54d3-4301-b19f-f780479f7359/ac3-head-unit.log. Criterion 'receipt under retired key outside overlap rejected' is pinned by `receipt signed under the retired key verifies inside the overlap and is rejected at/after overlapEndsAt (retired_key)` plus the route-level rotation-procedure tests and the offlineSignature.test.ts key-ring cases; the executed/passed counts above are the 19-test __wf__ file (the unit file adds 157 more, all passing). Worktree removed after the runs; candidate checkout stayed clean.",
+                "passed": 19,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/711a2a39-1831-4b82-9fd7-46ccf4898de5/ac1-deno-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a1334a-c7d7-4743-8cb6-dfe64af29127/ac2-edge-suite.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7504f9d3-f4ef-49e5-b08e-738b81739dd3/ac3-base-wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/db78eb8d-329b-4d20-946a-973e67ed8ad1/ac3-head-wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf93beab-fba8-499e-8037-e61ebfbf613a/ac3-base-unit.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd613e8c-91d6-48fb-9126-a861e887bfc5/ac3-base-unit-nocheck.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e780501-54d3-4301-b19f-f780479f7359/ac3-head-unit.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "INFERRED: verifyOfflineExecutionGrant (ring-aware, overlap/grace verdicts) is exported from offlineSignature.ts but no route in index.ts calls it on HEAD — identical to BASE, where the single-key verifier was also uncalled. The receipt-reconciliation route that consumes it is W04-04's declared scope (index.ts + offline_receipt_reconciliation.test.ts), so this is not counted against W04-03; W04-04's reviewer should confirm the route passes the imported ring (not a bare key list) so previous-key retirement windows travel with the keys.",
+              "INFERRED: the 15-minute propagation grace is a fixed constant; grants a compromised OLD key mints with iat <= retiredAt+900s verify until overlapEndsAt (bounded by <= retiredAt+7d). Runbook documents this and the compromise path (previous=null). Acceptable trade-off, noted for W04-04/mobile consumers.",
+              "VERIFIED: `git diff` shows the `importOfflineGrantSigningKey` doc comment as removed/re-added — it is byte-identical and only moved with the function (now a thin wrapper over importSigningKeyPair); no existing comment text was modified.",
+              "VERIFIED (environmental): AC2's literal manifest command (XC_PG_URL only) would leave the 12 W06-01 SQL-plane tests ignored; PICKLE_AUDIT_PG_URL was pointed at the SAME disposable DB to reach ignored==0, exactly as the implementer reported. Consider updating the manifest command text."
+            ],
+            "package_id": "W04-03",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+            "scope_violation": false,
+            "summary": "APPROVE W04-03 r3 (devin/pp/w04-03/impl-r3 @ 274a7d2237e589b492049bb7ce295e8d31c42b8b, 10 commits over BASE f9709ae5). SCOPE (VERIFIED, `git diff --stat f9709ae5..274a7d22`): exactly 5 files — 4 under write_paths (offlineSignature.ts +296 net (296 changed lines), offlineSignature.test.ts +409, __wf__/offline_key_rotation.test.ts +1409 new, docs/runbooks/offline-key-rotation.md +214 new) plus supabase/functions/api/index.ts (17 changed lines), which is under the `edge-index` serial group this package HOLDS and is listed in out_of_scope_files; the hunk is the minimum wiring (`offlineGrantKeyRing()` cache replacing the single-key cache, `POST /v1/offline/grants` signs with `keyRing.signingKey` = active kid only, binds `allowedKeyIds: keyRing.allowedKeyIds`, generic 503 before `issue_offline_grant` on a malformed ring) → scope_violation=false. No additive shared paths, no migrations, no supabase/tests, no mobile, no scripts touched. SHIPPED BEHAVIOUR (VERIFIED by reading index.ts 4737-4755/4887-4958 + route tests in the 932-test suite): kid-tagged ES256 grants are issued by the production route from the imported ring; ring import (bare private JWK or schemaVersion-1 {active, previous}) is on the shipping path. The overlap/grace verifier is in the same shared module the route imports; the receipt route that will call it is W04-04's declared scope (same as BASE, where the verifier was also route-less) — noted non-blocking. ACCEPTANCE (all my own runs): AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite on my disposable migrated postgres:16 (xc_pg_up.sh, port 55434, XC_PG_URL+PICKLE_AUDIT_PG_URL) → `ok | 932 passed (31 steps) | 0 failed`, ignored==0, exit 0; AC3 BASE+copied tests: offline_key_rotation.test.ts `0 passed | 19 failed` exit 1, offlineSignature.test.ts fails type-check (TS2305 missing ring exports) exit 1; HEAD: 19/19 and 157/157, exit 0 → regression_fails_on_base=true. Extra gates VERIFIED: `deno check cache.ts rateLimit.ts http.ts legal.ts` exit 0, prettier --check on the 5 files exit 0, `git diff --check` exit 0. DIFF AUDIT vs REVIEW.md/invariants (VERIFIED by reading the full diff and HEAD source): no `any`/ts-ignore/eslint-disable/`|| true`/ignore/only/sanitize flags in changed files; no test deleted, reordered or weakened (offlineSignature.test.ts is pure insertions; offline_grants_routes.test.ts untouched); no comment text modified (the only removed comment lines belong to `importOfflineGrantSigningKey`, whose doc comment is re-added byte-identical above the function's new location); no migration/RLS/grant/session-check change; 5xx stays generic (`SigningKeyUnavailable` 503, no detail); billing: malformed ring → 503 BEFORE the grant-spending RPC, active key is the only signer so offline allocation/consumption semantics untouched; owner isolation unchanged (route still binds ownerId/installationKeyId); runbook is operator-facing, contains no forbidden copy terms and no secret values. Verifier logic reviewed: previous-key grants accepted only when `retiredAt − 900s ≤ now < overlapEndsAt` and `iat ≤ retiredAt + 900s`, window bounded to ≤ 7 d and instants ≤ 253402300799 at import AND in `retirementWindows()` (snapshot before async crypto); import refuses previous private material, duplicate kid, off-curve points, same-x previous point (P = ±Q), active d/(x,y) mismatch (sign+verify probe), unknown members; ring keys can only be narrowed by the binding allowlist. All prior adversary categories (mismatched d, narrowed allowlist, list-path metadata loss, duplicate previous, ms/unbounded instants, negated point, missing grace) have pinning tests that pass on HEAD and fail on BASE. Zero blocking issues, zero invariant violations. No PR opened, no push, no Mac run, no production/secrets touched; base worktree and disposable container removed.",
+            "verdict": "approve"
+          }
+        },
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a670ea26-d7d3-437c-b77c-ee559d434652/attack-candidate.clean.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5cc6ca0d-e83e-4f4f-94f9-2062dc3a6bb0/attack-base.clean.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5ac2733b-0a95-4ba6-9326-0011009c38c2/ac2-with-attacks.clean.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/274fd1a2-0ae2-495c-b1f1-ba8799dbc50f/ac2-baseline-both.clean.log"
+            ],
+            "attack_branch": "devin/pp/w04-03/attack-8f0f4c46",
+            "attack_branch_sha": "bdc46eae27648d8395af1fb0d70300a25571f8b8",
+            "attacked_sha": "8f0f4c464ef7ec2dba6507b21671dc57b48dc9cb",
+            "attacks_tried": 11,
+            "breaks": [
+              {
+                "expected": "docs/runbooks/offline-key-rotation.md step 4 (write-path deliverable) tells the operator to roll back when the log shows `name: \"SigningKeyUnavailable\"`; the log must carry that marker (or the runbook must name the marker that is actually emitted). As shipped an operator following the runbook has no signal to distinguish a broken ring from any other 503.",
+                "observed": "POST /v1/offline/grants with OFFLINE_GRANT_SIGNING_JWK set to a ring whose previous jwk carries `d` -> 503, 0 issue_offline_grant calls (good), but the function log line is `[api] Offline grant issuance: { name: \"unknown\", code: \"unknown\", status: null }`. serviceUnavailable() passes { name: \"SigningKeyUnavailable\" } to http.ts failureDetail(), whose FAILURE_NAMES allow-list does not contain it, so the name is normalised to \"unknown\".",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json ./attack_w04_03_key_rotation.test.ts --filter 'A2 runbook step 4'",
+                "severity": "P2",
+                "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts",
+                "title": "Runbook roll-back trigger does not exist in logs: a malformed ring logs name \"unknown\", not the documented \"SigningKeyUnavailable\""
+              },
+              {
+                "expected": "The retirement window must be bound to the same key entry it was declared on; verification of a previous-key receipt at/after overlapEndsAt must fail with retired_key regardless of how the caller's entry object answers `kid`. Reachability: requires a trusted in-process caller to pass a non-plain key object on the readonly-list API (not reachable from the network); the shipping ring path snapshots correctly. Defense-in-depth gap, not an exploitable path — hence P3.",
+                "observed": "verifyOfflineExecutionGrant(receipt, [activeKey, entry], ctx) where `entry` is a retired-key object with a `kid` getter answering PREVIOUS_KID on the first read (key map) and another id on the second read (retirementWindows) accepted a receipt signed under the previous key at now = overlapEndsAt (control with the honest object: retired_key). The retirement window is keyed by a separately-read kid instead of being snapshotted with the key entry, so the window silently detaches from the key.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json ./attack_w04_03_key_rotation.test.ts --filter 'A4 list path'",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts",
+                "title": "List-path verification reads `kid` twice: a retired-key entry whose kid differs between the two reads verifies a previous-key receipt AFTER overlapEndsAt"
+              },
+              {
+                "expected": "Either OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS should be lease-max + propagation-grace so the runbook's 'use the longest lease' guidance actually covers every grace-issued grant, or the runbook must state that grace-issued grants lose up to one hour of lease at the maximum overlap. The runbook does say receipts are refused at overlapEndsAt even if the lease is live, so this is a documented trade-off with no money loss (device re-requests online) — P3, design/documentation coherence.",
+                "observed": "Ring with retiredAt = T, overlapEndsAt = T + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS (the runbook's recommended 'longest lease' value). A grant issued under the previous key at iat = T + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS (accepted by design: iat <= retiredAt + grace) with the full 7-day Pro lease verifies at T + 7d - 1 but is refused with retired_key at T + 7d + 3600 - 1, i.e. during the last hour of a lease the server itself issued and the verifier explicitly deems legitimately-issued.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json ./attack_w04_03_key_rotation.test.ts --filter 'A11 overlap ceiling'",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts",
+                "title": "Maximum overlap (7 days) cannot cover a grant the server legitimately issued under the old key during the propagation grace: its last hour is refused as retired_key"
+              }
+            ],
+            "package_id": "W04-03",
+            "summary": "Adversarial run against W04-03 candidate 8f0f4c464ef7ec2dba6507b21671dc57b48dc9cb (branch devin/pp/w04-03/impl-r3-c2). Attack file supabase/functions/api/__wf__/attack_w04_03_key_rotation.test.ts pushed as the only commit on devin/pp/w04-03/attack-8f0f4c46 @ bdc46eae27648d8395af1fb0d70300a25571f8b8 (plain push, no PR, no force, main/ci-mac untouched, no production access, no candidate production code or candidate-owned tests modified).\n\nBASELINE (VERIFIED, candidate HEAD, prior turn): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0. AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> PICKLE_AUDIT_PG_URL=<same> deno task test` exit 0, 927 passed / 0 failed / 0 ignored (attachment ac2-baseline-both.clean.log; with only XC_PG_URL set 12 W06-01 golden-parity tests are ignored, so the audit URL is required for ignored == 0 — env note, not a candidate defect).\n\nATTACKS (11 tried, VERIFIED): `cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json ./attack_w04_03_key_rotation.test.ts` -> exit 1, 8 passed / 3 failed / 0 ignored (attachment attack-candidate.clean.log). Full suite with the attack file present: exit 1, 935 passed / 3 failed / 0 ignored — the only failures are the three attack reproductions, so the attack file does not disturb the candidate suite (attachment ac2-with-attacks.clean.log). Attack file fmt/lint/check: `deno fmt --config deno.json --check` exit 0, `deno lint --config deno.json` exit 0, `deno check --config __wf__/deno.json __wf__/attack_w04_03_key_rotation.test.ts` exit 0.\nHELD (no break): A1 runbook step-0/1/3 key-generation + public-half extraction + `deno eval --lock=deno.lock` dry import produces an accepted ring; A3 secret hygiene — no coordinate/scalar/raw secret in 200 body, 503 body or any log line; A5 two retired keys in the list path keep independent windows, allowlist narrowing refuses out-of-list kids with invalid_metadata, no window ever attaches to the active key; A6 route cache transitions valid ring -> malformed (503, zero RPC) -> restored -> legacy bare private JWK -> pretty-printed ring all follow the secret value exactly, and a 6-request cold-cache burst all signs with the active kid and every grant verifies; A7 compromise rotation (zero overlap at the secret-set instant) refuses every old-key receipt before/during/after the grace while the new key verifies, and dropping the previous key yields invalid_metadata; A8 numeric boundaries — exponent-notation integers equal the literal window, -0 / fractions / numeric strings / MAX+1 / reversed windows / NaN / Infinity refused as invalid_key, epoch 0 and 253402300799 import; A9 no bearer / garbage bearer / service-role-looking bearer -> 401 with zero RPC calls and no grant material in the body; A10 verifier clock rolled back before iat -> invalid_time for both keys, rolled back > one grace before retiredAt -> ring import refused, far-future clock -> invalid_time (never acceptance).\nBREAKS: (P2) A2 — malformed ring logs `name: \"unknown\"` because http.ts failureDetail() strips the undocumented `SigningKeyUnavailable` name; runbook step 4's roll-back trigger therefore never appears. (P3) A4 — readonly-list path reads `kid` twice, so a key object whose kid differs between reads detaches the retirement window and a previous-key receipt verifies after overlapEndsAt (needs a hostile in-process caller; ring path unaffected). (P3) A11 — at the runbook's recommended maximum overlap (7 d) a grant issued under the old key inside the propagation grace with a 7-day lease is refused for its last hour; MAX_OVERLAP excludes the grace the verifier itself honours.\n\nAC3 regression evidence (VERIFIED): attack file copied onto BASE f9709ae5 in a throwaway worktree fails to load — `SyntaxError: The requested module '../offlineSignature.ts' does not provide an export named 'OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS'`, exit 1 (attachment attack-base.clean.log); on HEAD the 8 non-breaking attacks pass. Not run (out of scope for this Edge-only package): Mac verification, RLS runner, mobile Jest. Nothing was deployed, no secrets read or written."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/921c8039-8486-4183-b45e-0395aa303369/ac1.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC1",
+                "note": "VERIFIED on HEAD 8f0f4c46 (run after the final index.ts edit). `Check file:///.../supabase/functions/api/index.ts`, exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a32b853b-a2bf-44aa-aaba-f8461820d04d/ac2.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 927,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC2",
+                "note": "VERIFIED on the final HEAD tree: `ok | 927 passed (31 steps) | 0 failed (1m52s)`, no ignored tests (ignored == 0). Disposable postgres:16 docker container `pickle-xc-pg` on 127.0.0.1:55433. PICKLE_AUDIT_PG_URL is also pointed at the disposable DB because w06_01_golden_parity.test.ts reads only that variable and would otherwise mark 12 tests ignored. Base (f9709ae5) full suite observed with XC_PG_URL only: `ok | 901 passed (31 steps) | 0 failed | 12 ignored`, exit 0 (the 12 are the W06-01 golden-parity tests gated on PICKLE_AUDIT_PG_URL). HEAD = 901 + 12 formerly-ignored + 14 new rotation tests = 927.",
+                "passed": 927,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fbee9f83-0975-4136-9853-efd1754bc2f4/ac3_head_wf.log",
+                "command": "git worktree add --detach /home/ubuntu/w0403/base f9709ae5ef76b53bc89d8aced75308a5f43f9729; cp supabase/functions/api/__wf__/offline_key_rotation.test.ts and supabase/functions/api/offlineSignature.test.ts from HEAD into the base worktree; BASE: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_key_rotation.test.ts  (and: deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts); HEAD: same two commands in the candidate checkout",
+                "executed": 14,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC3",
+                "note": "PROOF: new tests FAIL on BASE and PASS on HEAD. BASE __wf__/offline_key_rotation.test.ts: exit 1, `FAILED | 0 passed | 14 failed` (first assertion: offlineSignature.ts must export importOfflineGrantKeyRing and the rotation bounds) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/12f7ef6b-6a6b-4d39-a572-d96da0e32d59/ac3_base_wf.log . BASE offlineSignature.test.ts: exit 1, type check fails with 4x TS2305 (no exported member OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION / OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS / OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS / importOfflineGrantKeyRing), 0 executed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/cfd70c5d-aba1-4bf4-aba4-8d46c9347bb0/ac3_base_unit.log . HEAD __wf__: exit 0, `ok | 14 passed | 0 failed` (counts above). HEAD offlineSignature.test.ts: exit 0, `ok | 158 passed | 0 failed` — https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c5e2371-b3df-4ad3-afca-7d0e1de44343/ac3_head_unit.log . Criterion 'receipt under retired key outside overlap rejected' is covered by the tests asserting retired_key at now >= overlapEndsAt (exclusive boundary) and for previous-key grants with iat > retiredAt + grace.",
+                "passed": 14,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Test-first: wrote __wf__/offline_key_rotation.test.ts (14 tests incl. the three prior-round attacks) + ring unit tests, proved failure on BASE_SHA in a detached worktree, committed separately; then implemented the ring importer/verifier in offlineSignature.ts, a 2-line wiring hunk in index.ts, and the runbook; reran all acceptance commands on the final tree. Extra (beyond the manifest): `XC_PG_URL=… PICKLE_AUDIT_PG_URL=… scripts/verify-cloud.sh --only format,lint,edge,security` on HEAD → format passed, lint passed (root eslint), edge passed (deno check + full __wf__ suite), security failed with the pre-existing BASE_SHA gitleaks findings recorded in baseline_failures_observed (verify_cloud_subset.log). Scoped `deno lint` on the changed Edge files: 0 problems. No PR opened; only devin/pp/w04-03/impl-r3-c2 pushed.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/921c8039-8486-4183-b45e-0395aa303369/ac1.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a32b853b-a2bf-44aa-aaba-f8461820d04d/ac2.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12f7ef6b-6a6b-4d39-a572-d96da0e32d59/ac3_base_wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cfd70c5d-aba1-4bf4-aba4-8d46c9347bb0/ac3_base_unit.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fbee9f83-0975-4136-9853-efd1754bc2f4/ac3_head_wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c5e2371-b3df-4ad3-afca-7d0e1de44343/ac3_head_unit.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/55e82814-add2-4353-b172-29748d4b6904/format_check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/86dbed55-0190-49ec-b5b4-5b861829d764/git_diff_check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21cfbcd8-bec2-45ea-a45d-b3ec67f1b59d/verify_cloud_subset.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae0a0f08-cd0a-4cc1-a25a-52be88fb3abc/security_scan_base.log"
+            ],
+            "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+            "baseline_failures_observed": [
+              "scripts/security-scan.sh (the `security` stage of scripts/verify-cloud.sh --tier pr): exit 1 on a CLEAN checkout of BASE_SHA f9709ae5 — gitleaks 8.30.1 reports 8 tree findings (generic-api-key) in .devin/program/ledger/W08-06/wave-17-keep/record.json:32,42; .devin/program/ledger/W08-06/wave-7-keep/record.json:269,277,292; .devin/program/runs/WAVE__0e7f18ede164__wave-17-keep.py:16 (x2); apps/mobile/__tests__/w01PartialOutcome.test.tsx:141 — and the same 8 in history. Identical finding set on HEAD 8f0f4c46 (none in this package's files or commits). Not fixed (outside write_paths). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae0a0f08-cd0a-4cc1-a25a-52be88fb3abc/security_scan_base.log"
+            ],
+            "blocked": false,
+            "branch": "devin/pp/w04-03/impl-r3-c2",
+            "files_changed": [
+              "supabase/functions/api/offlineSignature.ts",
+              "supabase/functions/api/offlineSignature.test.ts",
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts",
+              "docs/runbooks/offline-key-rotation.md",
+              "supabase/functions/api/index.ts"
+            ],
+            "head_sha": "8f0f4c464ef7ec2dba6507b21671dc57b48dc9cb",
+            "out_of_scope_files": [
+              "supabase/functions/api/index.ts — edge-index serial group (held by this package); 2-line wiring hunk only: import `importOfflineGrantKeyRing` instead of `importOfflineGrantSigningKey` and sign with `(await importOfflineGrantKeyRing(parsed, now)).signingKey`, so the shipping route consumes the key ring (legacy bare JWK still accepted; malformed ring stays a generic 503 before issue_offline_grant is called)."
+            ],
+            "package_id": "W04-03",
+            "regression_tests_added": [
+              "supabase/functions/api/__wf__/offline_key_rotation.test.ts (14 tests: kid-tagged header, overlap acceptance with exclusive end, retired_key past overlap, propagation-grace acceptance / late-mint retired_key (A5), ms/near-MAX_SAFE_INTEGER retiredAt rejected (A3), overlap length bound, negated-point previous key refused (A4), previous entry must be public-only, active/previous-only allowlists, unknown kid invalid_key, route 503 on malformed ring without spending, route signs with active kid, runbook contract)",
+              "supabase/functions/api/offlineSignature.test.ts (+~40 ring/rotation unit tests; suite 158 total)"
+            ],
+            "residual_risks": [
+              "The route caches the ring per distinct secret value per isolate; a rotation takes effect on each isolate's next request (documented in the runbook), so grants issued by cold isolates for up to the propagation grace are still verifiable inside the overlap by design.",
+              "A retiredAt more than one propagation grace (3600 s) in the future is refused at import; operators must set the secret within an hour of the chosen retiredAt (documented).",
+              "Devices verify with the ring's public material; the mobile-side verifier is out of this package's scope (write_paths are Edge + runbook)."
+            ],
+            "summary": "Defect on BASE_SHA f9709ae5: supabase/functions/api/offlineSignature.ts had a single-key contract — `importOfflineGrantSigningKey(privateJwk)` (offlineSignature.ts:~96–130 on base) imported one private JWK, `verifyOfflineExecutionGrant(raw, readonly OfflineGrantKey[], ctx)` (base ~:380) selected by kid from a flat list with no notion of a retired key or an overlap window, and index.ts:4737–4759 cached exactly one key for POST /v1/offline/grants. There was no rotation procedure, no bounded overlap and no way to accept a receipt under the previous key only inside the overlap; docs/runbooks/offline-key-rotation.md did not exist. Prior-round (r2) adversary breaks A3 (retiredAt unbounded → ms slip makes the overlap unbounded), A5 (grants the server issued between ring assembly and secret propagation were retired_key inside the overlap) and A4 (negated point (x, p−y) bypassed the 'previous repeats active' check) were all reproduced conceptually and are each pinned by new tests.\n\nFix (HEAD 8f0f4c46): `importOfflineGrantKeyRing(configured, nowEpochSeconds)` accepts the legacy bare private JWK or a schemaVersion=1 ring {active: private P-256 JWK, previous: {jwk: PUBLIC JWK, retiredAtEpochSeconds, overlapEndsAtEpochSeconds} | null}. Active material is validated (canonical 32-byte coords/scalar, d in [1,n−1], point on curve, sign/verify probe so (x,y) belongs to d); previous material must be public-only (any `d` → invalid_key) and must not share the active key's x coordinate (refuses both the identical and the negated point — A4). Retirement metadata must be plausible Unix seconds (≤ 253402300799), overlapEndsAt − retiredAt ≤ OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS (= 7-day Pro lease bound) and retiredAt ≤ now + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS (3600 s) — A3. `verifyOfflineExecutionGrant` accepts a ring or the existing key list; a previous-key receipt verifies only when now < overlapEndsAt (exclusive) AND iat ≤ retiredAt + grace, otherwise retired_key — A5 resolved by the grace, while a key minted later under the retired key is refused. `allowedKeyIds` remains verifier-side binding context (never a signed claim). The shipping route signs with `ring.signingKey` (active private key only); a malformed ring is a generic 503 before issue_offline_grant is called. Runbook docs/runbooks/offline-key-rotation.md documents the ring shape, key generation, choosing retiredAt/overlapEndsAt, dry import, the human-approved `supabase secrets set` step (not executed), retirement and compromise response.\n\nVERIFIED: AC1 exit 0; AC2 927 passed / 0 failed / 0 ignored; AC3 base FAIL (wf 0/14 passed exit 1; unit TS2305 exit 1) → HEAD PASS (wf 14/14, unit 158/158); `pnpm format:check` exit 0; `git diff --check` exit 0; `deno lint` on the three write-path TS files clean; `deno check` of offlineSignature.ts + .test.ts exit 0. Commits: 09136b76 (tests first) then 8f0f4c46 (implementation), pushed to origin/devin/pp/w04-03/impl-r3-c2. No PR opened; no production Supabase access; no secrets touched."
+          },
+          "lane": 2,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a88ffbb-38f0-4f75-9485-8b8b91081866/ac1.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC1",
+                "note": "VERIFIED on 8f0f4c46: `Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts`, exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/970f8387-398e-4905-a9cb-bad165bc5fa6/ac2.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 927,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC2",
+                "note": "VERIFIED on 8f0f4c46: `ok | 927 passed (31 steps) | 0 failed (1m58s)`, no `ignored` count in the summary (0 ignored). Disposable postgres (container w0403-pg, postgres:16-alpine image, 127.0.0.1:55433) prepared with supabase/tests/shim_auth.sql + every supabase/migrations/*.sql. PICKLE_AUDIT_PG_URL also pointed at the disposable DB so w06_01_golden_parity tests run instead of being ignored. `running 14 tests from ./offline_key_rotation.test.ts` all ok.",
+                "passed": 927,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1aba7064-3532-468f-95ed-0c6c2683cf56/ac3_head_wf.log",
+                "command": "git worktree add --detach /home/ubuntu/w0403-review/base f9709ae5ef76b53bc89d8aced75308a5f43f9729; cp HEAD's supabase/functions/api/__wf__/offline_key_rotation.test.ts and supabase/functions/api/offlineSignature.test.ts into the base worktree (only files changed in `git status`); BASE: (cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_key_rotation.test.ts) and (cd supabase/functions/api && deno test --no-prompt --frozen --lock=deno.lock offlineSignature.test.ts); HEAD (8f0f4c46): same two commands in the candidate checkout",
+                "executed": 172,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-03-AC3",
+                "note": "PROOF holds. BASE __wf__/offline_key_rotation.test.ts: exit 1, `FAILED | 0 passed | 14 failed` (AssertionError: offlineSignature.ts must export importOfflineGrantKeyRing and the rotation bounds) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/681eec16-15df-4742-b47d-b8887f9c817d/ac3_base_wf.log . BASE offlineSignature.test.ts: exit 1, 4x TS2305 (no exported member OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION / OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS / OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS / importOfflineGrantKeyRing), 0 tests executed — https://la-hacks-rttothemoon.devinenterprise.com/attachments/a8a3313c-d14b-49ee-b3c8-850d88929929/ac3_base_unit.log . HEAD __wf__: exit 0, `ok | 14 passed | 0 failed`. HEAD offlineSignature.test.ts: exit 0, `ok | 158 passed | 0 failed` — https://la-hacks-rttothemoon.devinenterprise.com/attachments/de5e282f-9dea-49c8-a317-354ff458c064/ac3_head_unit.log . executed/passed = 14 + 158. Criterion 'receipt under retired key outside overlap rejected' is asserted at offline_key_rotation.test.ts:333-336 (now in [overlapEndsAt, overlapEndsAt+1, overlapEndsAt+DAY] -> retired_key while the grant itself is unexpired) and :421-435 (iat > retiredAt + grace -> retired_key inside the overlap).",
+                "passed": 172,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a88ffbb-38f0-4f75-9485-8b8b91081866/ac1.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/970f8387-398e-4905-a9cb-bad165bc5fa6/ac2.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/681eec16-15df-4742-b47d-b8887f9c817d/ac3_base_wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a8a3313c-d14b-49ee-b3c8-850d88929929/ac3_base_unit.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1aba7064-3532-468f-95ed-0c6c2683cf56/ac3_head_wf.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de5e282f-9dea-49c8-a317-354ff458c064/ac3_head_unit.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "The verifier side of the objective (verifyOfflineExecutionGrant accepting a previous-key receipt only inside the overlap) lives in supabase/functions/api/offlineSignature.ts and is exercised by the new tests, but no shipping Edge route calls verifyOfflineExecutionGrant on BASE or HEAD (the Edge only issues/signs grants; devices verify via packages/shared-types/src/offlineAuthorization.ts, which is under the un-held `shared-types` serial group and unchanged). The shipping route does consume the ring for signing (index.ts:4752). Device-side acceptance of previous-key receipts inside the overlap is therefore not shipped by this package; the implementer lists this as a residual risk. Coordinator should decide whether a follow-up package for the mobile/shared-types verifier is needed.",
+              "AC3 base failure for __wf__/offline_key_rotation.test.ts is a single guard assertion ('offlineSignature.ts must export importOfflineGrantKeyRing and the rotation bounds') repeated for all 14 tests, because the base module has no ring concept; the retired_key behaviour itself is asserted on HEAD (tests at offline_key_rotation.test.ts:300, :407, :878, :1117 assert retired_key at now >= overlapEndsAt and for iat > retiredAt + grace).",
+              "Reviewer environment note: `docker pull postgres:16` returned HTTP 429 from Docker Hub; the disposable DB was run from the locally cached postgres:16-alpine image (tagged as postgres:16 so db_migrations_rls_indexes.audit.test.ts could launch its own container). shim_auth.sql + all migrations were applied to the disposable DB before the suite (the __wf__ live-DB tests require a migrated DB, they do not migrate it themselves)."
+            ],
+            "package_id": "W04-03",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "8f0f4c464ef7ec2dba6507b21671dc57b48dc9cb",
+            "scope_violation": false,
+            "summary": "APPROVE W04-03 candidate 8f0f4c464ef7ec2dba6507b21671dc57b48dc9cb (branch devin/pp/w04-03/impl-r3-c2) vs BASE f9709ae5.\n\nSCOPE (VERIFIED, `git diff --numstat f9709ae5..8f0f4c46`): docs/runbooks/offline-key-rotation.md +220/-0, supabase/functions/api/__wf__/offline_key_rotation.test.ts +1282/-0, supabase/functions/api/offlineSignature.test.ts +304/-0, supabase/functions/api/offlineSignature.ts +292/-14, supabase/functions/api/index.ts +2/-2. Four files are write_paths. index.ts is under the `edge-index` serial group, which this package HOLDS; the edit is exactly the 2-line wiring hunk declared in out_of_scope_files (import `importOfflineGrantKeyRing` instead of `importOfflineGrantSigningKey`; `const key = (await importOfflineGrantKeyRing(parsed, Math.floor(Date.now()/1000))).signingKey;` at index.ts:4752) and is required for the shipping POST /v1/offline/grants route to consume the ring -> justified wiring, scope_violation=false. Shipping behaviour: the route signs with the ring's active key; a malformed ring still returns the generic 503 before issue_offline_grant (pinned by the new __wf__ route tests).\n\nDIFF REVIEW (INFERRED from reading the full diff): importOfflineGrantSigningKey is kept (now delegates to importSigningKeyPair) with its original doc comment moved verbatim — no existing comment edited. offlineSignature.test.ts is additive only (0 deletions); no test weakened/reordered/skipped. grep of the diff for `any`, @ts-ignore/@ts-expect-error, eslint-disable, `|| true`, passWithNoTests, `ignore: true`, sanitizeOps/Resources, `only:`, Deno.exit, setTimeout -> no matches. No migrations, RLS, grants, session checks, billing paths, mobile code or copy touched. Runbook mentions the production project id only to require an explicit human go-ahead for `supabase secrets set`; no secrets printed; no forbidden copy terms. Overlap bound = OFFLINE_PRO_LEASE_MAX_SECONDS (7-day Pro lease invariant); previous key must be public-only and may not share the active x coordinate (negated point refused); retiredAt/overlapEndsAt validated as Unix seconds <= 253402300799 and retiredAt <= now + 3600; previous-key receipts verify only when now < overlapEndsAt (exclusive) AND iat <= retiredAt + 3600, else `retired_key`; retirement windows are snapshotted before async crypto so a mutated key object cannot widen them. `deno lint --config deno.json` on the three changed TS files: 0 problems; root `npx prettier --check` on all 5 changed files: clean; `git diff --check f9709ae5..8f0f4c46`: exit 0.\n\nACCEPTANCE (VERIFIED, my own runs): AC1 `npx --yes deno@2.5.6 check ... index.ts` exit 0. AC2 full __wf__ suite against a disposable migrated Postgres (XC_PG_URL + PICKLE_AUDIT_PG_URL): `ok | 927 passed (31 steps) | 0 failed`, 0 ignored, exit 0. AC3: only the two test files copied onto a detached BASE worktree -> __wf__ rotation tests `FAILED | 0 passed | 14 failed` exit 1 and offlineSignature.test.ts fails typecheck with 4x TS2305 exit 1; on HEAD `ok | 14 passed | 0 failed` and `ok | 158 passed | 0 failed`, both exit 0 -> regression_fails_on_base=true.\n\nNON-BLOCKING: no shipping Edge route calls verifyOfflineExecutionGrant (true on BASE as well — the Edge issues grants; devices verify through packages/shared-types offlineAuthorization.ts, an un-held serial group left unchanged), so device-side acceptance of previous-key receipts during the overlap is not delivered by this package; flagged for the coordinator as a possible follow-up, consistent with the implementer's residual-risk disclosure. No production Supabase, secrets, PR or push were touched by this review; the disposable container and base worktree were removed.",
+            "verdict": "approve"
+          }
+        }
+      ],
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/711a2a39-1831-4b82-9fd7-46ccf4898de5/ac1-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC1",
+            "note": "VERIFIED at 274a7d22 from repo root: `Check file:///…/supabase/functions/api/index.ts`, exit 0; only the two known deno.json workspace warnings (\"lock\"/\"nodeModulesDir\" field) printed; working tree clean after the run. Also VERIFIED: `cd supabase/functions/api && deno check cache.ts rateLimit.ts http.ts legal.ts` exit 0; `npx prettier --check` on all 5 changed files exit 0; `git diff --check f9709ae5..274a7d22` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a1334a-c7d7-4743-8cb6-dfe64af29127/ac2-edge-suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test",
+            "executed": 932,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC2",
+            "note": "VERIFIED at 274a7d22: `ok | 932 passed (31 steps) | 0 failed`, ignored == 0 (no `N ignored` token in the summary line; grep confirmed). Disposable DB = my own postgres:16 container `w0403rev` on 127.0.0.1:55434 provisioned via `XC_PG_CONTAINER=w0403rev XC_PG_PORT=55434 ./xc_pg_up.sh` (shim_auth.sql + every migration). PICKLE_AUDIT_PG_URL set to the same disposable URL so the 12 W06-01 SQL-plane tests execute rather than ignore. The new file runs inside the suite: `running 19 tests from ./offline_key_rotation.test.ts`. No hosted project touched; container removed afterwards.",
+            "passed": 932,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/db78eb8d-329b-4d20-946a-973e67ed8ad1/ac3-head-wf.log",
+            "command": "git worktree add --detach /home/ubuntu/w0403-base f9709ae5ef76b53bc89d8aced75308a5f43f9729 && cp supabase/functions/api/__wf__/offline_key_rotation.test.ts /home/ubuntu/w0403-base/supabase/functions/api/__wf__/ && cp supabase/functions/api/offlineSignature.test.ts /home/ubuntu/w0403-base/supabase/functions/api/ && (cd /home/ubuntu/w0403-base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts)  # BASE must FAIL; (cd /home/ubuntu/w0403-base && deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts)  # BASE must FAIL; then on HEAD 274a7d22: (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json offline_key_rotation.test.ts) && deno test --no-prompt --frozen --lock=deno.lock supabase/functions/api/offlineSignature.test.ts  # must PASS",
+            "executed": 19,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-03-AC3",
+            "note": "PROOF exit 0 (VERIFIED, my own runs). BASE f9709ae5 with ONLY the two candidate test files copied over (git status in the worktree: `M offlineSignature.test.ts`, `?? __wf__/offline_key_rotation.test.ts`): (a) __wf__/offline_key_rotation.test.ts → exit 1, `FAILED | 0 passed | 19 failed` — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7504f9d3-f4ef-49e5-b08e-738b81739dd3/ac3-base-wf.log; (b) offlineSignature.test.ts → exit 1, fails type-check (TS2305: BASE exports no OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION / OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS / OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS / OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS / importOfflineGrantKeyRing) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf93beab-fba8-499e-8037-e61ebfbf613a/ac3-base-unit.log; with --no-check it is exit 1, `FAILED | 0 passed | 1 failed` (module load fails) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd613e8c-91d6-48fb-9126-a861e887bfc5/ac3-base-unit-nocheck.log. HEAD 274a7d22: __wf__/offline_key_rotation.test.ts → exit 0, `ok | 19 passed | 0 failed` (artifact above); offlineSignature.test.ts (type-checked, frozen lock) → exit 0, `ok | 157 passed | 0 failed` — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e780501-54d3-4301-b19f-f780479f7359/ac3-head-unit.log. Criterion 'receipt under retired key outside overlap rejected' is pinned by `receipt signed under the retired key verifies inside the overlap and is rejected at/after overlapEndsAt (retired_key)` plus the route-level rotation-procedure tests and the offlineSignature.test.ts key-ring cases; the executed/passed counts above are the 19-test __wf__ file (the unit file adds 157 more, all passing). Worktree removed after the runs; candidate checkout stayed clean.",
+            "passed": 19,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/711a2a39-1831-4b82-9fd7-46ccf4898de5/ac1-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b7a1334a-c7d7-4743-8cb6-dfe64af29127/ac2-edge-suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7504f9d3-f4ef-49e5-b08e-738b81739dd3/ac3-base-wf.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/db78eb8d-329b-4d20-946a-973e67ed8ad1/ac3-head-wf.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf93beab-fba8-499e-8037-e61ebfbf613a/ac3-base-unit.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dd613e8c-91d6-48fb-9126-a861e887bfc5/ac3-base-unit-nocheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e780501-54d3-4301-b19f-f780479f7359/ac3-head-unit.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED: verifyOfflineExecutionGrant (ring-aware, overlap/grace verdicts) is exported from offlineSignature.ts but no route in index.ts calls it on HEAD — identical to BASE, where the single-key verifier was also uncalled. The receipt-reconciliation route that consumes it is W04-04's declared scope (index.ts + offline_receipt_reconciliation.test.ts), so this is not counted against W04-03; W04-04's reviewer should confirm the route passes the imported ring (not a bare key list) so previous-key retirement windows travel with the keys.",
+          "INFERRED: the 15-minute propagation grace is a fixed constant; grants a compromised OLD key mints with iat <= retiredAt+900s verify until overlapEndsAt (bounded by <= retiredAt+7d). Runbook documents this and the compromise path (previous=null). Acceptable trade-off, noted for W04-04/mobile consumers.",
+          "VERIFIED: `git diff` shows the `importOfflineGrantSigningKey` doc comment as removed/re-added — it is byte-identical and only moved with the function (now a thin wrapper over importSigningKeyPair); no existing comment text was modified.",
+          "VERIFIED (environmental): AC2's literal manifest command (XC_PG_URL only) would leave the 12 W06-01 SQL-plane tests ignored; PICKLE_AUDIT_PG_URL was pointed at the SAME disposable DB to reach ignored==0, exactly as the implementer reported. Consider updating the manifest command text."
+        ],
+        "package_id": "W04-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+        "scope_violation": false,
+        "summary": "APPROVE W04-03 r3 (devin/pp/w04-03/impl-r3 @ 274a7d2237e589b492049bb7ce295e8d31c42b8b, 10 commits over BASE f9709ae5). SCOPE (VERIFIED, `git diff --stat f9709ae5..274a7d22`): exactly 5 files — 4 under write_paths (offlineSignature.ts +296 net (296 changed lines), offlineSignature.test.ts +409, __wf__/offline_key_rotation.test.ts +1409 new, docs/runbooks/offline-key-rotation.md +214 new) plus supabase/functions/api/index.ts (17 changed lines), which is under the `edge-index` serial group this package HOLDS and is listed in out_of_scope_files; the hunk is the minimum wiring (`offlineGrantKeyRing()` cache replacing the single-key cache, `POST /v1/offline/grants` signs with `keyRing.signingKey` = active kid only, binds `allowedKeyIds: keyRing.allowedKeyIds`, generic 503 before `issue_offline_grant` on a malformed ring) → scope_violation=false. No additive shared paths, no migrations, no supabase/tests, no mobile, no scripts touched. SHIPPED BEHAVIOUR (VERIFIED by reading index.ts 4737-4755/4887-4958 + route tests in the 932-test suite): kid-tagged ES256 grants are issued by the production route from the imported ring; ring import (bare private JWK or schemaVersion-1 {active, previous}) is on the shipping path. The overlap/grace verifier is in the same shared module the route imports; the receipt route that will call it is W04-04's declared scope (same as BASE, where the verifier was also route-less) — noted non-blocking. ACCEPTANCE (all my own runs): AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite on my disposable migrated postgres:16 (xc_pg_up.sh, port 55434, XC_PG_URL+PICKLE_AUDIT_PG_URL) → `ok | 932 passed (31 steps) | 0 failed`, ignored==0, exit 0; AC3 BASE+copied tests: offline_key_rotation.test.ts `0 passed | 19 failed` exit 1, offlineSignature.test.ts fails type-check (TS2305 missing ring exports) exit 1; HEAD: 19/19 and 157/157, exit 0 → regression_fails_on_base=true. Extra gates VERIFIED: `deno check cache.ts rateLimit.ts http.ts legal.ts` exit 0, prettier --check on the 5 files exit 0, `git diff --check` exit 0. DIFF AUDIT vs REVIEW.md/invariants (VERIFIED by reading the full diff and HEAD source): no `any`/ts-ignore/eslint-disable/`|| true`/ignore/only/sanitize flags in changed files; no test deleted, reordered or weakened (offlineSignature.test.ts is pure insertions; offline_grants_routes.test.ts untouched); no comment text modified (the only removed comment lines belong to `importOfflineGrantSigningKey`, whose doc comment is re-added byte-identical above the function's new location); no migration/RLS/grant/session-check change; 5xx stays generic (`SigningKeyUnavailable` 503, no detail); billing: malformed ring → 503 BEFORE the grant-spending RPC, active key is the only signer so offline allocation/consumption semantics untouched; owner isolation unchanged (route still binds ownerId/installationKeyId); runbook is operator-facing, contains no forbidden copy terms and no secret values. Verifier logic reviewed: previous-key grants accepted only when `retiredAt − 900s ≤ now < overlapEndsAt` and `iat ≤ retiredAt + 900s`, window bounded to ≤ 7 d and instants ≤ 253402300799 at import AND in `retirementWindows()` (snapshot before async crypto); import refuses previous private material, duplicate kid, off-curve points, same-x previous point (P = ±Q), active d/(x,y) mismatch (sign+verify probe), unknown members; ring keys can only be narrowed by the binding allowlist. All prior adversary categories (mismatched d, narrowed allowlist, list-path metadata loss, duplicate previous, ms/unbounded instants, negated point, missing grace) have pinning tests that pass on HEAD and fail on BASE. Zero blocking issues, zero invariant violations. No PR opened, no push, no Mac run, no production/secrets touched; base worktree and disposable container removed.",
+        "verdict": "approve"
+      },
+      "round": 3,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-19-keep"
+}

@@ -1,0 +1,93 @@
+{
+  "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+  "integration_order": {
+    "edge-index": [
+      "W04-03",
+      "W11-01",
+      "W08-06"
+    ],
+    "mobile-data": [
+      "W05-03",
+      "W01-06"
+    ]
+  },
+  "packages": {
+    "W01-06": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w01-06/impl-r1",
+        "head_sha": "6183b42e37ef7adecb8072716311bd3dac6cac0b",
+        "lane": 1,
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W04-03": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w04-03/impl-r3",
+        "head_sha": "274a7d2237e589b492049bb7ce295e8d31c42b8b",
+        "lane": 1,
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "W05-03": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w05-03/impl-r1",
+        "head_sha": "083ae400b1f0257327061342c8da4d3bced16b52",
+        "lane": 1,
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W08-06": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w08-06/impl-r6",
+        "head_sha": "004c69f3ae1f11418c7b9e365f38c239d8313757",
+        "lane": 1,
+        "round": 6
+      },
+      "status": "ACCEPTED"
+    },
+    "W11-01": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w11-01/impl-r7-c2",
+        "head_sha": "96a0f658b218eef0cd4d3b954a4d35a70c24fbfe",
+        "lane": 2,
+        "round": 7
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-19-keep"
+}

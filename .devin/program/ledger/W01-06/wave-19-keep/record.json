@@ -1,0 +1,303 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W01-06-r1",
+      "phase": "implement",
+      "prompt_sha256": "b8c20a42285e74841b7e6cfbed03ef0422f1cb3f69702008942115cabd71a2b6",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-06-r1",
+      "phase": "review",
+      "prompt_sha256": "c84df4106d37be2abe71ac195a9fd0e95e70fbe49c107e67deae819b8d688927",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-06-r1",
+      "phase": "adversary",
+      "prompt_sha256": "88c91ba00cddc3e9ee77887b172ec46b4190d359569316925dc107be6552ccfc",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+  "candidate": {
+    "branch": "devin/pp/w01-06/impl-r1",
+    "head_sha": "6183b42e37ef7adecb8072716311bd3dac6cac0b",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W01-06",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aaf0070d-f17b-41d2-812b-07b333c225e7/attack-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ab04453-0a44-4ea0-9ef8-5d48a8c47f89/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/14923900-4f71-4aea-9c28-ac2cfac07f72/ac3-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1d8283f-fe64-46a6-878f-01ef10030524/tsc-attack-branch.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ffed6cb-314c-4926-84c5-7bee20495078/eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c0c12b3a-2b5f-43e7-8314-ad72104b8c6d/prettier.log"
+        ],
+        "attack_branch": "devin/pp/w01-06/attack-6183b42e",
+        "attack_branch_sha": "90eb4d57e78dbd78181a01ff48f2f15be7d22dd2",
+        "attacked_sha": "6183b42e37ef7adecb8072716311bd3dac6cac0b",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "Byte-for-byte parity with supabase/functions/api/canonicalDigest.ts (objective: 'mirror releasePolicy.ts'): '{\"__proto__\":1,\"a\":2}', and distinct documents must never share canonical bytes/digest. Impact today: a document carrying an own __proto__ member verifies on the Edge but is rejected on mobile (fails closed), and a document tampered by ADDING a __proto__ member passes the mobile digest check (the extra member has no consumer, so no observed authorization effect); classified P2, not P0/P1.",
+            "observed": "canonicalizeReleasePolicyJson(JSON.parse('{\"a\":2,\"__proto__\":1}')) returned '{\"a\":2}'; canonicalizeReleasePolicyJson(JSON.parse('{\"a\":2,\"__proto__\":{\"x\":1}}')) === canonicalizeReleasePolicyJson(JSON.parse('{\"a\":2}')) and digestReleasePolicyJson agrees for both. Cause (INFERRED from apps/mobile/src/analysis/releasePolicyClient.ts snapshot()): the copy is built on a plain `{}` and `object['__proto__'] = value` assigns the prototype instead of creating an own member; the Edge uses Object.create(null). 2 of 3 A1 tests fail; the Object.prototype pollution check passes.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/releasePolicyClient.attack.test.ts -t 'A1' (branch devin/pp/w01-06/attack-6183b42e @ 90eb4d57). Edge behaviour VERIFIED with `deno run --node-modules-dir=none --lock=deno.lock --frozen` of a probe importing supabase/functions/api/canonicalDigest.ts: canonicalizeOfflineJson(JSON.parse('{\"a\":2,\"__proto__\":1}')) === '{\"__proto__\":1,\"a\":2}'.",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/releasePolicyClient.attack.test.ts",
+            "title": "Mobile canonicalizer does not mirror the Edge canonicalDigest for an own \"__proto__\" member: the member is silently dropped, so two different documents share canonical bytes and the SHA-256, and mobile/Edge digests disagree"
+          },
+          {
+            "expected": "The most recent verified server statement wins: a verified negative must not be overwritten by an older active response (e.g. refuse writes whose serverTime is older than the last verified answer, or serialise reads per scope). Severity P2: on 6183b42e the cached policy only gates a permit reservation that itself needs the server (no offline permit path in runCaptureAnalysis), so no charge or publication is enabled today; it becomes P1 once offline grants consume the cached policy.",
+            "observed": "Request 2 returns {status:'ineligible', reasonCode:'unverified'} / the fast run is the mechanics-only partial and the cache slot is null; after request 1 completes, kv 'analysis.release-policy:<owner>' holds {schemaVersion:'mobile-release-policy-cache-v1', fetchedAt:<older serverTime>, policy:<active>} (attack-run2.log lines 134-166). A following offline gate would admit from that record (INFERRED from readCachedReleasePolicy; the assertion is after the failing expect). Cause (INFERRED): resolveReleaseAuthority() writes the cache after awaiting the response with no compare against the record's fetchedAt/serverTime and no single-flight per scope.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/releasePolicyClient.attack.test.ts -t 'A2' (branch devin/pp/w01-06/attack-6183b42e @ 90eb4d57). Two resolveReleaseAuthority() calls (and, in the second test, two runCaptureAnalysis() runs of two captures) share one owner/origin; request 1 is delayed and answers {policy: ACTIVE}, request 2 answers immediately {policy: null}.",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/releasePolicyClient.attack.test.ts",
+            "title": "Concurrent authority reads: an older in-flight ACTIVE response overwrites the cache after a newer VERIFIED negative response cleared it, resurrecting withdrawn authority for offline use"
+          }
+        ],
+        "package_id": "W01-06",
+        "summary": "Adversarial run against W01-06 candidate 6183b42e (branch devin/pp/w01-06/impl-r1), base f9709ae5. Attack suite apps/mobile/__tests__/releasePolicyClient.attack.test.ts pushed on devin/pp/w01-06/attack-6183b42e @ 90eb4d57e78dbd78181a01ff48f2f15be7d22dd2 (1 file, +1313; no candidate production code or candidate tests modified; no PR; no force-push).\n\nVERIFIED runs (exit code / counts / artifact):\n- Candidate AC1 `cd apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts`: exit 0, 1 suite, 37 passed / 0 failed / 0 skipped — ac1-candidate.log.\n- Candidate AC3 `cd apps/mobile && npx tsc --noEmit` (after `npm ci`, exit 0): exit 0 — ac3-candidate.log.\n- Attack suite `cd apps/mobile && npx jest --ci __tests__/releasePolicyClient.attack.test.ts`: exit 1, 1 suite, 87 executed, 83 passed / 4 failed / 0 skipped — attack-run2.log. The 4 failures are the two confirmed breaks (A1 x2, A2 x2).\n- Attack branch `npx tsc --noEmit` exit 0 (tsc-attack-branch.log); root `npx eslint apps/mobile/__tests__/releasePolicyClient.attack.test.ts` exit 0 (eslint.log); root `npx prettier --check` same file exit 0 (prettier.log).\n- Edge canonicalizer probe: `deno run --node-modules-dir=none --lock=deno.lock --frozen` in supabase/functions/api importing canonicalDigest.ts printed '{\"__proto__\":1,\"a\":2}', '{\"__proto__\":{\"x\":1},\"a\":2}', '{\"a\":2}' (probe file removed, not committed).\n- Base comparison (worktree at f9709ae5, removed afterwards): a transport failure at permits.reserve leaves the journal row release_pending/failed with permit_id null and a re-run of the SAME operation returns {kind:'unavailable', cause:'recovery_pending'} — identical hold/recover behaviour to what the candidate shows when the policy read fails, so that is NOT counted as a W01-06 break.\n\nAttacks tried (11 categories, 87 tests):\nA1 canonicalizer parity (__proto__ own member, digest collision, prototype pollution) — BREAK (P2, 2/3 fail).\nA2 two in-flight authority reads racing a withdrawal, at resolveReleaseAuthority level and via two concurrent runCaptureAnalysis runs — BREAK (P2, 2/2 fail).\nA3 transport failures at the policy step on the shipping path: 429+Retry-After, 500, 502 no body, 503, 302 manual redirect, opaque redirect, redirected-to-another-URL 200, unreadable body, array body, policy undefined, string policy, AbortError, plus 408 timeout with fake timers — all held: unavailable, no reservation, nothing cached, nothing chargeable, same operation held for recovery, fresh capture scores; with a valid cached policy every failure falls back to cache and scores — PASS (no break).\nA4 interleaved account switch while the policy read is in flight (bearer for the old account, cache written under the wrong owner, cross-account eviction) — PASS.\nA5 cached-policy clock boundaries: validUntil-1s/validUntil, scheduled withdrawnAt edge, clock rollback beyond tolerance and rollbackDetected flag, floor+unmeasured / floor+persisted / none+invalid readings, NaN/negative/zero/±Infinity/year-2200/1970 nowMs, cache lifetime cap with a server clock 3 days behind — PASS.\nA6 envelope serverTime boundaries (2025/2100 bounds ±1s, non-integer, string, NaN, negative, zero, null, absent, Infinity, unsafe integer) and post-approval document edits — PASS.\nA7 corrupt/hostile persisted cache records (byte cap exactly / +1, wrong schema, wrong binding, other account's record copied under this key, non-integer fetchedAt, prototype-pollution record, truncated JSON; corrupt slot not repaired by transport failure, replaced only by a verified active answer) — PASS.\nA8 process death / storage faults (kv write fault does not block the online run nor fabricate offline authority, eviction fault, replay after restart and after a settled refusal) — PASS.\nA9 server disagrees at reservation after client admission (409 release_not_authorized → mechanics-only partial, settled, replayed without a second reservation; 429 at reserve → unavailable, held, no charge, fresh capture scores) — PASS.\nA10 double submission of one capture concurrently (≤1 reservation, ≤1 shot, outbox == shots) — PASS.\nA11 copy: no forbidden dossier terms in client string literals; server free text/HTML/percentages never leak into typed refusals or ApiError outcomes — PASS.\n\nNot attacked (out of this package's surface): Edge/SQL role matrix (W01-06 adds no SQL/Edge surface); Apple runtime (Linux only, no Mac runner use). No P0/P1 confirmed; both confirmed breaks are P2 with reasoning recorded per object."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bb5999c-e2f8-4d4c-80ea-ce3703049230/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts",
+            "executed": 37,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC1",
+            "note": "VERIFIED on HEAD 6183b42e37ef7adecb8072716311bd3dac6cac0b. Repo-local copy: artifacts/w01-06/ac1-jest.log. Test Suites: 1 passed; Tests: 37 passed, 37 total.",
+            "passed": 37,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d732b2c8-6e1c-47e9-aa34-2076b69456b2/ac2-base-jest.log",
+            "command": "git worktree at f9709ae5ef76b53bc89d8aced75308a5f43f9729 (~/repos/ps-base, node_modules symlinked); copy ONLY apps/mobile/__tests__/releasePolicyClient.test.ts over; cd apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts (must FAIL); then same command on HEAD (must PASS)",
+            "executed": 37,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC2",
+            "note": "VERIFIED. BASE run: exit 1, Test Suites: 1 failed, Tests: 0 total — `Cannot find module '../src/analysis/releasePolicyClient'` (the client does not exist on base; the suite also exercises runCaptureAnalysis end to end, which on base reserves a permit without any policy read). Base log: artifacts/w01-06/ac2-base-jest.log. HEAD run: exit 0, 37 passed / 37 total (artifacts/w01-06/ac1-jest.log). Tampered canonical bytes and tampered digest are rejected (`canonical_mismatch` / `digest_mismatch`) and a withdrawn policy yields the mechanics-only partial with zero permit requests.",
+            "passed": 37,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7b7b6c5-0836-4d11-97cd-27cb87481386/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC3",
+            "note": "VERIFIED; no diagnostics. Repo-local copy: artifacts/w01-06/ac3-tsc.log. (apps/mobile deps restored with `npm ci --no-audit --no-fund` beforehand — @sentry/react-native was missing from node_modules on the fresh checkout.)",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d9905d6-8ba9-4151-9337-9bce0100b071/ac4-lint.log",
+            "command": "npx eslint <34 changed apps/mobile files listed in artifacts/w01-06/changed-files.txt> && npx prettier --check <same files>; plus pnpm format:check and git diff --check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC4",
+            "note": "VERIFIED from repo root: eslint exit 0, prettier --check exit 0 (all 34 files use Prettier code style); root `pnpm format:check` exit 0 (artifacts/w01-06/format-check.log); `git diff --check` exit 0. Full mobile suite also run: `cd apps/mobile && npx jest --ci --silent` exit 0, Test Suites 325 passed / 1 skipped, Tests 6567 passed / 1 skipped (the documented importedRealFootageAnalysis.test.ts env skip from docs/devin/TEST_MATRIX.md) — artifacts/w01-06/mobile-jest-full.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: wrote apps/mobile/__tests__/releasePolicyClient.test.ts (canonicalisation parity with the Edge fixture digest, RFC 8785 ordering, tampered canonical bytes and tampered digest rejected, envelope/policy validation, active/missing/withdrawn/denied/expired/unreleased, cache owner+origin isolation, tamper/size/lifetime bounds, trusted-time restrictions, purge, offline fallback, end-to-end runCaptureAnalysis gating with zero permit calls, auth rethrow), proved it red on BASE_SHA, committed. Implemented the client mirroring supabase/functions/api/canonicalDigest.ts + releasePolicy.ts and reused shared validators (validateAnalysisReleasePolicy/Approval, resolveAnalysisReleaseEligibility) and the existing trusted-time lease evaluator; wired the gate before permit reservation in runCaptureAnalysis. Because the policy read is now mandatory in the shipping path, the 22 existing permit-flow fake servers + the process-death rating service were taught to answer GET /v1/analysis/release-policy with a self-consistent active fixture (apps/mobile/testSupport/releasePolicyFixture.ts); permit-count assertions that counted every fetch now count permit calls only (permitCalls helper), request-order pins gained the policy GET, and the four OWNER_SCOPED_KV_NAMESPACES pins gained the new namespace. No test was weakened, skipped or reordered.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bb5999c-e2f8-4d4c-80ea-ce3703049230/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d732b2c8-6e1c-47e9-aa34-2076b69456b2/ac2-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7b7b6c5-0836-4d11-97cd-27cb87481386/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d9905d6-8ba9-4151-9337-9bce0100b071/ac4-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f8341e8-6629-4f00-90bd-0cca53eab6fa/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d50581f-519a-4099-af3b-abbaf8d13778/mobile-jest-full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/20729581-db6d-419a-89e7-aa6c3cb047c8/changed-files.txt"
+        ],
+        "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w01-06/impl-r1",
+        "files_changed": [
+          "apps/mobile/src/analysis/releasePolicyClient.ts",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/src/data/repository.ts",
+          "apps/mobile/testSupport/releasePolicyFixture.ts",
+          "apps/mobile/__harness__/processDeath/ratingService.ts",
+          "apps/mobile/__tests__/releasePolicyClient.test.ts",
+          "apps/mobile/__tests__/accountDeletion.test.ts",
+          "apps/mobile/__tests__/allTechniquesScore.test.ts",
+          "apps/mobile/__tests__/analyzeScreenFullFlowE2E.test.tsx",
+          "apps/mobile/__tests__/attack3/permitFaults.attack.test.ts",
+          "apps/mobile/__tests__/attack4AnalyzeScreenLifecycle.test.tsx",
+          "apps/mobile/__tests__/attack4RunCaptureAnalysisPermits.test.ts",
+          "apps/mobile/__tests__/attack5/permitContract.test.ts",
+          "apps/mobile/__tests__/audit/structural1PermitReleaseOnThrow.test.ts",
+          "apps/mobile/__tests__/auditStructural2PermitAccounting.test.ts",
+          "apps/mobile/__tests__/autoDetectAnalysis.test.ts",
+          "apps/mobile/__tests__/captureAnalysisFlow.test.ts",
+          "apps/mobile/__tests__/importedCaptureAnalysis.test.ts",
+          "apps/mobile/__tests__/originalAnalysisRetry.test.ts",
+          "apps/mobile/__tests__/repositoryAccountScope.test.ts",
+          "apps/mobile/__tests__/runCaptureJournalIntegration.test.ts",
+          "apps/mobile/__tests__/savedTechniqueConfirmationRoute.test.tsx",
+          "apps/mobile/__tests__/w01PartialOutcome.test.tsx",
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts",
+          "apps/mobile/__tests__/wf/be-billing-entitlement-sync.test.ts",
+          "apps/mobile/__tests__/wf/fix-3-runCaptureAnalysisPaywall.test.ts",
+          "apps/mobile/__tests__/wf/flow-account-deletion-store.test.ts",
+          "apps/mobile/__tests__/wf/flow-data-layer-typed-failures.test.ts",
+          "apps/mobile/__tests__/wf/flow-splash-hydration-overlays.test.tsx",
+          "apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts",
+          "apps/mobile/__tests__/xc/adjudication/importedClipStrokeWindowGate.xc.test.ts",
+          "apps/mobile/__tests__/xcBehavioral/permitLifecycleMatrix.test.ts"
+        ],
+        "head_sha": "6183b42e37ef7adecb8072716311bd3dac6cac0b",
+        "out_of_scope_files": [
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts — minimal shipping-path wiring (mobile-analysis group, held): permitPort() also builds the release-policy client from the same ApiConfigState and requireReleaseAuthority() is awaited immediately before permits.reserve(); without it the module would be unused and the objective unmet.",
+          "apps/mobile/src/data/repository.ts — one additive list entry (mobile-data group, held): 'analysis.release-policy' appended to OWNER_SCOPED_KV_NAMESPACES so purgeOwnerData()/account deletion removes the per-owner policy cache.",
+          "apps/mobile/testSupport/releasePolicyFixture.ts — new test-only fixture (active, self-consistent signed policy + isReleasePolicyRequest/permitCalls helpers) shared by the existing fake servers.",
+          "apps/mobile/__harness__/processDeath/ratingService.ts — test-only harness: one added route answering GET /v1/analysis/release-policy with the active fixture; existing routes untouched.",
+          "apps/mobile/__tests__/{allTechniquesScore,analyzeScreenFullFlowE2E,attack3/permitFaults.attack,attack4AnalyzeScreenLifecycle,attack4RunCaptureAnalysisPermits,attack5/permitContract,audit/structural1PermitReleaseOnThrow,auditStructural2PermitAccounting,autoDetectAnalysis,captureAnalysisFlow,importedCaptureAnalysis,originalAnalysisRetry,runCaptureJournalIntegration,savedTechniqueConfirmationRoute,w01PartialOutcome,w02OwnerFencingMatrix,wf/be-billing-entitlement-sync,wf/fix-3-runCaptureAnalysisPaywall,xc/adjudication/importedClip24fpsGate.xc,xc/adjudication/importedClipStrokeWindowGate.xc,xcBehavioral/permitLifecycleMatrix}.test.* — existing fake servers threw `Unexpected fetch` on the now-mandatory policy GET; each gained a route returning the active fixture. Where a test counted every fetch as a permit call, it now counts permit calls only (permitCalls); no assertion about permits was removed or loosened.",
+          "apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts — exact server request-order pins now include the policy GET the scoring launch sends before reserving ('/v1/analysis/release-policy' first); the 'no reservation reached the server' assertion now pins exactly that only the policy GET reached it.",
+          "apps/mobile/__tests__/{accountDeletion,repositoryAccountScope,wf/flow-account-deletion-store,wf/flow-data-layer-typed-failures,wf/flow-splash-hydration-overlays}.test.* — exact pins of OWNER_SCOPED_KV_NAMESPACES / purge DELETE list extended with the new 'analysis.release-policy' namespace (7 kv deletes instead of 6)."
+        ],
+        "package_id": "W01-06",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/releasePolicyClient.test.ts"
+        ],
+        "residual_risks": [
+          "Offline numerical admission requires ANCHORED trusted time; on devices where only floor/unmeasured time is available the client returns retryable `unavailable` rather than using the cached policy (conservative by design, matches evaluateLease()).",
+          "Recovery of an already-admitted attempt (reserve_pending after process death) re-sends the reservation without re-reading the policy; that path never publishes a new numerical result (it is held/cancelled) and the server re-checks release authority at reservation time, so no numerical output can be produced without an active policy.",
+          "Every scoring run now performs one extra GET /v1/analysis/release-policy before reserving; the server route is cached/rate-limited per existing edge policy, and a cached verified policy is not used to short-circuit the online read (server-first, cache only as offline fallback).",
+          "The Edge canonicaliser is mirrored, not shared (Deno vs RN bundles); parity is pinned by the fixture digest test (0ded0fac…ade89) and the RFC 8785 ordering/number/string cases, so future canonicalDigest.ts changes must be mirrored here."
+        ],
+        "summary": "Gap on BASE_SHA (INFERRED from code): apps/mobile never read GET /v1/analysis/release-policy. apps/mobile/src/data/api.ts had permit/offline-grant clients only (no release-policy transport); apps/mobile/src/analysis/runCaptureAnalysis.ts reserved a permit directly (`reserved = await permits.reserve(run.reservationKey)`, ~line 1660 on base) with no client-side release-authority check, so the only defence was the server-side reserve refusal (`access.release_not_authorized`, already mapped to the mechanics-only partial by partialOutcome.ts), and nothing could admit/refuse offline numerical work from a cached, verified policy. Fix (VERIFIED): new apps/mobile/src/analysis/releasePolicyClient.ts verifies the authority envelope (analysis-release-authority-v1), policy document/approval shape + analysis-release-policy-v1, canonical-bytes cap (64 KiB), canonical JSON recomputed with the Edge canonicalDigest rules (RFC 8785 key order, number/string serialisation, depth 64 / 100k nodes / 1 MiB, no cycles/holes/non-JSON), SHA-256 recomputed (sha256Hex from @pickle/swing-domain) and compared with approval.policy.sha256, version match, then resolveAnalysisReleaseEligibility(). Only a verified ACTIVE policy is cached: record <= 192 KiB, lifetime <= TRUSTED_TIME_LEASE_MAX_MS, bound to owner+API origin by digest and stored under owner-scoped kv key `analysis.release-policy:<owner>` (namespace added to OWNER_SCOPED_KV_NAMESPACES so purgeOwnerData()/account deletion removes it per owner). Offline admission only for a cached verified policy inside its validity window under anchored trusted time (evaluateLease); floor/none/rollback/unmeasured => unavailable. Additive api.ts export createReleasePolicyClient (missing bearer => ApiError 401 auth.required). runCaptureAnalysis awaits requireReleaseAuthority() immediately before permits.reserve(): verified negative answers (missing/withdrawn/denied/expired/not-yet-valid/tampered bytes or digest) throw the typed access.release_not_authorized refusal => existing mechanics-only partial, no permit reserved; transport failures/unverifiable bodies => retryable `unavailable`; HTTP 401/403 and missing bearer stay authentication refusals. Commits: c299b0f9 (regression test, red on base), 328adcec (test amendments), 6183b42e (implementation + harness reconciliation). Verification (VERIFIED): AC1 focused suite 37/37 exit 0; AC2 base run fails (Cannot find module ../src/analysis/releasePolicyClient, 0 tests, exit 1) and HEAD passes 37/37; AC3 tsc exit 0; AC4 eslint + prettier --check on all 34 changed files exit 0; root pnpm format:check exit 0; git diff --check exit 0; full mobile suite `cd apps/mobile && npx jest --ci --silent`: Test Suites 325 passed, 1 skipped (documented importedRealFootageAnalysis env skip), Tests 6567 passed, 1 skipped, exit 0. No PR created; pushed only to origin devin/pp/w01-06/impl-r1."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8858a063-d9a4-41a3-856d-cd99fd6a7dee/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts",
+            "executed": 37,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC1",
+            "note": "VERIFIED on 6183b42e (repo-local: artifacts/review-w01-06/ac1-jest.log). Test Suites: 1 passed; Tests: 37 passed, 37 total. Deps restored beforehand with root `pnpm install --frozen-lockfile` + `cd apps/mobile && npm ci --no-audit --no-fund` (no source changes).",
+            "passed": 37,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee1dc7d9-2c1f-4b41-b346-0aab654bc217/ac2-base-jest.log",
+            "command": "git worktree add -f ~/repos/ps-base f9709ae5ef76b53bc89d8aced75308a5f43f9729 (node_modules symlinked); cp apps/mobile/__tests__/releasePolicyClient.test.ts into it; cd ~/repos/ps-base/apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts (must FAIL); then cd apps/mobile && npx jest --ci --silent __tests__/releasePolicyClient.test.ts on 6183b42e (must PASS)",
+            "executed": 37,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC2",
+            "note": "VERIFIED proof holds. BASE run (only the new test file copied): exit 1, Test Suites: 1 failed, Tests: 0 total — `Cannot find module '../src/analysis/releasePolicyClient'` (artifacts/review-w01-06/ac2-base-jest.log). Stronger second base run: also copied releasePolicyClient.ts, testSupport/releasePolicyFixture.ts, api.ts and repository.ts onto BASE but NOT the runCaptureAnalysis.ts wiring → exit 1, Tests: 12 failed, 25 passed, 37 total — every `runCaptureAnalysis gates numerical publication` case fails (no policy/withdrawn/expired → partial, tampered bytes/digest → unavailable with no reservation, offline cache, owner binding, eviction), proving the suite asserts the shipping-path gate and not just the module (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef0fafb9-a6d3-4fb1-8a83-26c33f0f28ef/ac2-base-unwired-jest.log). HEAD run: exit 0, 37 passed / 37 total. Criterion content confirmed by reading the suite: `rejects tampered canonical bytes` (canonical_mismatch), `rejects a digest that does not match` (digest_mismatch), and `withdrawn policy → mechanics-only partial, no reservation, nothing chargeable` (expectMechanicsOnlyPartial + expectNothingChargeable + cache slot null).",
+            "passed": 37,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0edf22cd-313d-46ca-9b9e-3bb5c709929a/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC3",
+            "note": "VERIFIED on 6183b42e; no diagnostics (repo-local: artifacts/review-w01-06/ac3-tsc.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ece039a-83e4-405d-a7c9-7af15c2c88f5/ac4-eslint.log",
+            "command": "npx eslint $(cat artifacts/review-w01-06/changed-files.txt) && npx prettier --check $(cat artifacts/review-w01-06/changed-files.txt)  # from repo root; 34 files = `git diff --name-only f9709ae5..6183b42e`",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-06-AC4",
+            "note": "VERIFIED from repo root on all 34 changed files (list: https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee5038f9-7e6e-43ee-9adf-0ee84bcbe5a3/changed-files.txt): eslint exit 0 (artifacts/review-w01-06/ac4-eslint.log); prettier --check exit 0, `All matched files use Prettier code style!` (https://la-hacks-rttothemoon.devinenterprise.com/attachments/c887919d-bb2e-45ae-92df-52af95cbcb4b/ac4-prettier.log). Additionally full mobile suite `cd apps/mobile && npx jest --ci --silent` on 6183b42e: exit 0, Test Suites 325 passed / 1 skipped of 326, Tests 6567 passed / 1 skipped of 6568 — the one skip is the documented `importedRealFootageAnalysis.test.ts` env skip (docs/devin/TEST_MATRIX.md, Mac-generated artifacts absent) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab13800a-c30b-4f87-882a-95061d6d96d9/mobile-jest-full.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8858a063-d9a4-41a3-856d-cd99fd6a7dee/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee1dc7d9-2c1f-4b41-b346-0aab654bc217/ac2-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef0fafb9-a6d3-4fb1-8a83-26c33f0f28ef/ac2-base-unwired-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0edf22cd-313d-46ca-9b9e-3bb5c709929a/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ece039a-83e4-405d-a7c9-7af15c2c88f5/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c887919d-bb2e-45ae-92df-52af95cbcb4b/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee5038f9-7e6e-43ee-9adf-0ee84bcbe5a3/changed-files.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab13800a-c30b-4f87-882a-95061d6d96d9/mobile-jest-full.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/__tests__/wf/flow-data-layer-typed-failures.test.ts:393-397 — the pre-existing comment enumerating OWNER_SCOPED_KV_NAMESPACES (6 names) is now stale next to the updated `toHaveLength(7)` pin; left as-is per the no-comment-edit rule, worth refreshing in a later docs/test pass.",
+          "Implementer residual risk #2 (\"recovery of reserve_pending re-sends the reservation without re-reading the policy\") is not what the candidate does: apps/mobile/__tests__/w02ProcessDeathRecovery.test.ts:599-601 pins that the relaunch from `attempt_admitted_before_reserve_request` DOES issue GET /v1/analysis/release-policy before the reserve. Behaviour is the safer one; only the prose is inaccurate.",
+          "Every scoring run now adds one GET /v1/analysis/release-policy before reserve (server-first, cache only as offline fallback). Acceptable for the P0 gate; the Edge route's per-user budget in rateLimit.ts should be confirmed generous enough during the integration pass (INFERRED, not measured)."
+        ],
+        "package_id": "W01-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "6183b42e37ef7adecb8072716311bd3dac6cac0b",
+        "scope_violation": false,
+        "summary": "APPROVE W01-06 candidate 6183b42e37ef7adecb8072716311bd3dac6cac0b (base f9709ae5). SCOPE (VERIFIED, `git diff --stat`: 34 files, +2153/-38): the 3 write_paths, additive-only api.ts (new ANALYSIS_RELEASE_POLICY_PATH / ReleasePolicyClient / createReleasePolicyClient appended, nothing existing touched), runCaptureAnalysis.ts (mobile-analysis, held: permitPort() shares one ApiConfigState and adds `releasePolicy`; `await requireReleaseAuthority({db, scope, client})` inserted immediately before `permits.reserve(run.reservationKey)` inside the existing try so the existing isReleaseNotAuthorized → mechanics-only-partial branch handles the typed refusal), repository.ts (mobile-data, held: one entry appended to OWNER_SCOPED_KV_NAMESPACES), one new test fixture, one test-harness route, and 27 existing test files. No file under any unheld serial group; every out-of-scope edit is listed and is minimal wiring or test-support for the now-mandatory policy GET. scope_violation=false. SHIPPED BEHAVIOUR (VERIFIED): the gate is in the shipping path — copying the module+fixture+api/repository onto BASE without the runCaptureAnalysis wiring makes 12/37 tests fail. IMPLEMENTATION READ (INFERRED from code vs supabase/functions/api/canonicalDigest.ts + releasePolicy.ts + packages/shared-types analysisReleasePolicy.ts): envelope schema `analysis-release-authority-v1` + epoch serverTime pinned; policy/approval shape via shared validators; canonical bytes ≤ 64 KiB, recomputed RFC 8785 canonical JSON must equal returned canonicalDocument, sha256Hex must equal approval.policy.sha256; eligibility via shared resolveAnalysisReleaseEligibility (withdrawn/denied/expired/not-yet-valid → ineligible); server-first, verified negative evicts cache and throws the existing 409 access.release_not_authorized (no permit reserved, nothing chargeable); unverifiable body / transport / HTTP error → 503 access.release_authority_unavailable (retryable, never a settled refusal, never a charge); 401/403 and missing bearer rethrown as auth refusals. Cache: only verified-active policies, record ≤ 192 KiB, key `analysis.release-policy:<ownerKey>`, binding = sha256(schema+owner+origin) so another account/origin reads nothing, lifetime ≤ TRUSTED_TIME_LEASE_MAX_MS, offline admission only under `evaluateLease` with anchored trusted time (none/floor/unmeasured/rollback → unavailable), re-verified byte-for-byte on read, namespace purged by purgeOwnerData()/account deletion (pinned by 5 updated deletion tests, 7 kv DELETEs). TEST INTEGRITY (VERIFIED by reading every `-` hunk in __tests__): no test deleted/skipped/reordered; the only removed assertions are `fetchMock toHaveBeenCalledTimes(1)` → `permitCalls(fetchMock) toHaveLength(1)` where permitCalls filters ONLY the policy GET (same count of permit traffic), one inline fetch stub gained a policy branch, w02ProcessDeathRecovery order pins gained the policy GET as first request, and namespace-count pins went 6→7. grep of the diff for eslint-disable/@ts-ignore/any/`|| true`/passWithNoTests/.skip/.only/inflated timeouts: none. No existing comments modified; no migrations, grants, RLS, session checks, billing, secrets or diagnostics touched; new user-facing strings use 'validated ratings' / 'rating service' language only. ACCEPTANCE (all re-run by me on 6183b42e): AC1 37/37 exit 0; AC2 base exit 1 (0 tests, module missing) and unwired-base exit 1 (12 failed) vs HEAD 37/37 → proof holds; AC3 tsc exit 0; AC4 eslint + prettier --check on all 34 files exit 0; full mobile jest 6567 passed / 1 documented env skip, exit 0. No Mac run needed (no native/ios files changed). Non-blocking notes recorded (stale namespace comment in one test, an inaccurate residual-risk sentence, +1 GET per scoring run).",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-19-keep"
+}

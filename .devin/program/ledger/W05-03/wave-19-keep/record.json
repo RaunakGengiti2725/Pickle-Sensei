@@ -1,0 +1,239 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W05-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "e3b7d2e6873ac5e7fd9990e9b51ffa26f525c17816920bb83899a5866aae967a",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W05-03-r1",
+      "phase": "review",
+      "prompt_sha256": "7d25819d64f90541d7a4bf404ccbc33c96dc99269ecd0e23265cab1383930e55",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "91cbcf7927e2c7d4f28e78cf36bbfeab93ca918795608f8bb4dc8b1ab50953a4",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+  "candidate": {
+    "branch": "devin/pp/w05-03/impl-r1",
+    "head_sha": "083ae400b1f0257327061342c8da4d3bced16b52",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4990ed65-4024-4ab8-a6c2-81ae5c6addd8/baseline-ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/51a6f69f-7847-4900-8682-2e36b9e23351/baseline-ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f0756e1-6629-4ba7-849c-399373214e37/attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52d021ad-3efb-46d5-81b6-5f1dfa0ef9d6/attack-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f62af0ae-b083-4885-a7aa-36d299cea3fe/attack-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c4a56545-64cd-4417-a4d2-45d5743fd40e/attack-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w05-03/attack-083ae400",
+        "attack_branch_sha": "48429765460902848aa2bf64bf591a079c7597fc",
+        "attacked_sha": "083ae400b1f0257327061342c8da4d3bced16b52",
+        "attacks_tried": 63,
+        "breaks": [
+          {
+            "expected": "Per the module's own contract (offlineWallet.ts reconcileOfflineWallet doc: 'Corrupt journal state fails before anything is sent' and 'unreadable journal state is the typed offline.wallet_corrupt failure, never an empty wallet'), the drain should reject with offline.wallet_corrupt, make zero presentations, leave settlement NULL and the journal unchanged — consistent with the status API. Not money-affecting (the same receipt id is presented, the server settles idempotently, no second ticket is spent), hence P2 not P0/P1: incorrect behaviour on a defensive path, and the app's HOLD/status view and the sync drain disagree about whether the wallet is readable.",
+            "observed": "With a single malformed offline_wallet_journal row for the active owner in state applied/superseded/unknown, readOfflineWalletStatus(db) and readOfflineWalletJournal(db) reject with OfflineGrantError code offline.wallet_corrupt (as designed), but reconcileOfflineWallet(db, client, reading) resolves {submitted:1, accepted:1, held:0, refused:0, stale:0, pending:0, recovered:0}: the pending receipt IS presented over the network (1 POST /v1/offline/receipts), settled 'accepted', and a second 'applied' journal row is written alongside the corrupt one. The same corrupt rows in state in_flight DO fail before sending (tests pass for the five in_flight variants), so the check exists only on the in_flight filter path (loadJournal(..., 'in_flight') in openPresentation).",
+            "repro": "git fetch origin devin/pp/w05-03/attack-083ae400 && git checkout 48429765460902848aa2bf64bf591a079c7597fc && cd apps/mobile && npx jest --ci __tests__/w05WalletRecoveryAttack.test.ts -t 'A4a: with an applied entry whose verdicts are not JSON'  (also fails for: applied entry whose verdicts name a different receipt; applied entry with an unknown verdict kind; superseded entry that still carries verdicts; entry in an unknown state). VERIFIED: full attack suite exit=1, Tests: 5 failed, 58 passed, 63 total (artifacts/w05-03-attack/attack-final.log).",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05WalletRecoveryAttack.test.ts (describe 'W05-03 attack: wallet journal failure boundaries', it.each A4a rows j-applied-garbage, j-applied-foreign, j-applied-kind, j-superseded-verdicts, j-state)",
+            "title": "reconcileOfflineWallet() only validates in_flight journal rows: a corrupt applied/superseded/unknown-state row makes the status API throw offline.wallet_corrupt while the drain still presents and settles receipts (documented contract: 'Corrupt journal state fails before anything is sent')"
+          }
+        ],
+        "package_id": "W05-03",
+        "summary": "ADVERSARIAL REPORT W05-03 — candidate devin/pp/w05-03/impl-r1 @ 083ae400b1f0257327061342c8da4d3bced16b52 (VERIFIED `git rev-parse HEAD` after `git fetch origin devin/pp/w05-03/impl-r1 && git checkout 083ae400...`; base f9709ae5 confirmed in `git log`).\n\nCANDIDATE BASELINE (VERIFIED, run on the candidate before any attack file existed):\n- AC1 `cd apps/mobile && npx jest --ci --silent __tests__/w05WalletRecovery.test.ts` → exit 0; Test Suites 1 passed/1; Tests 22 passed, 0 failed, 0 skipped (artifacts/w05-03-attack/baseline-ac1.log, uploaded).\n- AC2 `cd apps/mobile && npx tsc --noEmit` → exit 0 (baseline-ac2-tsc.log, uploaded).\n- Candidate production code and candidate tests were NOT modified (attack branch = candidate HEAD + one commit adding only apps/mobile/__tests__/w05WalletRecoveryAttack.test.ts; `git status` clean otherwise).\n\nATTACK BRANCH: devin/pp/w05-03/attack-083ae400 pushed (no force) → attack_branch_sha 48429765460902848aa2bf64bf591a079c7597fc. Attack file passes gates: `npx tsc --noEmit` exit 0 (attack-tsc.log), root `npx eslint apps/mobile/__tests__/w05WalletRecoveryAttack.test.ts` exit 0 (attack-eslint.log), root `npx prettier --check` exit 0 (attack-prettier.log). Node v24.19.0 in this VM (repo says 22+; npm ci and all suites ran).\n\nATTACK RUN (VERIFIED): `cd apps/mobile && npx jest --ci __tests__/w05WalletRecoveryAttack.test.ts` → exit 1; Test Suites 1 failed/1; Tests 63 total: 58 passed, 5 failed, 0 skipped (artifacts/w05-03-attack/attack-final.log, uploaded). The 5 failures are ONE finding (P2, `breaks[0]`): five it.each rows of A4a where the corrupt journal row is in state applied/superseded/unknown. Every other attack held.\n\nATTACK CATEGORIES TRIED (63 tests, 9 categories; ✓ = candidate held, ✗ = break):\nA1 concurrency / interleaved account switch (4 ✓): A→B→A switch while the request is gated (verdict applied only under the original owner context, B's DB never sees A's rows; two receipts, same ids, one presentation each); sign-out during request (DataOwnerChangedError, in_flight kept as HOLD, no settlement); re-entrant drain from inside the fetch mock (serialized: second drain sees an empty queue, receipt presented once); 3 concurrent drains + a receipt consumed mid-flight (each receipt id presented exactly once across all drains, second receipt goes in the next batch).\nA2 replay / duplicate identities (5 ✓): duplicate ids in answer, foreign id, missing id, malformed status, empty answer → network.invalid_response, nothing settled, in_flight stays (HOLD), same ids re-presented; reverse-ordered answer applied to the right receipts; same operation-id replay returns the original receipt with replayed=true, different result/hash under the same op id → offline.receipt_conflict, no ticket spent, receipt count unchanged; a late duplicate verdict for an already-settled receipt is counted `stale` and never overwrites the terminal settlement.\nA3 network failure at each step (12 ✓): 429+Retry-After, 500, 503 empty body, 401, 302 redirect, empty body, non-JSON, unrelated JSON, 404 → journal stays in_flight, hold=true, zero settlement, retry re-presents the SAME receipt id once (no new operation id, no new ticket); 20 s API timeout (fake timers, AbortController) → network.timeout, HOLD, same id re-presented; token-less client → auth.required before the request leaves (journal committed first: conservative HOLD, recovery re-presents once).\nA4 corrupt / partial persisted state (10 rows + 7 ✓, 5 ✗): in_flight rows with closed_at set / verdicts present / duplicate ids / empty id list / unknown kind → status API AND drain both fail offline.wallet_corrupt before sending ✓; applied/superseded/unknown-state corrupt rows → status API fails but drain sends+settles ✗ (breaks[0]); orphaned in_flight naming a receipt that no longer exists (superseded, no crash, nothing settled) ✓; orphan naming a receipt already settled (superseded, stale not re-presented) ✓; stale in_flight from a 'previous launch' re-presents the same id exactly once ✓; another owner's corrupt row is invisible to this owner ✓; corrupt receipt body (non-JSON claims) fails typed, not as empty wallet ✓; receipt deleted between submission and answer → apply rejects offline.receipt_unknown, journal stays in_flight, nothing else settled ✓.\nA5 boundary clocks (4 ✓ incl. it.each NaN/±Infinity/far-future/far-past): non-finite wall clock inside the presentation transaction throws (RangeError from toISOString) and the transaction ROLLS BACK — nothing sent, no journal row, no settlement (untyped error; not a break: fails closed, no money movement, and syncRuntime swallows and backs off); clock rollback between launches (settled_at earlier than opened_at) still applied, ids unchanged; negative epoch wall clock ok; untrusted reading (authority none, rollbackDetected) does not gate presentation.\nA6 atomicity + free-rating conservation (6 ✓): failed journal close (statement fault) rolls back both settlements, retry presents the same two ids once more; lost commit ack after the write-ahead INSERT → nothing sent, HOLD, retry presents once; commit failing before the apply transaction commits → nothing half-settled, in_flight kept; held+refused+accepted mixed batch settles per receipt and ticket count is conserved (refused ticket stays consumed locally, never auto-reclaimed); receipt consumed while a batch is in flight is not settled by that batch; 40-receipt batch conserves tickets exactly and each id is presented once.\nA7 process death beyond the candidate's kill points (5 ✓, real SIGKILL child on a durable node:sqlite file via the candidate's walletChild harness + a real HTTP server): answer lost TWICE (launch 1 and recovering launch 2 both die after the server recorded) → launch 3 settles one receipt once, server saw the same receipt id/operation id every time, one ticket; launch 2 dies INSIDE the recovery transaction (after superseding, before its own row commits) → orphan still in_flight for launch 3; launch 1 dies with the answer received but before the first settlement write → relaunch re-presents once; HELD receipt whose re-presentation answer is lost is settled by launch 3 under the same id; request never leaves on two consecutive launches → server sees exactly one presentation in total, receipt never minted twice.\nA8 unauthorised roles / isolation + copy (3 ✓): guest owner and signed-out owner never submit and never read the signed-in owner's journal; string literals in offlineWallet.ts contain none of the forbidden terms (Android, Google Play, guest mode, Live Court, DUPR, competitor names, accuracy %, superlatives, refund/refunded-as-copy).\n\nNOT APPLICABLE / NOT TESTED: no new SQL or Edge surface in this package (write_paths are mobile-only), so anon/other-user/service RLS attacks do not apply; no UI in the package, so accessibility could not be exercised beyond the copy scan; iOS-native behaviour of op-sqlite `rowsAffected` is UNKNOWN from Linux (the candidate tolerates undefined).\n\nOBSERVATIONS (INFERRED, no test asserts a break): (1) readOfflineWalletStatus() — the HOLD surface the implementer summary calls a 'JS-side wallet status API for the app to surface a HOLD' — has no caller under apps/mobile/src other than offlineWallet.ts itself; only the process-death harness reads it, so nothing in the shipping UI shows the HOLD yet. (2) The legacy non-journaled reconcileOfflineReceipts() remains exported from offlineCapabilities.ts (still used only by __tests__/w04OfflineGrants.test.ts; syncRuntime.ts calls the new reconcileOfflineWallet) — a future caller could bypass the journal. (3) syncRuntime.ts wraps the drain in try/catch, so every failure mode above (including the untyped RangeError in A5a and the corrupt-journal error) is swallowed into back-off rather than crashing the app.\n\nVERDICT: no P0/P1 found. Money/identity invariants held under every attack: no receipt was ever presented under a new operation id or receipt id, no second ticket was spent, no partial batch persisted, no cross-owner read, ambiguous outcomes always surfaced as HOLD (in_flight kept) rather than refund/retry-with-new-id. One P2 contract inconsistency (breaks[0]) reproduced by 5 failing attack tests."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w05-03/ac1-head.log (uploaded: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c9f5284-f572-4c23-8578-d60e69853120/ac1-head.log)",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05WalletRecovery.test.ts",
+            "executed": 22,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC1",
+            "note": "VERIFIED. Regression proof: the same command on BASE_SHA f9709ae5 (test committed at cbf67388, no implementation) exits 1 — 'Cannot find module ../src/data/offlineWallet', Test Suites 1 failed, Tests 0 total — log artifacts/w05-03/ac1-base.log (uploaded: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ad57d76-1e3f-4f29-b54f-5008cc88dbea/ac1-base.log). Candidate (HEAD 083ae400): exit 0, 22 executed / 22 passed / 0 failed / 0 skipped, 26.7 s. Full mobile suite on HEAD `cd apps/mobile && npx jest --ci --silent`: exit 0, 325 suites passed + 1 pre-existing conditional skip (importedRealFootageAnalysis: describe.skip when footage artifacts absent), 6552 passed / 1 skipped / 0 failed — artifacts/w05-03/jest-full-head.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5e342bd-6fce-4ca2-975b-01206e9ef231/jest-full-head.log).",
+            "passed": 22,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w05-03/ac2-tsc.log (uploaded: https://la-hacks-rttothemoon.devinenterprise.com/attachments/5568e777-5c19-4c3f-88d9-7b164c51b9ca/ac2-tsc.log)",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC2",
+            "note": "VERIFIED on HEAD 083ae400 after `cd apps/mobile && npm ci` (a stale node_modules lacked @sentry/react-native, which package.json declares; the first attempt before npm ci failed only on those missing types). Empty output, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w05-03/ac3-lint-format.log (uploaded: https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8e40b8e-a971-42ad-a759-68b0702eabf6/ac3-lint-format.log)",
+            "command": "npx eslint apps/mobile/src/data/offlineWallet.ts apps/mobile/__tests__/w05WalletRecovery.test.ts apps/mobile/__harness__/processDeath/walletChild.ts apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/src/data/db.ts apps/mobile/src/data/syncRuntime.ts && npx prettier --check apps/mobile/src/data/offlineWallet.ts apps/mobile/__tests__/w05WalletRecovery.test.ts apps/mobile/__harness__/processDeath/walletChild.ts apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/src/data/db.ts apps/mobile/src/data/syncRuntime.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC3",
+            "note": "VERIFIED from repo root on HEAD 083ae400 (root ESLint + root Prettier 3.9.6): 'All matched files use Prettier code style!', exit 0. Also: root `pnpm format:check` exit 0 (artifacts/w05-03/format-check.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/09e63f18-f67f-4c7e-8e6c-80e870e70561/format-check.log); `git diff --check f9709ae5..HEAD` exit 0, no output (artifacts/w05-03/git-diff-check.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5722f20-c946-4fdf-a78b-8dffb88ad9c6/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression test first (unit tests against the real SQLite test double + process-death tests through the existing __harness__/processDeath harness with a new wallet child), proved failing on BASE_SHA (module missing, exit 1), committed separately. Then a minimal write-ahead journal module inside write_paths, wired with a 2-line DDL hunk in db.ts and a 1-call swap in syncRuntime.ts (both mobile-data, held by this package). No existing tests were modified; the one existing fake DB was extended additively (one more table returns []) because the shipping drain now reads the new table.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ad57d76-1e3f-4f29-b54f-5008cc88dbea/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4c9f5284-f572-4c23-8578-d60e69853120/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5568e777-5c19-4c3f-88d9-7b164c51b9ca/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8e40b8e-a971-42ad-a759-68b0702eabf6/ac3-lint-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/09e63f18-f67f-4c7e-8e6c-80e870e70561/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5722f20-c946-4fdf-a78b-8dffb88ad9c6/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5e342bd-6fce-4ca2-975b-01206e9ef231/jest-full-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8a3547d6-79f9-416e-a380-318a0ab6ff8c/jest-full.log"
+        ],
+        "base_sha": "f9709ae5ef76b53bc89d8aced75308a5f43f9729",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w05-03/impl-r1",
+        "files_changed": [
+          "apps/mobile/src/data/offlineWallet.ts",
+          "apps/mobile/__tests__/w05WalletRecovery.test.ts",
+          "apps/mobile/__harness__/processDeath/walletChild.ts",
+          "apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts",
+          "apps/mobile/src/data/db.ts",
+          "apps/mobile/src/data/syncRuntime.ts"
+        ],
+        "head_sha": "083ae400b1f0257327061342c8da4d3bced16b52",
+        "out_of_scope_files": [
+          "apps/mobile/src/data/db.ts — +2 lines: spreads OFFLINE_WALLET_JOURNAL_DDL into LOCAL_MIGRATIONS so the journal table exists in the shipping schema (mobile-data group, held by this package).",
+          "apps/mobile/src/data/syncRuntime.ts — 1 import + 1 call-site swap: the shipping receipt drain calls reconcileOfflineWallet instead of reconcileOfflineReceipts, so the journal is on the real code path (mobile-data group, held by this package).",
+          "apps/mobile/__harness__/processDeath/walletChild.ts — new test-only child process for the existing process-death harness; runs hold -> consume -> sync-runtime drain on a durable SQLite file so the suite can SIGKILL/relaunch it. Not under any serial_group_paths prefix.",
+          "apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts — +1 line: the in-memory outbox fake returns [] for `SELECT * FROM offline_wallet_journal`, exactly as it already does for offline_receipt/analysis_run_journal; without it __tests__/wf/be-mobile-sync-outbox.test.ts (3 tests) fails on the candidate because the fake throws 'unhandled sql' for the new table. Test-only, not under any serial_group_paths prefix."
+        ],
+        "package_id": "W05-03",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w05WalletRecovery.test.ts (22 tests: 11 unit — journal DDL, write-ahead entry before request, atomic verdict application + journal close, per-owner serialization, HOLD on unanswered presentation, replay after lost local ack, batch atomicity, held verdict re-presentation, terminal settlement never overwritten, corrupt journal -> offline.wallet_corrupt, owner isolation, syncRuntime wiring; 11 process-death — control launch, SIGKILL at grant insert / ticket consume / receipt queue / post-commit / journal insert / request-unsent / server-ack-lost / settlement write / journal apply, held verdict across relaunch; each asserts same receipt id + operation id, one ticket consumed, no double submission)"
+        ],
+        "residual_risks": [
+          "The full mobile Jest run first showed 3 failures in __tests__/wf/be-mobile-sync-outbox.test.ts on the candidate — caused by the in-memory outbox fake throwing on the new table read; fixed by the additive 1-line stub in outboxFakeDb.ts (test-only file). The integrator should keep that hunk with the syncRuntime wiring.",
+          "Per-owner serialization of drains is in-process only (Map of promises); two OS processes on one device are not a supported topology for the mobile app, and cross-process safety is provided by the journal (a stale in_flight entry is superseded and the same receipt ids are re-presented; the server settles by receipt id).",
+          "Not run (explicitly out of scope for this package): scripts/mac-full-verify.sh --remote, Edge/RLS suites, browser/UI testing; no server-side changes were needed because offline_receipt is already keyed by (owner_key, receipt_id) and submitReceipts already settles by receipt id.",
+          "Full mobile Jest shows 1 pre-existing conditional skip (importedRealFootageAnalysis.test.ts uses describe.skip when footage artifacts are absent) on both the base-era run and HEAD; it is unrelated to this package and not counted in AC1."
+        ],
+        "summary": "Defect on BASE_SHA (INFERRED from code, then VERIFIED by the new suite failing on base): apps/mobile/src/data/offlineCapabilities.ts reconcileOfflineReceipts() (L1386–1410) reads pendingOfflineReceipts() (L1319), calls client.submitReceipts(...) over the network, and only then loops settleOfflineReceipt() (L1338) per verdict. Nothing durable is written between 'request left the device' and 'verdicts recorded', so (a) a process death after the server answered but before/while settling leaves receipts `settled_at IS NULL` with no record that they were ever presented — the relaunch cannot distinguish 'never sent' from 'sent, answer lost' and has no HOLD signal; (b) verdicts for a batch were applied one row at a time, so a kill mid-loop persisted a partial batch; (c) two overlapping drains (foreground trigger + 30 s cadence) could present the same receipt ids concurrently; (d) there was no JS-side wallet status API for the app to surface a HOLD. The receipt ids/operation ids themselves were already durable and the server settles by receipt id, so the fix is a write-ahead journal around the submission, not a change to consumption.\n\nFix (apps/mobile/src/data/offlineWallet.ts, 522 lines, wired into the shipping path): `offline_wallet_journal (owner_key, journal_id, kind, receipt_ids JSON, state in_flight|applied|superseded, opened_at, closed_at, verdicts JSON)` installed via OFFLINE_WALLET_JOURNAL_DDL in db.ts LOCAL_MIGRATIONS. reconcileOfflineWallet(db, client, reading) — now called by syncRuntime.ts's receipt drain — (1) in one BEGIN IMMEDIATE transaction reads pending receipts, marks any prior `in_flight` entry `superseded` (counted as `recovered`), inserts a new `in_flight` entry naming the exact receipt ids, COMMITs; (2) submits exactly those ids (idempotent: same receipt ids, same operation ids, never a new operation id, never a second ticket); (3) validates the verdict list matches the presented ids 1:1 (else offline.receipt_unknown, nothing settled), then in a second transaction settles every receipt AND closes the journal `applied` with the verdicts — atomically; existing terminal settlements are never overwritten (counted `stale`). Drains are serialized per owner in-process; owner fencing via captureDataOwnerContext/forDataOwner; guest/signed-out owners never submit. readOfflineWalletStatus() reports each pending receipt's phase (queued | presented_unanswered | held) and `hold=true` when an unanswered presentation exists — a HOLD, not a refund. Malformed journal rows throw offline.wallet_corrupt rather than reading as an empty wallet.\n\nHarness: apps/mobile/__harness__/processDeath/walletChild.ts runs the wallet path as a real Node child on a durable SQLite file (holdOfflineGrant -> consumeOfflineAllocation -> configureSyncRuntime + triggerOutboxSync) with the existing SQL/HTTP kill switches; the suite SIGKILLs it at every step, relaunches, and asserts the same receipt id/operation id, one consumed ticket, one applied journal entry, no double submission, and that a held verdict survives relaunch until accepted.\n\nCommits on devin/pp/w05-03/impl-r1 (pushed, no PR): cbf67388 regression suite (fails on base), b3c16788 prettier/unused-import cleanup of the suite, 083ae400 implementation + wiring + harness. HEAD 083ae400b1f0257327061342c8da4d3bced16b52 = origin/devin/pp/w05-03/impl-r1 (VERIFIED). AC1/AC2/AC3, root pnpm format:check and git diff --check all exit 0 (logs in artifacts/w05-03/ and uploaded). Full mobile Jest on HEAD: 6552 passed, 0 failed, 1 pre-existing conditional skip."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/920e86f5-52f1-43a1-9758-e15c47865472/ac1-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05WalletRecovery.test.ts",
+            "executed": 22,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC1",
+            "note": "VERIFIED on HEAD 083ae400 after `cd apps/mobile && npm ci` (exit 0): Test Suites 1 passed, Tests 22 passed / 22 total, 26.4 s (local log artifacts/w05-03-review/ac1-head.log). Regression proof VERIFIED: separate worktree /home/ubuntu/repos/ps-base at f9709ae5 with ONLY __tests__/w05WalletRecovery.test.ts and __harness__/processDeath/walletChild.ts copied over, same command -> exit 1, 'Cannot find module ../src/data/offlineWallet', Test Suites 1 failed, Tests 0 total (https://la-hacks-rttothemoon.devinenterprise.com/attachments/572ccc03-ebba-4242-92d9-8ac2471079d0/ac1-base.log). Full mobile suite on HEAD `cd apps/mobile && npx jest --ci --silent`: exit 0, 325 suites passed, 6552 passed / 0 failed / 1 skipped — the skip is the pre-existing conditional describe.skip in __tests__/importedRealFootageAnalysis.test.ts:103 (identical on BASE_SHA), not part of AC1 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ade8674e-b142-41dc-81f6-b98acc77d6c3/jest-full-head.log). __tests__/wf/be-mobile-sync-outbox.test.ts, __tests__/w04OfflineGrants.test.ts, __tests__/xcBehavioral/syncRuntimeMatrix.test.ts, __tests__/w02ProcessDeathRecovery.test.ts all PASS in that run.",
+            "passed": 22,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3aeb8588-1988-4de0-992c-2a3b7ac1b4be/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC2",
+            "note": "VERIFIED on HEAD 083ae400: empty output, exit 0 (local log artifacts/w05-03-review/ac2-tsc.log). Compiler check, no test counts.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ddb617f-2f52-43bb-93a2-f7b8e690a3a6/ac3-lint-format.log",
+            "command": "npx eslint apps/mobile/src/data/offlineWallet.ts apps/mobile/__tests__/w05WalletRecovery.test.ts apps/mobile/__harness__/processDeath/walletChild.ts apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/src/data/db.ts apps/mobile/src/data/syncRuntime.ts && npx prettier --check apps/mobile/src/data/offlineWallet.ts apps/mobile/__tests__/w05WalletRecovery.test.ts apps/mobile/__harness__/processDeath/walletChild.ts apps/mobile/__harness__/serverResponseMatrix/outboxFakeDb.ts apps/mobile/src/data/db.ts apps/mobile/src/data/syncRuntime.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-03-AC3",
+            "note": "VERIFIED from repo root on HEAD 083ae400 over all six changed files: eslint exit 0 (no output), prettier exit 0 'All matched files use Prettier code style!'; additionally `git diff --check f9709ae5..HEAD` exit 0 (local log artifacts/w05-03-review/ac3-lint-format.log). Lint/format check, no test counts.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/920e86f5-52f1-43a1-9758-e15c47865472/ac1-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/572ccc03-ebba-4242-92d9-8ac2471079d0/ac1-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3aeb8588-1988-4de0-992c-2a3b7ac1b4be/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8ddb617f-2f52-43bb-93a2-f7b8e690a3a6/ac3-lint-format.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ade8674e-b142-41dc-81f6-b98acc77d6c3/jest-full-head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Regression proof on BASE_SHA fails at module resolution ('Cannot find module ../src/data/offlineWallet', Tests: 0 total), not by a behavioural assertion; the base defect (offlineCapabilities.ts reconcileOfflineReceipts settles verdicts row-by-row with no durable presentation record) is INFERRED from code, VERIFIED only in the sense that the new suite cannot run on base.",
+          "readOfflineWalletStatus().hold is exposed by the module and asserted by the tests/harness, but no shipping UI consumes it yet; the HOLD is enforced by data-layer behaviour (in_flight entry superseded, same receipt ids re-presented) rather than surfaced to the user. Acceptable for this package's objective (JS-side store + tests).",
+          "syncRuntime.ts:145 catch{} (pre-existing) swallows offline.wallet_corrupt from reconcileOfflineWallet into consecutiveFailures backoff; the wallet never reads as empty, but corruption is not observable beyond backoff.",
+          "Legacy reconcileOfflineReceipts remains exported from offlineCapabilities.ts (used only by __tests__/w04OfflineGrants.test.ts); no shipping caller after the syncRuntime swap."
+        ],
+        "package_id": "W05-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "083ae400b1f0257327061342c8da4d3bced16b52",
+        "scope_violation": false,
+        "summary": "APPROVE W05-03 candidate 083ae400b1f0257327061342c8da4d3bced16b52 (base f9709ae5 is an ancestor; 3 commits cbf67388, b3c16788, 083ae400). SCOPE (VERIFIED via git diff --stat): 6 files — the two write_paths (src/data/offlineWallet.ts new 522 lines; __tests__/w05WalletRecovery.test.ts new 1291 lines, 22 tests), two minimal wiring edits inside the held mobile-data group (db.ts +2: spreads OFFLINE_WALLET_JOURNAL_DDL into LOCAL_MIGRATIONS; syncRuntime.ts import + one call swap reconcileOfflineReceipts -> reconcileOfflineWallet), and two test-only additions not under any serial_group_paths prefix (__harness__/processDeath/walletChild.ts new; __harness__/serverResponseMatrix/outboxFakeDb.ts +1 line returning [] for the new table). All four extras are listed in out_of_scope_files with matching justifications; scope_violation=false. SHIPPED BEHAVIOUR (VERIFIED by rg): the only shipping caller of the receipt drain, syncRuntime.ts:131, now calls reconcileOfflineWallet; the legacy reconcileOfflineReceipts has no shipping callers. DESIGN (INFERRED from code): openPresentation runs one transaction — read pending receipts, close every prior in_flight entry as superseded, insert a new in_flight entry naming the exact receipt ids — before client.submitReceipts; applyVerdicts requires a 1:1, same-order verdict list (else offline.receipt_unknown, nothing settled, entry stays in_flight = HOLD) and settles every receipt plus the journal close in one transaction, never overwriting a terminal settlement (counted stale); drains are serialized per owner in-process; owner fencing via captureDataOwnerContext/forDataOwner; guest/signed-out owners return idle; malformed journal rows throw offline.wallet_corrupt rather than reading as empty. Same receipt ids and operation ids are re-presented on every relaunch, so no second consumption and no new operation id — consistent with the HOLD/recover and offline-allocation invariants. INVARIANTS: no migration, RLS, grant, session or billing code touched; no existing code comments modified in db.ts/syncRuntime.ts/outboxFakeDb.ts diffs; no `|| true`, any, @ts-ignore, eslint-disable, .only/.skip, setTimeout inflation or force-exit in the new files (VERIFIED by grep); jest testTimeout unchanged (30000); process-death tests use the existing SIGKILL harness and assert per kill point: signal SIGKILL + marker, on-disk state as expected, HOLD reported iff an in_flight entry exists, one consumed ticket, same receipt id/operation id, superseded+applied journal, server recorded exactly one receipt with presentations = killed-launch presentations + 1. ACCEPTANCE (all re-executed): AC1 exit 0, 22/22; AC2 exit 0; AC3 eslint+prettier exit 0 over all six files, git diff --check clean. REGRESSION PROOF: the copied suite exits 1 on BASE_SHA (module missing, 0 tests) and 22/22 on HEAD; regression_fails_on_base=true, noting the base failure is at module resolution rather than a behavioural assertion. Full mobile Jest on HEAD: 6552 passed, 0 failed, 1 pre-existing conditional skip (importedRealFootageAnalysis, present identically on base). Not run (out of scope for this package): Mac runner, Edge/RLS suites, UI testing. Working tree clean at HEAD; nothing pushed, no PR.",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-19-keep"
+}
