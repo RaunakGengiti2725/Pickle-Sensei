@@ -776,6 +776,48 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     ]);
   });
 
+  it('an account switch while the server carries the deletion out: no poll goes out under the new owner, and the sent confirmation is never described as something to "start again"', async () => {
+    route({
+      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-confirm': () =>
+        reply(
+          'delete-confirm',
+          { operationId: deletionId(10), state: 'in_progress' },
+          202,
+          { headers: { 'retry-after': '2' } },
+        ),
+      'delete-status': () =>
+        reply('delete-status', statusPayload('in_progress')),
+    });
+    const renderer = renderScreen();
+    try {
+      await armDeletion(renderer);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+      expect(allText(renderer)).toContain('Deletion in progress');
+      act(() => {
+        signIn(OWNER_B, BEARER_B, 'apple');
+      });
+      await advance(2_000);
+      await advance(5_000);
+      expect(calls('delete-status')).toHaveLength(0);
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expectNotDeleted(renderer);
+      const text = allText(renderer);
+      expect(text).toContain('Deletion status unknown');
+      expect(text).toContain('signed-in account changed');
+      expect(text).toContain('may still be carried out');
+      expect(text).not.toContain('start again');
+      expect(text).not.toContain('Nothing was deleted');
+      expect(text).not.toContain('Nothing has been deleted');
+      expect(journalRows()).toMatchObject([
+        { owner_id: OWNER_A, operation_id: deletionId(10), phase: 'observing' },
+      ]);
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it('re-entering while the confirmation is still in flight shows an unresolved outcome for the same account, never "account changed", and the late reply still completes', async () => {
     const hang = deferred<Response>();
     route({
@@ -2451,7 +2493,15 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
 
         await pressWhenArmed(second, 'Retry deletion');
         expect(calls('delete-status')).toHaveLength(1);
-        expectUnknownOutcome(second);
+        expect(calls('delete-request')).toHaveLength(1);
+        // `pending` proves the confirmation never arrived: the same challenge
+        // is re-armed, and its review pause is the usual few seconds too.
+        expect(allText(second)).toContain('Delete your account?');
+        const armed = String(
+          sheetButton(second, 'Permanently delete').props.label,
+        );
+        const pause = /\((\d+)\)$/.exec(armed);
+        expect(pause ? Number(pause[1]) : 0).toBeLessThanOrEqual(5);
         expectNotDeleted(second);
       } finally {
         act(() => second.unmount());
