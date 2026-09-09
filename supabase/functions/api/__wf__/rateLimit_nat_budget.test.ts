@@ -194,10 +194,19 @@ const postRefresh = (handler: Handler, ip: string, refreshToken: string, bearer?
 const postBootstrap = (handler: Handler, ip: string, idToken: string) =>
   send(handler, userRequest("POST", "/v1/account/bootstrap", { token: idToken, ip, body: {} }));
 
-/** What healthy peers behind the egress see: a valid session bearer reading
- * /v1/me, a live refresh token rotating, and a NEW handset signing in. */
+/** The established session of a peer behind `ip`: one bearer per egress, so
+ * once verified it is served from the auth cache like a real handset's is. */
+const peerSessions = new Map<string, string>();
+const establishedSession = (ip: string) => {
+  const bearer = peerSessions.get(ip) ?? fakeSupabaseAccessToken(TEST_USER_ID);
+  peerSessions.set(ip, bearer);
+  return bearer;
+};
+
+/** What healthy peers behind the egress see: an established session bearer
+ * reading /v1/me, a live refresh token rotating, and a NEW handset signing in. */
 async function peerStatuses(handler: Handler, ip: string) {
-  const read = await readMe(handler, ip, fakeSupabaseAccessToken(TEST_USER_ID));
+  const read = await readMe(handler, ip, establishedSession(ip));
   const refresh = await postRefresh(handler, ip, `rt-healthy-peer-${crypto.randomUUID()}`);
   const bootstrap = await postBootstrap(handler, ip, fakeGoogleIdToken(OTHER_USER_ID));
   return { read: read.status, refresh: refresh.status, bootstrap: bootstrap.status };
@@ -220,6 +229,23 @@ const repeat = async (times: number, run: () => Promise<Response>): Promise<numb
 
 const allEqual = (statuses: number[], expected: number) =>
   statuses.every((status) => status === expected);
+
+/** Pin the clock to the first minute of a FRESH auth-failure window so a test
+ * may step across minute boundaries (the refresh route has its own 30/min
+ * per-IP budget, which is not under test) without leaving the window. */
+async function inFreshAuthWindow(run: (nextMinute: () => void) => Promise<void>) {
+  const realNow = Date.now;
+  const windowMs = AUTH_FAILURE_LIMIT.windowSeconds * 1_000;
+  let clock = (Math.floor(realNow() / windowMs) + 1) * windowMs + 500;
+  Date.now = () => clock;
+  try {
+    await run(() => {
+      clock += 60_000;
+    });
+  } finally {
+    Date.now = realNow;
+  }
+}
 
 const assertBoundedRetryAfter = (response: Response) => {
   const retryAfter = Number(response.headers.get("Retry-After"));
@@ -387,20 +413,18 @@ Deno.test(
       "one handset's 30 guesses must not take the venue offline (one NAT egress cannot lock out a venue)",
     );
 
-    // Under stuffing, a refused credential is not tolerated again: its next
-    // presentation is 429 before Auth — that credential alone.
+    // Under stuffing, a bearer nothing verified vouches for — a refused one
+    // replayed, or a never-seen one (indistinguishable from a guess before
+    // Auth answers) — is 429 before Auth; the flat lockout of
+    // rate_limit_test.ts is preserved for exactly those.
     const upstreamBefore = h.calls.filter(isUserCall).length;
     const replay = await readMe(h.handler, ip, forged[0]);
     assertEquals(replay.status, 429, "a refused credential replayed under stuffing is throttled");
     assertBoundedRetryAfter(replay);
-    assertEquals(
-      h.calls.filter(isUserCall).length,
-      upstreamBefore,
-      "the replay never reached Auth",
-    );
-    // A never-seen credential cannot be told from a valid peer's first
-    // request before Auth answers: it is judged (and refused) like any other.
-    assertEquals((await readMe(h.handler, ip, forged[LIMIT])).status, 401);
+    const novel = await readMe(h.handler, ip, forged[LIMIT]);
+    assertEquals(novel.status, 429, "an unverified bearer under stuffing is throttled");
+    assertNoInternalHeaders(novel);
+    assertEquals(h.calls.filter(isUserCall).length, upstreamBefore, "neither reached Auth");
     await assertPeersServed(h.handler, ip, "peers are still served under stuffing");
   },
 );
@@ -581,11 +605,16 @@ Deno.test(
     const bogus = new Set(Array.from({ length: LIMIT }, (_, i) => `rt-bogus-${i}-${ip}`));
     h.respond = (call) =>
       isRefreshCall(call) && bogus.has(bodyField(call, "refresh_token")) ? refreshRefused() : null;
-    const statuses: number[] = [];
-    for (const token of bogus) statuses.push((await postRefresh(h.handler, ip, token)).status);
-    assert(allEqual(statuses, 401), `each bogus refresh is refused: ${statuses.join(",")}`);
-    assertEquals(await egressCharged(ip), LIMIT);
-    await assertPeersServed(h.handler, ip, "peers are served after 30 refresh guesses");
+    await inFreshAuthWindow(async (nextMinute) => {
+      await assertPeersServed(h.handler, ip, "peers are served before the stuffing");
+      nextMinute();
+      const statuses: number[] = [];
+      for (const token of bogus) statuses.push((await postRefresh(h.handler, ip, token)).status);
+      assert(allEqual(statuses, 401), `each bogus refresh is refused: ${statuses.join(",")}`);
+      assertEquals(await egressCharged(ip), LIMIT);
+      nextMinute();
+      await assertPeersServed(h.handler, ip, "peers are served after 30 refresh guesses");
+    });
   },
 );
 
@@ -604,26 +633,29 @@ Deno.test(
       if (token === spentToken) return refreshAlreadyUsed();
       return null;
     };
-    const replays = await repeat(LIMIT, () => postRefresh(h.handler, ip, bogus));
-    assert(allEqual(replays, 401), `bogus refresh refused ${LIMIT}×: ${replays.join(",")}`);
-    const throttled = await postRefresh(h.handler, ip, bogus);
-    assertEquals(throttled.status, 429, "the 31st replay is throttled");
-    assertBoundedRetryAfter(throttled);
-    assertEquals(
-      h.calls.filter((call) => isRefreshCall(call) && bodyField(call, "refresh_token") === bogus)
-        .length,
-      LIMIT,
-      "the throttled replay never reached Auth",
-    );
-    assertEquals(await egressCharged(ip), 1, "one refused refresh token is one guess");
+    await inFreshAuthWindow(async (nextMinute) => {
+      const replays = await repeat(LIMIT, () => postRefresh(h.handler, ip, bogus));
+      assert(allEqual(replays, 401), `bogus refresh refused ${LIMIT}×: ${replays.join(",")}`);
+      nextMinute();
+      const throttled = await postRefresh(h.handler, ip, bogus);
+      assertEquals(throttled.status, 429, "the 31st replay is throttled");
+      assertBoundedRetryAfter(throttled);
+      assertEquals(
+        h.calls.filter((call) => isRefreshCall(call) && bodyField(call, "refresh_token") === bogus)
+          .length,
+        LIMIT,
+        "the throttled replay never reached Auth",
+      );
+      assertEquals(await egressCharged(ip), 1, "one refused refresh token is one guess");
 
-    const spentStatuses = await repeat(5, () => postRefresh(h.handler, ip, spentToken));
-    assert(
-      allEqual(spentStatuses, 401),
-      `already-used token is refused: ${spentStatuses.join(",")}`,
-    );
-    assertEquals(await egressCharged(ip), 1, "an already-rotated token is liveness, not a guess");
-    await assertPeersServed(h.handler, ip, "peers are served");
+      const spentStatuses = await repeat(5, () => postRefresh(h.handler, ip, spentToken));
+      assert(
+        allEqual(spentStatuses, 401),
+        `already-used token is refused: ${spentStatuses.join(",")}`,
+      );
+      assertEquals(await egressCharged(ip), 1, "an already-rotated token is liveness, not a guess");
+      await assertPeersServed(h.handler, ip, "peers are served");
+    });
   },
 );
 
@@ -785,21 +817,27 @@ Deno.test("primitives: charge and peek semantics in the memory fallback", async 
   await rateLimit.chargeAuthFailure(ip, alice, { kind: "credential", identity: null }, BUDGET);
   assertEquals((await rateLimit.peekAuthFailureBudget(ip, alice, BUDGET)).remaining, BUDGET.limit);
 
-  // Stuffing: once `limit` distinct guesses were refused, previously refused
-  // credentials are not tolerated again; clean ones are untouched.
+  // Stuffing: once `limit` DISTINCT guesses were refused the egress is under
+  // stuffing (a gate for unverified bearers only); shards stay per credential
+  // and no clean credential is ever closed by it.
+  assertEquals((await rateLimit.peekAuthStuffing(ip, BUDGET)).allowed, true);
   for (let i = spent(await egress()); i < BUDGET.limit; i += 1) {
     const id = await rateLimit.authFailureIdentity(`stuffed-${i}`);
     await rateLimit.chargeAuthFailure(ip, id, { kind: "credential" }, BUDGET);
   }
   assertEquals(spent(await egress()), BUDGET.limit);
-  assertEquals((await rateLimit.peekAuthFailureBudget(ip, guess, BUDGET)).allowed, false);
+  const stuffing = await rateLimit.peekAuthStuffing(ip, BUDGET);
+  assertEquals(stuffing.allowed, false);
+  assertEquals(stuffing.remaining, 0);
+  assert(stuffing.retryAfterSeconds >= 1 && stuffing.retryAfterSeconds <= BUDGET.windowSeconds);
+  assertEquals((await rateLimit.peekAuthFailureBudget(ip, guess, BUDGET)).allowed, true);
   assertEquals((await rateLimit.peekAuthFailureBudget(ip, dead, BUDGET)).allowed, false);
   assertEquals((await rateLimit.peekAuthFailureBudget(ip, alice, BUDGET)).allowed, true);
   assertEquals((await rateLimit.peekAuthFailureBudget(ip, null, BUDGET)).allowed, true);
   const other = await rateLimit.authFailureIdentity("elsewhere");
   await rateLimit.chargeAuthFailure("203.0.113.11", other, { kind: "credential" }, BUDGET);
   assertEquals(
-    (await rateLimit.peekAuthFailureBudget("203.0.113.11", other, BUDGET)).allowed,
+    (await rateLimit.peekAuthStuffing("203.0.113.11", BUDGET)).allowed,
     true,
     "another egress is not under stuffing",
   );
@@ -984,9 +1022,14 @@ Deno.test(
       );
       for (const { rateLimit } of isolates) {
         assertEquals(
-          spent(await rateLimit.peekRateLimit("authfail", ip, BUDGET.limit, BUDGET.windowSeconds)),
+          spent(await rateLimit.peekAuthFailureBudget(ip, dead, BUDGET)),
           1,
-          "each isolate saw one guess, never thirty",
+          "each isolate still counts the guess it saw in its own memory shard",
+        );
+        assertEquals(
+          spent(await rateLimit.peekRateLimit("authfail", ip, BUDGET.limit, BUDGET.windowSeconds)),
+          0,
+          "the shared stuffing signal never saw the credential",
         );
       }
     } finally {
