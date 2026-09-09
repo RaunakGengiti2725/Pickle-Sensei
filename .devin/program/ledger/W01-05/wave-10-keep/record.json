@@ -1,5 +1,48 @@
 {
-  "agents": [],
+  "agents": [
+    {
+      "label": "implement-W01-05-r3",
+      "phase": "implement",
+      "prompt_sha256": "569b175c002624e8332cd1b18cc082fb64d5c88bd457db8de7e4e3cbe9f8dd79",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W01-05-r3-c2",
+      "phase": "implement",
+      "prompt_sha256": "dbb5446cdbefdcc808c26b18be19210a15eb32b48c05980ddbb37cfd1b58fee0",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-05-r3",
+      "phase": "review",
+      "prompt_sha256": "8948fe266184f09e83dec8f5d5ff242a9f887c60be90a77c2d637ae8b8d90f5b",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-05-r3",
+      "phase": "adversary",
+      "prompt_sha256": "f3ad17b7c5ce500394becc7379492cb3e6577d1905f7c0799d6c0dff53ba045a",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-05-r3-c2",
+      "phase": "review",
+      "prompt_sha256": "be142900d39bc1847c6002a0d58a3a7ce9910f879f0d3e7b7305e112b3e4ee68",
+      "role": "reviewer",
+      "status": "launched"
+    },
+    {
+      "label": "adversary-W01-05-r3-c2",
+      "phase": "adversary",
+      "prompt_sha256": "e7250602624c5b1c9db48d8428ccc67a2a5e53e890e2a34b8f3b75fc42473cab",
+      "role": "adversary",
+      "status": "launched"
+    }
+  ],
   "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
   "competing": 2,
   "integration_branch": "devin/1788854799-production-program-integration",
@@ -52,7 +95,11 @@
     },
     "head_sha": "b7b9ac7f11d8b5ae3ef0f73710ef2e978664b93a"
   },
-  "rounds": [],
+  "rounds": [
+    {
+      "round": 3
+    }
+  ],
   "start_round": 3,
   "status": "RUNNING",
   "wave_id": "wave-10-keep"

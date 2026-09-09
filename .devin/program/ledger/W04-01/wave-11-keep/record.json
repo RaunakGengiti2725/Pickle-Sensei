@@ -1,11 +1,17 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W04-01-r7",
       "phase": "implement",
       "prompt_sha256": "bc1cbf2c9ce059a32cc411ccaa28828b8b010f61ecd61f3a5839775ad32f51e4",
       "role": "implementer",
-      "status": "launched"
+      "status": "completed"
     },
     {
       "label": "implement-W04-01-r7-c2",
@@ -13,9 +19,43 @@
       "prompt_sha256": "b149763ad5e86645acb3afb1474472e57d6ee035ebde165a5129cbc773d3e0bf",
       "role": "implementer",
       "status": "completed"
+    },
+    {
+      "label": "review-W04-01-r7-c2",
+      "phase": "review",
+      "prompt_sha256": "219224a08819fff386855f34791120ed20085464647c53e2a962f3a09d729ae7",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-01-r7-c2",
+      "phase": "adversary",
+      "prompt_sha256": "3b9e4d2059acc6204b20c64cb8a1731ca4bf2baded62c84685096134fa338881",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-01-r7",
+      "phase": "review",
+      "prompt_sha256": "850288f673f1316bef4ea8129c2dd68b2efe4cbe5e7187ac1966e16400ac154f",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-01-r7",
+      "phase": "adversary",
+      "prompt_sha256": "5b370d380f6e956bd097e091edfc8c97e5b0f94d99bdc5ccc09dd5b7f2a54c86",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+  "candidate": {
+    "branch": "devin/pp/w04-01/impl-r7-c2",
+    "head_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+    "lane": 2,
+    "round": 7
+  },
   "competing": 2,
   "integration_branch": "devin/1788854799-production-program-integration",
   "lib_version": "2026-09-08.8",
@@ -56,10 +96,601 @@
   },
   "rounds": [
     {
-      "round": 7
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/16794afd-7509-48a8-8192-c38a965457c2/attack_candidate_707bc097.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8df5cc87-1a64-4989-b108-88bfc2eb3cd6/attack_base_6a6e92a9.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f5cbf5d-2b80-4144-bdf2-816f27c7b67d/rls_matrix_attack_branch.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/91355b39-fa65-41eb-b19f-b10ccded0241/edge_full_attack_branch.log"
+        ],
+        "attack_branch": "devin/pp/w04-01/attack-707bc097",
+        "attack_branch_sha": "2dff7d307ef5b202abf1a138e979b1f07754d402",
+        "attacked_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "The registry accepts every installation key the edge/shared-types identifier contract accepts (or the wire contract is narrowed to match in the same change), so a valid client never gets offline.invalid_input for a contract-valid key.",
+            "observed": "VERIFIED on 707bc097: keys 'AAAA/BBBB-*', 'AAAA+BBBB-*', 'AAAABBBB=-*', '.dotted-*', '-dashed-*', ':colon-*' all return offline.invalid_input from register_offline_device(), although every one of them passes CLAIM_ID_RE in supabase/functions/api/index.ts and isIdentifier() in packages/shared-types/src/offlineAuthorization.ts. 128-char key accepted, 129/empty/space/non-ASCII refused as expected. A base64/base64url-shaped installation key (contains + / = or starts with - or .) can never register, so that device can never receive an offline grant.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json --filter 'ATK-01' w04_01_attack_707bc097.test.ts",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts (W04-01 ATK-01)",
+            "title": "register_offline_device() refuses installation keys the shipping wire contract accepts (SQL alphabet ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ is narrower than edge CLAIM_ID_RE / shared-types isIdentifier ^[A-Za-z0-9._:/+=-]{1,128}$)"
+          },
+          {
+            "expected": "A NaN (or out-of-[0,1]) detail confidence fails the settlement atomically (shot.write_failed:*), no detail row is written and the ticket stays outstanding — the shot row already enforces this for analysis_confidence.",
+            "observed": "VERIFIED on 707bc097: a phase entry {confidence:'NaN'} and a checkpoint entry {confidence:'NaN'} both return 'accepted', a detail row with confidence = 'NaN'::numeric is stored, and the ledger shows allocated,consumed. Every other poison payload (NaN overall score, out-of-range clock, int overflow, bad enum, missing NOT NULL field, non-boolean applicable) correctly returns shot.write_failed:<SQLSTATE> with no shot/detail/ledger row (ATK-03 passes). INFERRED: the pre-existing apply_synced_shot() uses the identical detail-row insert (20260906000000 migration) and the shot_phases/shot_checkpoints tables carry no confidence range constraint on BASE either, so this is an inherited schema gap the new settlement path re-exposes rather than a regression; the online path is fronted by the edge parser, the new RPC is not yet.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json --filter 'ATK-03b' w04_01_attack_707bc097.test.ts",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts (W04-01 ATK-03b)",
+            "title": "consume_offline_ticket() persists shot_phases/shot_checkpoints rows with confidence = NaN and marks the ticket consumed (numeric(5,4) has no range check on the detail tables)"
+          }
+        ],
+        "package_id": "W04-01",
+        "summary": "ADVERSARY W04-01 vs candidate 707bc097 (branch devin/pp/w04-01/impl-r7-c2). One test-only file added on devin/pp/w04-01/attack-707bc097 @ 2dff7d30: supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts — 12 Deno tests, all against a disposable Postgres (postgres:16, candidate migrations applied via the candidate's own __wf__/xc_pg_up.sh; Docker Hub 429 worked around by tagging the cached postgres:16-alpine as postgres:16, no repo changes). No candidate production code or candidate-owned test was touched; no PR opened; no force-push.\n\nATTACKS (12): ATK-01 installation-key alphabet vs wire contract (BREAK P2); ATK-02 malformed RPC args (null/negative/over-max counts, scalar/array/null shot JSON, unknown ticket, bad reason) → verdicts, no raise, ledger unchanged (held); ATK-03 crash-between-steps: NaN score, int overflow, out-of-range clocks, bad enums, missing NOT NULL, non-boolean → shot.write_failed:<SQLSTATE>, no shot/detail/ledger row, settlement vouch cleared inside the same tx, ticket still settles (held); ATK-03b NaN detail confidence (BREAK P3, inherited schema gap); ATK-04 replay/duplicate identities: same ticket+shot replay idempotent, same shot id under 2nd ticket refused with 2nd ticket still outstanding, stranger's shot id refused, consumed ticket + new shot refused (held); ATK-05 anon/service_role/no api key/no|expired|foreign session/banned → 42501 on all 4 RPCs, direct INSERT/UPDATE/DELETE on 4 tables and client-set shots.offline_ticket_id refused, owner UPDATE/DELETE on ledger and UPDATE on grants refused, SELECT own-rows + API-only (held); ATK-06 cross-account isolation incl. same installation key on a stranger and an UNLINKED re-created account (held); ATK-07 conservation scored+reserved+held ≤ 2 in every ordering, released tickets keep counting, stale 25h permit cannot settle a 3rd rating (held); ATK-08 concurrent issue/issue, issue on 2 devices, issue vs reserve_analysis_permit, 8-lane burst → exactly 2 allocated (held); ATK-09 Pro lease ≤ 7d and ≤ entitlement expiry for null/far/near/'infinity'/just-expiring, lapsed/non-premium falls back to free path, generations increase, grant immutable (held); ATK-10 attestation never downgrades, environment change refused, unattested → no grant (held); ATK-11 delete + re-create via SAME identity/installation: outstanding ticket recovered not re-allocated, consumed not re-credited, lifetime stays exactly 2 (held).\n\nEVIDENCE (all VERIFIED this session):\n- Attack suite on candidate: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json w04_01_attack_707bc097.test.ts` → exit 1, 12 run / 10 passed / 2 failed (ATK-01, ATK-03b) / 0 ignored. Log: attack_candidate_707bc097.log.\n- AC2 regression on BASE 6a6e92a9 (worktree /home/ubuntu/repos/ps-base, ONLY the attack file copied, disposable pg on :55434 with base migrations): same command → exit 1, 12 run / 0 passed / 12 failed, every test 'function public.register_offline_device(text, text, boolean) does not exist'. Log: attack_base_6a6e92a9.log. Regression-sensitive conservation (ATK-07/08/11) and denied-write (ATK-05) cases fail on base and pass on candidate.\n- AC1 on attack branch: `./supabase/tests/run_rls_tests.sh` → exit 0; 16/16 verdict banners (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING / W08 ACCOUNT DELETION / Analysis release policy authority: PASS ×4 scenarios = fresh + historical upgrades). Log: rls_matrix_attack_branch.log.\n- AC3 on attack branch: `cd supabase/functions/api/__wf__ && XC_PG_URL=… PICKLE_AUDIT_PG_URL=… deno task test` → exit 1, 903 run / 901 passed (31 steps) / 2 failed / 0 ignored; the ONLY 2 failures are the adversary's own ATK-01 and ATK-03b — the candidate's 891 tests all pass with ignored == 0 (matches implementer's 891/0/0). Log: edge_full_attack_branch.log.\n- `npx prettier --check` on the attack file exit 0; `git diff --check` exit 0.\n\nVERDICT: no P0/P1 found. Conservation, no-auto-reclaim, Pro lease bounds, append-only ledger, API-only RLS, cross-account isolation and identity recovery held under every attack tried. Two confirmed breaks: P2 contract mismatch (SQL installation-key regex narrower than the edge/shared-types identifier contract → contract-valid keys can never register) and P3 NaN detail confidence accepted by the new settlement path (inherited from the shared detail-row schema; flagged, not a regression)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/523a4904-8383-4651-a617-6747eb17cd83/ac1_run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 16,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC1",
+            "note": "VERIFIED on HEAD 707bc097 (Docker postgres:16). executed/passed = the 16 matrix verdict banners across fresh install + both historical-upgrade states (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING MATRIX / W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED, Analysis release policy authority: PASS). 0 psql ERROR lines; the only 'error' matches are NOTICE lines from 20260904000000_apply_synced_shot_error_hygiene.sql.",
+            "passed": 16,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log",
+            "command": "HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts ; BASE: git worktree add /home/ubuntu/w04/base 6a6e92a9 && cp the 3 test files over && same deno command against a disposable postgres migrated from BASE_SHA (xc_pg_up.sh, port 55434) ; BASE SQL: ./supabase/tests/run_rls_tests.sh with only security_regression.sql copied over",
+            "executed": 27,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC2",
+            "note": "VERIFIED. HEAD (candidate) run: exit 0, 27 executed / 27 passed / 0 failed / 0 skipped (22 static chain tests incl. the new W04-01 pin + 5 live concurrency tests R1–R5; see also the full-suite run in the AC3 log). BASE run of the same three test files on BASE_SHA 6a6e92a9: deno exit 1, 27 executed / 21 passed / 6 failed / 0 skipped — the W04-01 static pin and R1–R5 all fail (PostgresError: function public.register_offline_device(unknown, unknown, boolean) does not exist), the 21 pre-existing static tests pass; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log. BASE SQL matrix with the new security_regression.sql copied over: exit 3, fails at security_regression.sql:2385 'function public.online_reservation_count() does not exist'; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/52d7b7e6-b1ee-456d-8875-a4eed280f92f/ac2_base_run_rls_tests.log. Additional proof against the ROUND-6 candidate migration (4a082970's 20260908120000_offline_device_grants.sql applied on BASE_SHA under the 160000 name): concurrency suite exit 1, 5 executed / 1 passed / 4 failed — R1 fails with 23505 duplicate key (ATK-01), R2 fails 'the overlapping release waits for the ticket and reports it consumed' (ATK-05), R3 fails 'loser is told the TICKET is consumed, not shot.id_conflict' (ATK-06), R5 fails 'the one-terminal index exists'; R4 (single account) passes on r6 as expected; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed8ace29-21a2-4780-af05-0d307dfba3ff/ac2_r6_migration_deno_new_tests.log. Denied client writes: security_regression.sql T-sections + AC1 pass on HEAD.",
+            "passed": 27,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d02621a-3234-41b8-97c8-dccb5cc9c285/ac3_deno_task_test.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 891,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC3",
+            "note": "VERIFIED on HEAD 707bc097 against a disposable postgres:16 migrated with shim_auth.sql + every migration (xc_pg_up.sh): 'ok | 891 passed (31 steps) | 0 failed', ignored == 0. The disposable URL is passed under BOTH env names because the pre-existing w06_01_golden_parity.test.ts (not in this package's write_paths, unchanged) reads only PICKLE_AUDIT_PG_URL; with XC_PG_URL alone the same run is exit 0, 879 passed / 0 failed / 12 ignored (all 12 = W06-01 golden SQL-plane tests) — recorded in baseline_failures_observed, not waived.",
+            "passed": 891,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA on devin/pp/w04-01/impl-r7-c2 and reused the sound parts of the r6 candidate (4a082970) via cherry-pick -n, moving the migration to the additive later timestamp 20260908160000 (BASE now contains 20260908120000 and 20260908150000) and re-basing its apply_synced_shot() override on 20260908110000_settlement_receipt_lineage.sql so settlement receipts keep working. Defects on BASE_SHA: no offline device/grant/ledger schema at all (security_regression.sql:2385 online_reservation_count() missing; register_offline_device() missing). Defects in the r6 candidate the adversary broke: (1) register_offline_device() did SELECT … FOR UPDATE on a row that did not exist, so two overlapping first registrations both inserted and one raised 23505; (2) consume_offline_ticket()/release_offline_ticket()/guard_offline_ledger_event() serialised only on access_lock_key(uid) while identity recovery makes one ticket owned by two uids, and the ledger unique key (ticket_id, event) let 'consumed' and 'released' coexist; (3) consume's unique_violation handler translated a shots_pkey collision to shot.id_conflict before asking whether the ticket was already terminal. Fix (all inside the new migration): register_offline_device() takes pg_advisory_xact_lock(access_lock_key(uid)) before its check-then-insert and adopts the concurrent row on unique_violation; new api_private.offline_ticket_lock_key(uuid) (immutable, search_path='', revoked from anon/authenticated/service_role) and both terminal RPCs plus the ledger trigger lock caller-first then ticket so recovered siblings contend on one lock; partial unique index offline_allocation_ledger_one_terminal_idx on (ticket_id) where event in ('consumed','released') makes one-terminal-per-ticket a table invariant even if a future path bypasses the trigger's check; consume's unique_violation fallback reports the committed terminal state (offline.ticket_consumed / offline.ticket_released / accepted-if-same-shot) before falling back to shot.id_conflict. Regression tests were committed first (a970ae61), the migration second (e5fbfb71), then a harness-only test commit (707bc097) so a lane-A failure on BASE surfaces as a test failure instead of an uncaught promise rejection. No amend, no force push, no PR.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/523a4904-8383-4651-a617-6747eb17cd83/ac1_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52d7b7e6-b1ee-456d-8875-a4eed280f92f/ac2_base_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed8ace29-21a2-4780-af05-0d307dfba3ff/ac2_r6_migration_deno_new_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d02621a-3234-41b8-97c8-dccb5cc9c285/ac3_deno_task_test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/47b89d5c-5ad9-4dbf-9f55-7bbb8a052433/format_check.log"
+        ],
+        "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test → exit 0 but 12 ignored: w06_01_golden_parity.test.ts gates its SQL-plane tests on PICKLE_AUDIT_PG_URL only (not XC_PG_URL), so the manifest's AC3 command as literally written cannot reach ignored == 0 on BASE_SHA or HEAD without also exporting PICKLE_AUDIT_PG_URL. Present on BASE_SHA (file unchanged by this package). Worked around for AC3 by exporting both variables, not by editing the W06 file."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w04-01/impl-r7-c2",
+        "files_changed": [
+          "supabase/migrations/20260908160000_offline_device_grants.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts"
+        ],
+        "head_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+        "out_of_scope_files": [
+          "supabase/migrations/20260908160000_offline_device_grants.sql — the manifest's frozen path 20260908120000_offline_device_grants.sql is no longer later than every existing migration on BASE_SHA (20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql now exist); the HARD RULE 'LATER timestamp than every existing one' forces the same additive file under a fresh later timestamp inside the held sql serial group.",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts — new test-only file next to the listed db_migrations_rls_indexes.test.ts: the round-6 adversary breaks are concurrency races (overlapping transactions, barrier fan-out, account deletion/recreation) that a single-session psql matrix and a static chain test cannot exercise; it is picked up by the AC3 `deno task test` glob and imports nothing outside __wf__."
+        ],
+        "package_id": "W04-01",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R1 register_offline_device() double submit (ATK-01) -> both accepted, same device id, one row, never SQLSTATE 23505",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R2 recovered sibling accounts (identity split after deletion) consume vs release one ticket overlapping (ATK-05) -> exactly one terminal event, loser gets offline.ticket_consumed/offline.ticket_released",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R3 sibling accounts consume vs consume with different shots (ATK-06) -> one shot, one consumed row, loser told offline.ticket_consumed never shot.id_conflict",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R4 16-lane consume/release barrier burst on one ticket -> no raise, one terminal event, lifetime count moves by exactly the consumed tickets",
+          "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R5 table invariant — with the row guard disabled (owner, rolled back) a second terminal event is refused by offline_allocation_ledger_one_terminal_idx",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts 'W04-01' static chain pin: one-terminal partial unique index, api_private.offline_ticket_lock_key(uuid) (immutable, search_path='', revoked), caller lock before check-then-insert + unique_violation adoption in register_offline_device(), caller->ticket lock order in consume/release/guard trigger, terminal-state-first unique_violation fallback in consume",
+          "supabase/tests/security_regression.sql T1–T16 (T16 = round-6 adversary: one terminal event per ticket at the table, private ticket lock helper unreachable by anon/authenticated/service_role, ticket lock key differs from caller lock key, terminal RPCs hold both advisory locks)"
+        ],
+        "residual_risks": [
+          "AC3 'ignored == 0' depends on exporting PICKLE_AUDIT_PG_URL as well as XC_PG_URL because the pre-existing w06_01_golden_parity.test.ts (outside this package) reads only the former; a reviewer running the manifest command literally will see 12 ignored W06-01 tests that are unrelated to W04.",
+          "The migration file name differs from the manifest's frozen write_path (20260908160000 vs 20260908120000) because BASE_SHA now already contains 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql; the integrator must keep it later than any other sql-group migration landing in the same wave.",
+          "Overlap tests use a 400 ms park window to let lane B reach the lock before lane A commits; on a heavily loaded CI host lane B could start after A commits, in which case the tests still assert the correct sequential outcome (they cannot false-fail, but the overlap would be less adversarial). R4's 16-lane barrier burst does not depend on the window.",
+          "The per-ticket advisory lock key is hashtextextended('pickle.offline_ticket:'||ticket) — a 64-bit hash collision with another advisory key in the same database would only cause extra serialisation, never a correctness loss."
+        ],
+        "summary": "W04-01 round 7 lane 2 candidate pushed to devin/pp/w04-01/impl-r7-c2 @ 707bc09768b15b7d22f55f3613035bae603868b6 (3 commits on BASE 6a6e92a9). Gap on BASE_SHA: none of the W04 objects exist (security_regression.sql:2385 → 'function public.online_reservation_count() does not exist'; the concurrency suite → 'function public.register_offline_device(unknown, unknown, boolean) does not exist'). Both round-6 adversary breaks are resolved and pinned: ATK-01 (register_offline_device() 23505 under double submit — r6 migration took SELECT … FOR UPDATE on a nonexistent row) now holds access_lock_key(uid) across check-then-insert and adopts the concurrent row on unique_violation; ATK-05/06 (consumed AND released on one ticket via recovered sibling accounts, loser told shot.id_conflict — r6 serialised per CALLER on access_lock_key(v_uid) only and the ledger's (ticket_id,event) key never collided) now serialise per TICKET via api_private.offline_ticket_lock_key(uuid) in consume/release/guard trigger (caller lock first, ticket lock second), plus the partial unique index offline_allocation_ledger_one_terminal_idx as the table-layer invariant, and consume's unique_violation fallback returns the committed terminal verdict first. Proof: the new tests fail on BASE_SHA (27 run / 21 pass / 6 fail, deno exit 1; SQL matrix exit 3) AND fail on the r6 migration with exactly the adversary shapes (R1 23505, R2 double terminal, R3 shot.id_conflict, R5 index missing; 1 pass / 4 fail), and pass on HEAD (27/27). AC1 ./supabase/tests/run_rls_tests.sh exit 0 (16/16 verdict banners, fresh + both historical upgrades). AC3 deno task test exit 0, 891 passed / 0 failed / 0 ignored with the disposable URL exported as XC_PG_URL and PICKLE_AUDIT_PG_URL (the pre-existing W06-01 golden tests read only the latter; with XC_PG_URL alone: 879 passed / 12 ignored — recorded as baseline, not waived). pnpm format:check exit 0; git diff --check exit 0 (working tree and 6a6e92a9..HEAD). Invariants preserved: allocated+consumed+released ≤ entitlement across offline_hold_count()+online_reservation_count(); no automatic reclaim on disconnect/expiry/reinstall/key replacement/deletion; Pro lease ≤ 7 days and ≤ verified entitlement expires_at; all RPCs security definer with set search_path='', authenticated-only EXECUTE, service_role revoked, append-only ledger enforced by trigger for every role. Files: two write_paths as listed (security_regression.sql, db_migrations_rls_indexes.test.ts); the migration under 20260908160000 instead of the manifest's 20260908120000 (a 120000 and a 150000 migration already exist on BASE — the later-timestamp hard rule wins); one new test-only file w04_01_offline_grants_concurrency.test.ts (concurrency races cannot be exercised by psql or a static test) — both listed in out_of_scope_files with justification. Labels: everything above under 'VERIFIED' was run in this session with the logs attached; the r6 root-cause description is INFERRED from reading 4a082970's migration and CONFIRMED by the r6-migration test run."
+      },
+      "lanes": [
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f20b912f-84d8-47fd-a3ce-5b381511b547/attack_r8_candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84327b66-509e-482c-a679-b1d1b5e4c695/attack_r8_base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8eeebd35-c1e4-44ab-b0f8-66c9ddca51ec/edge_full_candidate2.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b9021790-fed3-4764-926b-ec14cc572cc3/edge_full_candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/97b22b20-4244-4942-8318-2bcd5d930129/rls_candidate.log"
+            ],
+            "attack_branch": "devin/pp/w04-01/attack-8e6e9281",
+            "attack_branch_sha": "28b796015ca01eeb5b6983c9cee17955c438bc90",
+            "attacked_sha": "8e6e928104e08346ba6cb985cf6128245e7db139",
+            "attacks_tried": 8,
+            "breaks": [
+              {
+                "expected": "allocated + consumed + released <= entitlement for the identity set the allocation was made under: consuming a ticket allocated under {I,J} must charge J's free_rating_ledger as well (or the allocation must be attributed to every allocation-time identity), so account C (identity J) sees lifetime_scored_count()=2 and reserve_analysis_permit() answers free_limit_reached. Total scored ratings across {I,J} must be <= 2.",
+                "observed": "VERIFIED (attack_r8_candidate.log, exit=1): 'identity pair {I, J} was entitled to 2 free ratings; observed: J ledger=0 (I=2), C access before={premium:false,scored_count:0,lifetime:0,holds:0} reserve=[accepted, accepted] synced=2 after={scored_count:2,lifetime:2}; scored ratings across the pair=4'. Root cause (INFERRED from migration): consume_offline_ticket() inserts the scored shot under the CONSUMER account, so shots_record_free_rating_ledger charges only the consumer's identities (I); the allocation's identity_hashes (J) recorded in offline_allocation_ledger are never charged, while offline_hold_count() for J drops to 0 once the tickets are consumed.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'ATK-08' w04_01_offline_grants_attack_r8.test.ts  (candidate DB = supabase/tests/shim_auth.sql + every migration through 20260908160000 via __wf__/xc_pg_up.sh). Steps in the test: user A with identities I+J registers an attested device, issue_offline_grant(key,2) -> 2 tickets; A is deleted (auth.users cascade); account B recreated with identity I -> api_private.offline_owned_allocations recovers both tickets; B consume_offline_ticket() twice -> accepted/accepted; account C recreated with identity J -> access_state() lifetime=0; C reserve_analysis_permit() x2 -> accepted/accepted; apply_synced_shot() x2 -> accepted.",
+                "severity": "P1",
+                "test_file": "supabase/functions/api/__wf__/w04_01_offline_grants_attack_r8.test.ts",
+                "title": "Free-rating conservation broken across duplicate identities: offline tickets allocated under identity set {I,J} are consumed by the recovered account holding I, identity J's ledger stays 0, and a second recreated account holding J scores two more free ratings (4 scored from a 2-rating entitlement)"
+              },
+              {
+                "expected": "For the merged identity set {I,J}: allocated(2) + consumed(2) > entitlement(2), so at most the tickets that still fit under the allowance may be reissued/settled; consume_offline_ticket() on a free account whose lifetime_scored_count() is already 2 must answer a stable refusal (free-limit verdict) rather than 'accepted', and lifetime_scored_count() must never exceed 2 for a non-premium account.",
+                "observed": "VERIFIED (attack_r8_candidate.log, exit=1): 'free account exceeded the lifetime allowance: before={premium:false,scored_count:2,reserved_count:2,lifetime:2,holds:2} issue=accepted/2 consume=[accepted, accepted] after={premium:false,scored_count:4,reserved_count:0,lifetime:4,holds:0} scored shots=4'. INFERRED: consume_offline_ticket() treats a recovered/inherited ticket as pre-authorised and has no lifetime-allowance backstop, unlike apply_synced_shot()/the shots write gate on the online path; issue_offline_grant() reissues inherited holds without re-checking lifetime_scored_count() + holds <= 2 for the merged identity set.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'ATK-09' w04_01_offline_grants_attack_r8.test.ts. Steps in the test: account A (identity J, lifetime 0) registers an attested device and issue_offline_grant(key,2) -> 2 tickets; A deleted; account B (identity I) reserves+syncs 2 online scored shots -> lifetime=2, access_state().scored_count=2; identity J is linked to B (insert into auth.identities -> inherit_offline_allocation_holds()); B registers the same installation key, issue_offline_grant(key,2) -> accepted with 2 reissued tickets; consume_offline_ticket() x2 -> accepted/accepted.",
+                "severity": "P1",
+                "test_file": "supabase/functions/api/__wf__/w04_01_offline_grants_attack_r8.test.ts",
+                "title": "Late-linked identity recovery lets a free account that has already spent its two lifetime ratings inherit two outstanding offline tickets and settle both: lifetime_scored_count() reaches 4 on a free account"
+              }
+            ],
+            "package_id": "W04-01",
+            "summary": "Adversary r8 against W04-01 candidate 8e6e928104e08346ba6cb985cf6128245e7db139 (branch devin/pp/w04-01/impl-r7). Attack suite: supabase/functions/api/__wf__/w04_01_offline_grants_attack_r8.test.ts on branch devin/pp/w04-01/attack-8e6e9281 @ 28b796015ca01eeb5b6983c9cee17955c438bc90 (pushed; only file added; candidate migration and candidate-owned tests untouched; no PR). Disposable Postgres built with __wf__/xc_pg_up.sh (shim_auth.sql + every migration) for candidate (port 55433) and BASE 6a6e92a9 (port 55434). 8 attacks tried (ATK-08..15): [ATK-08] duplicate-identity conservation, [ATK-09] late-linked-identity conservation, [ATK-10] boundary values (installation key 128/129/empty/null/leading-dot/unicode, environment/attested/ticket-count bounds, malformed uuid/shot json, NaN/negative/±infinity clocks), [ATK-11] partial/withheld/corrupt outcomes never charge (abstention, NaN/non-numeric score, missing fields, duplicate shot id, mid-batch failure + retry after simulated process death), [ATK-12] unauthorised roles (anon, other user, authenticated without api header/session, service_role, direct table writes; allowed+denied), [ATK-13] Pro lease bounds min(7d, entitlement expiry) incl. expired premium fallback and lease-mutation resistance, [ATK-14] corrupt/partially persisted ledger state (owner UPDATE/DELETE, second terminal row, forged consumed/released rows, orphan allocation), [ATK-15] release semantics and no auto-reclaim of a disconnected device's allocation. VERIFIED results: candidate run `XC_PG_URL=... deno test -A --no-check --config deno.json w04_01_offline_grants_attack_r8.test.ts` -> FAILED | 6 passed | 2 failed, exit=1 (ATK-08, ATK-09 are the two confirmed breaks; ATK-10..15 held). BASE run of the same file (port 55434) -> 0 passed | 8 failed, exit=1 (every case fails with 'function public.register_offline_device(...) does not exist' — feature absent on base, so the file discriminates base from HEAD). AC1 `./supabase/tests/run_rls_tests.sh` -> exit=0, all 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) passed. AC3 full Edge suite `cd supabase/functions/api/__wf__ && XC_PG_URL=<pg> PICKLE_AUDIT_PG_URL=<pg> deno task test` (attack file present in the tree) -> FAILED | 899 passed (31 steps) | 2 failed | 0 ignored, exit=1; the only 2 failures are ATK-08/ATK-09 from the attack file — every pre-existing candidate/base test passed. Note: with only XC_PG_URL set the same run was 887 passed | 2 failed | 12 ignored (edge_full_candidate.log) because the pre-existing W06 tests key off PICKLE_AUDIT_PG_URL; ignored==0 requires both variables. Both breaks are P1 (incorrect behaviour on the supported identity-recovery / late-link path, bounded free-rating over-grant of 2 ratings per identity pair; not a data leak or crash). No security, RLS, lease-bound, append-only, boundary or no-auto-reclaim break was found in ATK-10..15. Exploratory SQL probes (/tmp/probe1-4.sql) were scratch only and are not evidence."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": false,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": [
+              "adversarial P0/P1 breaks: 2"
+            ]
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7dca769-751f-431e-b7da-d16bd34e43b2/run_rls_tests.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 12,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC1",
+                "note": "VERIFIED on HEAD 8e6e9281 (run after the final migration edit; artifacts/ is gitignored so the log is uploaded). executed/passed = 12 matrix runs = 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) × 3 matrices (SECURITY REGRESSION incl. W04-01 T1–T16, W07 CONCURRENT BILLING, W08 ACCOUNT DELETION); every run printed 'ALL CASES PASSED', 0 psql ERROR lines. Disposable Docker postgres:16 only; production project untouched.",
+                "passed": 12,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/acc3045f-689e-49a7-931f-1cd72d432443/ac2_head_deno.log",
+                "command": "BASE: git worktree at 6a6e92a9 (/home/ubuntu/w04-base) with ONLY supabase/tests/security_regression.sql, supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts and supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts copied over; XC_PG_CONTAINER=pg-w04-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts; ./supabase/tests/run_rls_tests.sh. HEAD: XC_PG_CONTAINER=pg-w04 XC_PG_PORT=55432 ./supabase/functions/api/__wf__/xc_pg_up.sh && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts (+ AC1 run on HEAD)",
+                "executed": 29,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC2",
+                "note": "PROOF VERIFIED: new tests FAIL on BASE_SHA and PASS on HEAD. BASE deno run: exit 1, 21 passed / 9 failed (the W04-01 static test fails '20260908160000_offline_device_grants.sql must exist in the migration chain'; the 7 concurrency tests fail via the file's uncaught PostgresError 'function public.register_offline_device(unknown, unknown, boolean) does not exist' — the RPC does not exist on base) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/d07b85e4-1604-48f3-8151-ca068ccd0d1c/ac2_base_deno.log ; base DB setup log https://la-hacks-rttothemoon.devinenterprise.com/attachments/00bbe426-2dbe-485e-9983-669e6ff18d95/xc_pg_up_base.log . BASE run_rls_tests.sh with the new security_regression.sql: exit 3, matrix aborts at security_regression.sql:2385 'function public.online_reservation_count() does not exist' (0 matrices passed) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/40acafd5-56dc-403c-9bfe-96cf421c6d92/ac2_base_rls.log . HEAD deno run (candidate counts above): exit 0, 29 passed / 0 failed / 0 ignored (22 static db_migrations_rls_indexes tests incl. the W04-01 pin + ATK-01..07); HEAD DB setup https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2dc163c-1876-4946-9a4c-19a5c909cce9/xc_pg_up_head.log ; HEAD SQL matrix = AC1 (exit 0, 12/12, T16 conservation + denied client writes included). Note on r6 vs r7: the ATK-01/ATK-05/ATK-06 lanes are exactly the round-6 adversary's breaks and are the r7 delta; they were VERIFIED red against r6 by the adversary (prior-round evidence) and are green here.",
+                "passed": 29,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee0cb23c-350a-418b-9d3a-7d810cfb9d6b/ac3_deno_task_test.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+                "executed": 893,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC3",
+                "note": "VERIFIED on HEAD: 'ok | 893 passed (31 steps) | 0 failed' with ignored == 0 (grep -c '... ignored' = 0). The disposable DB is the xc_pg_up.sh container pg-w04 (shim_auth.sql + every migration incl. 20260908160000) on 127.0.0.1:55432. PICKLE_AUDIT_PG_URL is set to the SAME disposable URL because w06_01_golden_parity.test.ts (out of this package's scope) reads only PICKLE_AUDIT_PG_URL, not XC_PG_URL: a first run with XC_PG_URL alone was 881 passed / 0 failed / 12 ignored (all 12 = W06-01 golden SQL-plane tests), so both env vars are required for the ignored==0 gate. Extra checks: pnpm format:check exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7e7db3ea-d5f2-40b1-afdd-57f6a30ec9ce/format_check.log); git diff --check exit 0; pnpm exec eslint on the two changed/new .ts files exit 0; npx deno@2.5.6 check --config deno.json on both test files exit 0. index.ts untouched.",
+                "passed": 893,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "1) Checked out BASE_SHA, created devin/pp/w04-01/impl-r7, cherry-picked the four sound r6 commits. 2) Renamed the migration to 20260908160000 (later than every existing migration), re-based its apply_synced_shot() on 20260908110000's receipt-aware body (+ offline_hold_count backstop), and verified by extracting and diffing the two function bodies. 3) Wrote the regression coverage first (SQL T16, static pins, permanent w04_01_offline_grants_concurrency.test.ts with the adversary's ATK-01..07 lanes) and proved it red on a disposable BASE worktree/DB (pg-w04-base:55434) with ONLY those three test files copied over. 4) Implemented the minimal fixes in the migration: per-user lock before the registration lookup + unique_violation replay; per-ticket advisory lock helper taken by consume/release/ledger guard; one-terminal-per-ticket partial unique index; ticket-verdict mapping of late unique violations. 5) Ran AC1 (12/12 matrices), AC2 HEAD (29/29), AC3 (893/893, ignored 0 with XC_PG_URL + PICKLE_AUDIT_PG_URL on the disposable DB), pnpm format:check, git diff --check, eslint and deno check on the changed TS. 6) Two commits (tests, then fix), pushed the exact branch, no PR.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7dca769-751f-431e-b7da-d16bd34e43b2/run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/acc3045f-689e-49a7-931f-1cd72d432443/ac2_head_deno.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d07b85e4-1604-48f3-8151-ca068ccd0d1c/ac2_base_deno.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/40acafd5-56dc-403c-9bfe-96cf421c6d92/ac2_base_rls.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee0cb23c-350a-418b-9d3a-7d810cfb9d6b/ac3_deno_task_test.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7e7db3ea-d5f2-40b1-afdd-57f6a30ec9ce/format_check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2dc163c-1876-4946-9a4c-19a5c909cce9/xc_pg_up_head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/00bbe426-2dbe-485e-9983-669e6ff18d95/xc_pg_up_base.log"
+            ],
+            "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+            "baseline_failures_observed": [],
+            "blocked": false,
+            "branch": "devin/pp/w04-01/impl-r7",
+            "files_changed": [
+              "supabase/migrations/20260908160000_offline_device_grants.sql",
+              "supabase/tests/security_regression.sql",
+              "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts"
+            ],
+            "head_sha": "8e6e928104e08346ba6cb985cf6128245e7db139",
+            "out_of_scope_files": [
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts — new Deno/Postgres concurrency regression file (ATK-01..07) beside the manifest's static test; sits under the same __wf__ directory, is additive (new file only), and is the permanent home of the round-7 adversary repros so AC2's BASE-vs-HEAD proof is executable rather than static-only. Also: the migration is named 20260908160000_offline_device_grants.sql instead of the manifest's 20260908120000_… because BASE_SHA already carries 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql (a later timestamp than every existing migration is required)."
+            ],
+            "package_id": "W04-01",
+            "regression_tests_added": [
+              "supabase/tests/security_regression.sql — W04-01 T1–T15 (r6, cherry-picked) + T16 (r7): serialised registration under access_lock_key, recovered-sibling ticket ownership, per-ticket lock helper is api_private/definer/immutable/search_path='' and revoked from clients, offline_allocation_ledger_one_terminal_idx refuses a second terminal row for every role (checked with the event trigger disabled inside the rolled-back case), released tickets stay holds (no re-credit), conservation allocated+consumed+released ≤ entitlement",
+              "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts — static pins: migration file 20260908160000, one-terminal partial unique index, offline_ticket_lock_key(uuid) private helper, ticket lock taken in guard_offline_ledger_event before the ledger read, register_offline_device takes access_lock_key(uid) BEFORE its lookup and replays the row on unique_violation (no on conflict), consume/release take the ticket lock before reading the ledger and map a late unique_violation to the ticket verdict",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts — live disposable-Postgres lanes: ATK-01 double-submit registration (both accepted, one row, same device_id), ATK-02 16 issue_offline_grant lanes allocate exactly two tickets, ATK-03 6 offline devices vs 6 online reservations never exceed 2 and access_state() agrees, ATK-04 16 consume lanes + 8 consume/8 release lanes → one terminal event, ATK-05 recovered sibling accounts consume vs release → exactly one terminal event and loser gets offline.ticket_consumed/offline.ticket_released, ATK-06 sibling consume vs consume → one shot, ATK-07 lost-reply replay + malformed detail rolls the whole settlement back"
+            ],
+            "residual_risks": [
+              "AC3's ignored==0 depends on setting PICKLE_AUDIT_PG_URL beside XC_PG_URL (w06_01_golden_parity.test.ts, owned by W06-01, only reads the former). With XC_PG_URL alone the run is 881 passed / 12 ignored. The manifest command names only XC_PG_URL; the integrator/reviewer must export both to reproduce ignored==0.",
+              "The T16 matrix case proves the one-terminal index by disabling the ledger event trigger inside a transaction the harness rolls back; if a future runner changes the rollback discipline that sub-case would need to be re-homed.",
+              "Static pins in db_migrations_rls_indexes.test.ts assert exact statement text (lock call, index DDL, `exception when unique_violation`) — a later migration that redefines these RPCs must keep the same shape or extend the pin; that is intentional (the same discipline as the lifetime_scored_count pins).",
+              "Migration history on the branch contains an intermediate commit (de591142, r6 cherry-pick) that added the migration as 20260908120000_offline_device_grants.sql before 30b4b676 renamed it; the final tree has only 20260908160000. No applied migration was edited (neither name ever existed on base or in production).",
+              "The r7 adversary breaks were reproduced by the r6 adversary against 4a082970; this round re-runs them green on HEAD and red on BASE (where the RPCs do not exist) but did not re-run them against the r6 tree."
+            ],
+            "summary": "Defects on BASE_SHA (6a6e92a9): the W04-01 objective (offline_devices / offline_grants / offline_allocation_ledger tables, register_offline_device / issue_offline_grant / consume_offline_ticket / release_offline_ticket RPCs, API-only RLS, bounded ≤7-day leases, conservation) does not exist on base at all (no migration defines them; `public.register_offline_device` and `public.online_reservation_count` are undefined — see the base runs in AC2). The round-6 candidate (4a082970) supplied them but (a) its migration was numbered 20260908120000, which collides with base's 20260908120000_settlement_receipt_account_cascade.sql and precedes 20260908150000_billing_recovery_transfer.sql, and its apply_synced_shot() was 'byte-for-byte 20260907100000' — i.e. it would have REGRESSED the settlement-receipt-aware body introduced by 20260908110000; (b) two adversary breaks: ATK-01 — register_offline_device() (r6 migration ~line 1361) did `select … for update` on a row that does not exist yet, so two overlapping first registrations of one (user, installation_key_id) both inserted and the loser raised 23505 instead of `accepted`; ATK-05 — consume_offline_ticket()/release_offline_ticket()/guard_offline_ledger_event() serialised only on pg_advisory_xact_lock(access_lock_key(v_uid)) (per CALLER) while identity recovery lets two recreated accounts own the same ticket, and the ledger's unique key (ticket_id, event) let 'consumed' and 'released' rows coexist — a scored shot AND a released row for one ticket. Fix (all inside supabase/migrations/20260908160000_offline_device_grants.sql, r6 commits cherry-picked onto BASE then the migration renumbered/rebased): register_offline_device() takes pg_advisory_xact_lock(access_lock_key(v_uid)) BEFORE the lookup and has an `exception when unique_violation` branch that reloads the existing row `for update` and answers `accepted` with the same device_id (still refusing an attestation-environment mismatch); new api_private.offline_ticket_lock_key(uuid) (sql, immutable, security definer, search_path='', revoked from public/anon/authenticated/service_role) hashed in its own namespace; consume/release take the caller lock AND the ticket lock before reading the ledger, and guard_offline_ledger_event() takes the ticket lock before its allocation/terminal read; new partial unique index offline_allocation_ledger_one_terminal_idx on (ticket_id) where event in ('consumed','released') makes a second terminal row impossible for every role; the RPCs map a late unique_violation to the stable ticket verdict (offline.ticket_consumed / offline.ticket_released), never a SQL error. apply_synced_shot() is re-based on the 20260908110000 receipt-aware body (diffed: the ONLY change is the free-limit backstop adding public.offline_hold_count()). Grants/RLS unchanged from r6 (API-only, no client writes to offline tables, all new helpers revoked from clients). Tests: SQL matrix T16 + static pins + permanent Deno concurrency suite ATK-01..07 (fail on BASE, pass on HEAD — AC2). Commits (no amend, no force): 2c54c935/de591142/62eae8d9/f8573d21 (r6 cherry-picks), 30b4b676 (r7 tests first), 8e6e9281 (r7 fix). Pushed to origin devin/pp/w04-01/impl-r7 = 8e6e928104e08346ba6cb985cf6128245e7db139; no PR opened. Labels: everything under acceptance_results is VERIFIED; the r6 adversary's red runs against 4a082970 are cited from the prior-round evidence (not re-run here)."
+          },
+          "lane": 1,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/456ba4a0-f9c0-41ff-86bc-74a99f960fca/ac1_run_rls_tests.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 12,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC1",
+                "note": "VERIFIED on 8e6e9281. 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 matrices (SECURITY REGRESSION incl. W04-01 T1-T16, W07 CONCURRENT BILLING, W08 ACCOUNT DELETION) = 12 'ALL CASES PASSED' lines, 0 psql ERROR lines (only NOTICE 'does not exist, skipping'). Environment caveat: Docker Hub returned 429 for postgres:16, so the locally cached postgres:16-alpine (PostgreSQL 16.15) was tagged as postgres:16 for the disposable container; the script and migrations were not modified. Production project untouched.",
+                "passed": 12,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed48245e-34f8-40be-b618-aafddb53e5e4/ac2_head_deno.log",
+                "command": "BASE: git worktree /home/ubuntu/w04-base-rev at 6a6e92a9 with ONLY supabase/tests/security_regression.sql, supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts, supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts copied from the candidate; XC_PG_CONTAINER=pg-rev-base XC_PG_PORT=55441 ./supabase/functions/api/__wf__/xc_pg_up.sh && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55441/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts; ./supabase/tests/run_rls_tests.sh. HEAD: XC_PG_CONTAINER=pg-rev-head XC_PG_PORT=55440 ./supabase/functions/api/__wf__/xc_pg_up.sh && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55440/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts (+ AC1 on HEAD)",
+                "executed": 29,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC2",
+                "note": "PROOF VERIFIED: new tests FAIL on BASE_SHA and PASS on HEAD. BASE deno run: exit 1, 21 passed / 9 failed / 0 ignored — the W04-01 static pin fails 'Error: 20260908160000_offline_device_grants.sql must exist in the migration chain' (db_migrations_rls_indexes.test.ts:1474) and w04_01_offline_grants_concurrency.test.ts fails with uncaught PostgresError 'function public.register_offline_device(unknown, unknown, boolean) does not exist' (ATK-01..07 cancelled) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7f5a372-821d-47a6-93f5-272f494a4db5/ac2_base_deno.log ; BASE DB setup https://la-hacks-rttothemoon.devinenterprise.com/attachments/5852bb0c-01fa-4afb-b980-63b16a6f6fcd/xc_pg_up_base.log . BASE run_rls_tests.sh with the candidate security_regression.sql: exit 3, 0 'ALL CASES PASSED', aborts at security_regression.sql:2385 'ERROR: function public.online_reservation_count() does not exist' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/503afaf1-3f77-4b0c-9bf6-4f7bf7811569/ac2_base_rls.log . HEAD deno run (counts above): exit 0, 29 passed / 0 failed / 0 ignored (22 static db_migrations_rls_indexes tests + ATK-01..07 live); HEAD DB setup https://la-hacks-rttothemoon.devinenterprise.com/attachments/805e43fb-6645-44c7-add3-f1eb40c00b26/xc_pg_up_head.log ; HEAD SQL matrix = AC1 (exit 0, 12/12, incl. T4/T8/T9/T16 conservation + denied client writes).",
+                "passed": 29,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a9014b5-60dc-4f87-992b-5ba55ccec485/ac3_deno_task_test.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55440/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55440/postgres deno task test",
+                "executed": 893,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC3",
+                "note": "VERIFIED on 8e6e9281 against the disposable xc_pg_up.sh container pg-rev-head (shim_auth.sql + every migration incl. 20260908160000): 'ok | 893 passed (31 steps) | 0 failed', grep -c '... ignored' = 0. Cross-check of the implementer's caveat: the manifest command with XC_PG_URL ALONE gives exit 0, 881 passed / 0 failed / 12 ignored, all 12 in w06_01_golden_parity.test.ts (unchanged since BASE, owned by W06-01, reads only PICKLE_AUDIT_PG_URL) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/1999d9a7-8496-462d-b99e-f0ce78eddc38/ac3_deno_task_test_xc_only.log . Both env vars pointing at the same disposable DB are required for ignored==0; that is a pre-existing property of an out-of-scope file, not of this candidate. Extra: pnpm exec eslint on the two changed .ts files exit 0; prettier --check exit 0; deno check --config deno.json on both test files exit 0.",
+                "passed": 893,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/456ba4a0-f9c0-41ff-86bc-74a99f960fca/ac1_run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed48245e-34f8-40be-b618-aafddb53e5e4/ac2_head_deno.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7f5a372-821d-47a6-93f5-272f494a4db5/ac2_base_deno.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/503afaf1-3f77-4b0c-9bf6-4f7bf7811569/ac2_base_rls.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a9014b5-60dc-4f87-992b-5ba55ccec485/ac3_deno_task_test.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1999d9a7-8496-462d-b99e-f0ce78eddc38/ac3_deno_task_test_xc_only.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/805e43fb-6645-44c7-add3-f1eb40c00b26/xc_pg_up_head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5852bb0c-01fa-4afb-b980-63b16a6f6fcd/xc_pg_up_base.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "AC3 as literally written in the manifest (XC_PG_URL only) leaves 12 W06-01 golden-parity tests ignored because supabase/functions/api/__wf__/w06_01_golden_parity.test.ts (unchanged since BASE, W06-01 scope) reads only PICKLE_AUDIT_PG_URL; integrator must export PICKLE_AUDIT_PG_URL=XC_PG_URL to reproduce ignored==0. Consider fixing the manifest command or the W06-01 file in its own package.",
+              "The new RPCs (register_offline_device, issue_offline_grant, consume_offline_ticket, release_offline_ticket) are not yet called from supabase/functions/api/index.ts or apps/mobile — by program design that wiring is W04-02 (edge routes, depends on W04-01) and index.ts is the 'edge-index' serial group this package does not hold; the W04-01 objective is phrased as 'Create tables/RPCs', which is met.",
+              "Static pins in db_migrations_rls_indexes.test.ts assert exact statement text of the r7 migration (lock call order, partial unique index DDL, 'exception when unique_violation'); a later migration redefining these RPCs must keep that shape or extend the pins (INFERRED from reading the test).",
+              "Reviewer environment: Docker Hub rate-limited (429) the postgres:16 pull; the cached postgres:16-alpine (PostgreSQL 16.15) was tagged as postgres:16 for all disposable containers. Same major version; no repo script was modified."
+            ],
+            "package_id": "W04-01",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "8e6e928104e08346ba6cb985cf6128245e7db139",
+            "scope_violation": false,
+            "summary": "APPROVE W04-01 candidate devin/pp/w04-01/impl-r7 @ 8e6e928104e08346ba6cb985cf6128245e7db139 (BASE 6a6e92a9). SCOPE (VERIFIED): git diff --stat BASE..HEAD = 4 files, 6081+/4-: supabase/migrations/20260908160000_offline_device_grants.sql (write_paths names 20260908120000_…, but BASE already carries 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql, so the later timestamp is required by the 'never edit/collide with an applied migration' rule — justified, same file role, and the package HOLDS the 'sql' serial group), supabase/tests/security_regression.sql (write_paths), supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts (write_paths), and the additive new file supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts (declared in out_of_scope_files; new file only, under no foreign serial-group prefix, and it is what makes AC2 an executable live-Postgres proof rather than static-only — accepted as justified wiring). No edge-index / mobile / scripts / docs files touched. scope_violation=false. ACCEPTANCE (all re-executed by me, disposable Docker Postgres 16 only): AC1 ./supabase/tests/run_rls_tests.sh exit 0, 12/12 matrix runs (4 histories x 3 matrices) ALL CASES PASSED, 0 ERROR. AC2 BASE worktree with only the 3 test files copied: deno exit 1 (21 passed / 9 failed: static pin 'migration must exist', concurrency file uncaught 'register_offline_device does not exist'), run_rls_tests.sh exit 3 (security_regression.sql:2385 'online_reservation_count() does not exist', 0 matrices passed); HEAD: deno exit 0 29/29/0 ignored, SQL matrix 12/12 → regression_fails_on_base=true. AC3 deno task test with XC_PG_URL+PICKLE_AUDIT_PG_URL on the disposable DB: exit 0, 893 passed (31 steps) / 0 failed / 0 ignored; with XC_PG_URL alone 881/0/12 ignored, all 12 in the unchanged W06-01 golden file (noted, not this package's defect). DIFF AUDIT vs REVIEW.md + invariants (VERIFIED by reading the whole migration + test diffs): three new tables have RLS enabled, 'revoke all … from public, anon, authenticated, service_role', only SELECT own-row policies for authenticated plus a RESTRICTIVE api_requests_only policy using api_private.is_api_request(); ledger and identity-links tables are trigger-enforced append-only for every role (offline_allocation_ledger_append_only / guard_offline_ledger_event, sequences revoked); offline_grants constraints pin lease ≤ issued_at+7d, ≤ entitlement_expires_at, positive generation; all api_private helpers (offline_identity_hashes, offline_ticket_owned_by, offline_ticket_lock_key, offline_owned_allocations) are security definer, search_path='', revoked from every client role; offline_hold_count() is definer but auth.uid()-scoped, parameterless, returns 0 without API proof; online_reservation_count()/access_state()/apply_synced_shot()/register_offline_device/issue_offline_grant/consume_offline_ticket/release_offline_ticket keep SECURITY INVOKER (K28) and the K27 allowlist is extended only by these names; apply_synced_shot(jsonb) grant/revoke lines are byte-identical to 20260908110000 and its body differs only by adding public.offline_hold_count() to the free-limit backstop (INFERRED from the extracted diff); register_offline_device takes pg_advisory_xact_lock(access_lock_key(uid)) before the lookup and replays on unique_violation; consume/release/ledger guard take the caller lock AND the per-ticket lock; partial unique index offline_allocation_ledger_one_terminal_idx makes a second terminal row impossible; conservation in issue_offline_grant is capacity = max(2 − scored − reserved − held, 0) via lifetime_scored_count()/online_reservation_count()/offline_hold_count() under access_lock_key(); no auto-reclaim path exists (T5/T6 + ATK lanes assert expiry/sweep/device-delete/account-delete leave the hold counting); only 'drop trigger if exists' on the package's own new tables, no applied migration edited, no existing comment modified (all '-' lines in the diff are the 4 allowlist rows being extended); no || true / @ts-ignore / any / eslint-disable / .only / .skip / inflated timeouts in the diff; eslint, prettier --check and deno check on the two .ts files exit 0. No production Supabase, App Store Connect, secrets or diagnostics touched; no PR opened, nothing pushed. Environment caveat: Docker Hub 429'd postgres:16 so the cached postgres:16-alpine (PostgreSQL 16.15) was tagged postgres:16 for the disposable containers.",
+            "verdict": "approve"
+          }
+        },
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/16794afd-7509-48a8-8192-c38a965457c2/attack_candidate_707bc097.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8df5cc87-1a64-4989-b108-88bfc2eb3cd6/attack_base_6a6e92a9.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f5cbf5d-2b80-4144-bdf2-816f27c7b67d/rls_matrix_attack_branch.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/91355b39-fa65-41eb-b19f-b10ccded0241/edge_full_attack_branch.log"
+            ],
+            "attack_branch": "devin/pp/w04-01/attack-707bc097",
+            "attack_branch_sha": "2dff7d307ef5b202abf1a138e979b1f07754d402",
+            "attacked_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+            "attacks_tried": 12,
+            "breaks": [
+              {
+                "expected": "The registry accepts every installation key the edge/shared-types identifier contract accepts (or the wire contract is narrowed to match in the same change), so a valid client never gets offline.invalid_input for a contract-valid key.",
+                "observed": "VERIFIED on 707bc097: keys 'AAAA/BBBB-*', 'AAAA+BBBB-*', 'AAAABBBB=-*', '.dotted-*', '-dashed-*', ':colon-*' all return offline.invalid_input from register_offline_device(), although every one of them passes CLAIM_ID_RE in supabase/functions/api/index.ts and isIdentifier() in packages/shared-types/src/offlineAuthorization.ts. 128-char key accepted, 129/empty/space/non-ASCII refused as expected. A base64/base64url-shaped installation key (contains + / = or starts with - or .) can never register, so that device can never receive an offline grant.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json --filter 'ATK-01' w04_01_attack_707bc097.test.ts",
+                "severity": "P2",
+                "test_file": "supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts (W04-01 ATK-01)",
+                "title": "register_offline_device() refuses installation keys the shipping wire contract accepts (SQL alphabet ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ is narrower than edge CLAIM_ID_RE / shared-types isIdentifier ^[A-Za-z0-9._:/+=-]{1,128}$)"
+              },
+              {
+                "expected": "A NaN (or out-of-[0,1]) detail confidence fails the settlement atomically (shot.write_failed:*), no detail row is written and the ticket stays outstanding — the shot row already enforces this for analysis_confidence.",
+                "observed": "VERIFIED on 707bc097: a phase entry {confidence:'NaN'} and a checkpoint entry {confidence:'NaN'} both return 'accepted', a detail row with confidence = 'NaN'::numeric is stored, and the ledger shows allocated,consumed. Every other poison payload (NaN overall score, out-of-range clock, int overflow, bad enum, missing NOT NULL field, non-boolean applicable) correctly returns shot.write_failed:<SQLSTATE> with no shot/detail/ledger row (ATK-03 passes). INFERRED: the pre-existing apply_synced_shot() uses the identical detail-row insert (20260906000000 migration) and the shot_phases/shot_checkpoints tables carry no confidence range constraint on BASE either, so this is an inherited schema gap the new settlement path re-exposes rather than a regression; the online path is fronted by the edge parser, the new RPC is not yet.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json --filter 'ATK-03b' w04_01_attack_707bc097.test.ts",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts (W04-01 ATK-03b)",
+                "title": "consume_offline_ticket() persists shot_phases/shot_checkpoints rows with confidence = NaN and marks the ticket consumed (numeric(5,4) has no range check on the detail tables)"
+              }
+            ],
+            "package_id": "W04-01",
+            "summary": "ADVERSARY W04-01 vs candidate 707bc097 (branch devin/pp/w04-01/impl-r7-c2). One test-only file added on devin/pp/w04-01/attack-707bc097 @ 2dff7d30: supabase/functions/api/__wf__/w04_01_attack_707bc097.test.ts — 12 Deno tests, all against a disposable Postgres (postgres:16, candidate migrations applied via the candidate's own __wf__/xc_pg_up.sh; Docker Hub 429 worked around by tagging the cached postgres:16-alpine as postgres:16, no repo changes). No candidate production code or candidate-owned test was touched; no PR opened; no force-push.\n\nATTACKS (12): ATK-01 installation-key alphabet vs wire contract (BREAK P2); ATK-02 malformed RPC args (null/negative/over-max counts, scalar/array/null shot JSON, unknown ticket, bad reason) → verdicts, no raise, ledger unchanged (held); ATK-03 crash-between-steps: NaN score, int overflow, out-of-range clocks, bad enums, missing NOT NULL, non-boolean → shot.write_failed:<SQLSTATE>, no shot/detail/ledger row, settlement vouch cleared inside the same tx, ticket still settles (held); ATK-03b NaN detail confidence (BREAK P3, inherited schema gap); ATK-04 replay/duplicate identities: same ticket+shot replay idempotent, same shot id under 2nd ticket refused with 2nd ticket still outstanding, stranger's shot id refused, consumed ticket + new shot refused (held); ATK-05 anon/service_role/no api key/no|expired|foreign session/banned → 42501 on all 4 RPCs, direct INSERT/UPDATE/DELETE on 4 tables and client-set shots.offline_ticket_id refused, owner UPDATE/DELETE on ledger and UPDATE on grants refused, SELECT own-rows + API-only (held); ATK-06 cross-account isolation incl. same installation key on a stranger and an UNLINKED re-created account (held); ATK-07 conservation scored+reserved+held ≤ 2 in every ordering, released tickets keep counting, stale 25h permit cannot settle a 3rd rating (held); ATK-08 concurrent issue/issue, issue on 2 devices, issue vs reserve_analysis_permit, 8-lane burst → exactly 2 allocated (held); ATK-09 Pro lease ≤ 7d and ≤ entitlement expiry for null/far/near/'infinity'/just-expiring, lapsed/non-premium falls back to free path, generations increase, grant immutable (held); ATK-10 attestation never downgrades, environment change refused, unattested → no grant (held); ATK-11 delete + re-create via SAME identity/installation: outstanding ticket recovered not re-allocated, consumed not re-credited, lifetime stays exactly 2 (held).\n\nEVIDENCE (all VERIFIED this session):\n- Attack suite on candidate: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json w04_01_attack_707bc097.test.ts` → exit 1, 12 run / 10 passed / 2 failed (ATK-01, ATK-03b) / 0 ignored. Log: attack_candidate_707bc097.log.\n- AC2 regression on BASE 6a6e92a9 (worktree /home/ubuntu/repos/ps-base, ONLY the attack file copied, disposable pg on :55434 with base migrations): same command → exit 1, 12 run / 0 passed / 12 failed, every test 'function public.register_offline_device(text, text, boolean) does not exist'. Log: attack_base_6a6e92a9.log. Regression-sensitive conservation (ATK-07/08/11) and denied-write (ATK-05) cases fail on base and pass on candidate.\n- AC1 on attack branch: `./supabase/tests/run_rls_tests.sh` → exit 0; 16/16 verdict banners (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING / W08 ACCOUNT DELETION / Analysis release policy authority: PASS ×4 scenarios = fresh + historical upgrades). Log: rls_matrix_attack_branch.log.\n- AC3 on attack branch: `cd supabase/functions/api/__wf__ && XC_PG_URL=… PICKLE_AUDIT_PG_URL=… deno task test` → exit 1, 903 run / 901 passed (31 steps) / 2 failed / 0 ignored; the ONLY 2 failures are the adversary's own ATK-01 and ATK-03b — the candidate's 891 tests all pass with ignored == 0 (matches implementer's 891/0/0). Log: edge_full_attack_branch.log.\n- `npx prettier --check` on the attack file exit 0; `git diff --check` exit 0.\n\nVERDICT: no P0/P1 found. Conservation, no-auto-reclaim, Pro lease bounds, append-only ledger, API-only RLS, cross-account isolation and identity recovery held under every attack tried. Two confirmed breaks: P2 contract mismatch (SQL installation-key regex narrower than the edge/shared-types identifier contract → contract-valid keys can never register) and P3 NaN detail confidence accepted by the new settlement path (inherited from the shared detail-row schema; flagged, not a regression)."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/523a4904-8383-4651-a617-6747eb17cd83/ac1_run_rls_tests.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 16,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC1",
+                "note": "VERIFIED on HEAD 707bc097 (Docker postgres:16). executed/passed = the 16 matrix verdict banners across fresh install + both historical-upgrade states (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING MATRIX / W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED, Analysis release policy authority: PASS). 0 psql ERROR lines; the only 'error' matches are NOTICE lines from 20260904000000_apply_synced_shot_error_hygiene.sql.",
+                "passed": 16,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log",
+                "command": "HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts ; BASE: git worktree add /home/ubuntu/w04/base 6a6e92a9 && cp the 3 test files over && same deno command against a disposable postgres migrated from BASE_SHA (xc_pg_up.sh, port 55434) ; BASE SQL: ./supabase/tests/run_rls_tests.sh with only security_regression.sql copied over",
+                "executed": 27,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC2",
+                "note": "VERIFIED. HEAD (candidate) run: exit 0, 27 executed / 27 passed / 0 failed / 0 skipped (22 static chain tests incl. the new W04-01 pin + 5 live concurrency tests R1–R5; see also the full-suite run in the AC3 log). BASE run of the same three test files on BASE_SHA 6a6e92a9: deno exit 1, 27 executed / 21 passed / 6 failed / 0 skipped — the W04-01 static pin and R1–R5 all fail (PostgresError: function public.register_offline_device(unknown, unknown, boolean) does not exist), the 21 pre-existing static tests pass; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log. BASE SQL matrix with the new security_regression.sql copied over: exit 3, fails at security_regression.sql:2385 'function public.online_reservation_count() does not exist'; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/52d7b7e6-b1ee-456d-8875-a4eed280f92f/ac2_base_run_rls_tests.log. Additional proof against the ROUND-6 candidate migration (4a082970's 20260908120000_offline_device_grants.sql applied on BASE_SHA under the 160000 name): concurrency suite exit 1, 5 executed / 1 passed / 4 failed — R1 fails with 23505 duplicate key (ATK-01), R2 fails 'the overlapping release waits for the ticket and reports it consumed' (ATK-05), R3 fails 'loser is told the TICKET is consumed, not shot.id_conflict' (ATK-06), R5 fails 'the one-terminal index exists'; R4 (single account) passes on r6 as expected; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed8ace29-21a2-4780-af05-0d307dfba3ff/ac2_r6_migration_deno_new_tests.log. Denied client writes: security_regression.sql T-sections + AC1 pass on HEAD.",
+                "passed": 27,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d02621a-3234-41b8-97c8-dccb5cc9c285/ac3_deno_task_test.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 891,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC3",
+                "note": "VERIFIED on HEAD 707bc097 against a disposable postgres:16 migrated with shim_auth.sql + every migration (xc_pg_up.sh): 'ok | 891 passed (31 steps) | 0 failed', ignored == 0. The disposable URL is passed under BOTH env names because the pre-existing w06_01_golden_parity.test.ts (not in this package's write_paths, unchanged) reads only PICKLE_AUDIT_PG_URL; with XC_PG_URL alone the same run is exit 0, 879 passed / 0 failed / 12 ignored (all 12 = W06-01 golden SQL-plane tests) — recorded in baseline_failures_observed, not waived.",
+                "passed": 891,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Started from BASE_SHA on devin/pp/w04-01/impl-r7-c2 and reused the sound parts of the r6 candidate (4a082970) via cherry-pick -n, moving the migration to the additive later timestamp 20260908160000 (BASE now contains 20260908120000 and 20260908150000) and re-basing its apply_synced_shot() override on 20260908110000_settlement_receipt_lineage.sql so settlement receipts keep working. Defects on BASE_SHA: no offline device/grant/ledger schema at all (security_regression.sql:2385 online_reservation_count() missing; register_offline_device() missing). Defects in the r6 candidate the adversary broke: (1) register_offline_device() did SELECT … FOR UPDATE on a row that did not exist, so two overlapping first registrations both inserted and one raised 23505; (2) consume_offline_ticket()/release_offline_ticket()/guard_offline_ledger_event() serialised only on access_lock_key(uid) while identity recovery makes one ticket owned by two uids, and the ledger unique key (ticket_id, event) let 'consumed' and 'released' coexist; (3) consume's unique_violation handler translated a shots_pkey collision to shot.id_conflict before asking whether the ticket was already terminal. Fix (all inside the new migration): register_offline_device() takes pg_advisory_xact_lock(access_lock_key(uid)) before its check-then-insert and adopts the concurrent row on unique_violation; new api_private.offline_ticket_lock_key(uuid) (immutable, search_path='', revoked from anon/authenticated/service_role) and both terminal RPCs plus the ledger trigger lock caller-first then ticket so recovered siblings contend on one lock; partial unique index offline_allocation_ledger_one_terminal_idx on (ticket_id) where event in ('consumed','released') makes one-terminal-per-ticket a table invariant even if a future path bypasses the trigger's check; consume's unique_violation fallback reports the committed terminal state (offline.ticket_consumed / offline.ticket_released / accepted-if-same-shot) before falling back to shot.id_conflict. Regression tests were committed first (a970ae61), the migration second (e5fbfb71), then a harness-only test commit (707bc097) so a lane-A failure on BASE surfaces as a test failure instead of an uncaught promise rejection. No amend, no force push, no PR.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/523a4904-8383-4651-a617-6747eb17cd83/ac1_run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52d7b7e6-b1ee-456d-8875-a4eed280f92f/ac2_base_run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b4076f-a330-4df9-8fcd-9b34928d3eee/ac2_base_deno_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ed8ace29-21a2-4780-af05-0d307dfba3ff/ac2_r6_migration_deno_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1d02621a-3234-41b8-97c8-dccb5cc9c285/ac3_deno_task_test.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/47b89d5c-5ad9-4dbf-9f55-7bbb8a052433/format_check.log"
+            ],
+            "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+            "baseline_failures_observed": [
+              "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test → exit 0 but 12 ignored: w06_01_golden_parity.test.ts gates its SQL-plane tests on PICKLE_AUDIT_PG_URL only (not XC_PG_URL), so the manifest's AC3 command as literally written cannot reach ignored == 0 on BASE_SHA or HEAD without also exporting PICKLE_AUDIT_PG_URL. Present on BASE_SHA (file unchanged by this package). Worked around for AC3 by exporting both variables, not by editing the W06 file."
+            ],
+            "blocked": false,
+            "blocked_reason": "",
+            "branch": "devin/pp/w04-01/impl-r7-c2",
+            "files_changed": [
+              "supabase/migrations/20260908160000_offline_device_grants.sql",
+              "supabase/tests/security_regression.sql",
+              "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts"
+            ],
+            "head_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+            "out_of_scope_files": [
+              "supabase/migrations/20260908160000_offline_device_grants.sql — the manifest's frozen path 20260908120000_offline_device_grants.sql is no longer later than every existing migration on BASE_SHA (20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql now exist); the HARD RULE 'LATER timestamp than every existing one' forces the same additive file under a fresh later timestamp inside the held sql serial group.",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts — new test-only file next to the listed db_migrations_rls_indexes.test.ts: the round-6 adversary breaks are concurrency races (overlapping transactions, barrier fan-out, account deletion/recreation) that a single-session psql matrix and a static chain test cannot exercise; it is picked up by the AC3 `deno task test` glob and imports nothing outside __wf__."
+            ],
+            "package_id": "W04-01",
+            "regression_tests_added": [
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R1 register_offline_device() double submit (ATK-01) -> both accepted, same device id, one row, never SQLSTATE 23505",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R2 recovered sibling accounts (identity split after deletion) consume vs release one ticket overlapping (ATK-05) -> exactly one terminal event, loser gets offline.ticket_consumed/offline.ticket_released",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R3 sibling accounts consume vs consume with different shots (ATK-06) -> one shot, one consumed row, loser told offline.ticket_consumed never shot.id_conflict",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R4 16-lane consume/release barrier burst on one ticket -> no raise, one terminal event, lifetime count moves by exactly the consumed tickets",
+              "supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts: R5 table invariant — with the row guard disabled (owner, rolled back) a second terminal event is refused by offline_allocation_ledger_one_terminal_idx",
+              "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts 'W04-01' static chain pin: one-terminal partial unique index, api_private.offline_ticket_lock_key(uuid) (immutable, search_path='', revoked), caller lock before check-then-insert + unique_violation adoption in register_offline_device(), caller->ticket lock order in consume/release/guard trigger, terminal-state-first unique_violation fallback in consume",
+              "supabase/tests/security_regression.sql T1–T16 (T16 = round-6 adversary: one terminal event per ticket at the table, private ticket lock helper unreachable by anon/authenticated/service_role, ticket lock key differs from caller lock key, terminal RPCs hold both advisory locks)"
+            ],
+            "residual_risks": [
+              "AC3 'ignored == 0' depends on exporting PICKLE_AUDIT_PG_URL as well as XC_PG_URL because the pre-existing w06_01_golden_parity.test.ts (outside this package) reads only the former; a reviewer running the manifest command literally will see 12 ignored W06-01 tests that are unrelated to W04.",
+              "The migration file name differs from the manifest's frozen write_path (20260908160000 vs 20260908120000) because BASE_SHA now already contains 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql; the integrator must keep it later than any other sql-group migration landing in the same wave.",
+              "Overlap tests use a 400 ms park window to let lane B reach the lock before lane A commits; on a heavily loaded CI host lane B could start after A commits, in which case the tests still assert the correct sequential outcome (they cannot false-fail, but the overlap would be less adversarial). R4's 16-lane barrier burst does not depend on the window.",
+              "The per-ticket advisory lock key is hashtextextended('pickle.offline_ticket:'||ticket) — a 64-bit hash collision with another advisory key in the same database would only cause extra serialisation, never a correctness loss."
+            ],
+            "summary": "W04-01 round 7 lane 2 candidate pushed to devin/pp/w04-01/impl-r7-c2 @ 707bc09768b15b7d22f55f3613035bae603868b6 (3 commits on BASE 6a6e92a9). Gap on BASE_SHA: none of the W04 objects exist (security_regression.sql:2385 → 'function public.online_reservation_count() does not exist'; the concurrency suite → 'function public.register_offline_device(unknown, unknown, boolean) does not exist'). Both round-6 adversary breaks are resolved and pinned: ATK-01 (register_offline_device() 23505 under double submit — r6 migration took SELECT … FOR UPDATE on a nonexistent row) now holds access_lock_key(uid) across check-then-insert and adopts the concurrent row on unique_violation; ATK-05/06 (consumed AND released on one ticket via recovered sibling accounts, loser told shot.id_conflict — r6 serialised per CALLER on access_lock_key(v_uid) only and the ledger's (ticket_id,event) key never collided) now serialise per TICKET via api_private.offline_ticket_lock_key(uuid) in consume/release/guard trigger (caller lock first, ticket lock second), plus the partial unique index offline_allocation_ledger_one_terminal_idx as the table-layer invariant, and consume's unique_violation fallback returns the committed terminal verdict first. Proof: the new tests fail on BASE_SHA (27 run / 21 pass / 6 fail, deno exit 1; SQL matrix exit 3) AND fail on the r6 migration with exactly the adversary shapes (R1 23505, R2 double terminal, R3 shot.id_conflict, R5 index missing; 1 pass / 4 fail), and pass on HEAD (27/27). AC1 ./supabase/tests/run_rls_tests.sh exit 0 (16/16 verdict banners, fresh + both historical upgrades). AC3 deno task test exit 0, 891 passed / 0 failed / 0 ignored with the disposable URL exported as XC_PG_URL and PICKLE_AUDIT_PG_URL (the pre-existing W06-01 golden tests read only the latter; with XC_PG_URL alone: 879 passed / 12 ignored — recorded as baseline, not waived). pnpm format:check exit 0; git diff --check exit 0 (working tree and 6a6e92a9..HEAD). Invariants preserved: allocated+consumed+released ≤ entitlement across offline_hold_count()+online_reservation_count(); no automatic reclaim on disconnect/expiry/reinstall/key replacement/deletion; Pro lease ≤ 7 days and ≤ verified entitlement expires_at; all RPCs security definer with set search_path='', authenticated-only EXECUTE, service_role revoked, append-only ledger enforced by trigger for every role. Files: two write_paths as listed (security_regression.sql, db_migrations_rls_indexes.test.ts); the migration under 20260908160000 instead of the manifest's 20260908120000 (a 120000 and a 150000 migration already exist on BASE — the later-timestamp hard rule wins); one new test-only file w04_01_offline_grants_concurrency.test.ts (concurrency races cannot be exercised by psql or a static test) — both listed in out_of_scope_files with justification. Labels: everything above under 'VERIFIED' was run in this session with the logs attached; the r6 root-cause description is INFERRED from reading 4a082970's migration and CONFIRMED by the r6-migration test run."
+          },
+          "lane": 2,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3600e6a8-60fd-4d81-af5f-3ed6b3f4b7f4/ac1_run_rls_tests.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 16,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC1",
+                "note": "VERIFIED by reviewer on 707bc097 (Docker; the cached postgres:16-alpine image was retagged locally as postgres:16 because Docker Hub answered 429 to the pull — environmental, no repo change). executed/passed = the 16 matrix verdict banners (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING MATRIX / W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED + 'Analysis release policy authority: PASS') across fresh install and both historical-upgrade states; 0 psql ERROR lines; EXIT=0 recorded at end of log.",
+                "passed": 16,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/65389f69-b85f-49d1-8a20-9892e37402b5/ac2_head_deno_new_tests.log",
+                "command": "HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts ; BASE: git worktree /home/ubuntu/w04review/base @ 6a6e92a9 + cp of ONLY the three test files (security_regression.sql, db_migrations_rls_indexes.test.ts, w04_01_offline_grants_concurrency.test.ts) from 707bc097, same deno command against a disposable postgres migrated from BASE_SHA (xc_pg_up.sh, port 55434), and ./supabase/tests/run_rls_tests.sh in the BASE worktree",
+                "executed": 27,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC2",
+                "note": "VERIFIED proof holds (exit_code 0 = new tests FAIL on BASE and PASS on HEAD). HEAD run: deno exit 0, 27 passed / 0 failed / 0 ignored (22 static chain tests incl. the W04-01 pin + R1–R5 live concurrency tests). BASE run of the same files on 6a6e92a9: deno exit 1, 27 executed / 21 passed / 6 failed / 0 ignored — the failures are exactly the W04-01 static pin and R1–R5 (PostgresError: function public.register_offline_device(unknown, unknown, boolean) does not exist); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/937441b5-c10d-4352-8fe0-a91a761778f8/ac2_base_deno_new_tests.log. BASE SQL matrix with the candidate security_regression.sql copied over: run_rls_tests.sh exit 3 at security_regression.sql:2385 'function public.online_reservation_count() does not exist' (fails before the W04 T-sections, so the denied-client-write T8/T9/T12/T16 cases are exercised only on HEAD where they pass inside AC1); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/de203943-907f-4eac-99da-b3b999f474bc/ac2_base_run_rls_tests.log. Denied client writes on HEAD: security_regression.sql T8 (client INSERT/UPDATE/DELETE on offline_devices/offline_grants/offline_allocation_ledger refused), T9 (append-only for every role incl. owner), T12 (service_role cannot pass as a user through the definer RPCs), T16 (one terminal event per ticket at the table; api_private.offline_ticket_lock_key unreachable by anon/authenticated/service_role) all pass inside the AC1 run.",
+                "passed": 27,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/821bdf94-1714-44f9-965b-48a9f41bd725/ac3_deno_task_test_head.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 891,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-01-AC3",
+                "note": "VERIFIED by reviewer on 707bc097 against a disposable postgres:16 migrated with shim_auth.sql + every migration via supabase/functions/api/__wf__/xc_pg_up.sh: 'ok | 891 passed (31 steps) | 0 failed', ignored == 0, EXIT=0. The disposable URL is exported under both env names because the pre-existing, unchanged w06_01_golden_parity.test.ts gates its SQL-plane tests on PICKLE_AUDIT_PG_URL only; with XC_PG_URL alone those 12 W06 tests would be ignored (pre-existing on BASE, outside this package).",
+                "passed": 891,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3600e6a8-60fd-4d81-af5f-3ed6b3f4b7f4/ac1_run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/65389f69-b85f-49d1-8a20-9892e37402b5/ac2_head_deno_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/937441b5-c10d-4352-8fe0-a91a761778f8/ac2_base_deno_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de203943-907f-4eac-99da-b3b999f474bc/ac2_base_run_rls_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/821bdf94-1714-44f9-965b-48a9f41bd725/ac3_deno_task_test_head.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "Manifest path drift (justified): the frozen write_path supabase/migrations/20260908120000_offline_device_grants.sql could not be used because BASE_SHA already contains 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql; the candidate ships the file as 20260908160000_offline_device_grants.sql (later than every existing migration, inside the held 'sql' serial group, listed in out_of_scope_files). The integrator must keep it later than any other sql-group migration landing in the same wave — note W04-04's manifest write_path 20260908130000_offline_receipt_settlement.sql sorts BEFORE this file although it will depend on these objects; W04-04 will need a later timestamp too.",
+              "AC3 as literally written in the manifest (XC_PG_URL only) yields 879 passed / 12 ignored on both BASE and HEAD because supabase/functions/api/__wf__/w06_01_golden_parity.test.ts reads only PICKLE_AUDIT_PG_URL (pre-existing, not touched by this package). Re-verified ignored==0 by exporting both variables; consider aligning W06's env var in its own package.",
+              "supabase/migrations/20260908160000_offline_device_grants.sql:~640 public.online_reservation_count() adds 'and not exists (select 1 from public.shots s where s.analysis_permit_id = p.id)' to the previous inline predicate (status='reserved' and created_at > now()-24h) that access_state()/reserve_analysis_permit() used on BASE. This excludes a still-'reserved' permit already backed by a shot row (which lifetime_scored_count() already counts), so it avoids double-counting rather than widening the budget; INFERRED from code, covered live by security_regression.sql T2/T11/T15 and the AC3 suite, but it is a semantic change to the shared reader worth the integrator's awareness.",
+              "Overlap tests (R1–R3) rely on a 400 ms park window to make lane B reach the lock before lane A commits; on a heavily loaded host the overlap can degrade to sequential, in which case the asserts still hold (cannot false-fail) but the test is less adversarial. R4 (16-lane barrier) and R5 (table invariant) do not depend on the window."
+            ],
+            "package_id": "W04-01",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+            "scope_violation": false,
+            "summary": "APPROVE W04-01 candidate devin/pp/w04-01/impl-r7-c2 @ 707bc09768b15b7d22f55f3613035bae603868b6 (3 commits on BASE 6a6e92a9). SCOPE (VERIFIED, git diff --stat 6a6e92a9..707bc097): 4 files — supabase/tests/security_regression.sql (+2,616/-4; the 4 removed lines are the K27/K28/table-grant allowlists extended with the new objects, nothing weakened), supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts (+331/-0), new supabase/migrations/20260908160000_offline_device_grants.sql (1,929 lines) and new supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts (589 lines). The migration is under the held 'sql' serial group with a timestamp later than every existing migration (the frozen 120000 name is already taken on BASE), and the concurrency test is a test-only sibling of the listed static test picked up by the AC3 glob; both are listed in out_of_scope_files with sound justification → scope_violation=false. No historical migration touched; git diff --check exit 0. ACCEPTANCE (all re-run by me): AC1 ./supabase/tests/run_rls_tests.sh exit 0, 16/16 verdict banners (fresh + both historical upgrades), 0 failed, 0 skipped. AC2 regression proof holds: the three copied test files on BASE → deno exit 1 (27 run / 21 pass / 6 fail: W04-01 pin + R1–R5 fail with register_offline_device() missing) and SQL matrix exit 3 at security_regression.sql:2385 (online_reservation_count() missing); on HEAD → 27/27 pass, 0 ignored. AC3 deno task test on a disposable postgres migrated from HEAD: exit 0, 891 passed / 0 failed / 0 ignored (both XC_PG_URL and PICKLE_AUDIT_PG_URL exported; with XC_PG_URL alone the pre-existing W06 file ignores 12 — outside this package). INVARIANTS (read the full migration and both test diffs against REVIEW.md): tables offline_devices/offline_grants/offline_allocation_ledger have RLS on, SELECT-only for authenticated behind an api_private.is_active_session() owner policy, no client INSERT/UPDATE/DELETE, service_role revoked; the ledger is append-only via a trigger for every role and offline_allocation_ledger_one_terminal_idx (partial unique on ticket_id where event in consumed/released) makes one-terminal-per-ticket a table invariant; the ledger has no FKs so holds survive device/grant/account deletion and there is NO reclaim path anywhere (T5 40-day-old ticket, T6 account deletion, reinstall/key replacement covered); Pro lease = least(now+7d, verified entitlement expires_at) with CHECK constraints offline_grants_bounded_lease (≤ 7 days) and offline_grants_within_entitlement; free allocation runs under access_lock_key(uid) and budgets lifetime_scored_count() + online_reservation_count() + offline_hold_count() ≤ 2, and the same three terms are added to reserve_analysis_permit(), access_state() and apply_synced_shot()'s backstop (the apply_synced_shot override is byte-identical to 20260908110000_settlement_receipt_lineage.sql except the offline_hold_count() term, so settlement receipts keep working); consume_offline_ticket() writes the shot with shots.offline_ticket_id vouched via pickle.offline_ticket_id set_config re-verified in enforce_scored_shot_permit() (a direct client INSERT cannot claim a ticket, a row cannot be settled by both a permit and a ticket), appends the consumed event in the same transaction, and takes access_lock_key(uid) then offline_ticket_lock_key(ticket) — the same order as release_offline_ticket() and the ledger guard — so recovered sibling accounts sharing a ticket serialize on the ticket and the loser gets the ticket verdict, never shot.id_conflict; register_offline_device() holds the caller lock across check-then-insert and adopts the concurrent row on unique_violation. All five RPCs are SECURITY DEFINER, set search_path='', require a live API session (42501 otherwise), are auth.uid()-scoped, EXECUTE only for authenticated (anon/service_role revoked); api_private.offline_ticket_lock_key is revoked from all client roles. Owner isolation and original-installation recovery across account re-creation are covered by identity hashes (offline_ticket_owned_by, late-linked identity trigger). No bypass patterns (|| true, passWithNoTests, @ts-ignore, any, eslint-disable, .only/.skip, inflated timeouts) in the diff; tests are additive only; no existing comments modified; no production Supabase/App Store/secrets touched; nothing pushed, no PR. The RPCs are the shipped data layer this package's objective names ('Create tables/RPCs'); edge routes are W04-02/W04-04 per the manifest. Non-blocking notes listed separately (migration filename vs manifest and W04-04's earlier planned timestamp, W06 env-var name, online_reservation_count()'s added not-settled clause, 400 ms overlap window). No Apple-plane claims are made: this package changes only Supabase SQL and Deno tests.",
+            "verdict": "approve"
+          }
+        }
+      ],
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3600e6a8-60fd-4d81-af5f-3ed6b3f4b7f4/ac1_run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 16,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC1",
+            "note": "VERIFIED by reviewer on 707bc097 (Docker; the cached postgres:16-alpine image was retagged locally as postgres:16 because Docker Hub answered 429 to the pull — environmental, no repo change). executed/passed = the 16 matrix verdict banners (SECURITY REGRESSION MATRIX / W07 CONCURRENT BILLING MATRIX / W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED + 'Analysis release policy authority: PASS') across fresh install and both historical-upgrade states; 0 psql ERROR lines; EXIT=0 recorded at end of log.",
+            "passed": 16,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/65389f69-b85f-49d1-8a20-9892e37402b5/ac2_head_deno_new_tests.log",
+            "command": "HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts w04_01_offline_grants_concurrency.test.ts ; BASE: git worktree /home/ubuntu/w04review/base @ 6a6e92a9 + cp of ONLY the three test files (security_regression.sql, db_migrations_rls_indexes.test.ts, w04_01_offline_grants_concurrency.test.ts) from 707bc097, same deno command against a disposable postgres migrated from BASE_SHA (xc_pg_up.sh, port 55434), and ./supabase/tests/run_rls_tests.sh in the BASE worktree",
+            "executed": 27,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC2",
+            "note": "VERIFIED proof holds (exit_code 0 = new tests FAIL on BASE and PASS on HEAD). HEAD run: deno exit 0, 27 passed / 0 failed / 0 ignored (22 static chain tests incl. the W04-01 pin + R1–R5 live concurrency tests). BASE run of the same files on 6a6e92a9: deno exit 1, 27 executed / 21 passed / 6 failed / 0 ignored — the failures are exactly the W04-01 static pin and R1–R5 (PostgresError: function public.register_offline_device(unknown, unknown, boolean) does not exist); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/937441b5-c10d-4352-8fe0-a91a761778f8/ac2_base_deno_new_tests.log. BASE SQL matrix with the candidate security_regression.sql copied over: run_rls_tests.sh exit 3 at security_regression.sql:2385 'function public.online_reservation_count() does not exist' (fails before the W04 T-sections, so the denied-client-write T8/T9/T12/T16 cases are exercised only on HEAD where they pass inside AC1); log https://la-hacks-rttothemoon.devinenterprise.com/attachments/de203943-907f-4eac-99da-b3b999f474bc/ac2_base_run_rls_tests.log. Denied client writes on HEAD: security_regression.sql T8 (client INSERT/UPDATE/DELETE on offline_devices/offline_grants/offline_allocation_ledger refused), T9 (append-only for every role incl. owner), T12 (service_role cannot pass as a user through the definer RPCs), T16 (one terminal event per ticket at the table; api_private.offline_ticket_lock_key unreachable by anon/authenticated/service_role) all pass inside the AC1 run.",
+            "passed": 27,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/821bdf94-1714-44f9-965b-48a9f41bd725/ac3_deno_task_test_head.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 891,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-01-AC3",
+            "note": "VERIFIED by reviewer on 707bc097 against a disposable postgres:16 migrated with shim_auth.sql + every migration via supabase/functions/api/__wf__/xc_pg_up.sh: 'ok | 891 passed (31 steps) | 0 failed', ignored == 0, EXIT=0. The disposable URL is exported under both env names because the pre-existing, unchanged w06_01_golden_parity.test.ts gates its SQL-plane tests on PICKLE_AUDIT_PG_URL only; with XC_PG_URL alone those 12 W06 tests would be ignored (pre-existing on BASE, outside this package).",
+            "passed": 891,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3600e6a8-60fd-4d81-af5f-3ed6b3f4b7f4/ac1_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/65389f69-b85f-49d1-8a20-9892e37402b5/ac2_head_deno_new_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/937441b5-c10d-4352-8fe0-a91a761778f8/ac2_base_deno_new_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de203943-907f-4eac-99da-b3b999f474bc/ac2_base_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/821bdf94-1714-44f9-965b-48a9f41bd725/ac3_deno_task_test_head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Manifest path drift (justified): the frozen write_path supabase/migrations/20260908120000_offline_device_grants.sql could not be used because BASE_SHA already contains 20260908120000_settlement_receipt_account_cascade.sql and 20260908150000_billing_recovery_transfer.sql; the candidate ships the file as 20260908160000_offline_device_grants.sql (later than every existing migration, inside the held 'sql' serial group, listed in out_of_scope_files). The integrator must keep it later than any other sql-group migration landing in the same wave — note W04-04's manifest write_path 20260908130000_offline_receipt_settlement.sql sorts BEFORE this file although it will depend on these objects; W04-04 will need a later timestamp too.",
+          "AC3 as literally written in the manifest (XC_PG_URL only) yields 879 passed / 12 ignored on both BASE and HEAD because supabase/functions/api/__wf__/w06_01_golden_parity.test.ts reads only PICKLE_AUDIT_PG_URL (pre-existing, not touched by this package). Re-verified ignored==0 by exporting both variables; consider aligning W06's env var in its own package.",
+          "supabase/migrations/20260908160000_offline_device_grants.sql:~640 public.online_reservation_count() adds 'and not exists (select 1 from public.shots s where s.analysis_permit_id = p.id)' to the previous inline predicate (status='reserved' and created_at > now()-24h) that access_state()/reserve_analysis_permit() used on BASE. This excludes a still-'reserved' permit already backed by a shot row (which lifetime_scored_count() already counts), so it avoids double-counting rather than widening the budget; INFERRED from code, covered live by security_regression.sql T2/T11/T15 and the AC3 suite, but it is a semantic change to the shared reader worth the integrator's awareness.",
+          "Overlap tests (R1–R3) rely on a 400 ms park window to make lane B reach the lock before lane A commits; on a heavily loaded host the overlap can degrade to sequential, in which case the asserts still hold (cannot false-fail) but the test is less adversarial. R4 (16-lane barrier) and R5 (table invariant) do not depend on the window."
+        ],
+        "package_id": "W04-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "707bc09768b15b7d22f55f3613035bae603868b6",
+        "scope_violation": false,
+        "summary": "APPROVE W04-01 candidate devin/pp/w04-01/impl-r7-c2 @ 707bc09768b15b7d22f55f3613035bae603868b6 (3 commits on BASE 6a6e92a9). SCOPE (VERIFIED, git diff --stat 6a6e92a9..707bc097): 4 files — supabase/tests/security_regression.sql (+2,616/-4; the 4 removed lines are the K27/K28/table-grant allowlists extended with the new objects, nothing weakened), supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts (+331/-0), new supabase/migrations/20260908160000_offline_device_grants.sql (1,929 lines) and new supabase/functions/api/__wf__/w04_01_offline_grants_concurrency.test.ts (589 lines). The migration is under the held 'sql' serial group with a timestamp later than every existing migration (the frozen 120000 name is already taken on BASE), and the concurrency test is a test-only sibling of the listed static test picked up by the AC3 glob; both are listed in out_of_scope_files with sound justification → scope_violation=false. No historical migration touched; git diff --check exit 0. ACCEPTANCE (all re-run by me): AC1 ./supabase/tests/run_rls_tests.sh exit 0, 16/16 verdict banners (fresh + both historical upgrades), 0 failed, 0 skipped. AC2 regression proof holds: the three copied test files on BASE → deno exit 1 (27 run / 21 pass / 6 fail: W04-01 pin + R1–R5 fail with register_offline_device() missing) and SQL matrix exit 3 at security_regression.sql:2385 (online_reservation_count() missing); on HEAD → 27/27 pass, 0 ignored. AC3 deno task test on a disposable postgres migrated from HEAD: exit 0, 891 passed / 0 failed / 0 ignored (both XC_PG_URL and PICKLE_AUDIT_PG_URL exported; with XC_PG_URL alone the pre-existing W06 file ignores 12 — outside this package). INVARIANTS (read the full migration and both test diffs against REVIEW.md): tables offline_devices/offline_grants/offline_allocation_ledger have RLS on, SELECT-only for authenticated behind an api_private.is_active_session() owner policy, no client INSERT/UPDATE/DELETE, service_role revoked; the ledger is append-only via a trigger for every role and offline_allocation_ledger_one_terminal_idx (partial unique on ticket_id where event in consumed/released) makes one-terminal-per-ticket a table invariant; the ledger has no FKs so holds survive device/grant/account deletion and there is NO reclaim path anywhere (T5 40-day-old ticket, T6 account deletion, reinstall/key replacement covered); Pro lease = least(now+7d, verified entitlement expires_at) with CHECK constraints offline_grants_bounded_lease (≤ 7 days) and offline_grants_within_entitlement; free allocation runs under access_lock_key(uid) and budgets lifetime_scored_count() + online_reservation_count() + offline_hold_count() ≤ 2, and the same three terms are added to reserve_analysis_permit(), access_state() and apply_synced_shot()'s backstop (the apply_synced_shot override is byte-identical to 20260908110000_settlement_receipt_lineage.sql except the offline_hold_count() term, so settlement receipts keep working); consume_offline_ticket() writes the shot with shots.offline_ticket_id vouched via pickle.offline_ticket_id set_config re-verified in enforce_scored_shot_permit() (a direct client INSERT cannot claim a ticket, a row cannot be settled by both a permit and a ticket), appends the consumed event in the same transaction, and takes access_lock_key(uid) then offline_ticket_lock_key(ticket) — the same order as release_offline_ticket() and the ledger guard — so recovered sibling accounts sharing a ticket serialize on the ticket and the loser gets the ticket verdict, never shot.id_conflict; register_offline_device() holds the caller lock across check-then-insert and adopts the concurrent row on unique_violation. All five RPCs are SECURITY DEFINER, set search_path='', require a live API session (42501 otherwise), are auth.uid()-scoped, EXECUTE only for authenticated (anon/service_role revoked); api_private.offline_ticket_lock_key is revoked from all client roles. Owner isolation and original-installation recovery across account re-creation are covered by identity hashes (offline_ticket_owned_by, late-linked identity trigger). No bypass patterns (|| true, passWithNoTests, @ts-ignore, any, eslint-disable, .only/.skip, inflated timeouts) in the diff; tests are additive only; no existing comments modified; no production Supabase/App Store/secrets touched; nothing pushed, no PR. The RPCs are the shipped data layer this package's objective names ('Create tables/RPCs'); edge routes are W04-02/W04-04 per the manifest. Non-blocking notes listed separately (migration filename vs manifest and W04-04's earlier planned timestamp, W06 env-var name, online_reservation_count()'s added not-settled clause, 400 ms overlap window). No Apple-plane claims are made: this package changes only Supabase SQL and Deno tests.",
+        "verdict": "approve"
+      },
+      "round": 7,
+      "winning_lane": 2
     }
   ],
   "start_round": 7,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-11-keep"
 }
