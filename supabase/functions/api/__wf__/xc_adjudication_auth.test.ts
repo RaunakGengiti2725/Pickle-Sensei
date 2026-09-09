@@ -665,7 +665,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "characterization: thirty dead-session refusals from one address never lock out VALID bearers, bootstrap or refresh from the same address (W11-01)",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -693,19 +693,19 @@ Deno.test(
 
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
-      429,
-      "victim's VALID cached bearer → 429",
+      200,
+      "victim's VALID cached bearer → 200",
     );
-    const bootstrapBlocked = await call("POST", "/v1/account/bootstrap", {
+    const bootstrapAllowed = await call("POST", "/v1/account/bootstrap", {
       token: googleIdToken(VICTIM),
       ip,
       body: {},
     });
-    assertEquals(bootstrapBlocked.status, 429, "sign-in from the address → 429");
+    assertEquals(bootstrapAllowed.status, 200, "sign-in from the address → 200");
     assertEquals(
       (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
-      429,
-      "refresh from the address → 429",
+      200,
+      "refresh from the address → 200",
     );
   },
 );

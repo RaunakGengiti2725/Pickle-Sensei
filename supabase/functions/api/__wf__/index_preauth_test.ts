@@ -79,32 +79,66 @@ Deno.test(
     const ip = `10.9.1.${Math.floor(Math.random() * 250)}`;
     const limit = 30;
     const windowSeconds = 300;
-    for (let i = 0; i < limit; i += 1) {
-      const response = await handle(
-        new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": ip } }),
+    // Only a credential Supabase Auth itself refuses counts as a failure, so
+    // Auth answers `bad_jwt` here; everything else stays unreachable.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!new URL(url).pathname.endsWith("/auth/v1/user")) return realFetch(input, init);
+      return Promise.resolve(
+        new Response(JSON.stringify({ code: 401, error_code: "bad_jwt", msg: "invalid JWT" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
       );
-      assertEquals(response.status, 401, `failure ${i + 1} should still reach auth`);
-      await response.body?.cancel();
-    }
-    const blocked = await handle(
-      new Request(`${BASE}/v1/me`, {
-        headers: {
-          "x-forwarded-for": ip,
-          Authorization: `Bearer ${fakeIdToken({ iss: "https://accounts.google.com" })}`,
-        },
-      }),
-    );
-    assertEquals(blocked.status, 429);
-    const retryAfter = Number(blocked.headers.get("Retry-After"));
-    assertEquals(Number.isInteger(retryAfter), true);
-    assertEquals(retryAfter >= 1 && retryAfter <= windowSeconds, true);
-    await blocked.body?.cancel();
+    }) as typeof fetch;
+    const forgedBearer = (salt: string) =>
+      fakeIdToken({
+        iss: `${Deno.env.get("SUPABASE_URL")}/auth/v1`,
+        sub: "11111111-1111-4111-8111-111111111111",
+        aud: "authenticated",
+        role: "authenticated",
+        session_id: crypto.randomUUID(),
+        exp: Math.floor(Date.now() / 1_000) + 3_600,
+        salt,
+      });
+    try {
+      for (let i = 0; i < limit; i += 1) {
+        const response = await handle(
+          new Request(`${BASE}/v1/me`, {
+            headers: { "x-forwarded-for": ip, Authorization: `Bearer ${forgedBearer(`${i}`)}` },
+          }),
+        );
+        assertEquals(response.status, 401, `failure ${i + 1} should still reach auth`);
+        await response.body?.cancel();
+      }
+      const blocked = await handle(
+        new Request(`${BASE}/v1/me`, {
+          headers: {
+            "x-forwarded-for": ip,
+            Authorization: `Bearer ${forgedBearer("blocked")}`,
+          },
+        }),
+      );
+      assertEquals(blocked.status, 429);
+      const retryAfter = Number(blocked.headers.get("Retry-After"));
+      assertEquals(Number.isInteger(retryAfter), true);
+      assertEquals(retryAfter >= 1 && retryAfter <= windowSeconds, true);
+      await blocked.body?.cancel();
 
-    const other = await handle(
-      new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": "10.9.2.2" } }),
-    );
-    assertEquals(other.status, 401);
-    await other.body?.cancel();
+      const other = await handle(
+        new Request(`${BASE}/v1/me`, {
+          headers: {
+            "x-forwarded-for": "10.9.2.2",
+            Authorization: `Bearer ${forgedBearer("other")}`,
+          },
+        }),
+      );
+      assertEquals(other.status, 401);
+      await other.body?.cancel();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   },
 );
 
