@@ -1866,6 +1866,417 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     });
   });
 
+  describe('journal rows are owner-scoped', () => {
+    /** Valid JSON (the table CHECK demands it) that is not a journal entry:
+     * the persisted shape of a document a later build could not write
+     * whole. The phase column keeps the last committed phase. */
+    function corruptJournalDocument(ownerId: string) {
+      const changed = mockDatabase.native
+        .prepare(
+          'UPDATE device_account_deletion_journal SET document = ? WHERE owner_id = ?',
+        )
+        .run('{"version":1,"truncated":true}', ownerId).changes;
+      expect(changed).toBe(1);
+    }
+
+    it("an unreadable row of another account neither holds this account nor is described to it: the survey, then a request under this account's bearer", async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return reply('delete-request', requestPayload(requests * 10));
+        },
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectUnknownOutcome(first);
+      } finally {
+        act(() => first.unmount());
+      }
+      corruptJournalDocument(OWNER_A);
+
+      await act(async () => {
+        signIn(OWNER_B, BEARER_B, 'apple');
+      });
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        const text = allText(second);
+        expect(text).toContain("What's making you leave?");
+        expect(text).not.toContain('Deletion status unknown');
+        expect(text).not.toContain('could not be read');
+        expect(text).not.toContain('contact support');
+
+        await press(second, pressable(second, 'Skip the survey')[0]!);
+        await press(second, sheetButton(second, 'Continue to delete'));
+        expect(calls('delete-request')).toHaveLength(2);
+        expect(headerOf(calls('delete-request')[1]!, 'Authorization')).toBe(
+          `Bearer ${BEARER_B}`,
+        );
+        expect(sheetButton(second, 'Permanently delete').props.label).toBe(
+          'Permanently delete (5)',
+        );
+        expect(journalRows()).toMatchObject([
+          { owner_id: OWNER_A, operation_id: deletionId(10) },
+          { owner_id: OWNER_B, operation_id: deletionId(20), phase: 'ready' },
+        ]);
+        expectNotDeleted(second);
+      } finally {
+        act(() => second.unmount());
+      }
+
+      // Owner A's own re-entry is still held on A's unreadable record: the
+      // confirmation left the phone and the outcome is not known.
+      await act(async () => {
+        signIn(OWNER_A, BEARER_A, 'google');
+      });
+      const third = renderScreen();
+      try {
+        await openDeleteSheet(third);
+        const text = allText(third);
+        expect(text).toContain('Deletion status unknown');
+        expect(text).toContain('could not be read');
+        expect(text).not.toContain("What's making you leave?");
+        expect(buttonLabels(third)).toEqual(['Close']);
+        expect(calls('delete-request')).toHaveLength(2);
+        expectNotDeleted(third);
+      } finally {
+        act(() => third.unmount());
+      }
+    });
+
+    it('an unreadable row over a challenge this account never confirmed re-enters as the survey and a fresh request — never as an unknown outcome', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return reply('delete-request', requestPayload(requests * 10));
+        },
+        'delete-confirm': () => reply('delete-confirm', completionPayload(20)),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        expect(journalRows()).toMatchObject([{ phase: 'ready' }]);
+      } finally {
+        act(() => first.unmount());
+      }
+      corruptJournalDocument(OWNER_A);
+
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        const text = allText(second);
+        expect(text).toContain("What's making you leave?");
+        expect(text).not.toContain('Deletion status unknown');
+        expect(text).not.toContain('could not be read');
+        expect(calls('delete-status')).toHaveLength(0);
+
+        await press(second, pressable(second, 'Skip the survey')[0]!);
+        await press(second, sheetButton(second, 'Continue to delete'));
+        expect(calls('delete-request')).toHaveLength(2);
+        await advance(5_000);
+        await press(second, sheetButton(second, 'Permanently delete'));
+        expect(calls('delete-confirm').map(bodyOf)).toEqual([
+          { challenge: deletionId(21), operationId: deletionId(20) },
+        ]);
+        expectDeleted(second);
+        // The unreadable row is kept, never rewritten or reaped.
+        expect(journalRows()).toMatchObject([
+          {
+            operation_id: deletionId(10),
+            phase: 'ready',
+            document: '{"version":1,"truncated":true}',
+          },
+          { operation_id: deletionId(20), phase: 'receipt_verified' },
+        ]);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('reclaims lapsed requests around an unreadable row instead of refusing every new request for good', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return reply('delete-request', requestPayload(requests * 10));
+        },
+      });
+      const renderer = renderScreen();
+      try {
+        for (let index = 0; index < JOURNAL_CAPACITY; index += 1) {
+          await act(async () => {
+            signIn(ownerId(index), `session.bearer.${index}`, 'google');
+          });
+          await openReview(renderer);
+          await press(renderer, sheetButton(renderer, 'Continue to delete'));
+          expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+          await press(renderer, sheetButton(renderer, 'Keep my account'));
+        }
+        expect(journalRows()).toHaveLength(JOURNAL_CAPACITY);
+        corruptJournalDocument(ownerId(3));
+        await advance(DAY_MS + 60_000);
+
+        await act(async () => {
+          signIn(OWNER_A, BEARER_A, 'google');
+        });
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expect(calls('delete-request')).toHaveLength(JOURNAL_CAPACITY + 1);
+        expect(sheetButton(renderer, 'Permanently delete').props.label).toBe(
+          'Permanently delete (5)',
+        );
+        expect(journalRows()).toMatchObject([
+          { owner_id: ownerId(3), document: '{"version":1,"truncated":true}' },
+          {
+            owner_id: OWNER_A,
+            operation_id: deletionId((JOURNAL_CAPACITY + 1) * 10),
+            phase: 'ready',
+          },
+        ]);
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+  });
+
+  describe('a receipt the server verified is completion evidence once journaled', () => {
+    const realSetGenericPassword = Keychain.setGenericPassword;
+    const realGetGenericPassword = Keychain.getGenericPassword;
+
+    /** The device Keychain refuses exactly the SECOND write — the receipt
+     * seal after the server answered `deleted: true` — the way a locked
+     * device refuses (errSecInteractionNotAllowed). The journal already
+     * holds the transport-verified receipt at that point. */
+    function refuseReceiptSeal() {
+      let writes = 0;
+      return jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockImplementation(async (username, password, options) => {
+          writes += 1;
+          if (writes === 2) throw new Error('errSecInteractionNotAllowed');
+          return realSetGenericPassword(username, password, options);
+        });
+    }
+
+    function expectJournaledReceipt() {
+      const rows = journalRows() as Array<{ phase: string; document: string }>;
+      expect(rows).toMatchObject([
+        { operation_id: deletionId(10), phase: 'receipt_pending' },
+      ]);
+      expect(rows[0]!.document).toContain('"completedAt"');
+      expect(rows[0]!.document).toContain('"serverState":"completed"');
+    }
+
+    function relaunchAfterHandoff() {
+      mockShowBrandNotice.mockClear();
+      useAuthStore.setState({
+        completeAccountDeletion: jest.fn(() => Promise.resolve()),
+      });
+    }
+
+    it('a Keychain that refuses the receipt seal after `deleted: true` still renders the deletion complete and runs the account cleanup', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+      });
+      const seal = refuseReceiptSeal();
+      const context = { ...captureDataOwnerContext(), provider: 'google' };
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        expect(seal).toHaveBeenCalledTimes(2);
+        expectDeleted(renderer);
+        expect(
+          useAuthStore.getState().completeAccountDeletion,
+        ).toHaveBeenCalledWith(context);
+        expect(allText(renderer)).not.toContain('may have completed');
+        expect(sheetButtons(renderer, 'Retry deletion')).toHaveLength(0);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expectJournaledReceipt();
+      } finally {
+        act(() => renderer.unmount());
+        seal.mockRestore();
+      }
+    });
+
+    it('a relaunch past the status window completes from the journaled receipt with a healthy Keychain — no status call, no window-closed copy', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const seal = refuseReceiptSeal();
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectJournaledReceipt();
+      } finally {
+        act(() => first.unmount());
+        seal.mockRestore();
+      }
+
+      // The hand-off never finished (process death); the owner is back
+      // after the 24h status window with a Keychain that works again.
+      relaunchAfterHandoff();
+      await advance(25 * 60 * 60 * 1000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectDeleted(second);
+        const text = allText(second);
+        expect(text).not.toContain(
+          'The window for checking this deletion has closed',
+        );
+        expect(text).not.toContain('contact support');
+        expect(sheetButtons(second, 'Retry deletion')).toHaveLength(0);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(journalRows()).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a relaunch whose Keychain cannot be read at all still completes from the journaled receipt instead of an unreadable-record hold', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const seal = refuseReceiptSeal();
+      let locked = false;
+      const read = jest
+        .spyOn(Keychain, 'getGenericPassword')
+        .mockImplementation(async options => {
+          if (locked) throw new Error('errSecInteractionNotAllowed');
+          return realGetGenericPassword(options);
+        });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectJournaledReceipt();
+      } finally {
+        act(() => first.unmount());
+        seal.mockRestore();
+      }
+
+      relaunchAfterHandoff();
+      locked = true;
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectDeleted(second);
+        const text = allText(second);
+        expect(text).not.toContain('could not be read');
+        expect(text).not.toContain('may have completed');
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-request')).toHaveLength(1);
+        expectJournaledReceipt();
+      } finally {
+        act(() => second.unmount());
+        read.mockRestore();
+      }
+    });
+
+    it('a journaled receipt the Keychain contradicts is NOT completion: the outcome stays unknown', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+        'delete-status': () => Promise.reject(new TypeError('Network lost')),
+      });
+      const seal = refuseReceiptSeal();
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectJournaledReceipt();
+      } finally {
+        act(() => first.unmount());
+        seal.mockRestore();
+      }
+
+      // The journal's receipt is rewritten while the Keychain record (the
+      // capability the confirmation was sent with) carries the real one:
+      // the two stores disagree, so neither is proof.
+      relaunchAfterHandoff();
+      const [row] = journalRows() as Array<{ document: string }>;
+      const forged = row!.document.replace(
+        '"appleAuthorizationRevocation":"revoked"',
+        '"appleAuthorizationRevocation":"not_applicable"',
+      );
+      expect(forged).not.toBe(row!.document);
+      const capability = [...deletionKeychainStore.entries()].find(([, item]) =>
+        item.password.includes(DELETION_CAPABILITY),
+      );
+      expect(capability).toBeDefined();
+      const [service, item] = capability!;
+      const record = JSON.parse(item.password) as { receipt: unknown };
+      record.receipt = {
+        completedAt: iso(-60_000),
+        appleAuthorizationRevocation: 'revoked',
+      };
+      deletionKeychainStore.set(service, {
+        ...item,
+        password: JSON.stringify(record),
+      });
+      mockDatabase.native
+        .prepare(
+          'UPDATE device_account_deletion_journal SET document = ? WHERE operation_id = ?',
+        )
+        .run(forged, deletionId(10));
+
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectNotDeleted(second);
+        expect(allText(second)).toContain('Deletion status unknown');
+        expect(calls('delete-request')).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+  });
+
+  describe('request-step copy', () => {
+    it('a 429 with a long Retry-After says nothing was deleted exactly once and does not promise "a moment"', async () => {
+      route({
+        'delete-request': () =>
+          reply('delete-request', { error: { message: 'slow down' } }, 429, {
+            headers: { 'retry-after': '3600' },
+          }),
+      });
+      const renderer = renderScreen();
+      try {
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        await act(async () => {});
+        const text = allText(renderer);
+        expectNotDeleted(renderer);
+        expect(journalRows()).toMatchObject([
+          { phase: 'request_unknown', operation_id: null },
+        ]);
+        expect(text.match(/Nothing (was|has been) deleted/g)).toHaveLength(1);
+        expect(text).not.toContain('in a moment');
+        expect(sheetButton(renderer, 'Retry request').props.disabled).toBe(
+          true,
+        );
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+  });
+
   describe('fetchNoRedirect', () => {
     const url = `${ORIGIN}/v1/me/delete-request`;
     const init = {
