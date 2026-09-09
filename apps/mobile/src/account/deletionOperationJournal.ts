@@ -46,9 +46,21 @@ export interface DeletionJournalUnreadableRow {
   readonly reason: 'journal_invalid' | 'journal_unsupported';
 }
 
+/** A row at least one of whose identifying columns is itself not
+ * well-formed. Only the columns that still are say anything about it (a
+ * damaged one reads as null); it belongs to an owner only as far as its
+ * owner and origin columns still name one, and it is never opened, updated
+ * or reclaimed. */
+export interface DeletionJournalDamagedRow {
+  readonly ownerId: string | null;
+  readonly apiOrigin: string | null;
+  readonly phase: DeletionPhase | null;
+}
+
 export interface DeletionJournalListing {
   readonly entries: readonly DeletionJournalEntry[];
   readonly unreadable: readonly DeletionJournalUnreadableRow[];
+  readonly damaged: readonly DeletionJournalDamagedRow[];
 }
 
 const TRANSITIONS: Readonly<Record<DeletionPhase, readonly DeletionPhase[]>> = {
@@ -114,7 +126,7 @@ function parseRow(row: Record<string, unknown>): DeletionJournalEntry {
 function unreadableRow(
   row: Record<string, unknown>,
   error: unknown,
-): DeletionJournalUnreadableRow {
+): DeletionJournalUnreadableRow | DeletionJournalDamagedRow {
   if (
     !(error instanceof DeletionFoundationError) ||
     (error.code !== 'journal_invalid' && error.code !== 'journal_unsupported')
@@ -122,21 +134,32 @@ function unreadableRow(
     throw error;
   const { job_id, owner_id, api_origin, operation_id, phase } = row;
   if (
-    !deletionUuid(job_id) ||
-    !deletionUuid(owner_id) ||
-    !deletionOrigin(api_origin) ||
-    (operation_id !== null && !deletionUuid(operation_id)) ||
-    !deletionMember(phase, DELETION_PHASES)
-  )
-    throw error;
+    deletionUuid(job_id) &&
+    deletionUuid(owner_id) &&
+    deletionOrigin(api_origin) &&
+    (operation_id === null || deletionUuid(operation_id)) &&
+    deletionMember(phase, DELETION_PHASES)
+  ) {
+    return Object.freeze({
+      jobId: job_id,
+      ownerId: owner_id,
+      apiOrigin: api_origin,
+      operationId: operation_id,
+      phase,
+      reason: error.code,
+    });
+  }
   return Object.freeze({
-    jobId: job_id,
-    ownerId: owner_id,
-    apiOrigin: api_origin,
-    operationId: operation_id,
-    phase,
-    reason: error.code,
+    ownerId: deletionUuid(owner_id) ? owner_id : null,
+    apiOrigin: deletionOrigin(api_origin) ? api_origin : null,
+    phase: deletionMember(phase, DELETION_PHASES) ? phase : null,
   });
+}
+
+function isUnreadableRow(
+  row: DeletionJournalUnreadableRow | DeletionJournalDamagedRow,
+): row is DeletionJournalUnreadableRow {
+  return 'jobId' in row;
 }
 
 function validateTransition(
@@ -248,16 +271,20 @@ export function createDeletionOperationJournal(db: LocalDb) {
           throw new DeletionFoundationError('journal_capacity');
         const entries: DeletionJournalEntry[] = [];
         const unreadable: DeletionJournalUnreadableRow[] = [];
+        const damaged: DeletionJournalDamagedRow[] = [];
         for (const row of rows) {
           try {
             entries.push(parseRow(row));
           } catch (error) {
-            unreadable.push(unreadableRow(row, error));
+            const rest = unreadableRow(row, error);
+            if (isUnreadableRow(rest)) unreadable.push(rest);
+            else damaged.push(rest);
           }
         }
         return Object.freeze({
           entries: Object.freeze(entries),
           unreadable: Object.freeze(unreadable),
+          damaged: Object.freeze(damaged),
         });
       });
     },
