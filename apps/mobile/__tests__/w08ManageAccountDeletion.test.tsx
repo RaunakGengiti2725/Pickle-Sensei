@@ -776,6 +776,53 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     ]);
   });
 
+  it('re-entering while the confirmation is still in flight shows an unresolved outcome for the same account, never "account changed", and the late reply still completes', async () => {
+    const hang = deferred<Response>();
+    route({
+      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-confirm': () => hang.promise,
+    });
+    const first = renderScreen();
+    await armDeletion(first);
+    await press(first, sheetButton(first, 'Permanently delete'));
+    expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
+    act(() => first.unmount());
+
+    const second = renderScreen();
+    try {
+      await press(second, pressable(second, 'Delete account')[0]!);
+      const text = allText(second);
+      expect(text).toContain('Deletion status unknown');
+      expect(text).not.toContain('signed-in account changed');
+      expect(text).not.toContain('Nothing was deleted');
+      expect(text).not.toContain('Nothing has been deleted');
+      expect(text).not.toContain("What's making you leave?");
+      expect(sheetButtons(second, 'Permanently delete')).toHaveLength(0);
+      expectNotDeleted(second);
+
+      await pressWhenArmed(second, 'Retry deletion');
+      expect(allText(second)).not.toContain('signed-in account changed');
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expect(calls('delete-status')).toHaveLength(0);
+      expectNotDeleted(second);
+
+      await act(async () => {
+        hang.resolve(reply('delete-confirm', completionPayload()));
+      });
+      await act(async () => {});
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).toHaveBeenCalledTimes(1);
+      expect(calls('delete-request')).toHaveLength(1);
+      expect(calls('delete-confirm')).toHaveLength(1);
+      expect(journalRows()).toMatchObject([
+        { operation_id: deletionId(10), phase: 'receipt_verified' },
+      ]);
+    } finally {
+      act(() => second.unmount());
+    }
+  });
+
   it('keeps an expired operation honest: no deletion claim until the server says so, then a fresh request', async () => {
     let requests = 0;
     route({
@@ -1364,6 +1411,56 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         expectNotDeleted(reopened);
       } finally {
         act(() => reopened.unmount());
+      }
+    });
+
+    it('durable: a journaled 409 refusal is not replayed as live truth past its Retry-After — re-entry offers to ask the server again, which mints a fresh challenge', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return requests === 1
+            ? reply('delete-request', deletionInProgressError(), 409, {
+                headers: { 'retry-after': '3' },
+              })
+            : reply('delete-request', requestPayload(20));
+        },
+      });
+      const first = renderScreen();
+      await openReview(first);
+      await press(first, sheetButton(first, 'Continue to delete'));
+      expectAlreadyConfirmed(first);
+      expect(journalRows()).toMatchObject([
+        { phase: 'request_unknown', operation_id: null },
+      ]);
+      act(() => first.unmount());
+
+      // The server keeps a confirmed operation for days at most; the
+      // refusal it gave is a fact about that moment, not about now.
+      await advance(8 * DAY_MS);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        for (let round = 0; round < 10; round += 1) await advance(0);
+        expect(calls('delete-request')).toHaveLength(1);
+        const text = allText(second);
+        expect(text).not.toContain("What's making you leave?");
+        expect(text).not.toContain('Nothing was deleted');
+        expect(text).not.toContain('Nothing has been deleted');
+        expect(text).toContain('requested nothing new');
+        expect(sheetButton(second, 'Retry request').props.disabled).toBe(false);
+        expectNotDeleted(second);
+
+        await press(second, sheetButton(second, 'Retry request'));
+        expect(calls('delete-request')).toHaveLength(2);
+        expect(allText(second)).toContain('Delete your account?');
+        expect(sheetButtons(second, 'Permanently delete')).toHaveLength(1);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(20), phase: 'ready' },
+        ]);
+        expectNotDeleted(second);
+      } finally {
+        act(() => second.unmount());
       }
     });
 
