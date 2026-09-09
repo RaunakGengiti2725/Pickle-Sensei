@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-P0-02-r2",
@@ -26,6 +32,20 @@
       "phase": "implement",
       "prompt_sha256": "020ad277e5a3e4ac16024e50b7c625efcdf4c79d1ea688074870c0db3e15752b",
       "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-P0-02-r3",
+      "phase": "review",
+      "prompt_sha256": "d505595335d7c233d79d0780e1348e279c1d05b5a180a7cbff55647e31c362ae",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-P0-02-r3",
+      "phase": "adversary",
+      "prompt_sha256": "bc0bf0b19f51187b9d5652868274274a570613563c353aa97cb54ef31b2e50e4",
+      "role": "adversary",
       "status": "completed"
     }
   ],
@@ -279,6 +299,119 @@
       "round": 2
     },
     {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/763a31f5-b070-4557-a55f-05a7053babd5/report.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8e6d733-e9e1-4622-844d-262c39c44697/attackP0_02.all.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/78c5eb45-a92d-41b7-ab0c-22fd87a6ef6a/sessionKeeperRetryAfter.run1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3efd7b5b-af79-4082-b635-f5e55c916869/sessionRefreshDeadlineRace.run1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2f2c8183-b667-40eb-89fc-ae0e016d4bb7/practiceSetTryAgainClockRollback.run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b64869b8-3ff7-48b2-aa74-5bd4e0931239/tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aa82a04d-cb06-4d56-97d8-9891de0eda11/eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d26882a5-e8dc-48e6-b9b1-ab81734d37d6/prettier.log"
+        ],
+        "attack_branch": "devin/pp/p0-02/attack-02c45962",
+        "attack_branch_sha": "a0f64c494f9dbd27358e863425d1a6b04df091ef",
+        "attacked_sha": "02c459621f45959cbfb24538495654dd42192df5",
+        "attacks_not_broken": [
+          "sessionRefreshDeadlineRace: body settling 1 ms inside the deadline is adopted (control, passed)",
+          "sessionRefreshDeadlineRace: abort-honouring transport rejecting after the deadline leaves no timer and no second rejection (passed)",
+          "sessionRefreshDeadlineRace: sign-out with a logout body that never completes settles at the deadline (passed)",
+          "sessionRefreshDeadlineRace: account switch while a rotation stalls — late body and timeout both land on the dead generation, no cross-account rotation (passed)",
+          "practiceSetTryAgainClockRollback: monotonic-clock TRY AGAIN joins the prior set and scores (control, passed)",
+          "practiceSetTryAgainClockRollback: fresh (non TRY AGAIN) analysis after a rollback starts a new set and scores (passed)"
+        ],
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "evidence": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/78c5eb45-a92d-41b7-ab0c-22fd87a6ef6a/sessionKeeperRetryAfter.run1.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8e6d733-e9e1-4622-844d-262c39c44697/attackP0_02.all.log"
+            ],
+            "expected": "No refresh presented before the server-stated 120 s window; the session survives and rotates once the window elapses. The edge function documents 429/503 + Retry-After as the contract for rate-limiting/Auth-down (supabase/functions/api/index.ts refreshSessionRoute comment; AGENTS.md rateLimit section). The implementer summary lists this as a known residual risk, not fixed in 02c45962.",
+            "labels": "VERIFIED (test run) for keeper behaviour; INFERRED (code read) for the server Retry-After contract",
+            "observed": "First refresh answers 429 (and, in the second case, 503) with `Retry-After: 120`. The keeper presents the next refresh at t=5000 ms (fixed retryDelayMs backoff): retriesInsideRetryAfterWindow = [5000]. sessionLifecycle.readRefreshAnswer discards the response headers, so the keeper cannot see Retry-After.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackP0_02/sessionKeeperRetryAfter.test.ts  (exit 1; 2 failed / 0 passed / 2 total)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/attackP0_02/sessionKeeperRetryAfter.test.ts",
+            "title": "sessionKeeper ignores Retry-After on 429/503 from POST /v1/auth/refresh and retries after 5 s"
+          },
+          {
+            "evidence": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3efd7b5b-af79-4082-b635-f5e55c916869/sessionRefreshDeadlineRace.run1.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8e6d733-e9e1-4622-844d-262c39c44697/attackP0_02.all.log"
+            ],
+            "expected": "A slow-but-successful rotation must not cost the durable session (AGENTS.md: 'closing the app must NEVER sign out'; the ONE implicit sign-out is the server refusing the token). Either adopt a late body that does settle (keep listening after the deadline while treating the request as deferred), or do not let a timed-out rotation attempt be followed by a retry that is guaranteed to be refused. Pre-existing on BASE as well (base never timed out here but hung instead), but the candidate's body-deadline fix now converts the stall into a deterministic sign-out path for the server's documented rotation semantics.",
+            "labels": "VERIFIED (test run) for client behaviour; INFERRED (index.ts comment: 401 when 'already rotated away') for the server side. Note: run1.log also shows an earlier exact-on-the-deadline case that was a test-design mistake (same-tick timer ordering) and was replaced by the 1-ms-inside control, which passes.",
+            "observed": "Server rotates refresh-0 -> refresh-1 and the 200 headers arrive in time, but the JSON body settles 1 s after the 15 s deadline. The candidate's post() rejects with SessionRequestTimeoutError (retryable), the late body carrying refresh-1 is dropped, the keeper retries presenting refresh-0, the server answers 401 ('already rotated away', per index.ts refreshSessionRoute), stopSessionKeeper + onRevoked fire: {presentedOnRetry:'refresh-0', revoked:1, rotatedWith:[]}.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackP0_02/sessionRefreshDeadlineRace.test.ts -t 'settles 1 s past the deadline'  (whole file: exit 1; 1 failed / 4 passed / 5 total)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/attackP0_02/sessionRefreshDeadlineRace.test.ts",
+            "title": "Rotated refresh token that arrives after REQUEST_TIMEOUT_MS is discarded; retry presents the already-rotated token and the user is signed out"
+          },
+          {
+            "evidence": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2f2c8183-b667-40eb-89fc-ae0e016d4bb7/practiceSetTryAgainClockRollback.run2.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8e6d733-e9e1-4622-844d-262c39c44697/attackP0_02.all.log"
+            ],
+            "expected": "The candidate's recordClock fix is scoped to analyzeCapture's record timestamps; the practice-set plan embedded in the same request is still stamped from the raw wall clock and is validated with `Date.parse(plan.nowIso) < Date.parse(plan.startedAtIso) => invalid` in originalAnalysisSnapshot.ts, so a 3-second rollback still blocks the supported TRY AGAIN path. Expected: the re-record prepares and scores into the original set (or the plan clock is floored at startedAtIso the same way record timestamps are). UI consequence (INFERRED from AnalyzeScreen.tsx catch path): the user sees the 'This saved analysis could not be verified' recovery state instead of a result; no free rating is charged (permit stays reserved/unfinalised in the test).",
+            "labels": "VERIFIED (test run) at the prepareOriginalCaptureAnalysis boundary; INFERRED for the AnalyzeScreen rendering",
+            "observed": "A first attempt commits a practice set at T; the device clock is then corrected back by 3 s / 5 min / 1 h; the TRY AGAIN re-record calls planPracticeSet(db, {preferredSessionId}) with the (rolled-back) wall clock — exactly what AnalyzeScreen.tsx does (no nowIso passed) — producing {startedAtIso: T, nowIso: T-rollback}. prepareOriginalCaptureAnalysis rejects with OriginalAnalysisValidationError for all three rollbacks (control with a monotonic clock: prepared, scored, joins the prior set; a fresh non-TRY-AGAIN analysis after the rollback also scores).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackP0_02/practiceSetTryAgainClockRollback.test.ts  (exit 1; 3 failed / 2 passed / 5 total)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/attackP0_02/practiceSetTryAgainClockRollback.test.ts",
+            "title": "TRY AGAIN after a device clock rollback: planPracticeSet yields nowIso < startedAtIso and originalAnalysisSnapshot rejects the plan (OriginalAnalysisValidationError) — the re-record cannot be prepared"
+          }
+        ],
+        "commands": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8e6d733-e9e1-4622-844d-262c39c44697/attackP0_02.all.log",
+            "command": "cd apps/mobile && npx jest --ci --verbose __tests__/attackP0_02",
+            "exit_code": 1,
+            "suites": "3 failed / 3 total",
+            "tests": "6 failed / 6 passed / 12 total / 0 skipped"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b64869b8-3ff7-48b2-aa74-5bd4e0931239/tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "exit_code": 0
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aa82a04d-cb06-4d56-97d8-9891de0eda11/eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/attackP0_02/*.test.ts",
+            "exit_code": 0
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d26882a5-e8dc-48e6-b9b1-ab81734d37d6/prettier.log",
+            "command": "npx prettier --check apps/mobile/__tests__/attackP0_02/*.test.ts",
+            "exit_code": 0
+          },
+          {
+            "command": "git diff --check",
+            "exit_code": 0
+          }
+        ],
+        "package_id": "P0-02",
+        "summary": "Attacked P0-02 candidate 02c45962 with 12 attack cases in 3 Jest suites (attack tests only; no production code or candidate-owned tests modified; pushed to devin/pp/p0-02/attack-02c45962 @ a0f64c49, no PR). 6 of 12 cases break the candidate, grouping into 3 confirmed P1 supported-path breaks: (1) sessionKeeper ignores Retry-After on 429/503 refresh answers and retries at 5 s (implementer listed it as residual risk; contract per index.ts + AGENTS.md); (2) a successful rotation whose body settles after the 15 s deadline is discarded, the retry presents the already-rotated token, the server's documented 401 follows and the user is signed out — the new body-deadline fix turns a slow-network stall into a deterministic sign-out; (3) the clock-rollback fix (recordClock) does not cover the practice-set plan embedded in the same request: TRY AGAIN after a 3 s / 5 min / 1 h rollback yields nowIso < startedAtIso and prepareOriginalCaptureAnalysis rejects with OriginalAnalysisValidationError (monotonic control and fresh-analysis-after-rollback both score). No P0 found: no credit was consumed in any failing case and no cross-account leakage was observed (account-switch-during-stall attack held). Attack files pass tsc/eslint/prettier; artifacts uploaded (URLs above; local copies under artifacts/p0-02-attack/, gitignored). iOS runtime behaviour was not claimed from Linux."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
       "implement": {
         "acceptance_results": [
           {
@@ -362,10 +495,74 @@
         ],
         "summary": "P0-02 r3. (1) Full mobile Jest on BASE_SHA: the 4 failing suites were environmental — stale node_modules (qs@6.15.3 vs locked 6.16.0, @sentry/react-native absent); `npm ci` alone brings BASE to 312 passed / 1 documented skip (VERIFIED, logs in baseline_failures_observed). (2) Adversary break 1 (P1, body stall): apps/mobile/src/account/sessionLifecycle.ts post() (base lines 34-51) cleared the abort timer in `finally` as soon as fetch() resolved with headers, so refreshApiSession's later `response.json()` (base line 92) ran outside REQUEST_TIMEOUT_MS; a 200 whose body never settled left the promise pending forever and sessionKeeper's `inflight` guard (sessionKeeper.ts:91,112-113) set, so the next foreground/refreshSessionNow made 0 fetch calls. Fix: post<T>() now takes a `consume` callback and settles the whole request (headers + body) under one deadline that rejects with a timeout error even when the transport ignores the abort signal; readRefreshAnswer() returns 401/403 refusal synchronously (no body read, non-retryable sign-out semantics unchanged) and reads the body otherwise. revokeApiSession uses the same post. The timeout rejection is retryable, sessionKeeper's existing `finally { inflight = false }` clears the guard and its backoff retries. Regression: __tests__/sessionRefreshBodyStall.test.ts (4 failed on base, exit 1; passes on HEAD). (3) Adversary break 2 (P1, clock rollback): apps/mobile/src/analysis/runCaptureAnalysis.ts stamped records with `nowIso: () => new Date().toISOString()` (base line 1599); packages/analysis-pipeline/src/strokeAutoResolution.ts isVerifiedCompletedCaptureRecord rejects a record when capturedAtIso / selectedAtIso > createdAtIso or a model run completedAtIso > createdAtIso (lines 1273-1284, 1298-1302), and originalAnalysisOperations.ts recordMatches() (isVerifiedCompletedCaptureRecord at line 1164, held('commit_not_admitted') at line 1221) turns that into commit_not_admitted → OriginalAnalysisHeldError → recovery_pending with the permit finalised 'failed'; the direct runner's replay path fails the same verification on read. Fix (inside write_paths only): new apps/mobile/src/util/recordClock.ts — a monotonic clock floored at the record's own provenance instants (capture, import tap, technique confirmation) — wired as `nowIso` in the shipping runCaptureAnalysis analyzeCapture call. Record timestamps can therefore never precede the evidence they describe; with a monotonic device clock the output is identical to before. No shared-package verifier was touched. Regression: __tests__/analysisClockRollback.test.ts (original path 1 s/5 min/1 h + direct-runner replay; 6 failed on base, exit 1; 8 passed on HEAD) and __tests__/recordClock.test.ts (5 unit tests). Adversary suites replayed against HEAD: p0-02-clock-rollback-original-path 4/4 pass, p0-02-clock-rollback-analysis 9/9 pass, p0-02-sessionKeeper-network-boundaries: the two body-stall break cases' behaviour is fixed ('headers arrive but the body never does' passes; 'a body stall does not wedge the keeper' now performs 8 rotations over the test's 6 h instead of the adversary's assumed exactly 1, because the stalled rotation times out at 15 s, retries and then the keeper keeps rotating hourly against the 3600 s bearer — a legitimate consequence of the fix, pinned by the new regression test); the remaining failure in that file (429 Retry-After honouring) was not a listed break and is recorded under residual_risks. Commits: 110a4bc3 (test), f1d0e65d (fix), 29c57c05 (test), 02c45962 (fix). Acceptance: AC1 6073 passed / 1 documented skip exit 0; AC2 exit 0; AC3 exit 0; pnpm format:check exit 0; git diff --check exit 0. No PR opened."
       },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37004d7e-376b-4d32-b1e8-8ef8d49dbd27/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent",
+            "executed": 6074,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-02-AC1",
+            "note": "VERIFIED at 02c45962 after `cd apps/mobile && npm ci` (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a776226-53fd-4d38-952d-a49b415b3299/npm-ci.log). Test Suites: 1 skipped, 315 passed, 315 of 316 total; Tests: 1 skipped, 6073 passed, 6074 total. The single skipped suite/test is the documented importedRealFootageAnalysis.test.ts — proven by diffing `npx jest --listTests` (316 files) against the 315 PASS lines in the log: the only suite not listed as PASS is __tests__/importedRealFootageAnalysis.test.ts, and running it alone reports 1 suite skipped / 1 test skipped. No other skips.",
+            "passed": 6073,
+            "skipped": 1,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e5c5d24d-d4ab-45eb-81b0-dc8448265a31/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-02-AC2",
+            "note": "VERIFIED at 02c45962; no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6c7121b-1e28-4726-83be-63687efdf06b/ac3-lint-head.log",
+            "command": "npx eslint apps/mobile/__tests__/analysisClockRollback.test.ts apps/mobile/__tests__/recordClock.test.ts apps/mobile/__tests__/sessionRefreshBodyStall.test.ts apps/mobile/src/account/sessionLifecycle.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/util/recordClock.ts && npx prettier --check <same 6 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-02-AC3",
+            "note": "VERIFIED from repo root at 02c45962 over all 6 changed files (the full `git diff --stat` set): eslint exit 0, prettier 'All matched files use Prettier code style!' exit 0. Also `git diff --check f250acd7 HEAD` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37004d7e-376b-4d32-b1e8-8ef8d49dbd27/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e5c5d24d-d4ab-45eb-81b0-dc8448265a31/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f6c7121b-1e28-4726-83be-63687efdf06b/ac3-lint-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/86ee97bc-5351-484e-95d7-a0b304541c4b/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7c35d764-da6c-48c5-810c-8eddd2427f1a/regress-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d9f9485-e86c-455b-b985-33a48c81de76/base-jest-full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea2fa687-4340-412c-ba1d-be47c78779bf/base-stale-nm-4suites.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a776226-53fd-4d38-952d-a49b415b3299/npm-ci.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts is inside the write_paths prefix apps/mobile/src/ (so in scope per the manifest) but also under the serial-group prefix mobile-analysis (apps/mobile/src/analysis/), which P0-02 does not hold; the edit is 5 lines (import + nowIso wiring) — coordinator should expect a trivial merge with any package holding mobile-analysis.",
+          "REVIEW.md (perception section) asks for a version bump when analysis output can change; recordClock only changes record timestamps (createdAtIso/model-run instants), never scores or evidence, so no bump is warranted — noted for the record (INFERRED from the diff + analyzeCapture.ts nowIso call sites).",
+          "Implementer's residual risk stands: sessionKeeper still ignores Retry-After on a 429 refresh (not part of this package's acceptance; not fixed here).",
+          "After a real clock rollback, records are stamped at the capture instant (later than the device wall clock by the rollback amount). Server-side shot sync carries capturedAt, not createdAtIso, so nothing new reaches the server (INFERRED)."
+        ],
+        "package_id": "P0-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "02c459621f45959cbfb24538495654dd42192df5",
+        "scope_violation": false,
+        "summary": "APPROVE P0-02 candidate 02c459621f45959cbfb24538495654dd42192df5 (independent re-verification, not the implementer's numbers). SCOPE: `git diff --stat f250acd7..02c45962` = 6 files (3 new tests under apps/mobile/__tests__/, sessionLifecycle.ts, runCaptureAnalysis.ts, new util/recordClock.ts), all under write_paths; out_of_scope_files empty; scope_violation=false. The new recordClock module IS wired into the shipping path (runCaptureAnalysisCore -> analyzeCapture nowIso, used by both runCaptureAnalysis and runOriginalCaptureAnalysis), so the objective is met as behaviour, not as an orphan module. BASELINE CLAIM RE-VERIFIED: with the pre-existing apps/mobile/node_modules (qs 6.15.3 vs locked 6.16.0; node_modules/@sentry absent — VERIFIED on this box) the 4 named suites fail on BASE_SHA with 'Cannot find module @sentry/react-native[/metro]' and the qs-version guard (exit 1, log base-stale-nm-4suites.log); after `npm ci` the full suite on BASE_SHA is Test Suites 1 skipped/312 passed, Tests 1 skipped/6054 passed/6055, exit 0 (base-jest-full.log) — environmental, no source defect on base. ACCEPTANCE (all re-run by me at HEAD): AC1 `cd apps/mobile && npx jest --ci --silent` exit 0, 315 suites passed/1 skipped, 6073 tests passed/1 skipped/6074 total; the skipped suite is proven to be exactly __tests__/importedRealFootageAnalysis.test.ts (listTests minus PASS lines). AC2 tsc exit 0. AC3 root eslint + prettier over all 6 changed files exit 0; git diff --check exit 0. REGRESSION PROOF: BASE_SHA + only the 3 new test files copied over: exit 1, Test Suites 3 failed, Tests 10 failed/4 passed/14 (recordClock suite fails to run: Cannot find module '../src/util/recordClock'; sessionRefreshBodyStall 4 failed/2 passed; analysisClockRollback 6 failed/2 passed — base delivers 'unavailable'/recovery_pending with the permit finalised 'failed' instead of the scored result) (regress-base.log). Same 3 files on the candidate: exit 0, 3 suites passed, 19 passed/19 (regress-head.log). regression_fails_on_base=true. DIFF REVIEW vs REVIEW.md/hard rules: no test weakened/skipped/deleted; no `|| true`, `--passWithNoTests`, `@ts-ignore`, `any`, `eslint-disable`, inflated timeouts or force-exit; no existing comments modified (removed lines are code only); no migrations, grants, RLS, edge, billing, or copy touched. Auth invariants preserved: the only non-retryable sign-out remains a 401/403 refusal (readRefreshAnswer returns it synchronously without a body read, as base did); timeouts/body stalls map to retryable SessionRefreshError so sessionKeeper keeps the session and retries with backoff; no token is persisted or logged; revokeApiSession semantics unchanged. recordClock never lowers a timestamp below wall clock unless the record's own capture/tap/confirmation instant is later (capturedAtIso comes from the native device clock at capture/import — ClipMediaStore.swift:1349 — not file metadata), covers every instant strokeAutoResolution's verifier compares against createdAtIso (capturedAtIso, userSelection.selectedAtIso, techniqueConfirmation; guidedStartTap.selectedAtIso is always null), and with a monotonic clock is byte-identical to the previous `new Date().toISOString()`. Billing/permit behaviour: the rollback fix turns an incorrectly-held fully inferred result (permit 'failed', no charge) into the normally delivered result with the permit left reserved for sync — no new charge path, conservation intact. Zero blocking issues; non-blocking notes listed.",
+        "verdict": "approve"
+      },
       "round": 3
     }
   ],
   "start_round": 2,
-  "status": "RUNNING",
+  "status": "REQUEUE",
   "wave_id": "wave-3"
 }

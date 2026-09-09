@@ -1,0 +1,244 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W07-07-r1",
+      "phase": "implement",
+      "prompt_sha256": "824e7b2093ab010ab698a8e87219af64207f7b3bbe0ac391a14afd519a426f89",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-07-r1",
+      "phase": "review",
+      "prompt_sha256": "c4a63e2c5586b753080e213065820e98df860673ec3c59b94e52465412f930ef",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-07-r1",
+      "phase": "adversary",
+      "prompt_sha256": "07be8abf5dc83b07d9f20de80c7ee411be7c4c20022e889e945285c38c5e195d",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+  "candidate": {
+    "branch": "devin/pp/w07-07/impl-r1",
+    "head_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W07-07",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/09e3416e-ddab-46f3-9cb3-b76c380bd95a/w07-07-attack-report.json"
+        ],
+        "attack_branch": "devin/pp/w07-07/attack-95a33aff",
+        "attack_branch_sha": "9a836a2bbe005048e76110514c1716be071ae2fa",
+        "attacked_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+        "attacks_tried": 13,
+        "breaks": [
+          {
+            "expected": "A purchase record that can never be bound to a server verdict must reach a terminal disposition after an authoritative non-premium answer (e.g. settle via a store-account lookup / restore-path verdict, or surface a support path) rather than an indefinite `pending` hold that permanently blocks re-purchase on this device. Not charging / not unlocking is correct and was preserved.",
+            "observed": "VERIFIED: StoreKit purchase completes but the client has no transaction evidence (revenueCatClient.purchase() drops `transaction` when RC returns none or a mismatched productIdentifier; a schema-1 record from a pre-schema-2 build has the same shape) -> schema 1 `purchase` record. Server answers authoritative non-premium (refund / never fulfilled) on every retry; verifyPending() (accessStore.ts `!fulfilmentRequest && !synced.access.premium && attempted.source === 'purchase'`) can never bind a verdict, keeps the record and returns pendingError. After 24 h of fake-clock backoff the record sits at attempts=31, membership kind='pending', purchaseAllowed=false, detail='Verification is pending, not another purchase. Retry with our server without opening the app store.'; a manual retryPendingFulfilment() makes 1 more sync and stays pending. No support/contact path in the copy. Same failure on BASE_SHA 8ba4849d (attack-run-base.log).",
+            "repro": "git checkout 9a836a2bbe005048e76110514c1716be071ae2fa && cd apps/mobile && npx jest --ci __tests__/w07LifecycleAttack.test.ts -t 'A12'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w07LifecycleAttack.test.ts",
+            "title": "Purchase record without transaction evidence + authoritative non-premium answer is held forever and blocks re-purchase (pre-existing on BASE_SHA; accessStore.ts, outside candidate write_paths)"
+          },
+          {
+            "expected": "The next verification attempt honours the server's Retry-After (max(record backoff, Retry-After)); the edge rateLimit.ts per-user budget otherwise counts the early retries and lengthens the hold.",
+            "observed": "VERIFIED: through createCanonicalAccessClient() with a scripted fetch, POST billing sync answers 429 with `Retry-After: 120`. The record is journaled (no charge, no unlock, StoreKit not re-opened, subsequent 302 redirects never read as access/verdict — all correct), but the retry cadence follows the record's 5 s·2^n backoff: 4 requests (5 s, 15 s, 35 s, 75 s) before the Retry-After deadline. `Retry-After` is only parsed in account/deletionOperationTransport.ts; the billing path never reads it. Same on BASE_SHA.",
+            "repro": "git checkout 9a836a2bbe005048e76110514c1716be071ae2fa && cd apps/mobile && npx jest --ci __tests__/w07LifecycleAttack.test.ts -t 'A4'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w07LifecycleAttack.test.ts",
+            "title": "429 + Retry-After from the shipping API client is ignored: 4 verification retries fired inside a 120 s Retry-After window (pre-existing on BASE_SHA; accessApi.ts/accessStore.ts)"
+          },
+          {
+            "expected": "When the pass ends with nothing in flight, the published reconciliation state is restored to the tracker's real state ('unavailable') so membership copy / paywall retry affordances do not report a check that is not happening.",
+            "observed": "VERIFIED: purchase held offline (reconciliation 'unavailable'), then storage.write rejects (SQLITE_FULL) at the 5 s retry. Store state after the pass: status 'error', operation 'idle', pendingFulfilment.attempts 2, one scheduled timer, error billing.backend_verification_pending — but `reconciliation.status === 'checking'`. reconcileBilling() sets the published tracker to 'checking' before loadPending(); the catch only republishes when `!required`, and failVerification() leaves the published reconciliation untouched, so the internal tracker ('unavailable') and the published state diverge. Bounded backoff, StoreKit blocking and settlement after disk recovery are correct (A1b passes).",
+            "repro": "git checkout 9a836a2bbe005048e76110514c1716be071ae2fa && cd apps/mobile && npx jest --ci __tests__/w07LifecycleAttack.test.ts -t 'A1a'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w07LifecycleAttack.test.ts",
+            "title": "Published reconciliation.status stays 'checking' after a journal write failure aborts the retry pass with nothing in flight (pre-existing on BASE_SHA; accessStore.ts reconcileBilling)"
+          }
+        ],
+        "package_id": "W07-07",
+        "summary": "Attacked candidate 95a33aff469aa4eadc869f0e1e25ce49741d4266 (branch devin/pp/w07-07/impl-r1) with 13 real Jest attacks in apps/mobile/__tests__/w07LifecycleAttack.test.ts on branch devin/pp/w07-07/attack-95a33aff (pushed, sha 9a836a2bbe005048e76110514c1716be071ae2fa; no PR, no force-push, candidate code/tests untouched — `git diff 95a33aff --stat` on the branch shows only the new test file). VERIFIED against candidate: `cd apps/mobile && npx jest --ci __tests__/w07LifecycleAttack.test.ts` exit 1, 13 executed / 10 passed / 3 failed / 0 skipped (log /home/ubuntu/attack-logs/attack-run-final.log). Same file against BASE_SHA 8ba4849d (lifecycle.ts swapped to base, then restored): 13 executed / 9 passed / 4 failed — A2 (clock rollback during unreadable-journal hold) FAILS on base and PASSES on the candidate, independently confirming the candidate's selectRetryAtMs fix also holds under wall-clock rollback (log attack-run-base.log). Passing attacks (no break): A1b journal write failure stays bounded/blocks StoreKit/settles after recovery; A2 clock rollback; A3 stalled cold-start journal read held on bounded deadline, never read as empty; A5 bound `expired` beside premium shows fulfilled and a later non-premium answer is `free` not `expired`; A6 A→B→A account switch keeps journals/verdicts/trackers per owner; A7 host restart during hold adds no timers/StoreKit/network; A8 far-future record clock attempted once then backs off, far-future horizon stays fulfilled; A9 concurrent user retries + foreground during a stalled verification keep one attempt/one request/one timer; A10 corrupt/oversized/foreign-owner/NaN/negative/malformed durable rows hold the account instead of becoming an empty journal; A11 bound settlement with failing cleanup is not reported settled and settles once on recovery. Confirmed breaks (3): P2 A12 evidence-less purchase + authoritative non-premium answer = permanent pending hold blocking re-purchase with no support path; P3 A4 Retry-After ignored by billing verification retries; P3 A1a stale published `checking` reconciliation status after a journal write failure. All three reproduce on BASE_SHA and live in accessStore.ts/accessApi.ts — outside the candidate's write_paths — so they are pre-existing defects the candidate did not introduce and did not fix; none violates the money invariants (no charge, no unlock, no fabricated expired/refunded, no automatic StoreKit calls were observed in any attack). Candidate acceptance re-verified after `npm ci`: AC1 `npx jest --ci --silent __tests__/w07LifecycleMatrix.test.ts __tests__/billingLifecycle.test.ts` exit 0, 2 suites / 21 passed (candidate-matrix-final.log); AC2 `npx tsc --noEmit` exit 0 with the attack file present (tsc-attack.log); AC3 root `npx eslint` + `npx prettier --check` on lifecycle.ts, w07LifecycleMatrix.test.ts and w07LifecycleAttack.test.ts exit 0/0 (lint.log). iOS runtime behaviour was not exercised (Linux only); the A12 entry path via RevenueCat returning no transaction is INFERRED from revenueCatClient.ts, not observed on device."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a98d8e5-ed1f-46ee-af77-3a0552768a97/ac1-candidate-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w07LifecycleMatrix.test.ts __tests__/billingLifecycle.test.ts",
+            "executed": 21,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC1",
+            "note": "VERIFIED on HEAD 95a33aff: 2 suites, 21 tests (4 new matrix + 17 existing billingLifecycle). Regression proof: same command on BASE_SHA lifecycle.ts (test commit 7e20dfd4 only, fix stashed) exits 1 — 1 failed / 20 passed / 21 total; the failing test is 'an unreadable journal beside a remembered purchase follows the reconciliation backoff instead of polling storage every second' (base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/9b97fc8e-7f0a-4630-9b2e-052de2e2ddd5/ac1-base-jest.log). Also VERIFIED with billingRecovery.test.ts added: 3 suites / 90 tests pass, exit 0.",
+            "passed": 21,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/66ca8753-8a9d-4f7a-96cc-e71cfa02b5ec/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC2",
+            "note": "VERIFIED after `cd apps/mobile && npm ci` (the snapshot's node_modules lacked @sentry/*; a first tsc run before npm ci failed only on missing declared deps, not on package code). No output, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/534f25c4-cc79-418c-b775-1db744e1985d/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/billing/lifecycle.ts apps/mobile/__tests__/w07LifecycleMatrix.test.ts && npx prettier --check apps/mobile/src/billing/lifecycle.ts apps/mobile/__tests__/w07LifecycleMatrix.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC3",
+            "note": "VERIFIED from repo root. Also VERIFIED: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7e00c952-8259-4b54-8953-620943125f3a/format-check.log) and `git diff --check 8ba4849d HEAD` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/42c2655c-bfae-4dcc-a6f7-28235cc4c568/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Read AGENTS.md/REVIEW.md/OPERATING_SYSTEM.md/APP_STORE_SUBMISSION.md/§11 and the billing store, membershipState, pendingFulfilment, lifecycle host and existing billingLifecycle/billingRecovery suites; baselined those suites on BASE_SHA (86 pass). Wrote the matrix against the live host rather than helpers so the objective is met as behaviour; committed it first; proved it fails on base by stashing the fix; implemented the minimal host-side fix inside write_paths; ran all manifest commands plus pnpm format:check, git diff --check and the full mobile Jest run; classified the one unrelated full-run failure by re-running it in isolation on HEAD and in a clean BASE_SHA worktree.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9b97fc8e-7f0a-4630-9b2e-052de2e2ddd5/ac1-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3a98d8e5-ed1f-46ee-af77-3a0552768a97/ac1-candidate-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/66ca8753-8a9d-4f7a-96cc-e71cfa02b5ec/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/534f25c4-cc79-418c-b775-1db744e1985d/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7e00c952-8259-4b54-8953-620943125f3a/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/42c2655c-bfae-4dcc-a6f7-28235cc4c568/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ac1fc9e-2ace-4807-bd0c-b1aa5fd961ad/full-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/53b10f43-ba7c-4f8d-a657-9c24f17ec7a4/w02OwnerFencing-base-isolated.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0c487fbb-15ea-4a19-81de-bbad3b495e76/w02OwnerFencing-head-isolated.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e0a63639-ab9e-43c1-a9b8-d7b01d546ccd/baseline-billing-jest.log"
+        ],
+        "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts — exit 1 on BASE_SHA 8ba4849d in a clean worktree (1 failed / 12 passed / 13): 'W02-02 owner fencing matrix: settlement stage › switching to B while the permit reservation is in flight leaves A a recoverable journal and B nothing' expects runJournal state 'released' but gets 'release_pending' (w02OwnerFencingMatrix.test.ts:726). Identical failure on HEAD; the suite does not import billing/lifecycle or accessStore, so it is unrelated to this package. Logs: base https://la-hacks-rttothemoon.devinenterprise.com/attachments/53b10f43-ba7c-4f8d-a657-9c24f17ec7a4/w02OwnerFencing-base-isolated.log, head https://la-hacks-rttothemoon.devinenterprise.com/attachments/0c487fbb-15ea-4a19-81de-bbad3b495e76/w02OwnerFencing-head-isolated.log. Full mobile `npx jest --ci --silent` on HEAD: 320 of 321 suites ran, 319 passed, 1 failed (this one), 1 skipped (importedRealFootageAnalysis.test.ts — documented environmental skip in docs/devin/TEST_MATRIX.md), 6358 passed / 1 failed / 1 skipped tests, 247.6 s: https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ac1fc9e-2ace-4807-bd0c-b1aa5fd961ad/full-mobile-jest.log"
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w07-07/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w07LifecycleMatrix.test.ts",
+          "apps/mobile/src/billing/lifecycle.ts"
+        ],
+        "head_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+        "out_of_scope_files": [],
+        "package_id": "W07-07",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w07LifecycleMatrix.test.ts"
+        ],
+        "residual_risks": [
+          "The full mobile suite has one pre-existing unrelated failure (w02OwnerFencingMatrix.test.ts:726) on BASE_SHA; it is recorded, not fixed (outside write_paths / different package).",
+          "Fix scope: when a pass fails AFTER attempting the record (verifyPending path), record.lastAttemptAtMs advances so retryAt > reconciliation.lastAttemptAtMs and the record's own deadline governs exactly as before; the new bound only applies when the record could not be attempted. Edge: if a bounded storage write/read took longer than the pending backoff so that record retryAt ≤ tracker.lastAttemptAtMs, the host waits for the reconciliation backoff (≥5 s) instead of 1 s — still bounded and non-regressive for access.",
+          "Matrix drives StoreKit via mocked Purchases client; no real StoreKit/RevenueCat exercised (Linux plane only). Apple-runner verification not required — TypeScript/test-only change.",
+          "Node in this environment is v24.19.0 (root package.json engines wants >=20 <21); pnpm only warned, all checks passed."
+        ],
+        "summary": "Added apps/mobile/__tests__/w07LifecycleMatrix.test.ts (670 lines, 4 tests) driving the REAL shipping host (startBillingLifecycle + useAccessStore + AppState + fake timers) through an ordered matrix: cold start → restore while offline → 5xx retry → restore fulfilled (premium) → verified horizon passes (grace) → renewal check fails offline (grace preserved, no revoke) → stalled renewal (bounded timeout) → renewal verified with new horizon → unbound non-premium answer stays 'free' (never fabricates 'expired') → purchase verification stall (hold) → held state blocks re-purchase/restore without extra StoreKit calls → bound refund verdict settles → refund survives later network failure → new purchase supersedes refund → transfer-out non-premium answer does not fabricate premium/expiry/refund → restore after transfer-out stays free. Plus: durable restore record with unreachable server (held, exponential backoff, fulfilled without StoreKit); ambiguous 'pending' purchase verdict (stays pending, never settles/recharges, hold on network failure, settles only on a bound expired verdict); unreadable journal beside a remembered purchase. Defect found on BASE_SHA (VERIFIED, test fails on base): apps/mobile/src/billing/lifecycle.ts:44-49 scheduled `selectBillingReconciliationRetryAtMs(state)` directly; when the pending journal could not be read (accessStore.ts loadPending → fulfilmentStatus 'unavailable'), the record's own retry deadline never advances, so the already-overdue value was clamped to MIN_DELAY_MS (lifecycle.ts:8) and the host polled storage every 1 s, ignoring the store's bounded reconciliation backoff (accessStore.ts reconcileBilling catch → tracker.nextAttemptAtMs, 5 s·2^n capped at 5 min). Fix (lifecycle.ts, +25/-2): new `selectRetryAtMs(state)` returns the store's retryAt unchanged except when a pending record exists, reconciliation is 'unavailable', and the record's retryAt ≤ reconciliation.lastAttemptAtMs (i.e. the last pass failed before attempting the record); then it returns max(retryAt, reconciliation.nextAttemptAtMs). Both schedule() and run() use it. No other behaviour changed; invariants preserved (no automatic StoreKit calls, server-authoritative access, owner fencing, bounded retries). Commits: 7e20dfd4 (test, fails on base) then 95a33aff (fix). Branch pushed; no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/83e18913-373f-4f61-b3b2-d31225da93fa/ac1-candidate-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w07LifecycleMatrix.test.ts __tests__/billingLifecycle.test.ts",
+            "executed": 21,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC1",
+            "note": "VERIFIED on HEAD 95a33aff after `cd apps/mobile && npm ci` (snapshot node_modules lacked @sentry/*): 2 suites passed, 21 tests passed (4 new W07-07 matrix + 17 existing billingLifecycle). Regression proof (my own run): BASE_SHA 8ba4849d in a clean git worktree + ONLY the new test file copied over, same command -> exit 1, 1 failed / 20 passed / 21 total; the failing test is 'an unreadable journal beside a remembered purchase follows the reconciliation backoff instead of polling storage every second' at w07LifecycleMatrix.test.ts:651 (storage.read called 14 times vs 4 expected = 1 s polling). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a9800c0-3cd2-49e3-b1dc-a5e0930b9d02/ac1-base-jest.log",
+            "passed": 21,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d086964-8b40-480a-a3e4-fa169d66fe66/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC2",
+            "note": "VERIFIED on HEAD 95a33aff: no diagnostics, exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2031cb07-66e2-4f53-83d2-11f0f3ffe709/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/billing/lifecycle.ts apps/mobile/__tests__/w07LifecycleMatrix.test.ts && npx prettier --check apps/mobile/src/billing/lifecycle.ts apps/mobile/__tests__/w07LifecycleMatrix.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-07-AC3",
+            "note": "VERIFIED from repo root on both changed files: ESLint no findings, Prettier 'All matched files use Prettier code style!', exit 0. Also `git diff --check 8ba4849d 95a33aff` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/83e18913-373f-4f61-b3b2-d31225da93fa/ac1-candidate-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a9800c0-3cd2-49e3-b1dc-a5e0930b9d02/ac1-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d086964-8b40-480a-a3e4-fa169d66fe66/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2031cb07-66e2-4f53-83d2-11f0f3ffe709/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/82b21cd6-484b-4cc1-9821-dc6b33ed5904/full-mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3efb806-f8d4-474c-8f06-212566995454/w02OwnerFencing-base-isolated.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Full mobile Jest on HEAD (`cd apps/mobile && npx jest --ci --silent`, 268 s) exits 1 with exactly one failure, pre-existing and unrelated: __tests__/w02OwnerFencingMatrix.test.ts:726 'switching to B while the permit reservation is in flight leaves A a recoverable journal and B nothing' (expects 'released', gets 'release_pending'). VERIFIED identical failure on BASE_SHA 8ba4849d in a clean worktree in isolation (1 failed / 12 passed / 13); the suite imports neither billing/lifecycle nor accessStore. Counts on HEAD: 319 suites passed / 1 failed / 1 skipped (importedRealFootageAnalysis.test.ts, documented Mac-artifact skip in docs/devin/TEST_MATRIX.md), 6358 passed / 1 failed / 1 skipped tests. Logs: https://la-hacks-rttothemoon.devinenterprise.com/attachments/82b21cd6-484b-4cc1-9821-dc6b33ed5904/full-mobile-jest.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3efb806-f8d4-474c-8f06-212566995454/w02OwnerFencing-base-isolated.log . Belongs to a different package (W02), not fixable within W07-07 write_paths.",
+          "INFERRED edge of the fix (disclosed by the implementer): if a bounded storage write inside verifyPending took longer than the record's own backoff so that record retryAt <= reconciliation.lastAttemptAtMs, selectRetryAtMs defers to the reconciliation backoff (>= 5 s, <= 5 min) instead of retrying at 1 s. Still bounded, does not withhold access or consume credits; no test pins it.",
+          "Only 1 of the 4 new tests fails on BASE_SHA (the other 3 pass on base and pin existing behaviour as ordered matrix coverage) — consistent with the objective 'add matrix; fix defects found', but the base run shows 20/21 passing, not a whole-suite failure."
+        ],
+        "package_id": "W07-07",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "95a33aff469aa4eadc869f0e1e25ce49741d4266",
+        "scope_violation": false,
+        "summary": "APPROVE W07-07 candidate 95a33aff469aa4eadc869f0e1e25ce49741d4266 (2 commits over BASE 8ba4849d: 7e20dfd4 test, 95a33aff fix). Scope (VERIFIED `git diff --stat`): exactly apps/mobile/__tests__/w07LifecycleMatrix.test.ts (+670) and apps/mobile/src/billing/lifecycle.ts (+25/-2) — both in write_paths, lifecycle.ts under the held serial group mobile-billing; no out-of-scope files. Shipped behaviour: the fix is inside startBillingLifecycle (called from src/auth/authStore.ts:620), and the matrix drives that real host + useAccessStore + AppState with fake timers, not helpers. All three acceptance commands re-run by me PASS (AC1 21/21 exit 0; AC2 exit 0; AC3 exit 0). Regression proof VERIFIED: new test file on BASE_SHA in a clean worktree -> exit 1 (1 failed / 20 passed), the failing test being the unreadable-journal backoff case (storage polled every 1 s: 14 reads vs 4 expected); same file on the candidate -> pass. Diff audit against REVIEW.md/AGENTS.md: no test weakened/skipped/reordered, billingLifecycle.test.ts untouched; no `any`, ts-ignore, eslint-disable, `|| true`, .only/.skip, inflated timeouts; no existing comment modified (only two code lines removed, one new JSDoc added); no migrations/RLS/grants/session/edge changes; no user-facing copy added (test asserts existing membershipState eyebrows 'PURCHASE REFUNDED' / 'MEMBERSHIP EXPIRED'); no automatic StoreKit calls introduced — the matrix asserts purchase/restore counts stay at the explicit user actions and readEntitlement is never called by the host. Fix logic (INFERRED from accessStore.ts reconcileBilling/loadPending/verifyBackend): when loadPending throws, `required` is false, the tracker gets 'unavailable' with 5 s·2^n backoff (cap 5 min) but the in-memory record's retryAt never advances, so base clamped it to MIN_DELAY_MS=1 s; new selectRetryAtMs returns max(retryAt, reconciliation.nextAttemptAtMs) only when pendingFulfilment exists, status is 'unavailable', and record retryAt <= reconciliation.lastAttemptAtMs; when the failure happened after verifyPending advanced the record, retryAt > lastAttemptAtMs and the record's own deadline governs unchanged. Invariants preserved: access stays server-authoritative, HOLD is never turned into refund/expiry/free, no credit consumption paths touched, retries bounded. Non-blocking: one pre-existing unrelated full-suite failure (w02OwnerFencingMatrix.test.ts:726) VERIFIED identical on BASE_SHA.",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-7-keep"
+}

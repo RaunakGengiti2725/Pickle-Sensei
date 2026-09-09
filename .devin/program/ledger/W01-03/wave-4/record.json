@@ -1,4 +1,10 @@
 {
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
   "agents": [
     {
       "label": "implement-W01-03-r1",
@@ -27,9 +33,28 @@
       "prompt_sha256": "d6e9194a2f13155e19e30ae5c90d8514a01777bb0bfd3dc23def56e03bd6b745",
       "role": "implementer",
       "status": "completed"
+    },
+    {
+      "label": "review-W01-03-r2",
+      "phase": "review",
+      "prompt_sha256": "9bf0d0d24c240b262135d26af7101d079b265fde8eeaf37c15d01cd375292987",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-03-r2",
+      "phase": "adversary",
+      "prompt_sha256": "b16c459ce3b1ba3f78352d7a09f0c9238c78c13eff76d5fe94874c4dc08d9e7b",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/w01-03/impl-r2",
+    "head_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+    "round": 2
+  },
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.6",
   "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
@@ -267,6 +292,57 @@
       "round": 1
     },
     {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fff9d910-4d71-4201-ab02-60e392c463cf/attack_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e06a3d8a-7e62-4388-aa3c-cfaa0f8f563e/attack_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1094c268-f079-4e66-9c92-35e7c5c2459e/uppercase_probe_base_vs_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/130166b6-e24f-4ba6-a5e8-e09fae30c656/base_uppercase_probe.sql",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/67897332-143e-4fb6-bce0-d68bc14adc0f/ac1_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/25c8832a-6052-44c7-abc4-0d6c96d461e6/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37ab717f-f413-4839-a45f-fcd956e4a122/ac3_rls.log"
+        ],
+        "attack_branch": "devin/pp/w01-03/attack-d5469efc",
+        "attack_branch_sha": "b89a44f529263f966ab752e569ee7fe5efe3ccd3",
+        "attacked_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+        "attacks_tried": 14,
+        "breaks": [
+          {
+            "expected": "The Edge validator admits upper-case UUIDs (UUID_RE is case-insensitive) and PostgreSQL treats them as the same uuid, so an admitted id must settle, and its identical replay must return the original receipt without a chargeable RPC. Either normalise shot.id to lower case before binding/lookup or reject non-lower-case ids at the validator with a typed 4xx. Not reachable from the shipping client (apps/mobile makeUuid emits lower case), and no credit is consumed (permit is left reserved for the sweeper) — hence P2, not P1.",
+            "observed": "VERIFIED on candidate: P1a (fresh settlement with id 'XXXXXXXX-...' upper-cased, receipt built exactly as the edge builds it) -> apply_synced_shot returns 'shot.receipt_invalid'; permit stays reserved, shots=0. P1b (identical settlement replayed upper-cased) -> 'shot.receipt_invalid'. E1 (Edge harness): the same-owner stored receipt is found by the DB (uuid compare) but the Edge keys storedReceipts by the exact shot_id string and compares binding.shotId byte-wise, so the replay slips past the receipt check and reaches the chargeable RPC (chargeable RPC count 1, expected 0; response {\"acceptedIds\":[\"738C73F2-...\"],\"rejected\":[]} in the harness). VERIFIED on BASE (uppercase_probe_base_vs_candidate.log): the same upper-case settlement and its replay both return 'accepted' (shots=1, permit finalized/scored).",
+            "repro": "git checkout b89a44f529263f966ab752e569ee7fe5efe3ccd3 && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --no-check --config deno.json attack_w01_03_settlement_receipt.test.ts --filter 'P1a' (and --filter 'P1b'); base sensitivity: psql -f artifacts/attack-w01-03/base_uppercase_probe.sql against a BASE-schema database",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_03_settlement_receipt.test.ts (E1, P1a, P1b)",
+            "title": "Upper-case UUID spelling of an API-admitted shot id is permanently refused (shot.receipt_invalid) instead of settling / replaying — a regression versus BASE, which settles it"
+          },
+          {
+            "expected": "A receipt whose binding.shotId/ownerId disagrees with the row it was read for is corrupt persisted state and, per the product invariant, must not become a fabricated verdict; it should be the retryable 'shot.write_failed' (or fail closed with a row-consistency check). Reachability: the RPC validates binding.shotId == v_shot_id before the definer trigger writes the row and clients have no INSERT/UPDATE on settlement_receipts, so this needs a server-side write bug or direct DB access — defence-in-depth only, P3.",
+            "observed": "VERIFIED on candidate: with the settlement_receipts row for shot S returned by the owner-scoped read but its receipt_canonical binding naming a different shotId/ownerId (canonical + digest intact), verifiedStoredReceipt() accepts it and the Edge returns 'shot.receipt_mismatch' (permanent, client drops the settlement) for the owner's own identical settlement. E5a (non-canonical / truncated / upper-case-digest transport) is correctly 'shot.write_failed' (retryable).",
+            "repro": "git checkout b89a44f529263f966ab752e569ee7fe5efe3ccd3 && cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --no-check --config deno.json attack_w01_03_settlement_receipt.test.ts --filter 'E5b'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_03_settlement_receipt.test.ts (E5b)",
+            "title": "A structurally valid stored receipt whose binding names another shot/owner (inconsistent with its own row) is classified as a permanent shot.receipt_mismatch rather than unknown/corrupt state"
+          }
+        ],
+        "package_id": "W01-03",
+        "summary": "Attacked W01-03 at d5469efcd87a5190c1ff0b76d23575ec1155c67d with 14 executable attacks in supabase/functions/api/__wf__/attack_w01_03_settlement_receipt.test.ts (Edge harness + disposable PostgreSQL 16 in Docker, no production access), pushed on devin/pp/w01-03/attack-d5469efc @ b89a44f529263f966ab752e569ee7fe5efe3ccd3 (one new test file; no candidate test/production/migration edits; no PR). VERIFIED candidate run: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --no-check --config deno.json attack_w01_03_settlement_receipt.test.ts` -> exit 1, 14 executed, 10 passed, 4 failed, 0 ignored (attack_candidate.log). VERIFIED base run (BASE d8e5db3e worktree, only the attack file copied, separate base-schema DB): exit 1, 14 executed, 0 passed, 14 failed (attack_base.log) — the 10 candidate-passing attacks fail on BASE, so they are regression-sensitive. Passing (held): E2 receipt-read 500/429/503/307 -> retryable, no RPC/authority read; E3 same-batch mutated twin -> 1 accepted + 1 shot.receipt_mismatch, one receipt; E4 RPC timeout -> retryable, identical retry -> original receipt with no RPC; E5a non-canonical/truncated/upper-case-digest stored receipt -> shot.write_failed; P2 3 concurrent identical settlements -> exactly 1 shot/receipt/permit/ledger row; P3 concurrent rotated policy lineage -> exactly one accepted, other shot.receipt_mismatch, one charge; P4 anon/no-sub/un-gated/other-owner refused on RPC + receipt table; P5 claim boundary values (max admitted, one past each edge refused before permit/ledger move); P6 rollback before COMMIT leaves nothing and retries; abstention cannot be re-settled as scored; P7 direct-RPC mutated twin right after original -> shot.receipt_mismatch, one receipt, one charge. Confirmed breaks: (P2) upper-case UUID spelling — admitted by the Edge validator and equal in PostgreSQL — is permanently refused with shot.receipt_invalid on the candidate (BASE settles it), and the Edge's string-keyed receipt lookup lets such a replay reach the chargeable RPC (E1/P1a/P1b); not reachable from the shipping client, no credit consumed. (P3) a stored receipt inconsistent with its own row is a permanent shot.receipt_mismatch rather than retryable unknown state (E5b); needs a server-side write bug to reach. No P0/P1: no double charge, no cross-owner read/write, no credit consumed by any partial/replayed/mutated outcome was found. Baseline (VERIFIED earlier): AC1 exit 0; AC2 806 passed/0 failed/0 ignored; AC3 exit 0 across all 4 histories. Attack-file hygiene: deno fmt --check, deno lint, deno check all pass; no test skipped/ignored (XC_PG_URL set)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
       "implement": {
         "acceptance_results": [
           {
@@ -360,10 +436,82 @@
         ],
         "summary": "W01-03 round 2 at d5469efcd87a5190c1ff0b76d23575ec1155c67d on devin/pp/w01-03/impl-r2 (4 commits over BASE d8e5db3e: r1 test e03bef0f, r1 impl 39852520 cherry-picked unchanged; r2 test 8ea7d6b1; r2 fix d5469efc). Defect on BASE (unchanged from r1): supabase/functions/api/index.ts syncShots() decided replay on shot id alone and apply_synced_shot(jsonb) persisted no receipt, so a mutated re-settlement of a known id was silently 'accepted' with no binding to owner/device/grant/ticket/operation/payload digest/policy — r1 added public.settlement_receipts (20260908110000), the receipt transport in index.ts and the owner-scoped receipt-bound replay check. Prior-round P0 resolved: the r1 lifecycle guard (20260908110000_settlement_receipt_lineage.sql:128-152) admitted a DELETE only when the shot was already gone; settlement_receipts has two cascade parents (shot_id→shots, user_id→profiles) and shots cascades from profiles, and PostgreSQL fires same-event RI cascade triggers on profiles in trigger-NAME order (RI_ConstraintTrigger_a_<oid>, text compare), so with the receipts FK's oid sorting first the receipt cascade reached the row while its shot still existed and account deletion raised 23514 for every owner with a settled shot. Fix: NEW migration supabase/migrations/20260908120000_settlement_receipt_account_cascade.sql replaces guard_settlement_receipt_lifecycle() to return old when the owning profile row is already gone (account cascade, same detection as guard_analysis_permit_delete) OR when the shot is gone (shot cascade), still raising while both exist; UPDATE stays refused; no grant/policy/trigger changes; 20260908110000 untouched. Matrix: security_regression.sql T8a/T8b force each profiles-cascade order (recreate the other FK → newer oid, assert order from pg_trigger, settle via apply_synced_shot, delete auth.users → profile+shot+receipt gone, no error), T8c pins that a receipt with a live shot and owner remains undeletable. Evidence: T8a fails against the r1 guard with the adversary's exact 23514 message (negative control), the adversary's own run_cascade_order_attack.sh (oid counter burned past 100000, receipts trigger firing first) reproduces exit 3 on r1 and exits 0 on r2. All four acceptance commands PASS (AC1 exit 0; AC2 806/806, 0 ignored; AC3 4/4 histories; AC4 base 0/10 → HEAD 10/10). Also VERIFIED: `pnpm format:check` exit 0 ('All matched files use Prettier code style!', https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae489af3-1809-49e3-ad31-c93e69cada3a/format_check.log) and `git diff --check` exit 0. No PR opened; nothing pushed to main or ci/mac-*; no production resources touched."
       },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d880589-7809-415b-914d-8507e30d271a/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC1",
+            "note": "VERIFIED at d5469efc. Output: two pre-existing deno.json workspace-field warnings + 'Check file:///.../supabase/functions/api/index.ts'; frozen lock honoured, git status clean afterwards.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a12eabf-2d30-482d-8321-34589e974ce0/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 806,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC2",
+            "note": "VERIFIED. Summary line 'ok | 806 passed (31 steps) | 0 failed (1m39s)'; zero '... ignored' test lines. Disposable DB built by the repo's xc_pg_up.sh (Debian postgres:16 pulled from public.ecr.aws mirror because Docker Hub returned 429; shim_auth.sql + every migration incl. 20260908110000 and 20260908120000). Includes the 7 edge + 3 pg W01-03 tests, all ok.",
+            "passed": 806,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d6c2a6e-8fc9-4e0d-9d18-11ce57a2584a/ac3_rls.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC3",
+            "note": "VERIFIED. All 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) apply 20260908110000 + 20260908120000 as pending and each prints 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED', 'SECURITY REGRESSION MATRIX: ALL CASES PASSED', 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED', 'Analysis release policy authority: PASS'; final EXIT 0. Counted as 4 history runs (script has no per-case counter). Ran on Debian postgres:16 (ECR mirror of the official image).",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/be5ceec4-7e23-42ba-9e38-0eb0680e1773/ac4_head_regress.log",
+            "command": "git worktree add /home/ubuntu/wt-base-review d8e5db3eb346b651e4ce04cc997178abcbed56fe; cp supabase/functions/api/__wf__/settlement_receipt_binding.test.ts <wt-base>/supabase/functions/api/__wf__/; (base) XC_PG_CONTAINER=pickle-xc-pg-base-review XC_PG_PORT=55434 ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts; (HEAD) XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json settlement_receipt_binding.test.ts",
+            "executed": 10,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-03-AC4",
+            "note": "VERIFIED proof. BASE d8e5db3e (only the new test file copied; base worktree DB built by base xc_pg_up.sh = base migrations only, last 20260908100000): exit 1, 'FAILED | 0 passed | 10 failed (168ms)', failures are behavioural assertions (e.g. 'settlementReceipt must be an object'), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7c01dd7-615e-4d67-9652-87e5d3efa6ee/ac4_base_regress.log . HEAD d5469efc: exit 0, 'ok | 10 passed | 0 failed (270ms)'. Tests pin identical replay -> original stored receipt with no RPC/authority read/permit/ledger movement, and mismatch in payload digest/owner/device/grant/ticket/operation/policy -> shot.receipt_mismatch before the RPC with zero credit and zero sequence consumed.",
+            "passed": 10,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d880589-7809-415b-914d-8507e30d271a/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a12eabf-2d30-482d-8321-34589e974ce0/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d6c2a6e-8fc9-4e0d-9d18-11ce57a2584a/ac3_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7c01dd7-615e-4d67-9652-87e5d3efa6ee/ac4_base_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/be5ceec4-7e23-42ba-9e38-0eb0680e1773/ac4_head_regress.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED: apps/mobile does not yet send the optional `settlement` claims block (no `settlementReceipt`/`installationKeyId`/`settlement` in apps/mobile/src), so on shipped clients the device/grant/ticket/operation fields of the receipt bind as null (recorded as absent, never fabricated) until the mobile sync transport is extended; owner, shot id, permit, payload digest and policy lineage bind today through the live POST /v1/shots/sync path. Mobile transport is under the `mobile-data` serial group this package does not hold, so it is correctly out of scope here — follow-on package needed.",
+          "INFERRED: supabase/migrations/20260908110000_settlement_receipt_lineage.sql unique_violation branch of apply_synced_shot compares only bindingSha256+binding on a concurrent own-row insert (the main path also compares policy lineage). Under the per-user access_lock_key advisory lock this branch is effectively unreachable for same-owner races (AC2 race test confirms exactly one receipt), so no observed defect.",
+          "INFERRED: edge replay match (index.ts:2346) compares the canonical binding only; policy lineage is server-derived (not client-supplied) and the identical-replay response returns the ORIGINAL stored receipt including its lineage, so a client cannot mutate lineage through the edge; the RPC additionally compares policy lineage."
+        ],
+        "package_id": "W01-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+        "scope_violation": false,
+        "summary": "Independent review of W01-03 candidate d5469efcd87a5190c1ff0b76d23575ec1155c67d (branch devin/pp/w01-03/impl-r2) against BASE d8e5db3e. SCOPE (VERIFIED via git diff --stat): 6 files. 4 in write_paths (index.ts, settlement_receipt_binding.test.ts, 20260908110000_settlement_receipt_lineage.sql, security_regression.sql); canonicalDigest.ts untouched (imported, not modified). Two out-of-scope files, both accepted as justified wiring: supabase/migrations/20260908120000_settlement_receipt_account_cascade.sql is a NEW later-timestamped migration under the `sql` serial group that this package HOLDS, additive (create or replace of guard_settlement_receipt_lifecycle() only, no grant/policy/trigger change) and required for account deletion to cascade in either RI trigger order; supabase/functions/api/__wf__/xc_concurrency_harness.ts is +11 additive lines of shared test-fake support (fake settlement_receipts table) under no serial-group prefix, no behavioural change to existing fakes. scope_violation=false. SHIPPED BEHAVIOUR: the objective is met in the live POST /v1/shots/sync route (syncShots) — owner-scoped batched read of shots + settlement_receipts, stored receipt digest verified, identical binding returns the ORIGINAL receipt with no authority read/RPC, mismatch rejected as shot.receipt_mismatch before the authority read and the chargeable RPC; the RPC apply_synced_shot repeats the receipt validation and replay/mismatch decision under access_lock_key before any permit is locked or moved, and the receipt row is written by a definer trigger in the same transaction. INVARIANTS (read full diff against REVIEW.md/AGENTS.md): new table has RLS enabled, all privileges revoked from public/anon/authenticated then SELECT-only to authenticated with owner policy + restrictive api_requests_only gate; UPDATE always refused and DELETE only via shot/account cascade (append-only); trigger/guard functions revoked from clients; free-rating backstop still uses lifetime_scored_count(); no grant widening, no session-check change, no applied migration edited (both new files have later timestamps than 20260908100000), no existing comments removed/edited (all removed lines in index.ts are code), no test weakened (security_regression.sql only adds section T and the settlement_receipts privilege row), no ts-ignore/any/eslint-disable/|| true/.only/inflated timeouts; user-facing copy is neutral and compliant with APP_STORE_SUBMISSION.md; 5xx bodies stay generic; corrupt stored receipt -> retryable shot.write_failed, never accepted or fabricated. ACCEPTANCE (all re-executed by me): AC1 exit 0; AC2 806 passed / 0 failed / 0 ignored, exit 0, on a disposable postgres:16 built by xc_pg_up.sh; AC3 exit 0, 4/4 histories, all three SQL matrices + release-authority check pass on each; AC4 base 0/10 (exit 1, behavioural assertion failures) -> HEAD 10/10 (exit 0). regression_fails_on_base=true. No PR opened, nothing pushed, no production resources touched; candidate checkout left clean at d5469efc. Non-blocking: the shipping mobile client does not yet send the optional `settlement` claims (device/grant/ticket/operation bind as null until the mobile transport — a `mobile-data` group this package does not hold — is extended), which is correctly out of scope for this package.",
+        "verdict": "approve"
+      },
       "round": 2
     }
   ],
   "start_round": 1,
-  "status": "RUNNING",
+  "status": "ACCEPTED",
   "wave_id": "wave-4"
 }

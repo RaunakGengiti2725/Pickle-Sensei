@@ -1,0 +1,314 @@
+{
+  "agents": [
+    {
+      "label": "implement-W11-01-r3",
+      "phase": "implement",
+      "prompt_sha256": "6c82346ccbd088256e9013b3e8ad655d358cdfcbcc514dadc84ffb46d3982671",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W11-01-r3",
+      "phase": "review",
+      "prompt_sha256": "0553abcd81aa17d21f549c4e500ead1301648896e4c2dcb927859122a9d02750",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W11-01-r3",
+      "phase": "adversary",
+      "prompt_sha256": "8af4c098c7d81c5198ca440f85aef45275e53f1f7215ed590d0eb1d71713780f",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5632e1e3940904a5200c54b472227d78076f1453",
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W11-01",
+  "requeued_from": {
+    "branch": "devin/pp/w11-01/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w11-01/attack-7cbb268a",
+      "adversary_breaks": [
+        {
+          "expected": "Replays of one credential stay isolated to that credential (egress charged once), the replayer alone is throttled (31st → 429), valid peers at the venue keep 200 on read and refresh — the package objective ('one NAT egress cannot lock out a venue').",
+          "observed": "VERIFIED on 7cbb268a: after 60 signed-out peers (GoTrue 403 session_not_found, egress charged 0 as designed) one handset replaying ONE forged bearer 31x → egressCharged=30, replayer31st=429, peer GET /v1/me=429, peer POST /v1/auth/refresh=429, Retry-After=234s. Cause: chargeAuthFailure() with open.count===0 and tally>=AUTH_FAILURE_SHARD_CAP*limit takes the `if (kind==='credential') chargeEgress()` path on every replay instead of once per credential. On BASE d8e5db3e the same test also fails (venue locked, replayer31st=401).",
+          "repro": "git checkout b4a2aedec91c68c1f6649cb4f48f0292ea5dd29a && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK-5' attack_w11_01_nat_budget_routes.test.ts  (exit 1)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget_routes.test.ts",
+          "title": "Beyond the per-egress shard cap (60 open shards) a single replayed refused bearer charges the egress on EVERY refusal and locks the venue out — the base regression returns"
+        },
+        {
+          "expected": "A refusal that never consulted Auth is not credential-stuffing signal (no guess was checked); it must not consume the venue-wide stuffing budget, or at minimum must be sharded (e.g. per raw header hash / per device) so 30 of them from one device cannot deny valid peers. Peers should keep read=200 / refresh=200.",
+          "observed": "VERIFIED on 7cbb268a: 30 GET /v1/me with no credential (ATTACK-1), 30 with a non-JWT garbage bearer (ATTACK-2), or 30 replays of ONE valid token under a lowercase `bearer` scheme (ATTACK-3) → egressCharged=30, then a valid peer bearer gets read=429 and refresh=429 (Retry-After 234s). None of these requests reached GoTrue (h.calls shows no /auth/v1/user call). bearerOf() yields null identity so recordAuthFailure() charges the egress directly per request. Same lockout on BASE.",
+          "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK-1' attack_w11_01_nat_budget_routes.test.ts ; same with --filter 'ATTACK-2' and --filter 'ATTACK-3'  (each exit 1)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget_routes.test.ts",
+          "title": "Refusals decided locally without ever consulting Auth (no Authorization header, non-JWT garbage bearer, lowercase `bearer` scheme) each charge the egress-wide budget — 30 zero-cost requests from one device lock the venue for the window"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "7cbb268a73562921516b64619f3fef54aa33cbde"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fa01af1-b693-4f27-974a-eaa7aa49e5b6/EVIDENCE.md",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4a40f7d0-92cb-4cb3-9ab4-891eafdc4f3e/attack_run4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0bef2bb3-1190-4490-853f-ff299dac2c55/full_suite_with_attack_r2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c2ddff78-243f-4cf6-8329-8dae0a9cced5/ac1_check.log"
+        ],
+        "attack_branch": "devin/pp/w11-01/attack-e8311398",
+        "attack_branch_sha": "edf5ff2e5fb56430769104c9b7c4a8c675a5bc51",
+        "attacked_sha": "e831139821601e19c79be2080728ff5ab4325344",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "Local refusals that never consulted Auth must not fence a different, valid, already-verified transitional bearer; objective 'one NAT egress cannot lock out a venue' — old-build handsets are a supported path per AGENTS.md (authenticate() transitional branch).",
+            "observed": "After 30 local 401s for random non-JWT bearers from ip X, GET /v1/me with an already-verified (cached) Google ID token from the same ip returns 429 (assertion: 429 vs expected 200). exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 1a'",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 1a: 30 junk (non-JWT) bearers from one co-tenant lock a VALID transitional Google/Apple ID-token handset out of the egress (anonymous shard is shared by junk AND the supported transitional path)"
+          },
+          {
+            "expected": "Expired-token retries are not credential stuffing (nothing reached Auth); another valid transitional peer on the same egress must be served.",
+            "observed": "30 locally-refused 'identity token has expired' 401s from one handset charge the per-egress anonymous shard to 30; a second handset presenting a VALID Google ID token gets 429 (429 vs expected 200). exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 1b'",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 1b: ONE old-build handset retrying its own EXPIRED ID token 30x (benign local refusals) locks every other old-build handset out of the venue"
+          },
+          {
+            "expected": "Objective: 'shards auth-failure budgets so one NAT egress cannot lock out a venue'. A peer whose own credential shard is clean (and whose session is already in the verified auth cache) must not be fenced by a co-tenant's 30 guesses. The residual flat per-egress budget still gates every valid peer's precheck.",
+            "observed": "Egress 'authfail' counter reaches 30 (one charge per distinct credential); peers then receive {read: 429, refresh: 429, bootstrap: 429} (expected all 200). exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 2'",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 2: one handset presenting 30 DISTINCT forged session bearers still locks VALID peers (GET /v1/me with cached session, POST /v1/auth/refresh, POST /v1/account/bootstrap) out of the egress for 5 min"
+          },
+          {
+            "expected": "Liveness 401 is not counted as attack regardless of upstream body shape (fallback on HTTP status/msg or fail toward 'liveness' when error_code is absent). INFERRED: hosted GoTrue currently emits error_code; the shape dependence is a robustness gap, hence P2.",
+            "observed": "authRefusalKind() keys ONLY on error_code; with {code:403,msg:'Session from session_id claim in JWT does not exist'} each 401 charges the egress (egress charged = 30); peers get {read: 429, refresh: 429, bootstrap: 429}. exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 6'",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 6: liveness refusals whose GoTrue body carries no error_code (legacy {code,msg} shape) are classified 'credential' — 30 signed-out co-tenants lock the venue out"
+          },
+          {
+            "expected": "A venue with zero failures must never be fenced; shard cardinality must be bounded (e.g. cap shards per egress, or do not open new memory keys once the egress is closed). Requires ~645 distinct edge-trusted source IPs (clientIp uses cf-connecting-ip / last XFF hop) and memory fallback mode — hence P2 not P1.",
+            "observed": "HEAD accounting: after 646x30 chargeAuthFailure calls, a fresh venue ip gets enforceRateLimit('ip') allowed=false (remaining=0) and peekAuthFailureBudget for a clean session identity allowed=false. BASE accounting for the identical traffic (flat per-ip 'authfail') keeps the venue open. exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 3'",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 3: per-credential shard keys multiply memory-window cardinality 31x — ~645 egresses x 30 distinct refused guesses hit MEMORY_WINDOW_MAX (20000) and a venue that never failed then fails CLOSED (429) on its ip budget and on a valid peer's shard (memory fallback / Upstash unconfigured or down)"
+          },
+          {
+            "expected": "'Egress charged once per credential identity' must hold across isolates and Redis flaps; the first-refusal decision must be derived from the same store the egress counter lives in (or skip the egress charge when the shard INCR fell back to memory).",
+            "observed": "peekRateLimit('authfail', ip) spent = 30 (expected 1), venue closed, from a single dead credential. exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 4'",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 4: partial Redis failure (shard INCR fails over to isolate memory while the egress INCR reaches Redis) makes ONE replayed credential charge the shared egress once PER ISOLATE — 30 replays across 30 isolates close the venue"
+          },
+          {
+            "expected": "One credential charges one window's egress at most once; compute the window bucket once per chargeAuthFailure call.",
+            "observed": "egress spent = 2 after two refusals of one credential across the boundary (expected 1). exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 7'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 7: a refusal straddling the aligned 300s window boundary charges the egress twice in the new window for ONE credential (bucket computed separately for shard INCR and egress INCR)"
+          },
+          {
+            "expected": "At most 30 upstream Auth verifications per credential per window even when the replays are concurrent (reserve the shard slot atomically before consulting Auth). Bounded today only by IP_LIMIT 1200/min.",
+            "observed": "{refused: 60, upstream: 60} vs expected {refused: 30, upstream: 30}; peers all 200 and egress charged once (those parts hold). exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 10'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 10: the per-credential shard cap (30) does not hold for a concurrent burst — 60 concurrent replays of one refused bearer all reach Supabase Auth (peek-then-charge race; pre-existing pattern on BASE, but the candidate's claimed 'replay is bounded' holds only sequentially)"
+          },
+          {
+            "expected": "VERIFIED behaviour; INFERRED harm: this is the intended consequence of 'liveness 401 not counted as attack' but leaves upstream Auth amplification (40x BASE) uncapped per egress. Needs the judge's call on whether a separate per-egress liveness upstream cap is in scope; reported as P3 design gap, not an objective failure.",
+            "observed": "upstream auth.getUser calls = 1170, egress charged = 0, 1170 x 401, 0 x 429, peers served. exit=1.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts --filter 'ATTACK 5'",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts",
+            "title": "ATTACK 5: liveness refusals never charge the egress, so dead-session replays from one egress are bounded only by IP_LIMIT — 39 dead bearers x 30 replays = 1170 GoTrue round trips in one 5-min window (BASE: 30 then 429)"
+          }
+        ],
+        "package_id": "W11-01",
+        "summary": "Adversarial run of W11-01 candidate devin/pp/w11-01/impl-r3 @ e831139821601e19c79be2080728ff5ab4325344 (base 5632e1e3). Attack tests pushed ONLY to devin/pp/w11-01/attack-e8311398 @ edf5ff2e5fb56430769104c9b7c4a8c675a5bc51 (one new file: supabase/functions/api/__wf__/attack_w11_01_nat_budget.test.ts; no production code, candidate tests, migrations, mobile or secrets touched; no PR). VERIFIED: `cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w11_01_nat_budget.test.ts` -> exit 1, 11 executed / 2 passed / 9 failed / 0 skipped (attack_run4.log). Categories covered: replay+duplicate identities (1a/1b/2/5/10), boundary values (9: exp NaN/negative/1e300/MAX_SAFE/0, array/null payload, blank/whitespace, 24KB bearer, capability, wrong scheme), corrupt/partial persisted state (3 memory-window exhaustion, 4 Redis partial failure), network/upstream response shape (6), concurrency (7 window-boundary race, 10 concurrent burst), unauthorised/unsupported roles (8 internal header leak, 9 bootstrap junk). Confirmed breaks: P1 x3 — the per-egress ANONYMOUS shard is shared by junk bearers and the still-supported transitional provider-ID-token path, so 30 local junk refusals (1a) or one old-build handset retrying its own expired ID token (1b) 429 every other valid old-build handset behind the NAT; and 30 DISTINCT forged bearers from one co-tenant still charge the egress 30x and 429 valid peers' cached GET /v1/me, refresh and bootstrap for 5 min (2) — i.e. one egress can still lock out a venue. P2 x3: liveness classification depends solely on GoTrue error_code (6); shard cardinality 31x amplification exhausts MEMORY_WINDOW_MAX so a clean venue fails closed in memory-fallback mode (3); Redis partial failure charges the egress once per isolate for one replayed credential (4). P3 x3: window-boundary double charge (7), concurrent burst bypasses the 30/credential upstream cap (10, pre-existing peek-then-charge race), liveness upstream amplification 1170 round trips/window uncapped (5, design gap). Held: no X-Auth-Refusal-* header leak on any 401 path (8); malformed/boundary bearers are 401 not 5xx, charge nothing beyond what Auth judged, bootstrap junk charges nothing and the 30th real bootstrap is served (9). Acceptance re-run on candidate: AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (VERIFIED). AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=<same> deno task test` with ./xc_pg_up.sh disposable postgres (shim_auth + all migrations): 911 passed / 9 failed / 0 ignored, exit 1 — all 9 failures are the attack file; candidate-owned tests 909 passed / 0 failed / 0 ignored, matching the implementer's claim (VERIFIED; note PICKLE_AUDIT_PG_URL must ALSO be set or 12 W06-01 golden tests are ignored). AC3 not re-run by the adversary (candidate file 23 passed / 0 failed on HEAD VERIFIED earlier; base run is the reviewer's step). Attack file passes root prettier --check, git diff --check, `deno check --config deno.json`, `deno lint` (all exit 0); `deno check cache.ts rateLimit.ts http.ts legal.ts` exit 0. Artifacts: /home/ubuntu/w11-01-logs/{EVIDENCE.md,attack_run4.log,full_suite_with_attack_r2.log,ac1_check.log} and the uploaded URLs."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bcd8be8-017e-4411-a11f-22ddb8ddcdf7/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC1",
+            "note": "VERIFIED at HEAD e8311398 (re-run after the final index.ts edit). Local copy: artifacts/w11-01/ac1_deno_check.log (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/512b82aa-ceda-4da8-aa99-e5c7669e9ffe/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 909,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC2",
+            "note": "VERIFIED at HEAD e8311398: 'ok | 909 passed (31 steps) | 0 failed', ignored == 0 (no '... ignored' lines). Disposable PostgreSQL = docker postgres:16 'pickle-xc-pg' on 127.0.0.1:55433 (throwaway password). Both env vars point at the same disposable DB because w06_01_golden_parity.test.ts reads only PICKLE_AUDIT_PG_URL (with XC_PG_URL alone it ignores 12 live-DB tests — pre-existing on BASE, not changed). No test was modified to pass except the xc_adjudication_auth.test.ts characterisation listed in out_of_scope_files.",
+            "passed": 909,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7c27413d-6604-4a47-84a5-c10060ed9939/regress_head.log",
+            "command": "git worktree add --detach /home/ubuntu/wt-base 5632e1e3940904a5200c54b472227d78076f1453 && cp supabase/functions/api/__wf__/rateLimit_nat_budget.test.ts /home/ubuntu/wt-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/wt-base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json rateLimit_nat_budget.test.ts)  # BASE; then on HEAD: cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json rateLimit_nat_budget.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC3",
+            "note": "VERIFIED. BASE 5632e1e3 with ONLY the new test file copied over: exit 1, 'FAILED | 1 passed | 22 failed' (the one pass is the pure hash-stability primitive; every NAT-lockout, liveness, local-refusal and shard test fails on base) — log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7a8c10c-5539-4638-b91e-d4db409f94a3/regress_base.log. HEAD e8311398: exit 0, 'ok | 23 passed | 0 failed'.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression first (commit 51543dff, 22/23 fail on BASE), then the fix (commit e8311398). rateLimit.ts: refusals are tagged AuthFailureKind = credential | liveness | local (authRefusal/authRefusalOf on the Response; authRefusalKind maps GoTrue error_code: session_not_found/session_expired/user_not_found/user_banned/refresh_token_already_used => liveness, anything else => credential). Budget keys are sha256(credential)[:32] shards per egress ('authfail_id') plus the egress-wide stuffing budget ('authfail'). chargeAuthFailure: credential => charge the credential shard every time and the egress budget only on that identity's FIRST refusal (fixes r2 break #1: beyond the shard cap a replay no longer charges the egress per request); liveness => credential shard only; local => nothing for a route credential, or the per-egress anonymous shard ('anon') when no session-shaped bearer was presented (fixes r2 break #2: no-bearer / garbage / lowercase-scheme junk is throttled in its own lane, never consumes the venue budget, and cannot fence session bearers or bootstrap). peekAuthFailureBudget gates on anonymous shard (if anonymous) + presented credential shard. Atomic window-aligned Redis INCR, bounded memory fallback (MEMORY_WINDOW_MAX), hash-only identities preserved. index.ts wiring is the smallest hunk: tag the 401s, gate on the sharded budget, refresh gates/charges on its refresh token identity.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2bcd8be8-017e-4411-a11f-22ddb8ddcdf7/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/512b82aa-ceda-4da8-aa99-e5c7669e9ffe/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7a8c10c-5539-4638-b91e-d4db409f94a3/regress_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7c27413d-6604-4a47-84a5-c10060ed9939/regress_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7154342-4b49-4abd-9a8e-1384fcbbf61d/format_check.log"
+        ],
+        "base_sha": "5632e1e3940904a5200c54b472227d78076f1453",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=<url> deno task test on BASE/HEAD without PICKLE_AUDIT_PG_URL: 12 live-DB tests in w06_01_golden_parity.test.ts are IGNORED (that file reads only PICKLE_AUDIT_PG_URL, not XC_PG_URL). Pre-existing environment gap, not a failure; resolved for AC2 by exporting both variables to the same disposable DB. Not fixed in code (outside write_paths)."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w11-01/impl-r3",
+        "files_changed": [
+          "supabase/functions/api/rateLimit.ts",
+          "supabase/functions/api/__wf__/rateLimit_nat_budget.test.ts",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/xc_adjudication_auth.test.ts"
+        ],
+        "head_sha": "e831139821601e19c79be2080728ff5ab4325344",
+        "out_of_scope_files": [
+          "supabase/functions/api/index.ts — minimal wiring in serial group edge-index: tag each 401 with its refusal kind (local/liveness/Auth error_code via authRefusal/authRefusalKind), gate on peekAuthFailureBudget instead of the flat per-IP 'authfail' counter, charge via chargeAuthFailure(ip, presented, authRefusalOf(refused)); refresh gates on and charges its refresh-token identity. Without this the new module would be an unused export and the objective (behaviour) would not be met.",
+          "supabase/functions/api/__wf__/xc_adjudication_auth.test.ts — existing cross-component auth harness characterised the exact behaviour W11-01 removes (30 refusals from one IP, whatever their kind, lock the venue). Not weakened or skipped: the stuffing case is restated as 30 DISTINCT forged bearers (still asserts 429 on valid bearer/bootstrap/refresh), and a new NAT case (30 signed-out co-tenants + one replaying handset never lock valid peers out) is added; the fake Auth now answers session_not_found only for sessions it minted+revoked and bad_jwt for tokens it never issued."
+        ],
+        "package_id": "W11-01",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/rateLimit_nat_budget.test.ts (23 tests: per-credential shard replay isolation incl. beyond-shard-cap and concurrent replay, egress charged once per credential, liveness codes never charge egress, distinct forged bearers still close the stuffing budget, no-bearer / garbage-bearer / lowercase-scheme / locally-expired refusals never charge the egress and never deny valid read+refresh peers, anonymous junk throttled in its own lane without reaching Auth, refresh-token identity distinct from request bearer, refresh_token_already_used is liveness, memory fallback bounded with unrelated clients unaffected, Redis persistence + outage fallback, hash-only identities, refusal tagging)",
+          "supabase/functions/api/__wf__/xc_adjudication_auth.test.ts: 'NAT egress: 30 signed-out co-tenants (liveness 401) and one handset replaying ONE dead bearer never lock VALID bearers, bootstrap or refresh out of the same address'"
+        ],
+        "residual_risks": [
+          "Untagged 401s default to 'credential' (conservative): provider ID-token refusals from signInWithIdToken on bootstrap and refresh_token_not_found remain stuffing signal by design — 30 distinct such guesses from one egress still close the venue budget (intended stuffing protection), but a device repeatedly replaying ONE such credential is only shard-throttled.",
+          "isSessionBearer() reads the unverified JWT iss only to select the limiter lane; an attacker can forge a Supabase-issued-looking iss to leave the anonymous lane, but such a bearer then lands in its own credential shard (egress charged once per distinct forgery), so the worst case is the intended distinct-credential stuffing budget.",
+          "Per-egress shard cap / memory fallback are per isolate without Upstash; cross-isolate accounting still depends on Redis being configured (pre-existing property of rateLimit.ts).",
+          "w06_01_golden_parity.test.ts only honours PICKLE_AUDIT_PG_URL; the manifest's AC2 command with XC_PG_URL alone yields 12 ignored tests on any revision — a follow-up in that test file (outside this package) would let it also read XC_PG_URL."
+        ],
+        "summary": "W11-01 round 3 pushed to devin/pp/w11-01/impl-r3 @ e831139821601e19c79be2080728ff5ab4325344 (base 5632e1e3). Defect on BASE (rateLimit.ts / index.ts handleRequest ~L5013-5075): every 401 — missing bearer, garbage bearer, wrong scheme, locally expired token, GoTrue session_not_found for a signed-out co-tenant, or a replay of one dead bearer — called enforceRateLimit('authfail', ip, 30, 300s) on the flat per-IP counter, so 30 refusals of ANY kind from one NAT egress returned 429 to every valid peer's GET /v1/me, bootstrap and refresh for up to 5 min. Both r2 adversary breaks reproduced and resolved: (1) beyond the shard cap a replayed credential charged the egress on every refusal — now the egress is charged once per credential identity; (2) locally refused requests that never consulted Auth charged the egress — now they charge nothing (route credential) or a per-egress anonymous shard (junk), never the venue budget. Evidence: AC1 deno check exit 0; AC2 full Edge suite with disposable Postgres 909 passed / 0 failed / 0 ignored (exit 0); AC3 new test file on BASE 1 passed / 22 failed (exit 1), on HEAD 23 passed / 0 failed (exit 0); pnpm format:check exit 0; git diff --check exit 0. No PR opened, no production/mobile/RLS/migration/secret changes."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5a21137c-9cfd-40ae-9076-8dc8ed9a11bc/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC1",
+            "note": "VERIFIED at e8311398 (local Deno is 2.9.6, so the frozen 2.5.6 pin was exercised via npx exactly as specified). Output: 'Check file:///…/supabase/functions/api/index.ts', exit 0. Local copy artifacts/w11-01-review/ac1_deno_check.log (artifacts/ gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7bfda92a-fae2-4cc5-a49b-c80a52cab21f/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test",
+            "executed": 909,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC2",
+            "note": "VERIFIED at e8311398: 'ok | 909 passed (31 steps) | 0 failed (1m48s)', no '... ignored' result lines and no ignored count in the summary (ignored == 0). Disposable PostgreSQL: docker postgres:16 container 'w11-review-pg' on 127.0.0.1:55434 (throwaway password), prepared with supabase/tests/shim_auth.sql + all supabase/migrations/*.sql per the header of be-edge-routes-shots-rank.test.ts. PICKLE_AUDIT_PG_URL set to the same DB because w06_01_golden_parity.test.ts reads only that variable (otherwise 12 ignored). A first attempt against an unprepared DB failed 856/53 with 'relation auth.users does not exist' — environment, not candidate: https://la-hacks-rttothemoon.devinenterprise.com/attachments/89c24c1b-7065-4b0a-b82c-a456a2fb2ad5/ac2_edge_suite_unprepared_db_attempt1.log",
+            "passed": 909,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a36e2886-e43a-41c8-b056-066e9c3b529a/ac3_regress_head.log",
+            "command": "git worktree add --detach /home/ubuntu/wt-base-w11 5632e1e3940904a5200c54b472227d78076f1453 && cp supabase/functions/api/__wf__/rateLimit_nat_budget.test.ts /home/ubuntu/wt-base-w11/supabase/functions/api/__wf__/ && (cd /home/ubuntu/wt-base-w11/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json rateLimit_nat_budget.test.ts)  # BASE; then HEAD: cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json rateLimit_nat_budget.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W11-01-AC3",
+            "note": "VERIFIED. BASE 5632e1e3 with ONLY the new test file copied over: exit 1, 'FAILED | 1 passed | 22 failed' (the one pass is the hash-stability primitive; every NAT/liveness/local/shard test fails) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/27f53ae9-3ead-4557-b298-e24dc33b51a2/ac3_regress_base.log. HEAD e8311398: exit 0, 'ok | 23 passed | 0 failed'. The modified xc_adjudication_auth.test.ts was not copied to base because it is a changed (not new) file whose fake Auth harness was also changed; its new NAT test exercises the same shipped behaviour through the router and passes in AC2.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5a21137c-9cfd-40ae-9076-8dc8ed9a11bc/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7bfda92a-fae2-4cc5-a49b-c80a52cab21f/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/27f53ae9-3ead-4557-b298-e24dc33b51a2/ac3_regress_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a36e2886-e43a-41c8-b056-066e9c3b529a/ac3_regress_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89c24c1b-7065-4b0a-b82c-a456a2fb2ad5/ac2_edge_suite_unprepared_db_attempt1.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Bootstrap local refusals (garbage/expired/non-Google-Apple bearer on POST /v1/account/bootstrap) now charge no auth-failure budget at all (kind=local, identity!=null, anonymous=false → chargeAuthFailure charges nothing). They never consult Auth and remain bounded by IP_LIMIT + AUTH_BOOTSTRAP_LIMIT, so this is by design, but it is a deliberate relaxation vs BASE worth noting for the adversary pass (INFERRED from rateLimit.ts chargeAuthFailure 'local' branch + index.ts L5056-5058).",
+          "AC2 as literally written in the manifest (XC_PG_URL only) leaves 12 tests in w06_01_golden_parity.test.ts ignored because that file reads only PICKLE_AUDIT_PG_URL; both variables had to point at the disposable DB to reach ignored==0. Pre-existing on BASE, outside write_paths. The disposable Postgres also needs supabase/tests/shim_auth.sql + every supabase/migrations/*.sql applied first (a bare postgres:16 yields 53 'relation auth.users does not exist' failures — see ac2_edge_suite_unprepared_db_attempt1.log); the manifest command does not say so.",
+          "isSessionBearer() selects the limiter lane from the UNVERIFIED JWT iss; a forged iss escapes the anonymous lane but lands in its own credential shard and charges the egress once per distinct forgery, so worst case equals the intended distinct-credential stuffing budget (INFERRED, matches implementer's residual risk)."
+        ],
+        "package_id": "W11-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "e831139821601e19c79be2080728ff5ab4325344",
+        "scope_violation": false,
+        "summary": "APPROVE W11-01 at e831139821601e19c79be2080728ff5ab4325344 (base 5632e1e3). SCOPE (VERIFIED, git diff --stat): 4 files — rateLimit.ts and __wf__/rateLimit_nat_budget.test.ts are write_paths; index.ts is under serial group edge-index which this package holds and is the minimum wiring (tag 401s with refusal kind, gate on peekAuthFailureBudget, chargeAuthFailure, refresh gates/charges its refresh-token identity) — without it the module would be an unused export, so 1b is satisfied; __wf__/xc_adjudication_auth.test.ts is not under any serial-group path, is listed in out_of_scope_files, and is not weakened: the base characterisation body (30 distinct forged bearers → 429 for valid bearer/bootstrap/refresh) is retained verbatim with only its title clarified, the fake Auth now answers bad_jwt for never-minted tokens vs session_not_found for minted+revoked ones (mirrors GoTrue), and a new NAT test is ADDED. scope_violation=false. ACCEPTANCE (all re-run by me): AC1 exit 0; AC2 909 passed / 0 failed / 0 ignored, exit 0, on a disposable postgres:16 with shim+migrations applied; AC3 base 1 passed/22 failed exit 1 → head 23 passed/0 failed exit 0 (regression_fails_on_base=true). INVARIANTS (VERIFIED by reading the full diff): no test skipped/deleted/reordered; no '|| true', @ts-ignore, any, eslint-disable, ignore:true or inflated timeouts added; no existing comments removed (all '-' lines in index.ts/rateLimit.ts are code); no migrations, RLS, grants, mobile, secrets or production touched; session checks not weakened — isSessionBearer/authRefusalKind only choose a limiter lane, never grant access; the flat per-IP 'authfail' egress budget (30/300s) is still peeked pre-route and still charged once per distinct refused credential, so credential stuffing remains venue-throttled; liveness (session_not_found/session_expired/user_not_found/user_banned/refresh_token_already_used) and local refusals never charge the egress; credential identities are sha256[:32] hashes, never raw tokens; the internal X-Auth-Refusal-* tags are stripped by authRefusalOf on every 401 path (bootstrap, refresh, authenticate, deletion-capability) before the response leaves the function; memory fallback bounded by MEMORY_WINDOW_MAX; Redis 5xx degrades to memory. git diff --check exit 0; prettier --check on the four files exit 0. No PR opened, nothing pushed or deployed. Three non-blocking notes recorded (bootstrap local refusals now uncharged by design; AC2 environment needs shim+migrations and PICKLE_AUDIT_PG_URL to reach ignored==0; unverified-iss lane selection bounded by the distinct-credential budget).",
+        "verdict": "approve"
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-8-keep"
+}

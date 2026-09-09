@@ -1,5 +1,27 @@
 {
-  "agents": [],
+  "agents": [
+    {
+      "label": "implement-W01-05-r1",
+      "phase": "implement",
+      "prompt_sha256": "a003718b7bd0495c6dea59f39d8af78e39b929626f04e5515de55054d61def1a",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-05-r1",
+      "phase": "review",
+      "prompt_sha256": "d41713f1cc6838ddab43f4a64d3c5e280104cc18e19d65dfe6e73411c0302ead",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-05-r1",
+      "phase": "adversary",
+      "prompt_sha256": "f86b95ff5aef69b5aa2992549dc6012dd80e3d619b41683787b947378ba9f760",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
   "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
   "integration_branch": "codex/production-continuation-20260907",
   "lib_version": "2026-09-08.7",
@@ -7,7 +29,233 @@
   "manifest_version": "2026-09-08.3",
   "package_id": "W01-05",
   "requeued_from": null,
-  "rounds": [],
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/87007138-a7cd-4590-9f26-8899b1c7c62b/jest-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8d63e8e-ef2b-405d-88d0-bd061f92d010/tsc.log"
+        ],
+        "attack_branch": "devin/pp/w01-05/attack-4277a655",
+        "attack_branch_sha": "3763a98f954f6b7c5d4078ce440dc92661761f7b",
+        "attacked_sha": "4277a6557344284d96bb7c6fb0ae95d50ccbe8bf",
+        "attacks_tried": 8,
+        "breaks": [
+          {
+            "expected": "outcome.kind === 'partial' with record.result === null and partialOutcome.reasonCode === 'access.release_not_authorized'; one durable local_analysis_record; Result renders 'RESULT · BENCHMARK UNAVAILABLE' — free-rating snapshot unchanged (that part held).",
+            "observed": "prepareOriginalCaptureAnalysis + runOriginalCaptureAnalysis with a verified native-media clip: reserve called once and refused with typed 409 access.release_not_authorized; outcome = {kind:'unavailable', reason:'Validated ratings are not available right now. No rating was counted.'}; local_analysis_record count 0; capture status still 'awaiting_model'; no local_shot/outbox (non-chargeable holds). AnalyzeScreen.tsx L1810-1853 routes every signed-in, scoring-capable, non-confirmation capture through this path, so the W01-05 objective ('mechanics without validated benchmark ... Result must render an explicit benchmark unavailable state') is unreachable on the primary shipping path; only the technique-confirmation continuation (plain runCaptureAnalysis) reaches the new partial. Candidate guards this deliberately via `if (original || !isReleaseNotAuthorized(error))` (runCaptureAnalysis.ts) and the implementer summary declares it intentional — reviewer must decide whether 'deliberately excluded' satisfies an objective phrased as shipping behaviour.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'ATTACK 1'  (exit 1; 1 failed)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Shipping original-operation path (AnalyzeScreen signed-in pose-backed capture) never produces the partial: the settled 409 is mapped to plain 'unavailable', mechanics are discarded, nothing Result-readable is stored"
+          },
+          {
+            "expected": "replay.kind === 'partial', replay.replayed === true, same analysisId, no additional reserve call, free-rating snapshot unchanged.",
+            "observed": "First continuation run: 409 -> kind 'partial', record committed, reserve called once. Second run with the identical techniqueConfirmation request: {kind:'unavailable', cause:'recovery_pending'}; no second reserve (good) but the partial is never returned. Root cause (INFERRED, runCaptureAnalysis.ts L1246-1266): the early continuation gate reads the existing journal row and returns recoveryPendingOutcome() when `existing.state !== 'committed' && existing.releaseOutcome !== 'low_confidence'` — a terminal 'reservation_rejected' partial row fails that test before the later readPartialReplay() call (≈L1451) is ever reached. The candidate's own replay test only covers the plain begin() not-created path, which shipping does not use for confirmation continuations. Effect: after process death/restart or a stale-screen re-confirm on the only shipping path that reaches partial, the user is held in 'recovery pending' with no permit to recover.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'ATTACK 2'  (exit 1; 1 failed)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Replaying a technique-confirmation continuation that settled as partial returns recovery_pending forever instead of the durable partial (readPartialReplay in the techniqueConfirmation+existing branch is unreachable)"
+          },
+          {
+            "expected": "Write and read paths agree: either sanitize/truncate the message before persisting or refuse to settle as partial; first run, replay and Result must all agree on the settled partial.",
+            "observed": "For message '' / 'x'.repeat(513) / 'y'.repeat(2000): first run -> kind 'partial', reserve once, no local_shot/outbox. Then replay -> {kind:'unavailable', cause:'recovery_pending'}; ResultScreen for that analysisId renders no result-benchmark-status / result-partial-benchmark nodes and neither 'BENCHMARK UNAVAILABLE' nor 'RATING NOT CONSUMED' label (falls to the generic not-scored branch). Root cause (INFERRED, partialOutcome.ts L46, L89): marker() accepts any message on the write path but readPartialCaptureAnalysisRecord requires 1..512 chars, so the client writes a record its own reader rejects. Server-controlled string length decides whether the settled partial is honoured. The production edge fn currently sends a fixed constant message, so exploitability depends on the authority deviating.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'ATTACK 4'  (exit 1; 3 failed)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Refusal message boundary (empty, 513 chars, 2000 chars): first run reports 'partial' and commits a record that the storage validator then rejects — Result loses the benchmark-unavailable state and replay becomes recovery_pending"
+          },
+          {
+            "expected": "Retry of a settled, permit-less refusal with no durable record should re-run mechanics inference and commit the partial (nothing chargeable is at stake), or at minimum surface an explicit terminal outcome rather than an unrecoverable hold.",
+            "observed": "failNext('INTO local_analysis_record') on the first run: runCaptureAnalysis throws (no explicit outcome), transaction rolls back cleanly (records 0, capture status unchanged, no local_shot/outbox, access snapshot unchanged — conservation held). Retry of the same operation: reserve NOT called again (journal row already terminal 'reservation_rejected'), readPartialReplay finds no record and returns {kind:'unavailable', cause:'recovery_pending'} — but there is no permit and no server state to recover; the settled non-chargeable run can never deliver its mechanics.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx -t 'ATTACK 5'  (exit 1; 1 failed)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx",
+            "title": "Crash/write failure between the settled 409 and the local record commit leaves the operation permanently 'recovery pending' with nothing to recover"
+          }
+        ],
+        "package_id": "W01-05",
+        "summary": "Attacked candidate 4277a655 (branch devin/pp/w01-05/impl-r1) with 8 attack groups / 18 Jest tests in apps/mobile/__tests__/w01PartialOutcomeAttack.test.tsx on branch devin/pp/w01-05/attack-4277a655 @ 3763a98f (pushed normally, no force, no PR; production code and candidate tests untouched — `git diff --stat 4277a655 HEAD` = 1 file, 871 insertions). VERIFIED: `cd apps/mobile && npx jest --ci __tests__/w01PartialOutcomeAttack.test.tsx` exit 1, 18 executed / 12 passed / 6 failed / 0 skipped (artifacts/w01-05-attack/jest-attack.log). VERIFIED candidate acceptance on unchanged HEAD earlier: AC1 exit 0, 3 suites / 72 passed. VERIFIED `cd apps/mobile && npx tsc --noEmit` exit 0 with the attack file present (after `npm ci`; a first run failed only on a stale node_modules missing @sentry/react-native — artifacts/w01-05-attack/npm-ci.log exit 0). VERIFIED root `npx eslint` exit 0 and `npx prettier --check` exit 0 on the attack file. Attacks that HELD (12 passing tests): (3) concurrent double submit of the same operation — one reserve, one partial, second caller recovery_pending then replays the partial; (6) 429+Retry-After, 503, network failure, 409 with a different code, 409 release code with non-JSON body — none settle as partial, no record, no shot/outbox; (7) tampered persisted partial records (fabricated scored result, marker rewritten chargeable, status flipped to scored, record re-bound to another capture, truncated JSON) — never replay as scored and never trigger a fresh reservation; (8) account switch while the refusal is in flight writes nothing under either owner. Free-rating conservation held in every attack (accessStore snapshot byte-identical, zero local_shot/outbox inserts). BREAKS (4, all reproduced by failing tests): P1 — the shipping original-operation path never yields the partial (409 -> plain 'unavailable', mechanics discarded, nothing stored), so the objective is only reachable via the technique-confirmation continuation; P1 — replaying that continuation returns recovery_pending forever because the early continuation gate returns before readPartialReplay is reached; P2 — refusal message length boundary (0 / >512 chars) makes the writer persist a record its own reader rejects (Result loses the benchmark-unavailable state, replay holds); P2 — a write failure between the settled 409 and the commit leaves the operation in an unrecoverable recovery_pending hold. No money loss, no charge, no leak, no fabricated score was achievable in any attack. Not attempted: SQL/Edge role attacks (the candidate adds no new SQL or Edge surface), far-future/past clocks (partial marker carries no client clock decision), Apple-side runtime (Linux cannot establish it; Mac runner forbidden for this package)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w01-05/ac1.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx",
+            "executed": 72,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC1",
+            "note": "VERIFIED on HEAD 4277a655: 3 suites passed, 72 tests passed.",
+            "passed": 72,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w01-05/ac2-head.log",
+            "command": "git worktree add /home/ubuntu/w01-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp apps/mobile/__tests__/w01PartialOutcome.test.tsx <worktree>/apps/mobile/__tests__/ && (cd <worktree>/apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx) → FAIL; (cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx) on HEAD → PASS",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC2",
+            "note": "BASE run (5c1859a8 + only the committed test file copied over; worktree status showed just the untracked test + node_modules symlinks): exit 1, 4 executed / 0 passed / 4 failed / 0 skipped — every case fails at `expect(outcome.kind).toBe('partial')` receiving 'unavailable' (artifacts/w01-05/ac2-base.log). HEAD run: exit 0, 4/4 passed (artifacts/w01-05/ac2-head.log). Proof outcome = 0.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w01-05/ac3.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC3",
+            "note": "VERIFIED on HEAD after `cd apps/mobile && npm ci` (the snapshot lacked apps/mobile/node_modules/@sentry; a pre-install tsc run failed only on missing declared dependencies, not on source).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w01-05/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx && npx prettier --check apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC4",
+            "note": "Run from repo root (root ESLint + root Prettier 3.9.6). Also VERIFIED: `pnpm format:check` exit 0 (artifacts/w01-05/format-check.log) and `git diff --check HEAD~2 HEAD` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression test first (real node:sqlite capture-analysis harness, fetch mock returning the Edge's typed 409 on POST /v1/analysis-permits and throwing on any other URL, real accessStore fixture, real ResultScreen render). Then the smallest fix inside write_paths: an explicit partial marker module, a `partial` settlement branch in runCaptureAnalysis that reuses the journal's existing terminal `reservation_rejected` state (no new journal vocabulary, no schema/DDL change, no api.ts/shared-types/repository.ts edits), durable owner-scoped storage in the existing local_analysis_record table with the app's existing 'result: null = no product result' vocabulary, replay via the same journal identity, and an honest Result branch using the canonical benchmark-unavailable copy. One additive 7-line AnalyzeScreen hunk routes the partial to Result.",
+        "attachment_urls": [],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — before `npm ci`, failed with 'Cannot find module @sentry/react-native' / '@sentry/browser' because apps/mobile/node_modules/@sentry was absent from the environment snapshot (environment issue, not source); passes after `cd apps/mobile && npm ci`.",
+          "cd apps/mobile && npx jest --ci --silent — 1 pre-existing skipped suite on both base and HEAD (316 suites total, 6069 tests: 6068 passed / 1 skipped); not part of AC1's suites."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w01-05/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w01PartialOutcome.test.tsx",
+          "apps/mobile/src/analysis/partialOutcome.ts",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/src/screens/ResultScreen.tsx",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx"
+        ],
+        "head_sha": "4277a6557344284d96bb7c6fb0ae95d50ccbe8bf",
+        "out_of_scope_files": [
+          "apps/mobile/src/screens/AnalyzeScreen.tsx — 7-line additive hunk (not under any serial_group_paths prefix): route the new `partial` outcome straight to Result so the objective's 'Result renders benchmark unavailable' holds on every intent basis; without it a predicted-stroke partial would fall into the generic `analyzed` phase whose `showResult: hasResult` hides Result because the partial carries `result: null`. No outbox sync, free-limit prompt or review report is triggered on this branch."
+        ],
+        "package_id": "W01-05",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w01PartialOutcome.test.tsx"
+        ],
+        "residual_risks": [
+          "Trigger is the release authority's typed HTTP 409 `access.release_not_authorized` reserve refusal (the only server signal on BASE_SHA that settles 'no validated benchmark, no rating counted' BEFORE a permit exists). A permit that is reserved and only later found benchmark-less still follows the existing permit-backed scored/low_confidence settlement; no Edge/mobile-data API change was made to add a `partial` release outcome (api.ts and supabase/functions/api/index.ts are held by other groups).",
+          "Partial outcomes are deliberately excluded from evaluation-trial telemetry because shared TRIAL_OUTCOME_KINDS (packages/shared-types, held by shared-types group) has no `partial` kind; adding one is a separate additive shared-types change.",
+          "Original-operation (saved-original recovery) runs keep the pre-existing `unavailable` + failed-release semantics on the typed 409 (`original ||` guard) so the original-owner recovery ledger is unchanged; extending partial to that flow would need originalAnalysisOperations completion-kind vocabulary changes.",
+          "The partial record is stored with `result: null` (the app's existing 'no product result' storage vocabulary) plus the marker; readers that require a non-null ShotAnalysis (isVerifiedCompletedCaptureRecord / savedTechniqueConfirmation) are bypassed for partials by readPartialReplay, which validates identity + marker + envelope but does not re-run the full pipeline record validator (that validator requires a ShotAnalysis and lives in packages/analysis-pipeline, outside write_paths)."
+        ],
+        "summary": "Defect on BASE_SHA (INFERRED from code, VERIFIED by the new test failing there): apps/mobile/src/analysis/runCaptureAnalysis.ts had no partial outcome at all. RunCaptureAnalysisOutcome (≈L152-204) is scored | low_confidence | unavailable | quality_blocked | needs_technique_confirmation; the reserve catch block (≈L1478-1510 on base) mapped EVERY non-paywall ApiError — including the release authority's settled, typed 409 `access.release_not_authorized` ('No rating was counted') — to `{kind:'unavailable'}` after journal.reservationFailed(), so mechanics were never delivered and nothing Result-readable was stored, while the only path that delivers mechanics labels them `resultKind:'scored'` (permit-backed saveAnalysis → local_shot + outbox = chargeable) or `low_confidence` (packages/analysis-pipeline record build, ≈L1600). ResultScreen.tsx had no benchmark-unavailable state on the non-scored branch (only 'RESULT · NOT SCORED', ≈L510-530); TECHNIQUE_BENCHMARK_UNAVAILABLE was rendered only inside the scored branch. accessStore.ts (VERIFIED read) never decrements free ratings locally — canonicalAccess is a server snapshot — so it needed no change; the fix keeps the partial path from touching any ledger-affecting route so the snapshot stays byte-identical (pinned by the test). Fix: new apps/mobile/src/analysis/partialOutcome.ts (RELEASE_NOT_AUTHORIZED_CODE, isReleaseNotAuthorized(), PartialOutcomeMarker {status:'partial', billingDisposition:'not_chargeable', withheld:'technique_benchmark', reasonCode, message}, toPartialCaptureAnalysisRecord(), readPartialOutcome(), readPartialCaptureAnalysisRecord() storage validator bound to the journal's analysisId+captureId). runCaptureAnalysis.ts: the typed 409 on a non-original run becomes `settlement = {kind:'partial'}` (journal row already terminal `reservation_rejected`, permitId null, lastHttpStatus 409 — no release/finalize call); mechanics inference still runs; the record is persisted owner-scoped to local_analysis_record with result:null + partialOutcome marker and the capture marked analyzed, in one transaction, never through saveAnalysis/saveLocalOnlyAnalysis/local_shot/outbox; new `kind:'partial'` outcome; readPartialReplay() makes replays of the same operation (both the plain begin() not-created path and the techniqueConfirmation+existing path) return the durable partial instead of recovery_pending, without a second reservation; a needs_technique_confirmation record under a permit-less refusal returns `unavailable` with the authority's message rather than saving a half-settled continuation; partial is excluded from evaluation-trial telemetry (shared TRIAL_OUTCOME_KINDS has no partial and shared-types is held by another group) and cancellation maps it to cancelledOutcome() like low_confidence. ResultScreen.tsx: non-scored branch reads the marker and renders label 'RESULT · BENCHMARK UNAVAILABLE', kicker 'MECHANICS RECORDED · RATING NOT CONSUMED', testID result-benchmark-status with the canonical TECHNIQUE_BENCHMARK_UNAVAILABLE copy, and the server's own settled message — no score ring, no confidence, no range. Original-operation (recovery) flows deliberately keep their existing failure semantics (guarded by `original ||`). Commits: 5472558f (test only, fails on base: 4/4 failed, outcome 'unavailable'), 4277a655 (implementation). Full mobile suite VERIFIED on HEAD: `cd apps/mobile && npx jest --ci --silent` exit 0, 316 suites (315 passed, 1 pre-existing skipped suite), 6068 passed / 1 skipped / 0 failed (artifacts/w01-05/jest-full.log). Root `pnpm format:check` exit 0; `git diff --check HEAD~2 HEAD` exit 0. No PR opened; pushed normally (no force)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a46cbc8-6314-4143-a547-562f13621845/ac1.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx __tests__/accessStore.test.ts __tests__/analyzeScreenFullFlowE2E.test.tsx",
+            "executed": 72,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC1",
+            "note": "VERIFIED on 4277a655 after `cd apps/mobile && npm ci` (exit 0). Test Suites: 3 passed, 3 total; Tests: 72 passed, 72 total; 0 skipped. Local copy: artifacts/review-w01-05/ac1.log.",
+            "passed": 72,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b29be0ec-7261-4903-992e-689479300ffd/ac2-head.log",
+            "command": "git worktree add /home/ubuntu/w01-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && (symlink node_modules dirs) && cp apps/mobile/__tests__/w01PartialOutcome.test.tsx /home/ubuntu/w01-base/apps/mobile/__tests__/ && (cd /home/ubuntu/w01-base/apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx) ; (cd apps/mobile && npx jest --ci --silent __tests__/w01PartialOutcome.test.tsx)",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC2",
+            "note": "PROOF outcome 0. BASE run (worktree at 5c1859a8; `git status --short` showed only the untracked test file plus node_modules symlinks; `git diff --stat` empty): exit 1, Tests: 4 failed, 4 total (executed 4 / passed 0 / failed 4 / skipped 0), every case fails at expect(outcome.kind).toBe('partial') receiving 'unavailable' — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/d202bb10-fe82-4de5-9a6b-87bd62133674/ac2-base.log (artifacts/review-w01-05/ac2-base.log). HEAD run on 4277a655: exit 0, Tests: 4 passed, 4 total (artifacts/review-w01-05/ac2-head.log). The suite pins expect(useAccessStore.getState().canonicalAccess).toEqual(before) — free-rating view unchanged.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9435bbd7-6a05-4c9a-bc37-fdda730b398c/ac3.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC3",
+            "note": "VERIFIED on 4277a655 after `npm ci` in apps/mobile: no diagnostics, exit 0. Local copy: artifacts/review-w01-05/ac3.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b951986-e79e-4047-9889-d613a2421388/ac4.log",
+            "command": "npx eslint apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx && npx prettier --check apps/mobile/__tests__/w01PartialOutcome.test.tsx apps/mobile/src/analysis/partialOutcome.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/ResultScreen.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-05-AC4",
+            "note": "VERIFIED from repo root on 4277a655 covering all 5 files in `git diff --stat BASE..HEAD`: eslint exit 0 (no output); prettier 'All matched files use Prettier code style!' exit 0. Local copy: artifacts/review-w01-05/ac4.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a46cbc8-6314-4143-a547-562f13621845/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d202bb10-fe82-4de5-9a6b-87bd62133674/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b29be0ec-7261-4903-992e-689479300ffd/ac2-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9435bbd7-6a05-4c9a-bc37-fdda730b398c/ac3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5b951986-e79e-4047-9889-d613a2421388/ac4.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/screens/AnalyzeScreen.tsx (L1328-1334) is outside write_paths (it is in W05-04/W09-06 write_paths but under no serial_group_paths prefix). Judged justified minimal wiring: 7 additive lines; without them a predicted-stroke partial (result: null) would fall into strokeIntentPresentation() -> analyzed phase with showResult: hasResult (L558) === false, so Result would never open. INFERRED from code; the AC1 E2E suite still passes.",
+          "runCaptureAnalysis.ts L1748-1753 / L1766-1775: when the release authority refuses (typed 409) AND the engine itself abstained (record.result already null), `partial` is null, the record is saved without a marker and the run returns kind 'low_confidence' (cleanup('low_confidence') on a terminal reservation_rejected row is a no-op in runJournal.requestRelease L498-522). Honest (zero validated outputs, nothing charged, no local_shot/outbox) but such a run is not replayable as a partial and falls back to readJournalOutcome -> recovery_pending, same as base for any refused run. Not covered by a test. INFERRED.",
+          "toPartialCaptureAnalysisRecord() drops the whole ShotAnalysis (result: null), so a low_confidence mechanics result under refusal is presented as 'MECHANICS RECORDED · RATING NOT CONSUMED' with the record's faults/uncertainty/evidence kept but the low-confidence disposition of the mechanics not surfaced in Result copy. No score/confidence/range is rendered, so it is not an invented-confidence issue; noted as a copy-fidelity follow-up. INFERRED.",
+          "Original-operation (saved-original recovery) runs keep base 'unavailable' semantics on the typed 409 (`original ||` guard, runCaptureAnalysis.ts L1591); partial delivery does not apply to that flow. Matches implementer's stated residual risk.",
+          "Partial outcomes are excluded from evaluation-trial telemetry (shared TRIAL_OUTCOME_KINDS has no 'partial'; shared-types is held by another group)."
+        ],
+        "package_id": "W01-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4277a6557344284d96bb7c6fb0ae95d50ccbe8bf",
+        "scope_violation": false,
+        "summary": "APPROVE W01-05 at 4277a6557344284d96bb7c6fb0ae95d50ccbe8bf. Scope: `git diff --stat 5c1859a8..4277a655` = 5 files (+737/-22): w01PartialOutcome.test.tsx (new), src/analysis/partialOutcome.ts (new), src/analysis/runCaptureAnalysis.ts, src/screens/ResultScreen.tsx (all in write_paths) and src/screens/AnalyzeScreen.tsx (7 additive lines, listed in out_of_scope_files, not under any serial_group_paths prefix; judged justified wiring — without it a predicted-stroke partial with result:null is trapped in the analyzed phase by showResult: hasResult). accessStore.ts unchanged — VERIFIED it is a server snapshot with no local decrement; the partial path never reaches saveAnalysis/local_shot/outbox/permit release, and the new suite pins canonicalAccess byte-identical. All four acceptance criteria re-run by me: AC1 72/72 exit 0; AC2 proof holds (base 4/4 FAIL 'unavailable' vs partial, HEAD 4/4 PASS); AC3 tsc exit 0; AC4 eslint+prettier exit 0 on every changed file. Diff review vs REVIEW.md/invariants: no existing tests touched; no `any`/@ts-ignore/eslint-disable/|| true/skip; no comment lines removed (22 deletions are all code); no migrations/RLS/grants/session/Edge changes; owner isolation kept (readPartialReplay uses forDataOwner + owner_key/id/capture_id binding; partial write is inside the owner-scoped transaction); billing conservation kept (typed 409 → journal terminal reservation_rejected, permitId null, no permit/no release call, no local_shot/outbox; needs_technique_confirmation under refusal returns unavailable rather than a half-settled continuation); Result partial branch renders 'RESULT · BENCHMARK UNAVAILABLE', 'MECHANICS RECORDED · RATING NOT CONSUMED', canonical TECHNIQUE_BENCHMARK_UNAVAILABLE and the server's own message — no score ring/confidence/range, copy free of prohibited terms. Behaviour is shipped end to end (AnalyzeScreen → Result → readPartialOutcome consumer). Non-blocking notes listed (abstained-mechanics-under-refusal path yields low_confidence without marker; low_confidence mechanics disposition not surfaced in partial copy; original-operation recovery keeps base semantics; telemetry exclusion). Linux-only verification: TypeScript/Jest only, no Apple-native paths changed, so no Mac evidence required.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
   "start_round": 1,
   "status": "RUNNING",
   "wave_id": "wave-5"

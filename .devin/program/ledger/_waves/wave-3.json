@@ -1,0 +1,158 @@
+{
+  "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "packages": {
+    "H04-01": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/h04-01/impl-r4",
+        "head_sha": "7aafae061d0eb74e98306b636a5efdbfffed59e1",
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    },
+    "H06-01": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/h06-01/impl-r4",
+        "head_sha": "0d44c72071b23c4900240bcc2f30f32be22c7672",
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    },
+    "H09-01": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/h09-01/impl-r3",
+        "head_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "P0-01": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/p0-01/impl-r3",
+        "head_sha": "f010c464e4ed1b43541bdc70c5bc873da4f4a33a",
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "P0-02": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "P0-05": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/p0-05/impl-r3",
+        "head_sha": "981e24868158673e7c9fe53d101a5fe2699105a3",
+        "round": 3
+      },
+      "status": "ACCEPTED"
+    },
+    "W02-03": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w02-03/impl-r5",
+        "head_sha": "ddf33b225fd6ba1c958eb6873d0ed068d11a3e04",
+        "round": 5
+      },
+      "status": "ACCEPTED"
+    },
+    "W06-06": {
+      "agent_counts": {
+        "completed": 4,
+        "failed": 0,
+        "launched": 4,
+        "requested": 4
+      },
+      "candidate": null,
+      "status": "BLOCKED_EXTERNAL"
+    },
+    "W07-02": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W07-05": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w07-05/impl-r4",
+        "head_sha": "6dc61a4da49cad1f5a88de514d9666215bcf67d3",
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    },
+    "W10-02": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W10-03": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w10-03/impl-r1",
+        "head_sha": "4675b54fdead87ae55f55ee4124a5fe618e0d579",
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "wave_id": "wave-3"
+}
