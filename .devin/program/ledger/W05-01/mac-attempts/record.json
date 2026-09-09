@@ -1,0 +1,25 @@
+{
+  "package_id": "W05-01",
+  "wave_id": "mac-attempts",
+  "status": "BLOCKED_EXTERNAL",
+  "candidate_sha": "76999e4c95fed039e29d63aef2c446dc392d4cc5",
+  "attempts": [
+    {
+      "ref": "ci/mac-w05-01-r2",
+      "run": 34296396532,
+      "result": "job canceled ~10 min after runner pickup during 'Run canonical Apple verification'; no artifacts"
+    },
+    {
+      "ref": "ci/mac-w05-01-r2b",
+      "run": 34297612607,
+      "result": "queued ~40 min, job started 01:44:57Z, failed ~01:55Z during 'Run canonical Apple verification' (runner lost contact); no artifacts"
+    },
+    {
+      "ref": "ci/mac-w05-01-r2c",
+      "run": 34304519744,
+      "result": "queued ~11 min, job started 02:57:23Z, failed 03:07:24Z while actions/checkout was still in_progress (runner lost contact); no artifacts"
+    }
+  ],
+  "diagnosis": "Self-hosted M4 runner picks up jobs then disconnects ~10 minutes later on three consecutive runs (also during plain checkout), consistent with the Mac sleeping / losing network. Not a code failure. Owner action: keep the Mac awake (caffeinate -dims) and confirm the actions-runner service is online; then rerun scripts/mac-full-verify.sh --remote on the candidate.",
+  "recorded_at": "2026-09-09T03:45:56.492843+00:00"
+}
