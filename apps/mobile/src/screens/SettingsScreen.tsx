@@ -37,6 +37,10 @@ import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
 import { showBrandNotice } from '../design/BrandNotice';
+import {
+  OfflineAllocationCard,
+  useOfflineJourney,
+} from '../components/OfflineAllocationCard';
 
 async function openLegalPage(label: string, url: string): Promise<void> {
   try {
@@ -244,6 +248,8 @@ export function SettingsScreen() {
     }, [refreshAccess, syncedAccount]),
   );
 
+  const offlineJourney = useOfflineJourney();
+
   const accountLabel =
     session === null
       ? '—'
@@ -363,6 +369,12 @@ export function SettingsScreen() {
             />
           ) : null}
         </Card>
+        {syncedAccount && offlineJourney ? (
+          <OfflineAllocationCard
+            state={offlineJourney}
+            style={styles.offlineCard}
+          />
+        ) : null}
 
         <SectionTitle title="Player" />
         <Card style={styles.groupCard}>
@@ -601,6 +613,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   groupCard: { paddingHorizontal: space.md, paddingVertical: 2 },
+  offlineCard: { marginTop: space.sm },
   row: {
     minHeight: 66,
     flexDirection: 'row',
