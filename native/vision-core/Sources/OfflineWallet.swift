@@ -8,18 +8,30 @@ import Foundation
 #endif
 
 /// Offline wallet (W05): the device-side vault for signed offline execution
-/// grants and receipts that have not yet reached the server. One Keychain
-/// item per owner holds the whole wallet, so a replace is a single
-/// SecItemUpdate — either the previous wallet or the new one is on disk,
-/// never a mix. The item lives in its own `THIS_DEVICE_ONLY` service
-/// (distinct from the session vault), is never synchronised, and carries an
-/// HMAC over `(account, payload)` keyed by a per-installation random key in a
-/// sibling item: flipped bytes, a wallet copied between owners, or a payload
-/// whose key is gone are reported as typed failures — never as an empty
-/// wallet, and never overwritten without an explicit discard after
-/// reconciliation. Signature and policy verification of the grant itself is
-/// the caller's job; the wallet only guarantees shape, integrity and
-/// isolation of what it was asked to keep.
+/// grants and receipts that have not yet reached the server. Every owner has
+/// three Keychain items in the wallet's own `THIS_DEVICE_ONLY` service
+/// (distinct from the session vault, never synchronised):
+///
+/// - `wallet.v1.<owner>` — the whole wallet in one sealed envelope, so a
+///   replace is a single compare-and-swap item write: either the previous
+///   wallet or the new one is on disk, never a mix, and a concurrent writer
+///   (another `OfflineWallet` instance, another process) gets
+///   `revision_conflict` instead of silently overwriting unsent receipts.
+/// - `integrity-key.v1.<owner>` — a random per-owner key for the HMAC that
+///   seals the wallet and the fence. A corrupt key affects one owner only and
+///   leaves through `discardCorrupt` like any other corruption.
+/// - `fence.v1.<owner>` — the highest revision ever committed for the owner.
+///   A wallet whose revision is behind its fence was rolled back to an older
+///   (authentic) envelope and is reported `tampered`; the fence survives
+///   `clear`, so revisions never restart for an owner on this installation.
+///
+/// Flipped bytes, a wallet copied between owners, a payload whose key is
+/// gone, an unsupported envelope version and a rolled-back wallet are typed
+/// failures — never an empty wallet, and never overwritten without an
+/// explicit `discardCorrupt` after reconciliation. Signature and policy
+/// verification of the grant itself is the caller's job; the wallet only
+/// guarantees shape, integrity, monotonicity and isolation of what it was
+/// asked to keep.
 public enum OfflineWalletFailure: String, CaseIterable, Codable, Sendable {
   case invalidOwner = "invalid_owner"
   case invalidGrant = "invalid_grant"
@@ -37,6 +49,17 @@ public enum OfflineWalletFailure: String, CaseIterable, Codable, Sendable {
 
   /// Stable bridge error code (`wallet.<failure>`).
   public var code: String { "wallet.\(rawValue)" }
+
+  /// Failures that mean "bytes are stored but cannot be trusted"; only these
+  /// are ever returned by `discardCorrupt`.
+  public var isUnreadableState: Bool {
+    switch self {
+    case .tampered, .integrityKeyMissing, .unsupportedVersion:
+      return true
+    default:
+      return false
+    }
+  }
 
   /// Maps a Security framework `OSStatus` onto the three storage failures the
   /// caller can act on: retry later (device locked / keychain unavailable),
@@ -107,7 +130,8 @@ public struct OfflineWalletContents: Codable, Equatable, Sendable {
 
 public struct OfflineWalletSnapshot: Equatable, Sendable {
   public let ownerId: String
-  /// Monotonic per-owner write counter; 0 means "no wallet stored".
+  /// Monotonic per-owner write counter (never above `OfflineWallet.maxRevision`
+  /// so JS can represent it exactly); 0 means "no wallet stored".
   public let revision: UInt64
   public let contents: OfflineWalletContents
 
@@ -118,13 +142,16 @@ public struct OfflineWalletSnapshot: Equatable, Sendable {
   }
 }
 
-/// One secure item store. `write` must replace the item's value atomically
-/// (the Keychain does so per item); implementations throw
-/// `OfflineWalletError` for storage faults.
+/// One secure item store with compare-and-swap semantics. Implementations
+/// throw `OfflineWalletError` for storage faults and must make each write or
+/// delete conditional on the item still holding exactly the bytes the caller
+/// last read (`nil` = the item must be absent), returning `false` — having
+/// changed nothing — when that precondition no longer holds. The Keychain
+/// does this per item via a digest attribute in the update/delete query.
 public protocol OfflineWalletSecureStore {
   func read(account: String) throws -> Data?
-  func write(account: String, data: Data) throws
-  func delete(account: String) throws
+  func write(account: String, data: Data, ifUnchangedFrom previous: Data?) throws -> Bool
+  func delete(account: String, ifUnchangedFrom previous: Data) throws -> Bool
 }
 
 public final class OfflineWallet {
@@ -133,16 +160,26 @@ public final class OfflineWallet {
     public static let maxReceipts = 64
     public static let maxGrantJwsBytes = 16_384
     public static let maxReceiptPayloadBytes = 8_192
-    public static let maxEnvelopeBytes = 1_048_576
+    /// Sealed-envelope budget. Sized so that a wallet at every other limit
+    /// (8 maximal grants with maximal ids, 64 maximal receipts with maximal
+    /// ids) fits even when every receipt byte doubles under JSON escaping:
+    /// 33 B header + 8 × (16 384 + 2 × 128 + 64) + 64 × (2 × 8 192 + 2 × 128 + 96)
+    /// ≈ 1.15 MiB, rounded up to 1.25 MiB.
+    public static let maxEnvelopeBytes = 1_310_720
   }
 
   public static let keychainService = "com.picklesensei.offline.wallet"
-  public static let envelopeVersion = 1
-  static let integrityKeyAccount = "integrity-key.v1"
+  public static let envelopeVersion: UInt8 = 1
+  /// Largest revision the JS side can represent exactly (`Number.MAX_SAFE_INTEGER`).
+  public static let maxRevision: UInt64 = 9_007_199_254_740_991
   static let integrityKeyBytes = 32
+  private static let tagBytes = 32
+  private static let headerBytes = 1 + tagBytes
   private static let integrityDomain = Data("pickle-offline-wallet-v1".utf8)
 
   static func walletAccount(ownerId: String) -> String { "wallet.v1.\(ownerId)" }
+  static func integrityKeyAccount(ownerId: String) -> String { "integrity-key.v1.\(ownerId)" }
+  static func fenceAccount(ownerId: String) -> String { "fence.v1.\(ownerId)" }
 
   private let store: OfflineWalletSecureStore
 
@@ -150,16 +187,24 @@ public final class OfflineWallet {
     self.store = store
   }
 
-  /// `nil` means no wallet is stored for this owner. Any stored bytes that do
+  /// `nil` means no wallet item is stored for this owner. Stored bytes that do
   /// not verify are a thrown failure, never `nil`.
   public func load(ownerId: String) throws -> OfflineWalletSnapshot? {
     try OfflineWallet.validateOwner(ownerId)
-    guard let stored = try readVerified(ownerId: ownerId) else { return nil }
-    return stored.snapshot
+    let state = try readState(ownerId: ownerId)
+    guard state.walletBytes != nil else { return nil }
+    if let fault = state.fault { throw fault }
+    guard let wallet = state.wallet else {
+      throw OfflineWalletError(failure: .storageFailure, detail: "wallet state is inconsistent")
+    }
+    return wallet.snapshot
   }
 
-  /// Replaces the whole wallet in one item write. `expectedRevision` must
-  /// match the stored revision (0 when absent) or nothing is written.
+  /// Replaces the whole wallet in one compare-and-swap item write.
+  /// `expectedRevision` must match the stored revision (0 when absent) and the
+  /// stored bytes must be unchanged since they were read, or nothing is
+  /// written and `revision_conflict` is thrown. The new revision is one above
+  /// the greater of the stored revision and the owner's fence.
   public func replace(
     ownerId: String,
     expectedRevision: UInt64,
@@ -167,61 +212,105 @@ public final class OfflineWallet {
   ) throws -> OfflineWalletSnapshot {
     try OfflineWallet.validateOwner(ownerId)
     try OfflineWallet.validate(contents)
-    let current = try readVerified(ownerId: ownerId)
-    let currentRevision = current?.payload.revision ?? 0
+    let state = try readState(ownerId: ownerId)
+    if let fault = state.fault { throw fault }
+    let currentRevision = state.wallet?.revision ?? 0
     guard currentRevision == expectedRevision else {
       throw OfflineWalletError(
         failure: .revisionConflict,
         detail: "stored revision \(currentRevision) != expected \(expectedRevision)"
       )
     }
-    let key = try current?.key ?? loadOrMintIntegrityKey()
+
+    let key: Data
+    if let existing = state.key {
+      key = existing
+    } else {
+      key = OfflineWallet.mintIntegrityKey()
+      guard try storeWrite(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId), data: key, previous: nil) else {
+        throw OfflineWalletError(failure: .revisionConflict, detail: "integrity key was created concurrently")
+      }
+    }
+
+    var fenceBytes = state.fenceBytes
+    if fenceBytes == nil {
+      let initial = try OfflineWallet.sealFence(ownerId: ownerId, revision: 0, key: key)
+      guard try storeWrite(account: OfflineWallet.fenceAccount(ownerId: ownerId), data: initial, previous: nil) else {
+        throw OfflineWalletError(failure: .revisionConflict, detail: "revision fence was created concurrently")
+      }
+      fenceBytes = initial
+    }
+
+    let base = max(currentRevision, state.fence ?? 0)
+    guard base < OfflineWallet.maxRevision else {
+      throw OfflineWalletError(failure: .capacityExceeded, detail: "revision space exhausted for this owner")
+    }
     let payload = WalletPayload(
       ownerId: ownerId,
-      revision: currentRevision + 1,
+      revision: base + 1,
       grants: contents.grants,
       receipts: contents.receipts
     )
     let account = OfflineWallet.walletAccount(ownerId: ownerId)
-    let bytes = try OfflineWallet.encodeEnvelope(payload: payload, account: account, key: key)
-    try storeWrite(account: account, data: bytes)
+    let bytes = try OfflineWallet.sealWallet(payload: payload, account: account, key: key)
+    guard try storeWrite(account: account, data: bytes, previous: state.walletBytes) else {
+      throw OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this replace was prepared")
+    }
+    try commitFence(ownerId: ownerId, revision: payload.revision, previous: fenceBytes, key: key)
     return payload.snapshot
   }
 
-  /// Removes a readable wallet whose revision matches. Corrupt wallets are
-  /// refused here so they can only leave through `discardCorrupt`.
+  /// Removes a readable wallet whose revision matches; the fence stays so the
+  /// next wallet continues the owner's revision sequence. Corrupt state is
+  /// refused here so it can only leave through `discardCorrupt`.
   public func clear(ownerId: String, expectedRevision: UInt64) throws {
     try OfflineWallet.validateOwner(ownerId)
-    let current = try readVerified(ownerId: ownerId)
-    let currentRevision = current?.payload.revision ?? 0
+    let state = try readState(ownerId: ownerId)
+    if let fault = state.fault { throw fault }
+    let currentRevision = state.wallet?.revision ?? 0
     guard currentRevision == expectedRevision else {
       throw OfflineWalletError(
         failure: .revisionConflict,
         detail: "stored revision \(currentRevision) != expected \(expectedRevision)"
       )
     }
-    guard current != nil else { return }
-    try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId))
+    guard let walletBytes = state.walletBytes else { return }
+    guard try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId), previous: walletBytes) else {
+      throw OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this clear was prepared")
+    }
   }
 
-  /// Deletes a wallet that fails verification and returns the failure it
-  /// had; a readable (or absent) wallet is left alone with `.notCorrupt`.
-  /// Callers invoke this only after the server has reconciled the owner.
+  /// Deletes exactly the owner's unreadable items — the wallet when it fails
+  /// verification, the integrity key when it is unusable, the fence when it is
+  /// corrupt or can no longer be verified — and returns the failure the owner
+  /// had. A verified fence is kept so revisions stay monotonic. Healthy (or
+  /// absent) state is left alone with `.notCorrupt`. Callers invoke this only
+  /// after the server has reconciled the owner.
   @discardableResult
   public func discardCorrupt(ownerId: String) throws -> OfflineWalletFailure {
     try OfflineWallet.validateOwner(ownerId)
-    do {
-      _ = try readVerified(ownerId: ownerId)
-    } catch let error as OfflineWalletError {
-      switch error.failure {
-      case .tampered, .integrityKeyMissing, .unsupportedVersion:
-        try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId))
-        return error.failure
-      default:
-        throw error
+    let state = try readState(ownerId: ownerId)
+    guard let fault = state.fault, fault.failure.isUnreadableState else {
+      throw OfflineWalletError(failure: .notCorrupt, detail: "wallet verifies; use clear")
+    }
+    let conflict = OfflineWalletError(failure: .revisionConflict, detail: "state changed while corrupt items were discarded")
+    if let walletBytes = state.walletBytes {
+      guard try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId), previous: walletBytes) else {
+        throw conflict
       }
     }
-    throw OfflineWalletError(failure: .notCorrupt, detail: "wallet verifies; use clear")
+    let keyUnusable = state.keyBytes != nil && state.key == nil
+    if keyUnusable, let keyBytes = state.keyBytes {
+      guard try storeDelete(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId), previous: keyBytes) else {
+        throw conflict
+      }
+    }
+    if let fenceBytes = state.fenceBytes, state.fence == nil || keyUnusable {
+      guard try storeDelete(account: OfflineWallet.fenceAccount(ownerId: ownerId), previous: fenceBytes) else {
+        throw conflict
+      }
+    }
+    return fault.failure
   }
 
   // MARK: - Bridge helpers
@@ -229,7 +318,7 @@ public final class OfflineWallet {
   /// JS revisions arrive as doubles; only exact non-negative safe integers
   /// are accepted.
   public static func revision(fromBridge value: Double) throws -> UInt64 {
-    guard value.isFinite, value >= 0, value <= 9_007_199_254_740_991,
+    guard value.isFinite, value >= 0, value <= Double(maxRevision),
       value.rounded(.towardZero) == value
     else {
       throw OfflineWalletError(failure: .invalidRevision, detail: "revision must be a non-negative safe integer")
@@ -254,100 +343,214 @@ public final class OfflineWallet {
     }
   }
 
-  private struct Envelope: Codable {
-    let v: Int
-    let payload: Data
-    let tag: Data
+  private struct FencePayload: Codable {
+    let ownerId: String
+    let revision: UInt64
   }
 
-  private struct EnvelopeVersion: Decodable {
-    let v: Int
+  /// Everything read for one owner in one pass. `fault` is the corruption
+  /// found, if any: with a wallet present it makes the wallet unreadable; with
+  /// no wallet it blocks writes until `discardCorrupt` removes the bad item.
+  private struct OwnerState {
+    let walletBytes: Data?
+    let keyBytes: Data?
+    let fenceBytes: Data?
+    /// Usable integrity key (exactly `integrityKeyBytes`), else `nil`.
+    let key: Data?
+    /// Verified committed revision; `nil` when absent or unverifiable.
+    let fence: UInt64?
+    /// Verified wallet; `nil` when absent or unreadable.
+    let wallet: WalletPayload?
+    let fault: OfflineWalletError?
   }
 
-  private struct VerifiedWallet {
-    let payload: WalletPayload
-    let key: Data
-    var snapshot: OfflineWalletSnapshot { payload.snapshot }
+  /// Reads key, fence, then wallet — the reverse of the write order (wallet,
+  /// then fence) — so a concurrent legitimate replace can only ever be seen as
+  /// "wallet ahead of fence" (harmless), never as a spurious rollback.
+  private func readState(ownerId: String) throws -> OwnerState {
+    let walletAccount = OfflineWallet.walletAccount(ownerId: ownerId)
+    let keyBytes = try storeRead(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId))
+    let fenceBytes = try storeRead(account: OfflineWallet.fenceAccount(ownerId: ownerId))
+    let walletBytes = try storeRead(account: walletAccount)
+
+    var key: Data?
+    var keyFault: OfflineWalletError?
+    if let keyBytes {
+      if keyBytes.count == OfflineWallet.integrityKeyBytes {
+        key = keyBytes
+      } else {
+        keyFault = OfflineWalletError(failure: .tampered, detail: "integrity key has unexpected length")
+      }
+    }
+
+    var fence: UInt64?
+    var fenceFault: OfflineWalletError?
+    if let fenceBytes {
+      if let key {
+        do {
+          fence = try OfflineWallet.openFence(fenceBytes, ownerId: ownerId, key: key)
+        } catch let error as OfflineWalletError {
+          fenceFault = error
+        }
+      } else if keyFault == nil {
+        fenceFault = OfflineWalletError(
+          failure: .integrityKeyMissing, detail: "revision fence present without its integrity key")
+      }
+    }
+
+    var wallet: WalletPayload?
+    var walletFault: OfflineWalletError?
+    if let walletBytes {
+      if keyBytes == nil {
+        walletFault = OfflineWalletError(failure: .integrityKeyMissing, detail: "wallet present without its integrity key")
+      } else if let key {
+        do {
+          let payload = try OfflineWallet.openWallet(walletBytes, ownerId: ownerId, account: walletAccount, key: key)
+          if let fenceFault {
+            throw fenceFault
+          }
+          guard let fence else {
+            throw OfflineWalletError(failure: .tampered, detail: "wallet present without its revision fence")
+          }
+          guard payload.revision >= fence else {
+            throw OfflineWalletError(
+              failure: .tampered,
+              detail: "wallet revision \(payload.revision) is behind committed revision \(fence) (rolled back)"
+            )
+          }
+          wallet = payload
+        } catch let error as OfflineWalletError {
+          walletFault = error
+        }
+      }
+    }
+
+    let fault = walletFault ?? keyFault ?? fenceFault
+    return OwnerState(
+      walletBytes: walletBytes,
+      keyBytes: keyBytes,
+      fenceBytes: fenceBytes,
+      key: key,
+      fence: fence,
+      wallet: fault == nil ? wallet : nil,
+      fault: fault
+    )
   }
 
-  private func readVerified(ownerId: String) throws -> VerifiedWallet? {
-    let account = OfflineWallet.walletAccount(ownerId: ownerId)
-    guard let bytes = try storeRead(account: account) else { return nil }
+  private func commitFence(ownerId: String, revision: UInt64, previous: Data?, key: Data) throws {
+    let account = OfflineWallet.fenceAccount(ownerId: ownerId)
+    let bytes = try OfflineWallet.sealFence(ownerId: ownerId, revision: revision, key: key)
+    if try storeWrite(account: account, data: bytes, previous: previous) { return }
+    // Another writer moved the fence meanwhile; the wallet write above is the
+    // commit point, so the replace succeeded as long as the fence is not
+    // behind it.
+    if let current = try storeRead(account: account),
+      let committed = try? OfflineWallet.openFence(current, ownerId: ownerId, key: key),
+      committed >= revision
+    {
+      return
+    }
+    throw OfflineWalletError(failure: .storageFailure, detail: "revision fence could not be committed")
+  }
 
-    let decoder = JSONDecoder()
-    guard let version = try? decoder.decode(EnvelopeVersion.self, from: bytes) else {
-      throw OfflineWalletError(failure: .tampered, detail: "wallet envelope is not decodable")
-    }
-    guard version.v == OfflineWallet.envelopeVersion else {
-      throw OfflineWalletError(failure: .unsupportedVersion, detail: "wallet envelope version \(version.v)")
-    }
-    guard let envelope = try? decoder.decode(Envelope.self, from: bytes) else {
-      throw OfflineWalletError(failure: .tampered, detail: "wallet envelope is malformed")
-    }
-    guard let key = try storeRead(account: OfflineWallet.integrityKeyAccount) else {
-      throw OfflineWalletError(failure: .integrityKeyMissing, detail: "wallet present without its integrity key")
-    }
-    guard key.count == OfflineWallet.integrityKeyBytes else {
-      throw OfflineWalletError(failure: .tampered, detail: "integrity key has unexpected length")
-    }
-    let expected = OfflineWallet.tag(account: account, payload: envelope.payload, key: key)
-    guard OfflineWalletIntegrity.constantTimeEquals(expected, envelope.tag) else {
-      throw OfflineWalletError(failure: .tampered, detail: "wallet integrity tag mismatch")
-    }
-    guard let payload = try? decoder.decode(WalletPayload.self, from: envelope.payload) else {
+  private static func mintIntegrityKey() -> Data {
+    var generator = SystemRandomNumberGenerator()
+    return Data((0..<integrityKeyBytes).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
+  }
+
+  private static func openWallet(_ bytes: Data, ownerId: String, account: String, key: Data) throws -> WalletPayload {
+    let payloadBytes = try open(bytes, account: account, key: key)
+    guard let payload = try? JSONDecoder().decode(WalletPayload.self, from: payloadBytes) else {
       throw OfflineWalletError(failure: .tampered, detail: "wallet payload is not decodable")
     }
-    guard payload.ownerId == ownerId, payload.revision > 0 else {
+    guard payload.ownerId == ownerId else {
       throw OfflineWalletError(failure: .tampered, detail: "wallet payload does not belong to this owner")
     }
+    guard payload.revision >= 1, payload.revision <= maxRevision else {
+      throw OfflineWalletError(failure: .tampered, detail: "wallet revision is outside the supported range")
+    }
     do {
-      try OfflineWallet.validate(OfflineWalletContents(grants: payload.grants, receipts: payload.receipts))
+      try validate(OfflineWalletContents(grants: payload.grants, receipts: payload.receipts))
     } catch {
       throw OfflineWalletError(failure: .tampered, detail: "wallet payload violates its own shape rules")
     }
-    return VerifiedWallet(payload: payload, key: key)
+    return payload
   }
 
-  private func loadOrMintIntegrityKey() throws -> Data {
-    if let existing = try storeRead(account: OfflineWallet.integrityKeyAccount) {
-      guard existing.count == OfflineWallet.integrityKeyBytes else {
-        throw OfflineWalletError(failure: .tampered, detail: "integrity key has unexpected length")
-      }
-      return existing
+  static func openFence(_ bytes: Data, ownerId: String, key: Data) throws -> UInt64 {
+    let payloadBytes = try open(bytes, account: fenceAccount(ownerId: ownerId), key: key)
+    guard let payload = try? JSONDecoder().decode(FencePayload.self, from: payloadBytes) else {
+      throw OfflineWalletError(failure: .tampered, detail: "revision fence is not decodable")
     }
-    var generator = SystemRandomNumberGenerator()
-    let key = Data((0..<OfflineWallet.integrityKeyBytes).map { _ in UInt8.random(in: .min ... .max, using: &generator) })
-    try storeWrite(account: OfflineWallet.integrityKeyAccount, data: key)
-    return key
+    guard payload.ownerId == ownerId else {
+      throw OfflineWalletError(failure: .tampered, detail: "revision fence does not belong to this owner")
+    }
+    guard payload.revision <= maxRevision else {
+      throw OfflineWalletError(failure: .tampered, detail: "revision fence is outside the supported range")
+    }
+    return payload.revision
   }
 
-  private static func encodeEnvelope(payload: WalletPayload, account: String, key: Data) throws -> Data {
+  private static func sealWallet(payload: WalletPayload, account: String, key: Data) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
-    let payloadBytes: Data
-    let bytes: Data
-    do {
-      payloadBytes = try encoder.encode(payload)
-      let envelope = Envelope(
-        v: OfflineWallet.envelopeVersion,
-        payload: payloadBytes,
-        tag: tag(account: account, payload: payloadBytes, key: key)
-      )
-      bytes = try encoder.encode(envelope)
-    } catch {
+    guard let payloadBytes = try? encoder.encode(payload) else {
       throw OfflineWalletError(failure: .storageFailure, detail: "wallet could not be encoded")
     }
+    let bytes = seal(payload: payloadBytes, account: account, key: key)
     guard bytes.count <= Limits.maxEnvelopeBytes else {
       throw OfflineWalletError(failure: .capacityExceeded, detail: "wallet exceeds \(Limits.maxEnvelopeBytes) bytes")
     }
     return bytes
   }
 
-  private static func tag(account: String, payload: Data, key: Data) -> Data {
+  private static func sealFence(ownerId: String, revision: UInt64, key: Data) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let payloadBytes = try? encoder.encode(FencePayload(ownerId: ownerId, revision: revision)) else {
+      throw OfflineWalletError(failure: .storageFailure, detail: "revision fence could not be encoded")
+    }
+    return seal(payload: payloadBytes, account: fenceAccount(ownerId: ownerId), key: key)
+  }
+
+  /// Sealed envelope: `[version][tag: 32 bytes][payload]`. The tag is an HMAC
+  /// over the domain, the item account, the version byte and the payload, so
+  /// the version is covered too and the same bytes under another account (a
+  /// wallet copied between owners, a fence swapped for a wallet) do not verify.
+  static func seal(payload: Data, account: String, key: Data) -> Data {
+    var bytes = Data([envelopeVersion])
+    bytes.append(tag(account: account, version: envelopeVersion, payload: payload, key: key))
+    bytes.append(payload)
+    return bytes
+  }
+
+  static func open(_ bytes: Data, account: String, key: Data) throws -> Data {
+    let raw = [UInt8](bytes)
+    guard raw.count > headerBytes else {
+      throw OfflineWalletError(failure: .tampered, detail: "sealed envelope is too short")
+    }
+    let version = raw[0]
+    guard version == envelopeVersion else {
+      if version > envelopeVersion {
+        throw OfflineWalletError(failure: .unsupportedVersion, detail: "sealed envelope version \(version)")
+      }
+      throw OfflineWalletError(failure: .tampered, detail: "sealed envelope version is invalid")
+    }
+    let storedTag = Data(raw[1..<headerBytes])
+    let payload = Data(raw[headerBytes...])
+    let expected = tag(account: account, version: version, payload: payload, key: key)
+    guard OfflineWalletIntegrity.constantTimeEquals(expected, storedTag) else {
+      throw OfflineWalletError(failure: .tampered, detail: "sealed envelope integrity tag mismatch")
+    }
+    return payload
+  }
+
+  private static func tag(account: String, version: UInt8, payload: Data, key: Data) -> Data {
     var message = integrityDomain
     message.append(0)
     message.append(Data(account.utf8))
     message.append(0)
+    message.append(version)
     message.append(payload)
     return OfflineWalletIntegrity.hmacSHA256(key: key, message: message)
   }
@@ -364,9 +567,9 @@ public final class OfflineWallet {
     }
   }
 
-  private func storeWrite(account: String, data: Data) throws {
+  private func storeWrite(account: String, data: Data, previous: Data?) throws -> Bool {
     do {
-      try store.write(account: account, data: data)
+      return try store.write(account: account, data: data, ifUnchangedFrom: previous)
     } catch let error as OfflineWalletError {
       throw error
     } catch {
@@ -374,9 +577,9 @@ public final class OfflineWallet {
     }
   }
 
-  private func storeDelete(account: String) throws {
+  private func storeDelete(account: String, previous: Data) throws -> Bool {
     do {
-      try store.delete(account: account)
+      return try store.delete(account: account, ifUnchangedFrom: previous)
     } catch let error as OfflineWalletError {
       throw error
     } catch {
@@ -673,8 +876,12 @@ enum OfflineWalletIntegrity {
   /// Keychain adapter: generic-password items in the wallet's own service,
   /// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (re-asserted on every
   /// write), never synchronised, data-protection keychain on every platform.
-  /// `write` is update-first so an existing item is replaced in one call; only
-  /// a first write adds.
+  /// Compare-and-swap rides on `kSecAttrGeneric`: every item carries the
+  /// SHA-256 of its own value, and a conditional update or delete queries for
+  /// the digest of the bytes the caller last read, so the Keychain itself
+  /// refuses the write (`errSecItemNotFound`) once another writer has moved
+  /// the item. A first write is `SecItemAdd`, which the Keychain refuses
+  /// (`errSecDuplicateItem`) when the item appeared meanwhile.
   public final class KeychainOfflineWalletStore: OfflineWalletSecureStore {
     private let service: String
 
@@ -692,9 +899,17 @@ enum OfflineWalletIntegrity {
       ]
     }
 
+    /// Query that only matches the item while it still holds `previous`.
+    func conditionalQuery(account: String, previous: Data) -> [String: Any] {
+      var query = itemQuery(account: account)
+      query[kSecAttrGeneric as String] = OfflineWalletIntegrity.sha256(previous)
+      return query
+    }
+
     func updateAttributes(data: Data) -> [String: Any] {
       [
         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String,
+        kSecAttrGeneric as String: OfflineWalletIntegrity.sha256(data),
         kSecValueData as String: data,
       ]
     }
@@ -725,24 +940,37 @@ enum OfflineWalletIntegrity {
       }
     }
 
-    public func write(account: String, data: Data) throws {
-      let update = updateAttributes(data: data)
-      var status = SecItemUpdate(itemQuery(account: account) as CFDictionary, update as CFDictionary)
-      if status == errSecItemNotFound {
+    public func write(account: String, data: Data, ifUnchangedFrom previous: Data?) throws -> Bool {
+      let status: OSStatus
+      let refused: OSStatus
+      if let previous {
+        status = SecItemUpdate(
+          conditionalQuery(account: account, previous: previous) as CFDictionary,
+          updateAttributes(data: data) as CFDictionary)
+        refused = errSecItemNotFound
+      } else {
         status = SecItemAdd(addAttributes(account: account, data: data) as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-          status = SecItemUpdate(itemQuery(account: account) as CFDictionary, update as CFDictionary)
-        }
+        refused = errSecDuplicateItem
       }
-      guard status == errSecSuccess else {
+      switch status {
+      case errSecSuccess:
+        return true
+      case refused:
+        return false
+      default:
         throw OfflineWalletError(
           failure: OfflineWalletFailure(keychainStatus: status), detail: "keychain write failed", status: status)
       }
     }
 
-    public func delete(account: String) throws {
-      let status = SecItemDelete(itemQuery(account: account) as CFDictionary)
-      guard status == errSecSuccess || status == errSecItemNotFound else {
+    public func delete(account: String, ifUnchangedFrom previous: Data) throws -> Bool {
+      let status = SecItemDelete(conditionalQuery(account: account, previous: previous) as CFDictionary)
+      switch status {
+      case errSecSuccess:
+        return true
+      case errSecItemNotFound:
+        return false
+      default:
         throw OfflineWalletError(
           failure: OfflineWalletFailure(keychainStatus: status), detail: "keychain delete failed", status: status)
       }
