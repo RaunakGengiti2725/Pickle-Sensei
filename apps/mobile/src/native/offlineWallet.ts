@@ -41,6 +41,18 @@ export type OfflineWalletFailure =
 
 export const OFFLINE_WALLET_ERROR_CODE_PREFIX = 'wallet.';
 
+/** Mirrors `OfflineWallet.Limits` in the native core. */
+export const OFFLINE_WALLET_LIMITS = {
+  maxGrants: 8,
+  maxReceipts: 64,
+} as const;
+
+const UNREADABLE_FAILURES: readonly OfflineWalletNativeFailure[] = [
+  'tampered',
+  'integrity_key_missing',
+  'unsupported_version',
+];
+
 export interface OfflineWalletGrant {
   grantId: string;
   compactJws: string;
@@ -92,11 +104,7 @@ export class OfflineWalletError extends Error {
 export function isOfflineWalletUnreadable(
   failure: OfflineWalletFailure,
 ): boolean {
-  return (
-    failure === 'tampered' ||
-    failure === 'integrity_key_missing' ||
-    failure === 'unsupported_version'
-  );
+  return (UNREADABLE_FAILURES as readonly string[]).includes(failure);
 }
 
 /** Transient Keychain state (device not yet unlocked); retry later. */
@@ -160,7 +168,7 @@ export async function loadOfflineWallet(
     .loadWallet(ownerId)
     .catch(error => rethrowTyped(error));
   if (result === null || result === undefined) return null;
-  return parseSnapshot(result);
+  return parseSnapshot(result, ownerId);
 }
 
 export async function replaceOfflineWallet(
@@ -182,7 +190,7 @@ export async function replaceOfflineWallet(
       })),
     })
     .catch(error => rethrowTyped(error));
-  return parseSnapshot(result);
+  return parseSnapshot(result, ownerId);
 }
 
 export async function clearOfflineWallet(
@@ -203,7 +211,11 @@ export async function discardCorruptOfflineWallet(
   const result = await native
     .discardCorruptWallet(ownerId)
     .catch(error => rethrowTyped(error));
-  if (typeof result !== 'string' || !isNativeFailure(result)) {
+  if (
+    typeof result !== 'string' ||
+    !isNativeFailure(result) ||
+    !isOfflineWalletUnreadable(result)
+  ) {
     throw new OfflineWalletError(
       'bridge_contract',
       'The native offline wallet reported an unknown discard outcome.',
@@ -254,7 +266,28 @@ function readStatus(userInfo: unknown): number | null {
   return typeof status === 'number' && Number.isInteger(status) ? status : null;
 }
 
-function parseSnapshot(value: unknown): OfflineWalletSnapshot {
+function isJsonObjectText(text: string): boolean {
+  if (text.length === 0) return false;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return (
+      typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Re-checks the invariants the native core guarantees for anything it
+ * resolves — the requested owner, a fenceable revision, the item and count
+ * rules — so a wrong or racing native side can never hand JS another
+ * account's wallet or a shape the core itself would refuse.
+ */
+function parseSnapshot(
+  value: unknown,
+  requestedOwnerId: string,
+): OfflineWalletSnapshot {
   const contract = (detail: string) =>
     new OfflineWalletError(
       'bridge_contract',
@@ -265,6 +298,7 @@ function parseSnapshot(value: unknown): OfflineWalletSnapshot {
   }
   const record = value as Record<string, unknown>;
   if (typeof record.ownerId !== 'string') throw contract('ownerId');
+  if (record.ownerId !== requestedOwnerId) throw contract('ownerId mismatch');
   if (
     typeof record.revision !== 'number' ||
     !Number.isSafeInteger(record.revision) ||
@@ -274,6 +308,13 @@ function parseSnapshot(value: unknown): OfflineWalletSnapshot {
   }
   if (!Array.isArray(record.grants)) throw contract('grants');
   if (!Array.isArray(record.receipts)) throw contract('receipts');
+  if (record.grants.length > OFFLINE_WALLET_LIMITS.maxGrants) {
+    throw contract('grant count');
+  }
+  if (record.receipts.length > OFFLINE_WALLET_LIMITS.maxReceipts) {
+    throw contract('receipt count');
+  }
+  const grantIds = new Set<string>();
   const grants = record.grants.map((raw: unknown): OfflineWalletGrant => {
     if (!raw || typeof raw !== 'object') throw contract('grant');
     const grant = raw as Record<string, unknown>;
@@ -283,8 +324,14 @@ function parseSnapshot(value: unknown): OfflineWalletSnapshot {
     ) {
       throw contract('grant fields');
     }
+    if (grant.grantId.length === 0 || grant.compactJws.length === 0) {
+      throw contract('empty grant field');
+    }
+    if (grantIds.has(grant.grantId)) throw contract('duplicate grantId');
+    grantIds.add(grant.grantId);
     return { grantId: grant.grantId, compactJws: grant.compactJws };
   });
+  const receiptIds = new Set<string>();
   const receipts = record.receipts.map((raw: unknown): OfflineWalletReceipt => {
     if (!raw || typeof raw !== 'object') throw contract('receipt');
     const receipt = raw as Record<string, unknown>;
@@ -295,6 +342,14 @@ function parseSnapshot(value: unknown): OfflineWalletSnapshot {
     ) {
       throw contract('receipt fields');
     }
+    if (receipt.receiptId.length === 0) throw contract('empty receiptId');
+    if (!isJsonObjectText(receipt.payloadJson)) {
+      throw contract('receipt payloadJson is not a JSON object');
+    }
+    if (receiptIds.has(receipt.receiptId)) {
+      throw contract('duplicate receiptId');
+    }
+    receiptIds.add(receipt.receiptId);
     return {
       receiptId: receipt.receiptId,
       kind: receipt.kind,
