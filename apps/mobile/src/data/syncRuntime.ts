@@ -12,7 +12,7 @@ import {
 } from './api';
 import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
 import { getDb } from './db';
-import { reconcileOfflineReceipts } from './offlineCapabilities';
+import { reconcileOfflineWallet } from './offlineWallet';
 import { drainOutbox } from './sync';
 import { trustedTime } from './trustedTime';
 
@@ -128,7 +128,7 @@ export function configureSyncRuntime(session: ApiSession): void {
         // Offline consumption receipts are presented after the results they
         // paid for. A verdict the server withholds keeps the receipt queued
         // and this drain counts as unfinished, so the timer backs off.
-        const receipts = await reconcileOfflineReceipts(
+        const receipts = await reconcileOfflineWallet(
           db,
           offlineGrants,
           await trustedTime.read(),

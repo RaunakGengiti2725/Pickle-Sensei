@@ -218,6 +218,7 @@ export function createFakeOutboxDb(): FakeOutboxDb {
         sql.startsWith('SELECT * FROM analysis_run_journal') ||
         sql.startsWith('SELECT * FROM analysis_execution_attempts') ||
         sql.startsWith('SELECT * FROM offline_receipt') ||
+        sql.startsWith('SELECT * FROM offline_wallet_journal') ||
         sql.includes('INSERT OR REPLACE INTO local_shot')
       )
         return { rows: [] };
