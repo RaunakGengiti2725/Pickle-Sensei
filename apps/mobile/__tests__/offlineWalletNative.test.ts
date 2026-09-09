@@ -374,6 +374,17 @@ describe('offline wallet native bridge', () => {
       expect(error.message).toContain(detail);
       expect(error.status).toBeNull();
     }
+    for (const notContents of [null, undefined, 'x', 7, [], true]) {
+      const error = await expectFailure(
+        replaceOfflineWallet(
+          OWNER,
+          0,
+          notContents as unknown as Parameters<typeof replaceOfflineWallet>[2],
+        ),
+        'invalid_grant',
+      );
+      expect(error.message).toContain('contents');
+    }
     expect(mockReplaceWallet).not.toHaveBeenCalled();
 
     const atLimit = {

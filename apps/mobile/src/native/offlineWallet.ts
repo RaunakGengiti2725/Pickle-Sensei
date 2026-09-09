@@ -341,9 +341,13 @@ interface ContentsRejections {
 
 /** The item and count rules shared by write-side and read-side validation. */
 function parseContents(
-  record: { grants?: unknown; receipts?: unknown },
+  value: unknown,
   reject: ContentsRejections,
 ): { grants: OfflineWalletGrant[]; receipts: OfflineWalletReceipt[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw reject.grants('contents');
+  }
+  const record = value as { grants?: unknown; receipts?: unknown };
   if (!Array.isArray(record.grants)) throw reject.grants('grants');
   if (!Array.isArray(record.receipts)) throw reject.receipts('receipts');
   if (record.grants.length > OFFLINE_WALLET_LIMITS.maxGrants) {

@@ -199,13 +199,15 @@ public final class OfflineWallet {
   }
 
   /// `nil` means no wallet is stored for this owner: no item at all, or the
-  /// cleared envelope `clear` leaves behind. Stored bytes that do not verify,
-  /// and a wallet item missing while the fence records committed history, are
-  /// a thrown failure, never `nil`.
+  /// cleared envelope `clear` leaves behind. Stored bytes that do not verify
+  /// — wallet, fence or integrity key, with or without a wallet item beside
+  /// them — and a wallet item missing while the fence records committed
+  /// history, are a thrown failure, never `nil`: every entry point gives the
+  /// same verdict for the same persisted bytes.
   public func load(ownerId: String) throws -> OfflineWalletSnapshot? {
     try OfflineWallet.validateOwner(ownerId)
     let state = try readState(ownerId: ownerId)
-    if let fault = state.fault, state.walletBytes != nil || state.walletVanished { throw fault }
+    if let fault = state.fault { throw fault }
     guard state.walletBytes != nil else { return nil }
     guard let wallet = state.wallet else {
       throw OfflineWalletError(failure: .storageFailure, detail: "wallet state is inconsistent")

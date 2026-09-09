@@ -457,7 +457,9 @@ final class OfflineWalletTests: XCTestCase {
     for badLength in [0, 31, 33, 64] {
       store.items = [OfflineWallet.integrityKeyAccount(ownerId: ownerA): Data(repeating: 0xAB, count: badLength)]
 
-      XCTAssertNil(try wallet.load(ownerId: ownerA), "nothing stored is still nothing stored")
+      assertFailure(.tampered, "load with a \(badLength)-byte key reports the unusable key like every write does") {
+        try wallet.load(ownerId: ownerA)
+      }
       assertFailure(.tampered, "replace with a \(badLength)-byte key") {
         try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
       }
@@ -516,6 +518,64 @@ final class OfflineWalletTests: XCTestCase {
     XCTAssertTrue(store.items.isEmpty)
     XCTAssertEqual(
       try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 1)
+  }
+
+  func testEmptySlotBesideAnUnverifiableFenceIsAFaultOnEveryEntryPoint() throws {
+    let keyAccount = OfflineWallet.integrityKeyAccount(ownerId: ownerA)
+    let fenceAccount = OfflineWallet.fenceAccount(ownerId: ownerA)
+    let damages: [(String, OfflineWalletFailure, (MemoryWalletStore) -> Void)] = [
+      ("flipped fence byte", .tampered, { $0.items[fenceAccount]![0] ^= 0x01 }),
+      ("missing key", .integrityKeyMissing, { $0.items.removeValue(forKey: keyAccount) }),
+      ("31-byte key", .tampered, { $0.items[keyAccount] = Data(repeating: 0xAB, count: 31) }),
+    ]
+    for (label, expected, damage) in damages {
+      let store = MemoryWalletStore()
+      let wallet = OfflineWallet(store: store)
+      _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+      store.items.removeValue(forKey: OfflineWallet.walletAccount(ownerId: ownerA))
+      damage(store)
+
+      assertFailure(expected, "load — \(label): committed history behind a fence that no longer verifies is never an empty wallet") {
+        try wallet.load(ownerId: ownerA)
+      }
+      assertFailure(expected, "replace — \(label)") {
+        try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+      }
+      assertFailure(expected, "clear — \(label)") { try wallet.clear(ownerId: ownerA, expectedRevision: 0) }
+      XCTAssertEqual(try wallet.discardCorrupt(ownerId: ownerA), expected, label)
+      XCTAssertTrue(store.items.isEmpty, "nothing sealed under an unverifiable history survives — \(label)")
+      XCTAssertNil(try wallet.load(ownerId: ownerA), label)
+      XCTAssertEqual(
+        try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 1, label)
+    }
+  }
+
+  func testDiscardInterruptedAfterTheKeyDeletionLeavesLoadAndReplaceAgreeing() throws {
+    let store = MemoryWalletStore()
+    let wallet = OfflineWallet(store: store)
+    let keyAccount = OfflineWallet.integrityKeyAccount(ownerId: ownerA)
+    let fenceAccount = OfflineWallet.fenceAccount(ownerId: ownerA)
+    _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    store.items[fenceAccount]![0] ^= 0x01
+    assertFailure(.tampered) { try wallet.load(ownerId: ownerA) }
+
+    // Process death right after the integrity key is deleted: only the fence remains.
+    struct Crash: Error {}
+    store.onDelete = { account in
+      if account == keyAccount { throw Crash() }
+    }
+    assertFailure(.storageFailure, "the interrupted discard surfaces as a store failure") { try wallet.discardCorrupt(ownerId: ownerA) }
+    store.onDelete = nil
+    XCTAssertEqual(Array(store.items.keys), [fenceAccount])
+
+    let relaunched = OfflineWallet(store: store)
+    assertFailure(.integrityKeyMissing, "load reports the orphaned fence exactly like replace") { try relaunched.load(ownerId: ownerA) }
+    assertFailure(.integrityKeyMissing) {
+      try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+    }
+    XCTAssertEqual(try relaunched.discardCorrupt(ownerId: ownerA), .integrityKeyMissing)
+    XCTAssertTrue(store.items.isEmpty)
+    XCTAssertNil(try relaunched.load(ownerId: ownerA))
   }
 
   func testCrashBetweenKeyMintAndWalletWriteRecovers() throws {
@@ -1709,6 +1769,7 @@ private final class MemoryWalletStore: OfflineWalletSecureStore {
   var failNextRead: OfflineWalletError?
   var onReadWalletAccount: ((String) throws -> Void)?
   var onWrite: ((String) throws -> Void)?
+  var onDelete: ((String) throws -> Void)?
 
   func read(account: String) throws -> Data? {
     if let failure = failNextRead {
@@ -1738,6 +1799,7 @@ private final class MemoryWalletStore: OfflineWalletSecureStore {
   func delete(account: String, ifUnchangedFrom previous: Data) throws -> Bool {
     guard items[account] == previous else { return false }
     items.removeValue(forKey: account)
+    try onDelete?(account)
     return true
   }
 }
