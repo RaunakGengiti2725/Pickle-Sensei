@@ -197,12 +197,21 @@ async function overlap<A, B>(
   const parked = barrier();
   const aDone = barrier();
   let aResult: A | undefined;
+  let aError: unknown;
   const laneA = inTx(sql, a.n, async (tx) => {
     aResult = await a.fn(tx);
     aDone.open();
     await parked.gate;
+  }).catch((e) => {
+    aError = e;
+    aDone.open();
   });
   await aDone.gate;
+  if (aError !== undefined) {
+    parked.open();
+    await laneA;
+    throw aError;
+  }
   const laneB = inTx(sql, b.n, b.fn).catch((e) => ({
     error: `${pgError(e).code}:${pgError(e).message}`,
   }));
