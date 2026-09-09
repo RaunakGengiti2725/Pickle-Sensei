@@ -64,7 +64,6 @@ import { SUPABASE_URL } from "./routesHarness.ts";
 
 const ISSUER = `${SUPABASE_URL}/functions/v1/api`;
 const KID = "w04-04-attack-key";
-const DAY = 86_400;
 
 const keyPair = await generateKeyPair("ES256", { extractable: true });
 const signingKey: OfflineGrantKey = {
@@ -338,10 +337,13 @@ async function settlements(sql: Sql, n: number): Promise<SettlementRow[]> {
 }
 
 async function counters(sql: Sql, n: number): Promise<{ held: number; scored: number }> {
-  const [{ held, scored }] = await inTx(sql, n, (tx) =>
-    tx.unsafe<{ held: number; scored: number }[]>(
-      `select public.offline_hold_count() as held, public.lifetime_scored_count() as scored`,
-    ),
+  const [{ held, scored }] = await inTx(
+    sql,
+    n,
+    (tx) =>
+      tx.unsafe<{ held: number; scored: number }[]>(
+        `select public.offline_hold_count() as held, public.lifetime_scored_count() as scored`,
+      ),
   );
   return { held: Number(held), scored: Number(scored) };
 }
@@ -439,7 +441,8 @@ const REJECTED = (code: string): SettleRow => ({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A1 concurrency: the same receipt delivered from two connections at the same instant settles exactly once (one settled, one replayed; one consumed event, one shot)",
+  name:
+    "ATTACK A1 concurrency: the same receipt delivered from two connections at the same instant settles exactly once (one settled, one replayed; one consumed event, one shot)",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 4, onnotice: () => {} });
@@ -473,7 +476,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A1 concurrency: two DIFFERENT receipts racing for one ticket end with exactly one consumed event; the loser is a conflicting_receipt HOLD, never a second charge",
+  name:
+    "ATTACK A1 concurrency: two DIFFERENT receipts racing for one ticket end with exactly one consumed event; the loser is a conflicting_receipt HOLD, never a second charge",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 4, onnotice: () => {} });
@@ -510,7 +514,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A2 conservation: scored + held budget stays 2 across settle, replays, evidence_missing, contradictory evidence and a foreign hold; the identity ledger moves by exactly one",
+  name:
+    "ATTACK A2 conservation: scored + held budget stays 2 across settle, replays, evidence_missing, contradictory evidence and a foreign hold; the identity ledger moves by exactly one",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -609,7 +614,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A3 roles: anon, service_role, a bearer without the API proof and a bearer without a live session are all refused by settle_offline_receipt() and nothing is written",
+  name:
+    "ATTACK A3 roles: anon, service_role, a bearer without the API proof and a bearer without a live session are all refused by settle_offline_receipt() and nothing is written",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -701,7 +707,9 @@ Deno.test({
               await tx.unsafe(`set local role ${role}`);
               await tx.unsafe(`set local request.jwt.claim.sub = '${U(5)}'`);
               await tx.unsafe(
-                `update public.offline_receipt_settlements set status = 'result_recorded' where user_id = '${U(5)}'`,
+                `update public.offline_receipt_settlements set status = 'result_recorded' where user_id = '${
+                  U(5)
+                }'`,
               );
             }),
           Error,
@@ -727,7 +735,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A3 roles: another account naming the owner's ticket under ITS OWN name is HELD without consumption, and cannot block the true owner from settling that ticket once",
+  name:
+    "ATTACK A3 roles: another account naming the owner's ticket under ITS OWN name is HELD without consumption, and cannot block the true owner from settling that ticket once",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -784,7 +793,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A4 boundaries: lifecycleSequence at MAX_SAFE_INTEGER settles; 2^53, 0, -1, 1.5, '1' and an upper-case digest are rejected with nothing durable; a wrong generation is a HOLD with the ticket reserved",
+  name:
+    "ATTACK A4 boundaries: lifecycleSequence at MAX_SAFE_INTEGER settles; 2^53, 0, -1, 1.5, '1' and an upper-case digest are rejected with nothing durable; a wrong generation is a HOLD with the ticket reserved",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -805,8 +815,10 @@ Deno.test({
       for (const [tag, sequence] of probes) {
         const base = await liveReceipt(U(9), issued, ticketA, `a4-${tag}`);
         const rec = { ...base.receipt, lifecycleSequence: sequence };
-        const verdict = await inTx(sql, 9, (tx) =>
-          settleRaw(tx, rec, "a".repeat(64), base.output, null),
+        const verdict = await inTx(
+          sql,
+          9,
+          (tx) => settleRaw(tx, rec, "a".repeat(64), base.output, null),
         );
         assertEquals(verdict, REJECTED("offline.invalid_input"), `lifecycleSequence ${tag}`);
       }
@@ -814,8 +826,10 @@ Deno.test({
         const base = await liveReceipt(U(9), issued, ticketA, `a4-gen-${tag}`);
         assert(base.receipt.ticket);
         const rec = { ...base.receipt, ticket: { ...base.receipt.ticket, generation } };
-        const verdict = await inTx(sql, 9, (tx) =>
-          settleRaw(tx, rec, "b".repeat(64), base.output, null),
+        const verdict = await inTx(
+          sql,
+          9,
+          (tx) => settleRaw(tx, rec, "b".repeat(64), base.output, null),
         );
         assertEquals(verdict, REJECTED("offline.invalid_input"), `generation ${tag}`);
       }
@@ -859,7 +873,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A4 boundaries: outputs the shot writer cannot store (int4 overflow, unparsable timestamp, out-of-range score, far-future capture) never crash the settlement: each is a durable HOLD or a recorded result, the ticket is never consumed twice",
+  name:
+    "ATTACK A4 boundaries: outputs the shot writer cannot store (int4 overflow, unparsable timestamp, out-of-range score, far-future capture) never crash the settlement: each is a durable HOLD or a recorded result, the ticket is never consumed twice",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -873,7 +888,15 @@ Deno.test({
         ["int-overflow", { startMs: 2147483648, contactMs: 2147483649, endMs: 2147483650 }],
         ["bad-timestamp", { capturedAt: "not-a-timestamp" }],
         ["score-out-of-range", { overallScore: 10_000 }],
-        ["phase-int-overflow", { phases: [{ key: "prep", startMs: 0, representativeMs: 50, endMs: 2147483648, confidence: 0.8 }] }],
+        ["phase-int-overflow", {
+          phases: [{
+            key: "prep",
+            startMs: 0,
+            representativeMs: 50,
+            endMs: 2147483648,
+            confidence: 0.8,
+          }],
+        }],
       ];
       let seq = 1;
       for (const [tag, overrides] of poison) {
@@ -936,7 +959,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A5 corrupt state: a settlement row whose digest was altered makes the honest redelivery a receipt_conflict (never a fabricated replay, never a second consumption)",
+  name:
+    "ATTACK A5 corrupt state: a settlement row whose digest was altered makes the honest redelivery a receipt_conflict (never a fabricated replay, never a second consumption)",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -971,7 +995,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A5 corrupt state: the settlement row lost while the ledger says consumed — redelivery re-records the SAME result without a second consumed event, shot or ledger increment",
+  name:
+    "ATTACK A5 corrupt state: the settlement row lost while the ledger says consumed — redelivery re-records the SAME result without a second consumed event, shot or ledger increment",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1011,7 +1036,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A5 corrupt state: a not_chargeable abstention receipt for a ticket the ledger already CONSUMED must be a HOLD (conflicting_receipt) — the ledger tells another story about this ticket",
+  name:
+    "ATTACK A5 corrupt state: a not_chargeable abstention receipt for a ticket the ledger already CONSUMED must be a HOLD (conflicting_receipt) — the ledger tells another story about this ticket",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1051,7 +1077,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ATTACK A5 corrupt state: a not_chargeable abstention receipt for a ticket the ledger already RELEASED must be a HOLD, not a result_recorded settlement that reports the ticket 'reserved'",
+  name:
+    "ATTACK A5 corrupt state: a not_chargeable abstention receipt for a ticket the ledger already RELEASED must be a HOLD, not a result_recorded settlement that reports the ticket 'reserved'",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1063,8 +1090,7 @@ Deno.test({
       const released = await inTx(sql, 14, (tx) =>
         tx.unsafe<{ result: string }[]>(
           `select public.release_offline_ticket('${ticketA}', 'unused_ticket_returned') as result`,
-        ),
-      );
+        ));
       assertEquals(released[0].result, "accepted");
       assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "released"]);
 
@@ -1079,7 +1105,9 @@ Deno.test({
       assertEquals(
         verdict.status,
         "reconciliation_required",
-        `abstention on a released ticket was ${verdict.status} / ${verdict.financial_disposition}: ${JSON.stringify(verdict)}`,
+        `abstention on a released ticket was ${verdict.status} / ${verdict.financial_disposition}: ${
+          JSON.stringify(verdict)
+        }`,
       );
       assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "released"]);
       // A chargeable receipt for the released ticket is likewise held, never consumed.
@@ -1101,7 +1129,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A6 process death: a settlement whose transaction dies after the RPC answered leaves nothing durable; the retry under the SAME operation settles once; a retry under a NEW operation id never charges again",
+  name:
+    "ATTACK A6 process death: a settlement whose transaction dies after the RPC answered leaves nothing durable; the retry under the SAME operation settles once; a retry under a NEW operation id never charges again",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1167,7 +1196,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A7 identities: receipt and operation ids are namespaced per account (no cross-account conflict or leak); the same operation id reused for a second ticket of the same account is HELD with that ticket reserved",
+  name:
+    "ATTACK A7 identities: receipt and operation ids are namespaced per account (no cross-account conflict or leak); the same operation id reused for a second ticket of the same account is HELD with that ticket reserved",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1230,7 +1260,8 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name: "ATTACK A8 pending: a receipt naming ANOTHER account's session is never settled, never consumes and never records a fabricated result — redelivery keeps answering without a charge",
+  name:
+    "ATTACK A8 pending: a receipt naming ANOTHER account's session is never settled, never consumes and never records a fabricated result — redelivery keeps answering without a charge",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
@@ -1242,7 +1273,9 @@ Deno.test({
       const [ticketA] = issued.claims.allocation.ticketIds;
       const foreignSession = crypto.randomUUID();
       await sql.unsafe(
-        `insert into public.sessions (id, user_id, started_at) values ('${foreignSession}', '${U(19)}', now())`,
+        `insert into public.sessions (id, user_id, started_at) values ('${foreignSession}', '${
+          U(19)
+        }', now())`,
       );
       const a = await liveReceipt(U(18), issued, ticketA, "a8", {}, { sessionId: foreignSession });
       for (let i = 0; i < 2; i += 1) {

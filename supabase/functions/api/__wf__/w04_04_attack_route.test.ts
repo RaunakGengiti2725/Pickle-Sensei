@@ -67,7 +67,8 @@ const ISSUER = `${SUPABASE_URL}/functions/v1/api`;
 const KID = "w04-04-attack-route-key";
 const SIGNING_ENV = "OFFLINE_GRANT_SIGNING_JWK";
 const INSTALLATION_KEY = "ios-installation-w04-04-attack";
-const GRANT = (n: number): string => `64444444-4444-4444-8444-4444444444${String(n).padStart(2, "0")}`;
+const GRANT = (n: number): string =>
+  `64444444-4444-4444-8444-4444444444${String(n).padStart(2, "0")}`;
 const TICKETS = Array.from(
   { length: 60 },
   (_, i) => `65555555-5555-4555-8555-5555555555${String(i).padStart(2, "0")}`,
@@ -204,9 +205,12 @@ async function fixture(
   n: number,
   options: { claims?: OfflineExecutionGrantClaims; grant?: OfflineSignedExecutionGrant } = {},
 ): Promise<Fixture> {
-  const claims = options.claims ?? freeClaims(ownerId, { grantId: GRANT(n), tickets: ticketsFor(n) });
+  const claims = options.claims ??
+    freeClaims(ownerId, { grantId: GRANT(n), tickets: ticketsFor(n) });
   const grant = options.grant ?? (await sign(claims));
-  const resultId = `7a7a${String(n).padStart(4, "0")}-0404-4000-8000-${String(n).padStart(12, "0")}`;
+  const resultId = `7a7a${String(n).padStart(4, "0")}-0404-4000-8000-${
+    String(n).padStart(12, "0")
+  }`;
   const out = output(resultId);
   const rec: OfflineResultReceipt = {
     schemaVersion: OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
@@ -287,17 +291,14 @@ function durableRespond(call: RecordedCall): Response | null {
   const known = durable.get(key);
   let row: SettleRow;
   if (known) {
-    row =
-      known.sha256 === params.p_receipt_sha256
-        ? { ...known.row, delivery: "replayed" }
-        : {
-            result: "offline.receipt_conflict",
-            delivery: null,
-            status: null,
-            reason_code: null,
-            financial_disposition: null,
-            result_id: null,
-          };
+    row = known.sha256 === params.p_receipt_sha256 ? { ...known.row, delivery: "replayed" } : {
+      result: "offline.receipt_conflict",
+      delivery: null,
+      status: null,
+      reason_code: null,
+      financial_disposition: null,
+      result_id: null,
+    };
   } else if (params.p_hold_reason !== null) {
     row = {
       result: "accepted",
@@ -385,14 +386,16 @@ Deno.test(
     const one = await fixture(user.sub, 0);
     const twentySix = await Promise.all(Array.from({ length: 26 }, (_, i) => fixture(user.sub, i)));
 
-    for (const body of [
-      { receipts: [] },
-      { receipts: twentySix.map(entryOf) },
-      { receipts: { 0: entryOf(one) } },
-      { receipts: null },
-      { receipts: "x" },
-      {},
-    ]) {
+    for (
+      const body of [
+        { receipts: [] },
+        { receipts: twentySix.map(entryOf) },
+        { receipts: { 0: entryOf(one) } },
+        { receipts: null },
+        { receipts: "x" },
+        {},
+      ]
+    ) {
       const response = await post(body, user.token);
       const json = await readJson(response);
       collectCopy(json);
@@ -463,11 +466,13 @@ Deno.test(
 // B2 — network failure at each step
 // ---------------------------------------------------------------------------
 
-for (const [label, status, retryAfter] of [
-  ["500", 500, undefined],
-  ["429 + Retry-After", 429, "7"],
-  ["503", 503, undefined],
-] as const) {
+for (
+  const [label, status, retryAfter] of [
+    ["500", 500, undefined],
+    ["429 + Retry-After", 429, "7"],
+    ["503", 503, undefined],
+  ] as const
+) {
   Deno.test(
     `ATTACK B2 network: settlement RPC answers ${label} on the 2nd of 3 entries → generic 503, first entry stays durably settled, redelivery replays it and settles the rest once (no new operation, no second charge)`,
     async () => {
@@ -511,7 +516,13 @@ Deno.test(
     const user = freshUser();
     const f = await fixture(user.sub, 0);
     // Make the active policy a different one so the grant's lineage must be read.
-    const rotated = { ...releasePolicyRow, approval: { ...(releasePolicyRow.approval as Record<string, unknown>), policy: { version: "other", sha256: "e".repeat(64) } } };
+    const rotated = {
+      ...releasePolicyRow,
+      approval: {
+        ...(releasePolicyRow.approval as Record<string, unknown>),
+        policy: { version: "other", sha256: "e".repeat(64) },
+      },
+    };
     h.rpcs.read_analysis_release_policy = rotated;
     h.respond = (call) => {
       if (call.url.endsWith(LINEAGE_RPC)) {
@@ -563,7 +574,10 @@ Deno.test(
 
     const service = await post(entry, "service-role-test-key");
     collectCopy(await readJson(service));
-    assert(service.status === 401 || service.status === 403, `service bearer got ${service.status}`);
+    assert(
+      service.status === 401 || service.status === 403,
+      `service bearer got ${service.status}`,
+    );
 
     h.rpcs.is_api_session_active = false;
     const stale = await post(entry, user.token);
@@ -596,7 +610,11 @@ Deno.test(
     reset();
     const user = freshUser();
     const ahead = await fixture(user.sub, 0, {
-      claims: freeClaims(user.sub, { issuedAt: nowSeconds() + DAY, grantId: GRANT(0), tickets: ticketsFor(0) }),
+      claims: freeClaims(user.sub, {
+        issuedAt: nowSeconds() + DAY,
+        grantId: GRANT(0),
+        tickets: ticketsFor(0),
+      }),
     });
     const aheadOut = await results(await post({ receipts: [entryOf(ahead)] }, user.token));
     collectCopy({ aheadOut });
@@ -605,7 +623,11 @@ Deno.test(
     assertEquals(consumedCount(), 0);
 
     const expired = await fixture(user.sub, 1, {
-      claims: freeClaims(user.sub, { issuedAt: nowSeconds() - 30 * DAY, grantId: GRANT(1), tickets: ticketsFor(1) }),
+      claims: freeClaims(user.sub, {
+        issuedAt: nowSeconds() - 30 * DAY,
+        grantId: GRANT(1),
+        tickets: ticketsFor(1),
+      }),
     });
     assert(expired.claims.exp < nowSeconds(), "fixture: grant expired");
     const expiredOut = await results(await post({ receipts: [entryOf(expired)] }, user.token));
@@ -649,7 +671,9 @@ Deno.test(
     assertEquals(
       after[0].delivery,
       "settled",
-      `after the freeze lifted the redelivery was ${after[0].delivery}: ${JSON.stringify(after[0].reconciliation)}`,
+      `after the freeze lifted the redelivery was ${after[0].delivery}: ${
+        JSON.stringify(after[0].reconciliation)
+      }`,
     );
     assertEquals(consumedCount(), 1);
   },
