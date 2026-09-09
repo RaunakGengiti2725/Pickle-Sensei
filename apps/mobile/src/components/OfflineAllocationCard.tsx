@@ -29,7 +29,6 @@ import {
   readOfflineWalletStatus,
   type OfflineWalletStatus,
 } from '../data/offlineWallet';
-import { SYNC_RETRY_BASE_MS, triggerOutboxSync } from '../data/syncRuntime';
 import { withTransaction } from '../data/transactions';
 import { trustedTime, type TrustedTimeLeaseVerdict } from '../data/trustedTime';
 
@@ -40,9 +39,10 @@ import { trustedTime, type TrustedTimeLeaseVerdict } from '../data/trustedTime';
  * ledger (`readOfflineAllocation`, `readOfflineWalletStatus`): it never
  * spends, releases, refunds or re-presents anything, and an unreadable wallet
  * is shown as unreadable rather than as empty. While it stays on screen it
- * keeps following the ledger by reading again: after the sync runtime's own
- * foreground drain has settled, on the sync cadence while a receipt is
- * waiting or on hold, and once a live pass's trusted remaining time elapses.
+ * keeps following the ledger by reading again: on every return to the
+ * foreground, on a short cadence while a receipt is waiting or on hold (the
+ * sync runtime's drain may answer it at any moment), and once a live pass's
+ * trusted remaining time elapses.
  */
 
 export const OFFLINE_ALLOCATION_CARD_TEST_ID = 'offline-allocation-card';
@@ -414,17 +414,23 @@ function publish(
 
 /**
  * A card that stays on screen keeps following the ledger. Two things change
- * the ledger with no action on this screen: the sync drain answering a
- * receipt (the HOLD or the queue resolves) and trusted time passing the
- * lease end. Both are followed by READING again — the card never drains,
- * re-presents or expires anything itself: while a receipt is waiting or on
- * hold it re-reads on the sync cadence, and a live pass is re-read once its
- * remaining time has elapsed (the trusted reading decides whether it has
- * really ended). Timers run only while a surface is mounted for the owner
- * the state was read for, and the phone's own timers never end a pass.
+ * the ledger with no action on this screen: the sync runtime's drain
+ * answering a receipt (the HOLD or the queue resolves — on the foreground
+ * transition or on its own retry timer, and it announces neither) and
+ * trusted time passing the lease end. Both are followed by READING again —
+ * the card never drains, re-presents or expires anything itself: while a
+ * receipt is waiting or on hold it re-reads on a short cadence, and a live
+ * pass is re-read once its remaining time has elapsed (the trusted reading
+ * decides whether it has really ended). Timers run only while a surface is
+ * mounted for the owner the state was read for, and the phone's own timers
+ * never end a pass.
  */
 let mountedFollowers = 0;
 let followUpTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** While a receipt is waiting or on hold, the ledger is re-read this often:
+ * two small local reads, so a drain's answer is on screen within seconds. */
+export const PENDING_RECEIPT_READ_CADENCE_MS = 5_000;
 
 /** A read at the lease end is retried after this floor, never faster, and a
  * long lease is re-read at least daily rather than through one timer that
@@ -451,7 +457,9 @@ function nextFollowUpDelayMs(state: OfflineJourneyState): number | null {
   }
   if (state.wallet.hold || state.wallet.pending.length > 0) {
     delay =
-      delay === null ? SYNC_RETRY_BASE_MS : Math.min(delay, SYNC_RETRY_BASE_MS);
+      delay === null
+        ? PENDING_RECEIPT_READ_CADENCE_MS
+        : Math.min(delay, PENDING_RECEIPT_READ_CADENCE_MS);
   }
   return delay;
 }
@@ -479,24 +487,6 @@ function followLedger(): () => void {
     mountedFollowers -= 1;
     if (mountedFollowers === 0) clearFollowUpRead();
   };
-}
-
-/**
- * Return to the foreground: the ledger is read at once (honest about what is
- * recorded now), and read again once the sync the same transition started has
- * finished — the sync runtime drains on the same event, so the card waits
- * for that drain to record its outcome rather than racing it. The card asks
- * for nothing the runtime is not already doing on this event:
- * `triggerOutboxSync` joins the drain running for the configured generation
- * (or is the call that starts it, when this listener fires first) and
- * resolves when it settles; with no runtime configured it resolves at once.
- */
-function refreshOnForeground(owner: DataOwnerContext): void {
-  void refreshOfflineJourney(owner);
-  void triggerOutboxSync().then(() => {
-    if (mountedFollowers === 0 || !isDataOwnerContextCurrent(owner)) return;
-    void refreshOfflineJourney(owner, 'quiet');
-  });
 }
 
 function holdsServerIssuedAllocation(owner: DataOwnerContext): boolean {
@@ -607,7 +597,7 @@ export function useOfflineJourney(): OfflineJourneyState | null {
       const unfollow = followLedger();
       void refreshOfflineJourney(owner);
       const foreground = AppState.addEventListener('change', status => {
-        if (status === 'active') refreshOnForeground(owner);
+        if (status === 'active') void refreshOfflineJourney(owner);
       });
       return () => {
         foreground.remove();
@@ -648,8 +638,7 @@ export function useOfflineJourneyOnFocus(
     refresh();
     const unsubscribeFocus = navigation.addListener?.('focus', refresh);
     const foreground = AppState.addEventListener('change', status => {
-      if (status === 'active' && navigation.isFocused?.() !== false)
-        refreshOnForeground(owner);
+      if (status === 'active' && navigation.isFocused?.() !== false) refresh();
     });
     return () => {
       unsubscribeFocus?.();
