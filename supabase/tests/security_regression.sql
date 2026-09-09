@@ -7048,7 +7048,8 @@ begin
     ('settlement_receipts', true, false, false, array[]::text[]),
     ('offline_devices', true, false, false, array[]::text[]),
     ('offline_grants', true, false, false, array[]::text[]),
-    ('offline_allocation_ledger', true, false, false, array[]::text[])
+    ('offline_allocation_ledger', true, false, false, array[]::text[]),
+    ('offline_receipt_settlements', false, false, false, array[]::text[])
   ) as expected(name, can_select, can_insert, can_delete, updatable)
   loop
     relation := format('public.%I', r.name)::regclass;
@@ -7085,7 +7086,7 @@ begin
     'consume_offline_ticket','identity_scored_count','is_api_session_active',
     'issue_offline_grant','lifetime_scored_count','offline_hold_count',
     'online_reservation_count','permit_backs_sync','permit_tombstoned','register_offline_device',
-    'release_offline_ticket','reserve_analysis_permit'
+    'release_offline_ticket','reserve_analysis_permit','settle_offline_receipt'
   ] then
     raise exception 'K27: authenticated RPC allowlist drifted (got %)', functions;
   end if;
@@ -9886,6 +9887,970 @@ begin
     raise exception 'T8c: the refused deletes must leave the receipt intact';
   end if;
 end $$;
+rollback;
+
+-- ============================================================================
+-- U. (W04-04, 20260909220000) delayed offline consumption receipts settle at
+-- most once through settle_offline_receipt(): a redelivered receipt (same id,
+-- same canonical digest) replays the stored verdict and moves nothing; the
+-- same id with another body is offline.receipt_conflict; a second receipt for
+-- an operation or a result that already has one, a receipt whose ticket was
+-- already consumed or whose allocation does not match the grant it claims, a
+-- receipt without its output or with an output that does not name its result,
+-- a receipt the edge could not verify and a receipt naming another owner are
+-- all HELD as reconciliation_required with the ticket left exactly as it was
+-- (never released, never consumed, never re-executed); a malformed receipt
+-- persists nothing; the settlement table is invisible and unwritable for every
+-- client role, append-only for every role, service_role cannot execute the
+-- RPC, a caller without a live API session is refused, and the account cascade
+-- is the only remover.
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000481', 'uri@example.com',
+   '{"full_name":"Uri"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000482', 'ula@example.com',
+   '{"full_name":"Ula"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-uri', '00000000-0000-4000-8000-000000000481',
+   '{"sub":"google-sub-uri","email":"uri@example.com"}'),
+  ('apple', 'apple-sub-ula', '00000000-0000-4000-8000-000000000482',
+   '{"sub":"apple-sub-ula","email":"ula@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000004801', '00000000-0000-4000-8000-000000000481'),
+  ('00000000-0000-4000-8000-000000004802', '00000000-0000-4000-8000-000000000482');
+
+create temporary table u_state (key text primary key, id uuid);
+grant select, insert on u_state to authenticated;
+-- Test-only builders: the receipt the device signs (schema
+-- offline-result-receipt-v1, attestation omitted — the RPC settles what the
+-- edge verified), the canonical digest the edge computes for it, and the shot
+-- payload the device delivered beside it.
+create schema u_probe;
+create function u_probe.shot(p_id uuid, p_permit uuid, p_kind text) returns jsonb
+language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', p_permit,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-09T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+create function u_probe.receipt(
+  p_receipt_id text, p_owner uuid, p_key text, p_grant uuid, p_ticket uuid, p_generation integer,
+  p_operation text, p_result uuid, p_billing text
+) returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'schemaVersion', 'offline-result-receipt-v1',
+    'receiptId', p_receipt_id,
+    'ownerId', p_owner,
+    'installationKeyId', p_key,
+    'grantId', p_grant,
+    'grantJwsSha256', repeat('a', 64),
+    'lifecycleSequence', 1,
+    'nativeTime', jsonb_build_object('monotonicMs', 1000, 'wallClockIso', '2026-09-09T10:00:00Z'),
+    'ticket', case when p_ticket is null then 'null'::jsonb else jsonb_build_object(
+      'allocationId', p_grant, 'generation', p_generation, 'ticketId', p_ticket) end,
+    'operationId', p_operation,
+    'resultId', p_result,
+    'fullOutputSha256', repeat('c', 64),
+    'billingDisposition', p_billing)
+$$;
+create function u_probe.digest(p_receipt jsonb)
+returns text language sql immutable set search_path = '' as $$
+  select encode(pg_catalog.sha256(convert_to(p_receipt::text, 'UTF8')), 'hex')
+$$;
+create function u_probe.settle(p_receipt jsonb, p_output jsonb, p_hold text)
+returns table (result text, delivery text, status text, reason_code text, financial_disposition text, result_id text)
+language sql set search_path = '' as $$
+  select * from public.settle_offline_receipt(p_receipt, u_probe.digest(p_receipt), p_output, p_hold)
+$$;
+create function u_probe.events(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(e.event || ':' || e.n, ',' order by e.event)
+     from (select event, count(*) n from public.offline_allocation_ledger
+           where user_id = p_uid group by event) e), '');
+$$;
+create function u_probe.settlements(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(s.receipt_id || '=' || s.status || '/' || coalesce(s.reason_code, '-') || '/' || s.financial_disposition,
+                       ',' order by s.receipt_id)
+     from public.offline_receipt_settlements s where s.user_id = p_uid), '');
+$$;
+create function u_probe.held_on(p_uid uuid, p_ticket uuid) returns integer
+language sql security definer set search_path = '' as $$
+  select count(*)::int from public.offline_receipt_settlements s
+  where s.user_id = p_uid and s.ticket_id = p_ticket
+    and s.status = 'reconciliation_required' and s.financial_disposition = 'reserved';
+$$;
+create function u_probe.recorded(p_uid uuid) returns integer
+language sql security definer set search_path = '' as $$
+  select count(*)::int from public.offline_receipt_settlements s where s.user_id = p_uid;
+$$;
+grant usage on schema u_probe to authenticated;
+grant execute on all functions in schema u_probe to authenticated;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000481';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004801"}';
+
+-- U1: setup as Uri — an attested device holding a free grant of two tickets.
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('uri-key-1', 'production', true);
+  if r.result <> 'accepted' then
+    raise exception 'U1 precondition: registration is accepted (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('uri-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 1 or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'U1 precondition: two free tickets are allocated (got %, %, %)', g.result, g.generation, g.ticket_ids;
+  end if;
+  insert into u_state values ('grant', g.grant_id), ('t1', g.ticket_ids[1]), ('t2', g.ticket_ids[2]);
+  if u_probe.events((select auth.uid())) <> 'allocated:2' then
+    raise exception 'U1 precondition: the ledger holds exactly the two allocations (got %)', u_probe.events((select auth.uid()));
+  end if;
+end $$;
+
+-- U2: a chargeable receipt settles its ticket exactly once; the identical
+-- redelivery replays the verdict; the same id with another body is a
+-- conflict; a second receipt for the same operation, the same result or the
+-- same (consumed) ticket is HELD and writes no rating.
+do $$
+declare
+  uri uuid := (select auth.uid());
+  g uuid := (select id from u_state where key = 'grant');
+  t1 uuid := (select id from u_state where key = 't1');
+  r1 jsonb := u_probe.receipt('rcpt-1', uri, 'uri-key-1', g, t1, 1, 'op-1',
+    '00000000-0000-4000-8000-000000004811', 'joint_verification_required');
+  r1b jsonb := u_probe.receipt('rcpt-1', uri, 'uri-key-1', g, t1, 1, 'op-1',
+    '00000000-0000-4000-8000-000000004812', 'joint_verification_required');
+  r_same_op jsonb := u_probe.receipt('rcpt-1-again', uri, 'uri-key-1', g, t1, 1, 'op-1',
+    '00000000-0000-4000-8000-000000004812', 'joint_verification_required');
+  r_same_result jsonb := u_probe.receipt('rcpt-1-result', uri, 'uri-key-1', g, t1, 1, 'op-1-result',
+    '00000000-0000-4000-8000-000000004811', 'joint_verification_required');
+  r_same_ticket jsonb := u_probe.receipt('rcpt-2', uri, 'uri-key-1', g, t1, 1, 'op-2',
+    '00000000-0000-4000-8000-000000004812', 'joint_verification_required');
+  o1 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004811', null, 'scored');
+  o2 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004812', null, 'scored');
+  v record;
+begin
+  select * into v from u_probe.settle(r1, o1, null);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded'
+     or v.reason_code is not null or v.financial_disposition <> 'consumed'
+     or v.result_id <> '00000000-0000-4000-8000-000000004811' then
+    raise exception 'U2: a verified chargeable receipt settles its ticket (got %, %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition, v.result_id;
+  end if;
+  if (select count(*) from public.shots
+      where id = '00000000-0000-4000-8000-000000004811' and user_id = uri
+        and result_kind = 'scored' and analysis_permit_id is null and offline_ticket_id = t1) <> 1
+     or u_probe.events(uri) <> 'allocated:2,consumed:1'
+     or public.lifetime_scored_count() <> 1 then
+    raise exception 'U2: the rating, the consumed event and the receipt commit together (got %, %)',
+      u_probe.events(uri), public.lifetime_scored_count();
+  end if;
+  select * into v from u_probe.settle(r1, o1, null);
+  if v.result <> 'accepted' or v.delivery <> 'replayed' or v.status <> 'result_recorded'
+     or v.financial_disposition <> 'consumed' or v.result_id <> '00000000-0000-4000-8000-000000004811' then
+    raise exception 'U2: the identical redelivery replays the stored verdict (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(r1, o1, null);
+  if v.delivery <> 'replayed' then
+    raise exception 'U2: every further redelivery replays (got %)', v.delivery;
+  end if;
+  select * into v from u_probe.settle(r1b, o2, null);
+  if v.result <> 'offline.receipt_conflict' or v.delivery is not null then
+    raise exception 'U2: the same receipt id with another body is a conflict (got %, %)', v.result, v.delivery;
+  end if;
+  select * into v from u_probe.settle(r_same_op, o2, null);
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.status <> 'reconciliation_required'
+     or v.reason_code <> 'conflicting_receipt' or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U2: a second receipt for the same operation is held (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(r_same_result, o1, null);
+  if v.delivery <> 'held' or v.reason_code <> 'conflicting_receipt' then
+    raise exception 'U2: a second receipt for the same result is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  select * into v from u_probe.settle(r_same_ticket, o2, null);
+  if v.delivery <> 'held' or v.reason_code <> 'conflicting_receipt' or v.financial_disposition <> 'reserved' then
+    raise exception 'U2: a second rating claimed under a consumed ticket is held (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004812')
+     or u_probe.events(uri) <> 'allocated:2,consumed:1'
+     or public.lifetime_scored_count() <> 1 then
+    raise exception 'U2: held receipts write no rating and move no ticket (got %, %)',
+      u_probe.events(uri), public.lifetime_scored_count();
+  end if;
+  if u_probe.settlements(uri) <> 'rcpt-1=result_recorded/-/consumed,'
+       || 'rcpt-1-again=reconciliation_required/conflicting_receipt/reserved,'
+       || 'rcpt-1-result=reconciliation_required/conflicting_receipt/reserved,'
+       || 'rcpt-2=reconciliation_required/conflicting_receipt/reserved' then
+    raise exception 'U2: one durable row per receipt id, the conflict persisted nothing (got %)', u_probe.settlements(uri);
+  end if;
+end $$;
+
+-- U3: ambiguous evidence is HELD, never refunded and never settled: the
+-- ticket stays allocated through every hold and is still settled by the one
+-- verified receipt that follows. A malformed receipt persists nothing.
+do $$
+declare
+  uri uuid := (select auth.uid());
+  ula uuid := '00000000-0000-4000-8000-000000000482';
+  g uuid := (select id from u_state where key = 'grant');
+  t1 uuid := (select id from u_state where key = 't1');
+  t2 uuid := (select id from u_state where key = 't2');
+  o3 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004813', null, 'scored');
+  o4 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004814', null, 'scored');
+  o6 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004816', null, 'scored');
+  o9 jsonb := u_probe.shot('00000000-0000-4000-8000-000000004821', null, 'scored');
+  v record;
+begin
+  -- no output travelled with the receipt
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-3', uri, 'uri-key-1', g, t2, 1, 'op-3', '00000000-0000-4000-8000-000000004813', 'joint_verification_required'),
+    null, null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_missing' or v.financial_disposition <> 'reserved' then
+    raise exception 'U3: a receipt without its output is held as evidence_missing (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- the output names another result
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-4', uri, 'uri-key-1', g, t2, 1, 'op-4', '00000000-0000-4000-8000-000000004814', 'joint_verification_required'),
+    o3, null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' or v.financial_disposition <> 'reserved' then
+    raise exception 'U3: an output that does not name the result is held as evidence_ambiguous (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- the output is an abstention yet the receipt claims a charge
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-4b', uri, 'uri-key-1', g, t2, 1, 'op-4b', '00000000-0000-4000-8000-00000000481d', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-00000000481d', null, 'low_confidence'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: a charge claimed for an unscored output is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- the edge could not verify the signature / binding / digest
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-5', uri, 'uri-key-1', g, t2, 1, 'op-5', '00000000-0000-4000-8000-000000004815', 'joint_verification_required'),
+    o4, 'evidence_ambiguous');
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' or v.financial_disposition <> 'reserved' then
+    raise exception 'U3: an edge hold reason is recorded as the hold (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- the ticket does not belong to the grant the receipt claims
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-6', uri, 'uri-key-1', '00000000-0000-4000-8000-00000000f0f0', t2, 1, 'op-6', '00000000-0000-4000-8000-000000004816', 'joint_verification_required'),
+    o6, null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: a ticket outside the claimed grant is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- the receipt claims another generation of the same grant
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-6b', uri, 'uri-key-1', g, t2, 2, 'op-6b', '00000000-0000-4000-8000-00000000481e', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-00000000481e', null, 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: a ticket claimed under another generation is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- the receipt names another owner
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-7', ula, 'uri-key-1', g, t2, 1, 'op-7', '00000000-0000-4000-8000-00000000481f', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-00000000481f', null, 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'owner_mismatch' or v.financial_disposition <> 'reserved' then
+    raise exception 'U3: a receipt naming another owner is held as owner_mismatch (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- an unknown ticket
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-8', uri, 'uri-key-1', g, '00000000-0000-4000-8000-00000000f0f1', 1, 'op-8', '00000000-0000-4000-8000-000000004820', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004820', null, 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: an unknown ticket is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- malformed receipts: nothing recorded
+  select * into v from public.settle_offline_receipt('{"receiptId":"rcpt-9"}'::jsonb, repeat('d', 64), o9, null);
+  if v.result <> 'offline.invalid_input' or v.delivery is not null then
+    raise exception 'U3: a receipt missing its identities is refused (got %)', v.result;
+  end if;
+  select * into v from public.settle_offline_receipt(
+    u_probe.receipt('rcpt-9', uri, 'uri-key-1', g, t2, 1, 'op-9', '00000000-0000-4000-8000-000000004821', 'joint_verification_required'),
+    'not-a-digest', o9, null);
+  if v.result <> 'offline.invalid_input' then
+    raise exception 'U3: a receipt without a canonical digest is refused (got %)', v.result;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-9', uri, 'uri-key-1', g, t2, 1, 'op-9', '00000000-0000-4000-8000-000000004821', 'joint_verification_required'),
+    o9, 'refund');
+  if v.result <> 'offline.invalid_input' then
+    raise exception 'U3: an unknown hold reason is refused (got %)', v.result;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-9', uri, 'uri-key-1', g, t2, 1, 'op-9', '00000000-0000-4000-8000-000000004821', 'not_a_disposition'),
+    o9, null);
+  if v.result <> 'offline.invalid_input' then
+    raise exception 'U3: an unknown billing disposition is refused (got %)', v.result;
+  end if;
+  -- through every hold: no rating, no release, no consumption, the ticket is
+  -- exactly where the allocation left it
+  if exists (select 1 from public.shots where user_id = uri and id <> '00000000-0000-4000-8000-000000004811')
+     or u_probe.events(uri) <> 'allocated:2,consumed:1'
+     or public.lifetime_scored_count() <> 1
+     or public.offline_hold_count() <> 1 then
+    raise exception 'U3: holds never refund, release or consume (got %, %, %)',
+      u_probe.events(uri), public.lifetime_scored_count(), public.offline_hold_count();
+  end if;
+  if u_probe.settlements(uri) like '%rcpt-9%' or u_probe.held_on(uri, t2) <> 7 or u_probe.held_on(uri, t1) <> 3
+     or u_probe.settlements(uri) not like '%rcpt-8=reconciliation_required/evidence_ambiguous/reserved%'
+     or u_probe.recorded(uri) <> 12 then
+    raise exception 'U3: every hold is durable with its ticket still reserved, a refused receipt is not (got %)',
+      u_probe.settlements(uri);
+  end if;
+  -- an abstention under the outstanding ticket is recorded and consumes nothing
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-10', uri, 'uri-key-1', g, t2, 1, 'op-10', '00000000-0000-4000-8000-000000004817', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004817', null, 'low_confidence'), null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'reserved'
+     or v.result_id <> '00000000-0000-4000-8000-000000004817' or u_probe.events(uri) <> 'allocated:2,consumed:1' then
+    raise exception 'U3: a not_chargeable receipt records its result and leaves the ticket outstanding (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
+  end if;
+  -- a not_chargeable receipt beside an output that claims a scored rating is
+  -- contradictory evidence (the mirror of rcpt-4b): held, durable, nothing moves
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-10b', uri, 'uri-key-1', g, t2, 1, 'op-10b', '00000000-0000-4000-8000-000000004822', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004822', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'reserved' or v.result_id is not null
+     or u_probe.events(uri) <> 'allocated:2,consumed:1'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004822') then
+    raise exception 'U3: a not_chargeable receipt with a scored output is held as evidence_ambiguous (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, u_probe.events(uri);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-10b', uri, 'uri-key-1', g, t2, 1, 'op-10b', '00000000-0000-4000-8000-000000004822', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004822', null, 'scored'), null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: the contradictory receipt replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
+  -- the held ticket is still the device's to settle with verified evidence
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-11', uri, 'uri-key-1', g, t2, 1, 'op-11', '00000000-0000-4000-8000-000000004818', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004818', null, 'scored'), null);
+  if v.delivery <> 'settled' or v.financial_disposition <> 'consumed'
+     or u_probe.events(uri) <> 'allocated:2,consumed:2' or public.lifetime_scored_count() <> 2 then
+    raise exception 'U3: the held ticket was never reclaimed and settles once with verified evidence (got %, %, %)',
+      v.delivery, u_probe.events(uri), public.lifetime_scored_count();
+  end if;
+  -- and a Pro (no-ticket) receipt records its result with no financial disposition
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12', uri, 'uri-key-1', g, null, null, 'op-12', '00000000-0000-4000-8000-000000004819', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004819', null, 'scored'), null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or u_probe.events(uri) <> 'allocated:2,consumed:2' then
+    raise exception 'U3: a no-ticket receipt is recorded without touching the ledger (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
+  end if;
+end $$;
+
+-- U4: the settlement table is closed to the owner role — no read, no write —
+-- and the RPC is bound to a live session of the caller.
+do $$
+declare uri uuid := (select auth.uid()); claims text := current_setting('request.jwt.claims');
+        g uuid := (select id from u_state where key = 'grant'); t2 uuid := (select id from u_state where key = 't2');
+begin
+  begin
+    perform 1 from public.offline_receipt_settlements;
+    raise exception 'U4: the owner must not read settlements directly';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.offline_receipt_settlements (
+      user_id, receipt_id, receipt_sha256, owner_id, installation_key_id, grant_id, grant_jws_sha256,
+      operation_id, result_id, full_output_sha256, billing_disposition, lifecycle_sequence,
+      status, financial_disposition, receipt
+    ) values (
+      uri, 'forged', repeat('e', 64), uri, 'uri-key-1', g, repeat('a', 64),
+      'op-forged', '00000000-0000-4000-8000-00000000481a', repeat('c', 64), 'joint_verification_required', 1,
+      'result_recorded', 'not_applicable', '{}'::jsonb);
+    raise exception 'U4: the owner must not forge a settlement';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.offline_receipt_settlements set status = 'result_recorded', reason_code = null where user_id = uri;
+    raise exception 'U4: the owner must not rewrite a settlement';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_receipt_settlements where user_id = uri;
+    raise exception 'U4: the owner must not erase a settlement';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', '{"session_id":"00000000-0000-4000-8000-000000004802"}', true);
+  begin
+    perform u_probe.settle(
+      u_probe.receipt('rcpt-13', uri, 'uri-key-1', g, t2, 1, 'op-13', '00000000-0000-4000-8000-00000000481b', 'joint_verification_required'),
+      u_probe.shot('00000000-0000-4000-8000-00000000481b', null, 'scored'), null);
+    raise exception 'U4: settlement binds to a live session of the caller';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', '{}', true);
+  begin
+    perform u_probe.settle(
+      u_probe.receipt('rcpt-13', uri, 'uri-key-1', g, t2, 1, 'op-13', '00000000-0000-4000-8000-00000000481b', 'joint_verification_required'),
+      u_probe.shot('00000000-0000-4000-8000-00000000481b', null, 'scored'), null);
+    raise exception 'U4: a missing session fails closed';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', claims, true);
+  if u_probe.recorded(uri) <> 16 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
+    raise exception 'U4: refused calls persist nothing (got %)', u_probe.settlements(uri);
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- U5: anon and service_role: no read, no execute; superuser: append-only.
+set local role anon;
+do $$
+begin
+  begin
+    perform 1 from public.offline_receipt_settlements;
+    raise exception 'U5: anon must not read settlements';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.settle_offline_receipt('{}'::jsonb, repeat('a', 64), null, null);
+    raise exception 'U5: anon must not execute the settlement RPC';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local role service_role;
+do $$
+begin
+  begin
+    perform 1 from public.offline_receipt_settlements;
+    raise exception 'U5: service_role must not read settlements';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.settle_offline_receipt('{}'::jsonb, repeat('a', 64), null, null);
+    raise exception 'U5: service_role must not execute the settlement RPC (the route settles as the caller)';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+do $$
+declare uri uuid := '00000000-0000-4000-8000-000000000481';
+begin
+  begin
+    update public.offline_receipt_settlements set status = 'result_recorded', reason_code = null, financial_disposition = 'consumed'
+    where user_id = uri and receipt_id = 'rcpt-3';
+    raise exception 'U5: a held settlement is append-only for every role';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from public.offline_receipt_settlements where user_id = uri and receipt_id = 'rcpt-1';
+    raise exception 'U5: a settlement is not removable by any role';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_receipt_settlements (
+      user_id, receipt_id, receipt_sha256, owner_id, installation_key_id, grant_id, grant_jws_sha256,
+      operation_id, result_id, full_output_sha256, billing_disposition, lifecycle_sequence,
+      status, reason_code, financial_disposition, receipt
+    ) values (
+      uri, 'refund', repeat('e', 64), uri, 'uri-key-1', gen_random_uuid(), repeat('a', 64),
+      'op-refund', '00000000-0000-4000-8000-00000000481c', repeat('c', 64), 'joint_verification_required', 1,
+      'reconciliation_required', 'evidence_ambiguous', 'consumed', '{}'::jsonb);
+    raise exception 'U5: a hold can never be recorded as consumed';
+  exception when check_violation then null;
+  end;
+  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 16
+     or (select status || '/' || financial_disposition from public.offline_receipt_settlements
+         where user_id = uri and receipt_id = 'rcpt-3') <> 'reconciliation_required/reserved' then
+    raise exception 'U5: the refused writes leave every settlement intact';
+  end if;
+  -- the account cascade is the one remover
+  delete from auth.users where id = uri;
+  if exists (select 1 from public.offline_receipt_settlements where user_id = uri) then
+    raise exception 'U5: account deletion must remove the settlements';
+  end if;
+end $$;
+rollback;
+
+-- ============================================================================
+-- U6–U9. (W04-04 round 2, 20260909220000) a ticket is bound to its allocation
+-- LINEAGE, not the literal allocated row: issue_offline_grant() re-issues the
+-- installation's outstanding tickets under the next generation (new grant id,
+-- no new allocated row), so a receipt bound to the refreshed grant settles the
+-- generation-1 ticket exactly once, the stale receipt under the superseded
+-- grant then holds (never a second consumption), an out-of-order receipt for
+-- the other ticket under the superseded grant still settles, and foreign
+-- installations, foreign grants and generations the lineage never had stay
+-- HELD; a receipt whose session has not synced is answered pending with
+-- nothing recorded and settles on the identical redelivery once the session
+-- exists; lifecycleSequence/generation are positive safe integers (2^31 gets a
+-- durable verdict, 2^53 is refused); read_analysis_release_policy_lineage()
+-- answers an installed policy by digest (superseded or withdrawn included) to
+-- the service role alone and the nothing-installed row for an unknown digest.
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000491', 'ugo@example.com',
+   '{"full_name":"Ugo"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000492', 'uma@example.com',
+   '{"full_name":"Uma"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-ugo', '00000000-0000-4000-8000-000000000491',
+   '{"sub":"google-sub-ugo","email":"ugo@example.com"}'),
+  ('apple', 'apple-sub-uma', '00000000-0000-4000-8000-000000000492',
+   '{"sub":"apple-sub-uma","email":"uma@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000004901', '00000000-0000-4000-8000-000000000491'),
+  ('00000000-0000-4000-8000-000000004902', '00000000-0000-4000-8000-000000000492');
+
+create temporary table u2_state (key text primary key, id uuid);
+grant select, insert on u2_state to authenticated;
+create schema u2_probe;
+create function u2_probe.shot(p_id uuid, p_kind text, p_session uuid default null) returns jsonb
+language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'sessionId', p_session,
+    'analysisPermitId', null,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-09T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+create function u2_probe.receipt(
+  p_receipt_id text, p_owner uuid, p_key text, p_grant uuid, p_ticket uuid, p_generation bigint,
+  p_operation text, p_result uuid, p_billing text, p_sequence bigint default 1
+) returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'schemaVersion', 'offline-result-receipt-v1',
+    'receiptId', p_receipt_id,
+    'ownerId', p_owner,
+    'installationKeyId', p_key,
+    'grantId', p_grant,
+    'grantJwsSha256', repeat('a', 64),
+    'lifecycleSequence', p_sequence,
+    'nativeTime', jsonb_build_object('monotonicMs', 1000, 'wallClockIso', '2026-09-09T10:00:00Z'),
+    'ticket', case when p_ticket is null then 'null'::jsonb else jsonb_build_object(
+      'allocationId', p_grant, 'generation', p_generation, 'ticketId', p_ticket) end,
+    'operationId', p_operation,
+    'resultId', p_result,
+    'fullOutputSha256', repeat('c', 64),
+    'billingDisposition', p_billing)
+$$;
+create function u2_probe.settle(p_receipt jsonb, p_output jsonb, p_hold text)
+returns table (result text, delivery text, status text, reason_code text, financial_disposition text, result_id text)
+language sql set search_path = '' as $$
+  select * from public.settle_offline_receipt(
+    p_receipt, encode(pg_catalog.sha256(convert_to(p_receipt::text, 'UTF8')), 'hex'), p_output, p_hold)
+$$;
+create function u2_probe.events(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(e.event || ':' || e.n, ',' order by e.event)
+     from (select event, count(*) n from public.offline_allocation_ledger
+           where user_id = p_uid group by event) e), '');
+$$;
+create function u2_probe.recorded(p_uid uuid) returns integer
+language sql security definer set search_path = '' as $$
+  select count(*)::int from public.offline_receipt_settlements s where s.user_id = p_uid;
+$$;
+create function u2_probe.stored_sequence(p_uid uuid, p_receipt text) returns bigint
+language sql security definer set search_path = '' as $$
+  select s.lifecycle_sequence from public.offline_receipt_settlements s
+  where s.user_id = p_uid and s.receipt_id = p_receipt;
+$$;
+create function u2_probe.shots_on(p_uid uuid, p_ticket uuid) returns integer
+language sql security definer set search_path = '' as $$
+  select count(*)::int from public.shots s where s.user_id = p_uid and s.offline_ticket_id = p_ticket;
+$$;
+-- the app's session outbox landing after the receipt
+create function u2_probe.sync_session(p_uid uuid, p_session uuid) returns void
+language sql security definer set search_path = '' as $$
+  insert into public.sessions (id, user_id, started_at) values (p_session, p_uid, now());
+$$;
+grant usage on schema u2_probe to authenticated;
+grant execute on all functions in schema u2_probe to authenticated;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
+-- Uma: her own attested device with its own free grant — the foreign grant
+-- and the foreign owner of the lineage checks.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000492';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004902"}';
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('uma-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('uma-key-1', 2);
+  if r.result <> 'accepted' or g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'U6 precondition: Uma holds a free grant of two tickets (got %, %)', r.result, g.result;
+  end if;
+  insert into u2_state values ('uma-grant', g.grant_id), ('uma-t1', g.ticket_ids[1]), ('uma-t2', g.ticket_ids[2]);
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000491';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004901"}';
+
+-- U6: generation 1 allocates two tickets; the lease refresh re-issues the
+-- SAME tickets under generation 2 (a new grant id) and writes no new
+-- allocated row.
+do $$
+declare r record; g1 record; g2 record;
+begin
+  select * into r from public.register_offline_device('ugo-key-1', 'production', true);
+  if r.result <> 'accepted' then
+    raise exception 'U6 precondition: registration is accepted (got %)', r.result;
+  end if;
+  select * into g1 from public.issue_offline_grant('ugo-key-1', 2);
+  if g1.result <> 'accepted' or g1.generation <> 1 or coalesce(array_length(g1.ticket_ids, 1), 0) <> 2 then
+    raise exception 'U6 precondition: generation 1 allocates two tickets (got %, %, %)', g1.result, g1.generation, g1.ticket_ids;
+  end if;
+  select * into g2 from public.issue_offline_grant('ugo-key-1', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.grant_id = g1.grant_id
+     or g2.ticket_ids <> g1.ticket_ids then
+    raise exception 'U6 precondition: the refresh re-issues the same tickets under generation 2 (got %, %, %, %)',
+      g2.result, g2.generation, g2.grant_id, g2.ticket_ids;
+  end if;
+  if u2_probe.events((select auth.uid())) <> 'allocated:2' then
+    raise exception 'U6 precondition: the refresh writes no new allocated row (got %)', u2_probe.events((select auth.uid()));
+  end if;
+  insert into u2_state values
+    ('g1', g1.grant_id), ('g2', g2.grant_id), ('t1', g1.ticket_ids[1]), ('t2', g1.ticket_ids[2]);
+end $$;
+
+-- U7: lineage. Foreign evidence is HELD first (it must not poison the
+-- honest receipt that follows); the receipt bound to the refreshed grant
+-- settles the generation-1 ticket exactly once; the stale receipt for the
+-- same ticket under the superseded grant holds; the out-of-order receipt for
+-- the other ticket under the superseded grant still settles.
+do $$
+declare
+  ugo uuid := (select auth.uid());
+  uma uuid := '00000000-0000-4000-8000-000000000492';
+  g1 uuid := (select id from u2_state where key = 'g1');
+  g2 uuid := (select id from u2_state where key = 'g2');
+  t1 uuid := (select id from u2_state where key = 't1');
+  t2 uuid := (select id from u2_state where key = 't2');
+  uma_grant uuid := (select id from u2_state where key = 'uma-grant');
+  uma_t1 uuid := (select id from u2_state where key = 'uma-t1');
+  r_g2 jsonb := u2_probe.receipt('r2-1', ugo, 'ugo-key-1', g2, t1, 2, 'op2-1',
+    '00000000-0000-4000-8000-000000004911', 'joint_verification_required');
+  o1 jsonb := u2_probe.shot('00000000-0000-4000-8000-000000004911', 'scored');
+  v record;
+begin
+  -- the refreshed grant claimed under the generation it never had
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-gen', ugo, 'ugo-key-1', g2, t1, 1, 'op2-gen', '00000000-0000-4000-8000-000000004912', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004912', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' or v.financial_disposition <> 'reserved' then
+    raise exception 'U7: a generation the grant never had is held (got %, %, %)', v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- the superseded grant claimed under the refreshed generation
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-gen1', ugo, 'ugo-key-1', g1, t1, 2, 'op2-gen1', '00000000-0000-4000-8000-000000004913', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004913', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U7: a grant/generation pair the lineage never issued is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- another installation of the same account naming this installation's ticket
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-install', ugo, 'ugo-key-2', g2, t1, 2, 'op2-install', '00000000-0000-4000-8000-000000004914', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004914', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U7: a foreign installation is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- another account's grant (a real grant of a real device) naming my ticket
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-foreign', ugo, 'ugo-key-1', uma_grant, t1, 1, 'op2-foreign', '00000000-0000-4000-8000-000000004915', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004915', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U7: another account''s grant is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  -- my refreshed grant naming another account's ticket
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-theirs', ugo, 'ugo-key-1', g2, uma_t1, 2, 'op2-theirs', '00000000-0000-4000-8000-000000004916', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004916', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U7: another account''s ticket is held (got %, %)', v.delivery, v.reason_code;
+  end if;
+  if u2_probe.events(ugo) <> 'allocated:2' or u2_probe.events(uma) <> 'allocated:2'
+     or exists (select 1 from public.shots where user_id in (ugo, uma))
+     or public.lifetime_scored_count() <> 0 or u2_probe.recorded(ugo) <> 5 then
+    raise exception 'U7: foreign evidence is held durably and moves nothing (got %, %, %)',
+      u2_probe.events(ugo), u2_probe.events(uma), u2_probe.recorded(ugo);
+  end if;
+
+  -- the honest receipt bound to the refreshed grant settles the g1 ticket once
+  select * into v from u2_probe.settle(r_g2, o1, null);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded'
+     or v.financial_disposition <> 'consumed' or v.result_id <> '00000000-0000-4000-8000-000000004911' then
+    raise exception 'U7: a receipt bound to the refreshed grant settles the re-issued ticket (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  if u2_probe.shots_on(ugo, t1) <> 1 or u2_probe.events(ugo) <> 'allocated:2,consumed:1'
+     or public.lifetime_scored_count() <> 1 then
+    raise exception 'U7: one rating, one consumed event (got %, %, %)',
+      u2_probe.shots_on(ugo, t1), u2_probe.events(ugo), public.lifetime_scored_count();
+  end if;
+  select * into v from u2_probe.settle(r_g2, o1, null);
+  if v.delivery <> 'replayed' or v.financial_disposition <> 'consumed' then
+    raise exception 'U7: the identical redelivery replays (got %, %)', v.delivery, v.financial_disposition;
+  end if;
+  -- the stale receipt for the same ticket under the superseded grant
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-stale', ugo, 'ugo-key-1', g1, t1, 1, 'op2-stale', '00000000-0000-4000-8000-000000004917', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004917', 'scored'), null);
+  if v.delivery <> 'held' or v.reason_code <> 'conflicting_receipt' or v.financial_disposition <> 'reserved' then
+    raise exception 'U7: the same ticket under the superseded generation holds, never double-consumes (got %, %, %)',
+      v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- out of order: the other ticket, executed under the superseded grant
+  -- before the refresh, still settles through its own lineage
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r2-2', ugo, 'ugo-key-1', g1, t2, 1, 'op2-2', '00000000-0000-4000-8000-000000004918', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004918', 'scored'), null);
+  if v.delivery <> 'settled' or v.financial_disposition <> 'consumed' then
+    raise exception 'U7: an out-of-order receipt under the superseded grant settles its outstanding ticket (got %, %)',
+      v.delivery, v.financial_disposition;
+  end if;
+  if u2_probe.shots_on(ugo, t1) <> 1 or u2_probe.shots_on(ugo, t2) <> 1
+     or u2_probe.events(ugo) <> 'allocated:2,consumed:2' or public.lifetime_scored_count() <> 2
+     or public.offline_hold_count() <> 0 or u2_probe.recorded(ugo) <> 8 then
+    raise exception 'U7: exactly the two lifetime ratings, nothing held, every receipt durable (got %, %, %, %)',
+      u2_probe.events(ugo), public.lifetime_scored_count(), public.offline_hold_count(), u2_probe.recorded(ugo);
+  end if;
+end $$;
+reset role;
+
+-- U8: as Uma — a receipt whose session has not synced is pending with nothing
+-- recorded, redelivery stays pending, and the identical receipt settles once
+-- the session exists; lifecycleSequence 2^31 gets a durable verdict,
+-- generation 2^31 is a durable hold, 2^53 is refused.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000492';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004902"}';
+do $$
+declare
+  uma uuid := (select auth.uid());
+  g uuid := (select id from u2_state where key = 'uma-grant');
+  t1 uuid := (select id from u2_state where key = 'uma-t1');
+  t2 uuid := (select id from u2_state where key = 'uma-t2');
+  sess uuid := '00000000-0000-4000-8000-000000004930';
+  r_pending jsonb := u2_probe.receipt('r3-1', uma, 'uma-key-1', g, t1, 1, 'op3-1',
+    '00000000-0000-4000-8000-000000004921', 'joint_verification_required');
+  o_pending jsonb := u2_probe.shot('00000000-0000-4000-8000-000000004921', 'scored', '00000000-0000-4000-8000-000000004930');
+  r_wide jsonb := u2_probe.receipt('r3-2', uma, 'uma-key-1', g, t2, 1, 'op3-2',
+    '00000000-0000-4000-8000-000000004922', 'not_chargeable', 2147483648);
+  v record;
+begin
+  select * into v from u2_probe.settle(r_pending, o_pending, null);
+  if v.result <> 'accepted' or v.delivery <> 'pending' or v.status <> 'pending' or v.reason_code is not null
+     or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U8: a receipt whose session has not synced is pending (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle(r_pending, o_pending, null);
+  if v.delivery <> 'pending' then
+    raise exception 'U8: redelivery before the session syncs stays pending (got %)', v.delivery;
+  end if;
+  if u2_probe.recorded(uma) <> 0 or u2_probe.events(uma) <> 'allocated:2' or u2_probe.shots_on(uma, t1) <> 0 then
+    raise exception 'U8: pending records nothing and moves nothing (got %, %, %)',
+      u2_probe.recorded(uma), u2_probe.events(uma), u2_probe.shots_on(uma, t1);
+  end if;
+  perform u2_probe.sync_session(uma, sess);
+  select * into v from u2_probe.settle(r_pending, o_pending, null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'consumed'
+     or v.result_id <> '00000000-0000-4000-8000-000000004921' then
+    raise exception 'U8: the identical receipt settles once the session exists (got %, %, %)',
+      v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle(r_pending, o_pending, null);
+  if v.delivery <> 'replayed' or u2_probe.shots_on(uma, t1) <> 1 or u2_probe.events(uma) <> 'allocated:2,consumed:1' then
+    raise exception 'U8: settled once, then replayed (got %, %, %)', v.delivery, u2_probe.shots_on(uma, t1), u2_probe.events(uma);
+  end if;
+
+  -- a generation beyond int4 the lineage never issued: a durable hold
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-gen', uma, 'uma-key-1', g, t2, 2147483648, 'op3-gen', '00000000-0000-4000-8000-000000004923', 'joint_verification_required'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004923', 'scored'), null);
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U8: generation 2^31 is a durable hold, not invalid_input (got %, %, %)', v.result, v.delivery, v.reason_code;
+  end if;
+  -- lifecycleSequence beyond int4: a durable verdict, stored exactly
+  select * into v from u2_probe.settle(r_wide, u2_probe.shot('00000000-0000-4000-8000-000000004922', 'low_confidence'), null);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'reserved' then
+    raise exception 'U8: lifecycleSequence 2^31 receives a durable verdict (got %, %, %, %)', v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  if u2_probe.stored_sequence(uma, 'r3-2') <> 2147483648 then
+    raise exception 'U8: the sequence is stored exactly (got %)', u2_probe.stored_sequence(uma, 'r3-2');
+  end if;
+  -- beyond the shared contract's safe integer: refused, nothing recorded
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-huge', uma, 'uma-key-1', g, t2, 1, 'op3-huge', '00000000-0000-4000-8000-000000004924', 'joint_verification_required', 9007199254740992),
+    u2_probe.shot('00000000-0000-4000-8000-000000004924', 'scored'), null);
+  if v.result <> 'offline.invalid_input' or v.delivery is not null then
+    raise exception 'U8: lifecycleSequence 2^53 is refused (got %, %)', v.result, v.delivery;
+  end if;
+  if u2_probe.recorded(uma) <> 3 or u2_probe.events(uma) <> 'allocated:2,consumed:1' or public.lifetime_scored_count() <> 1 then
+    raise exception 'U8: three durable verdicts, one rating, the refused receipt persisted nothing (got %, %, %)',
+      u2_probe.recorded(uma), u2_probe.events(uma), public.lifetime_scored_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- U9: the release lineage reader — an installed policy by digest, superseded
+-- and withdrawn included, for the service role alone.
+do $$
+declare
+  artifact jsonb := jsonb_build_object('version', 'fixture-1', 'sha256', repeat('a', 64));
+  lineage jsonb; document jsonb; serialized text;
+  hashes text[] := '{}';
+  v text;
+  state jsonb; lineage_row jsonb;
+begin
+  select jsonb_object_agg(k, artifact) into lineage from unnest(array[
+    'pipeline', 'definition', 'model', 'preprocessing', 'calibration', 'dataset', 'validationReport', 'supportedDomain'
+  ]) k;
+  foreach v in array array['fixture-policy-u9-1', 'fixture-policy-u9-2'] loop
+    document := jsonb_build_object(
+      'schemaVersion', 'analysis-release-policy-v1', 'version', v,
+      'validFrom', floor(extract(epoch from now()))::bigint - 60,
+      'validUntil', floor(extract(epoch from now()))::bigint + 3600,
+      'mechanics', jsonb_build_object('lineage', lineage),
+      'benchmark', jsonb_build_object('lineage', lineage,
+        'uncertainty', jsonb_build_object('kind', 'calibrated_prediction_interval', 'nominalCoverage', 0.9,
+          'coverageScope', 'supported_slice', 'calibrationUnit', 'player_session'),
+        'maximumIntervalWidth', 1.5, 'boundaryStep', 0.25,
+        'supportedIntervals', jsonb_build_array(jsonb_build_object('lower', 3, 'upper', 5))),
+      'supportedInputs', jsonb_build_array(jsonb_build_object('shotType', 'forehand_drive', 'cameraView', 'side',
+        'handedness', 'right', 'captureMode', 'imported_video')));
+    serialized := document::text;
+    hashes := hashes || encode(sha256(convert_to(serialized, 'UTF8')), 'hex');
+    perform public.install_analysis_release_policy(serialized, hashes[array_length(hashes, 1)]);
+    perform public.approve_analysis_release_output(hashes[array_length(hashes, 1)], 'mechanics', 'u9-reviewer', repeat('a', 64));
+    perform public.approve_analysis_release_output(hashes[array_length(hashes, 1)], 'benchmark', 'u9-reviewer', repeat('a', 64));
+  end loop;
+  perform public.activate_analysis_release_policy(hashes[1], 'u9-operator');
+  -- while active, the lineage row IS the active reader's row
+  if public.read_analysis_release_policy_lineage(hashes[1]) <> public.read_analysis_release_policy() then
+    raise exception 'U9: the active policy reads identically by digest';
+  end if;
+  -- rotation: the superseded policy stays readable, approved and not withdrawn
+  perform public.activate_analysis_release_policy(hashes[2], 'u9-operator');
+  state := public.read_analysis_release_policy();
+  lineage_row := public.read_analysis_release_policy_lineage(hashes[1]);
+  if state #>> '{approval,policy,sha256}' <> hashes[2]
+     or lineage_row #>> '{approval,policy,sha256}' <> hashes[1]
+     or lineage_row ->> 'canonicalDocument' is null
+     or (lineage_row ->> 'denyNewAuthorizations')::boolean
+     or (lineage_row #>> '{approval,denyNewAuthorizations}')::boolean
+     or lineage_row #>> '{approval,withdrawnAt}' is not null
+     or lineage_row #>> '{approval,mechanicsApprovedAt}' is null
+     or lineage_row #>> '{approval,benchmarkApprovedAt}' is null then
+    raise exception 'U9: a superseded, never withdrawn policy is readable by digest with its approvals (got %)', lineage_row;
+  end if;
+  -- withdrawal of the superseded policy is visible through the lineage
+  perform public.withdraw_analysis_release_policy(hashes[1], 'u9-operator');
+  lineage_row := public.read_analysis_release_policy_lineage(hashes[1]);
+  if not (lineage_row ->> 'denyNewAuthorizations')::boolean
+     or not (lineage_row #>> '{approval,denyNewAuthorizations}')::boolean
+     or lineage_row #>> '{approval,withdrawnAt}' is null then
+    raise exception 'U9: a withdrawn lineage denies (got %)', lineage_row;
+  end if;
+  if (public.read_analysis_release_policy() ->> 'denyNewAuthorizations')::boolean then
+    raise exception 'U9: withdrawing the superseded policy does not gate the active one';
+  end if;
+  -- unknown or malformed digest: the nothing-installed row
+  if public.read_analysis_release_policy_lineage(repeat('f', 64))
+       <> '{"document":null,"canonicalDocument":null,"denyNewAuthorizations":true,"approval":null}'::jsonb
+     or public.read_analysis_release_policy_lineage('not-a-digest')
+       <> '{"document":null,"canonicalDocument":null,"denyNewAuthorizations":true,"approval":null}'::jsonb
+     or public.read_analysis_release_policy_lineage(null)
+       <> '{"document":null,"canonicalDocument":null,"denyNewAuthorizations":true,"approval":null}'::jsonb then
+    raise exception 'U9: an unknown digest is the nothing-installed row';
+  end if;
+  if not has_function_privilege('service_role', 'public.read_analysis_release_policy_lineage(text)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.read_analysis_release_policy_lineage(text)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.read_analysis_release_policy_lineage(text)', 'EXECUTE') then
+    raise exception 'U9: the lineage reader is the service role''s alone';
+  end if;
+end $$;
+set local role service_role;
+do $$
+begin
+  if (public.read_analysis_release_policy_lineage(repeat('f', 64)) ->> 'denyNewAuthorizations') <> 'true' then
+    raise exception 'U9: the service role reads the lineage';
+  end if;
+end $$;
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000491';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004901"}';
+do $$
+begin
+  begin
+    perform public.read_analysis_release_policy_lineage(repeat('f', 64));
+    raise exception 'U9: clients must not read the release lineage';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+set local role anon;
+do $$
+begin
+  begin
+    perform public.read_analysis_release_policy_lineage(repeat('f', 64));
+    raise exception 'U9: anon must not read the release lineage';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
 rollback;
 
 create schema w07_probe;
