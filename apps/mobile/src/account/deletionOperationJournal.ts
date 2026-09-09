@@ -5,6 +5,7 @@ import {
   DELETION_PHASES,
   DeletionFoundationError,
   deletionMember,
+  deletionOrigin,
   deletionRecord,
   deletionUuid,
   parseDeletionJournalEntry,
@@ -32,6 +33,23 @@ const DDL = `CREATE TABLE ${TABLE} (
   phase TEXT NOT NULL CHECK (phase IN (${DELETION_PHASES.map(phase => `'${phase}'`).join(',')})),
   document TEXT NOT NULL CHECK (length(CAST(document AS BLOB)) <= ${DELETION_FOUNDATION_LIMITS.journalBytes} AND json_valid(document))
 )`;
+
+/** A row whose columns are intact but whose document cannot be read as a
+ * journal entry. It is attributed to its owner and origin from the columns
+ * alone; nothing else about it is trusted. */
+export interface DeletionJournalUnreadableRow {
+  readonly jobId: string;
+  readonly ownerId: string;
+  readonly apiOrigin: string;
+  readonly operationId: string | null;
+  readonly phase: DeletionPhase;
+  readonly reason: 'journal_invalid' | 'journal_unsupported';
+}
+
+export interface DeletionJournalListing {
+  readonly entries: readonly DeletionJournalEntry[];
+  readonly unreadable: readonly DeletionJournalUnreadableRow[];
+}
 
 const TRANSITIONS: Readonly<Record<DeletionPhase, readonly DeletionPhase[]>> = {
   request_pending: ['request_pending', 'request_unknown', 'securing'],
@@ -91,6 +109,34 @@ function parseRow(row: Record<string, unknown>): DeletionJournalEntry {
     throw new DeletionFoundationError('journal_invalid');
   }
   return entry;
+}
+
+function unreadableRow(
+  row: Record<string, unknown>,
+  error: unknown,
+): DeletionJournalUnreadableRow {
+  if (
+    !(error instanceof DeletionFoundationError) ||
+    (error.code !== 'journal_invalid' && error.code !== 'journal_unsupported')
+  )
+    throw error;
+  const { job_id, owner_id, api_origin, operation_id, phase } = row;
+  if (
+    !deletionUuid(job_id) ||
+    !deletionUuid(owner_id) ||
+    !deletionOrigin(api_origin) ||
+    (operation_id !== null && !deletionUuid(operation_id)) ||
+    !deletionMember(phase, DELETION_PHASES)
+  )
+    throw error;
+  return Object.freeze({
+    jobId: job_id,
+    ownerId: owner_id,
+    apiOrigin: api_origin,
+    operationId: operation_id,
+    phase,
+    reason: error.code,
+  });
 }
 
 function validateTransition(
@@ -191,7 +237,7 @@ export function createDeletionOperationJournal(db: LocalDb) {
       await initialize();
       return transaction(tx => readIn(tx, jobId));
     },
-    async list(): Promise<readonly DeletionJournalEntry[]> {
+    async list(): Promise<DeletionJournalListing> {
       await initialize();
       return transaction(async tx => {
         const { rows } = await tx.execute(
@@ -200,7 +246,19 @@ export function createDeletionOperationJournal(db: LocalDb) {
         );
         if (rows.length > DELETION_FOUNDATION_LIMITS.journalEntries)
           throw new DeletionFoundationError('journal_capacity');
-        return Object.freeze(rows.map(parseRow));
+        const entries: DeletionJournalEntry[] = [];
+        const unreadable: DeletionJournalUnreadableRow[] = [];
+        for (const row of rows) {
+          try {
+            entries.push(parseRow(row));
+          } catch (error) {
+            unreadable.push(unreadableRow(row, error));
+          }
+        }
+        return Object.freeze({
+          entries: Object.freeze(entries),
+          unreadable: Object.freeze(unreadable),
+        });
       });
     },
     async create(value: DeletionJournalEntry): Promise<DeletionJournalEntry> {
