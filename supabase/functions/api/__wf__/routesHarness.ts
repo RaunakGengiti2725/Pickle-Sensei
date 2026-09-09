@@ -3,9 +3,68 @@
 // stubbed at the fetch layer, and env populated. Every request goes through
 // the REAL handler (auth → rate limits → routing → billing/webhook/drills).
 
-import { deletionChallengeHash, type AppleDeletionOutcome } from "../accountDeletionOperations.ts";
+import {
+  ACCOUNT_OWNER_NAMESPACES,
+  deletionChallengeHash,
+  type AppleDeletionOutcome,
+} from "../accountDeletionOperations.ts";
 import { isPagedSelect, postgrestSelect } from "./postgrestStandIn.ts";
 import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
+
+/** Tables the service role may SELECT under the migrations' grant model
+ * (20260905190106_api_only_database_access.sql); every other `public` table
+ * answers a service-role read with PostgREST's 42501, exactly like the live
+ * matrix. */
+export const SERVICE_ROLE_READABLE_TABLES: ReadonlySet<string> = new Set([
+  "billing_entitlements",
+  "account_external_credentials",
+  "webhook_events",
+]);
+
+const OWNER_NAMESPACE_TABLES: ReadonlyMap<string, string> = new Map(
+  ACCOUNT_OWNER_NAMESPACES.map((namespace) => [namespace.table, namespace.ownerColumn]),
+);
+
+const PGRST_RESERVED = new Set(["select", "order", "limit", "offset", "or", "and", "on_conflict"]);
+
+/** The `<column>=eq.<value>` filters of a PostgREST read. */
+function eqFilters(url: URL): Array<[string, string]> {
+  const filters: Array<[string, string]> = [];
+  for (const [key, value] of url.searchParams) {
+    if (!PGRST_RESERVED.has(key) && value.startsWith("eq.")) filters.push([key, value.slice(3)]);
+  }
+  return filters;
+}
+
+/** Applies a read's `eq` filters to fixture rows. Fixtures may omit the
+ * filtered column (the harness convention for "the requesting owner's row",
+ * see AccountDeletionStub.external); such rows match and are served with the
+ * column filled in, as PostgREST would return it. */
+export function filteredRows(url: URL, rows: readonly unknown[]): Record<string, unknown>[] {
+  let matched = rows.filter(isRecord);
+  for (const [column, value] of eqFilters(url)) {
+    matched = matched
+      .filter((row) => row[column] === undefined || row[column] === value)
+      .map((row) => (row[column] === undefined ? { ...row, [column]: value } : row));
+  }
+  return matched;
+}
+
+/** Mirrors the `on delete cascade` from auth.users over the swept namespaces:
+ * every row of `ownerId` (or a fixture row without an owner column)
+ * disappears. Other fixture tables are left to the tests that seeded them. */
+export function cascadeOwnerRows(tables: Record<string, unknown[]>, ownerId: string): void {
+  for (const [table, column] of OWNER_NAMESPACE_TABLES) {
+    const rows = tables[table];
+    if (!rows) continue;
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index];
+      if (!isRecord(row) || row[column] === undefined || row[column] === ownerId) {
+        rows.splice(index, 1);
+      }
+    }
+  }
+}
 
 interface StubDeletionOperation {
   id: string;
@@ -118,6 +177,7 @@ export class AccountDeletionStub {
 
   observeAuthDeletion(ownerId: string): void {
     this.missingOwners.add(ownerId);
+    cascadeOwnerRows(this.tables(), ownerId);
     for (const operation of this.operations.values()) {
       if (operation.ownerId !== ownerId) continue;
       operation.authAbsent = true;
@@ -909,13 +969,28 @@ export async function loadHarness(): Promise<Harness> {
         });
       }
       if (request.method === "GET") {
-        let rows = state.tables[table] ?? [];
+        let rows: unknown[] = state.tables[table] ?? [];
         if (table === "webhook_events" || table === "billing_entitlements") {
           const key = table === "webhook_events" ? "id" : "user_id";
           const filter = new URL(url).searchParams.get(key);
           if (filter?.startsWith("eq.")) {
             rows = rows.filter((row) => isRecord(row) && row[key] === filter.slice(3));
           }
+        }
+        if (isPagedSelect(new URL(url)) && OWNER_NAMESPACE_TABLES.has(table)) {
+          // paged namespace reads answer like PostgREST under the grant
+          // model: the service role is refused on client-owned tables and
+          // every `eq` filter applies
+          if (
+            headers.authorization === "Bearer service-role-test-key" &&
+            !SERVICE_ROLE_READABLE_TABLES.has(table)
+          ) {
+            return jsonResponse(403, {
+              code: "42501",
+              message: `permission denied for table ${table}`,
+            });
+          }
+          rows = filteredRows(new URL(url), rows);
         }
         if (isPagedSelect(new URL(url))) {
           rows = postgrestSelect(new URL(url), rows.filter(isRecord));
