@@ -1,0 +1,27 @@
+FAIL __tests__/offlineWalletNativeAttack.test.ts
+  ● offline wallet bridge — adversarial › attack: replace preflight blocks every malformed content before native is reached, and forwards exactly the limits
+
+    expect(received).toBeInstanceOf(expected)
+
+    Expected constructor: OfflineWalletError
+    Received constructor: TypeError
+
+      68 |     (caught: unknown) => caught,
+      69 |   );
+    > 70 |   expect(error).toBeInstanceOf(OfflineWalletError);
+         |                 ^
+      71 |   expect((error as OfflineWalletError).failure).toBe(failure);
+      72 |   return error as OfflineWalletError;
+      73 | }
+
+      at toBeInstanceOf (__tests__/offlineWalletNativeAttack.test.ts:70:17)
+      at asyncGeneratorStep (node_modules/@babel/runtime/helpers/asyncToGenerator.js:3:17)
+      at _next (node_modules/@babel/runtime/helpers/asyncToGenerator.js:17:9)
+
+PASS __tests__/offlineWalletNative.test.ts
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        0.548 s, estimated 1 s
+Ran all test suites matching /__tests__\/offlineWalletNativeAttack.test.ts|__tests__\/offlineWalletNative.test.ts/i.

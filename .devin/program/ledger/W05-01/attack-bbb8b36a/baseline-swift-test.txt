@@ -1,0 +1,149 @@
+Building for debugging...
+[0/13] Write sources
+[2/13] Write swift-version-465C9DD45C1AF93B.txt
+[4/15] Compiling PickleVisionCore OfflineWallet.swift
+[5/15] Emitting module PickleVisionCore
+[6/16] Wrapping AST for PickleVisionCore for debugging
+[8/18] Compiling PickleVisionCoreTests OfflineWalletTests.swift
+[9/18] Emitting module PickleVisionCoreTests
+[10/19] /home/ubuntu/wallet-attack-pkg/.build/x86_64-unknown-linux-gnu/debug/PickleVisionCorePackageDiscoveredTests.derived/all-discovered-tests.swift
+[11/19] Write sources
+[12/19] Wrapping AST for PickleVisionCoreTests for debugging
+[14/22] Compiling PickleVisionCorePackageDiscoveredTests all-discovered-tests.swift
+[15/22] Emitting module PickleVisionCorePackageDiscoveredTests
+[16/22] Compiling PickleVisionCorePackageDiscoveredTests PickleVisionCoreTests.swift
+[17/23] /home/ubuntu/wallet-attack-pkg/.build/x86_64-unknown-linux-gnu/debug/PickleVisionCorePackageTests.derived/runner.swift
+[18/23] Write sources
+[19/23] Wrapping AST for PickleVisionCorePackageDiscoveredTests for debugging
+[21/25] Emitting module PickleVisionCorePackageTests
+[22/25] Compiling PickleVisionCorePackageTests runner.swift
+[23/26] Wrapping AST for PickleVisionCorePackageTests for debugging
+[24/26] Write Objects.LinkFileList
+[25/26] Linking PickleVisionCorePackageTests.xctest
+Build complete! (7.01s)
+Test Suite 'All tests' started at 2026-09-09 19:09:55.374
+Test Suite 'debug.xctest' started at 2026-09-09 19:09:55.375
+Test Suite 'OfflineWalletTests' started at 2026-09-09 19:09:55.375
+Test Case 'OfflineWalletTests.testAbsentWalletLoadsAsNilWithoutWriting' started at 2026-09-09 19:09:55.375
+Test Case 'OfflineWalletTests.testAbsentWalletLoadsAsNilWithoutWriting' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testBridgePayloadRejectsMalformedShapesWithTypedFailures' started at 2026-09-09 19:09:55.376
+Test Case 'OfflineWalletTests.testBridgePayloadRejectsMalformedShapesWithTypedFailures' passed (0.101 seconds)
+Test Case 'OfflineWalletTests.testBridgePayloadRoundTrip' started at 2026-09-09 19:09:55.477
+Test Case 'OfflineWalletTests.testBridgePayloadRoundTrip' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testCanonicalBase64UrlTailsAreAccepted' started at 2026-09-09 19:09:55.478
+Test Case 'OfflineWalletTests.testCanonicalBase64UrlTailsAreAccepted' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testCapacityLimitsAreEnforced' started at 2026-09-09 19:09:55.482
+Test Case 'OfflineWalletTests.testCapacityLimitsAreEnforced' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision' started at 2026-09-09 19:09:55.486
+Test Case 'OfflineWalletTests.testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testClearInterruptedBetweenItsWritesNeverLetsTheRemovedEnvelopeReadAsCurrent' started at 2026-09-09 19:09:55.490
+Test Case 'OfflineWalletTests.testClearInterruptedBetweenItsWritesNeverLetsTheRemovedEnvelopeReadAsCurrent' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testClearOfAnAbsentWalletLeavesTheFenceAlone' started at 2026-09-09 19:09:55.494
+Test Case 'OfflineWalletTests.testClearOfAnAbsentWalletLeavesTheFenceAlone' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testClearRacingAReplaceThatAlreadyAdvancedTheFenceStillConflicts' started at 2026-09-09 19:09:55.495
+Test Case 'OfflineWalletTests.testClearRacingAReplaceThatAlreadyAdvancedTheFenceStillConflicts' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testClearRemovesOnlyThatOwnerAndRequiresCurrentRevision' started at 2026-09-09 19:09:55.496
+Test Case 'OfflineWalletTests.testClearRemovesOnlyThatOwnerAndRequiresCurrentRevision' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testConcurrentFirstWritesKeepOneKeyAndConflictTheLoser' started at 2026-09-09 19:09:55.499
+Test Case 'OfflineWalletTests.testConcurrentFirstWritesKeepOneKeyAndConflictTheLoser' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard' started at 2026-09-09 19:09:55.500
+Test Case 'OfflineWalletTests.testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover' started at 2026-09-09 19:09:55.502
+Test Case 'OfflineWalletTests.testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testCrashBetweenKeyMintAndWalletWriteRecovers' started at 2026-09-09 19:09:55.505
+Test Case 'OfflineWalletTests.testCrashBetweenKeyMintAndWalletWriteRecovers' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testDiscardCorruptOnlyRemovesUnreadableWallets' started at 2026-09-09 19:09:55.507
+Test Case 'OfflineWalletTests.testDiscardCorruptOnlyRemovesUnreadableWallets' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet' started at 2026-09-09 19:09:55.510
+Test Case 'OfflineWalletTests.testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testDiscardingACorruptFenceRetiresEveryOlderEnvelope' started at 2026-09-09 19:09:55.512
+Test Case 'OfflineWalletTests.testDiscardingACorruptFenceRetiresEveryOlderEnvelope' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testDiscardingACorruptWalletRetiresEveryOlderEnvelopeIncludingOnesAheadOfTheFence' started at 2026-09-09 19:09:55.515
+Test Case 'OfflineWalletTests.testDiscardingACorruptWalletRetiresEveryOlderEnvelopeIncludingOnesAheadOfTheFence' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testEnvelopeRemovedByClearIsARollbackNotCurrentState' started at 2026-09-09 19:09:55.519
+Test Case 'OfflineWalletTests.testEnvelopeRemovedByClearIsARollbackNotCurrentState' passed (0.005 seconds)
+Test Case 'OfflineWalletTests.testEnvelopeRemovedByClearOverALaggingFenceIsARollback' started at 2026-09-09 19:09:55.523
+Test Case 'OfflineWalletTests.testEnvelopeRemovedByClearOverALaggingFenceIsARollback' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping' started at 2026-09-09 19:09:55.526
+Test Case 'OfflineWalletTests.testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping' passed (0.903 seconds)
+Test Case 'OfflineWalletTests.testFailedStoreWriteSurfacesTypedFailureAndKeepsPreviousState' started at 2026-09-09 19:09:56.429
+Test Case 'OfflineWalletTests.testFailedStoreWriteSurfacesTypedFailureAndKeepsPreviousState' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testFailureCodesAreStableAndDistinct' started at 2026-09-09 19:09:56.431
+Test Case 'OfflineWalletTests.testFailureCodesAreStableAndDistinct' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testFenceSurvivesClearSoRevisionsNeverRestart' started at 2026-09-09 19:09:56.433
+Test Case 'OfflineWalletTests.testFenceSurvivesClearSoRevisionsNeverRestart' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testFlippedPayloadByteIsTamperedNotEmptyAndCannotBeOverwrittenSilently' started at 2026-09-09 19:09:56.436
+Test Case 'OfflineWalletTests.testFlippedPayloadByteIsTamperedNotEmptyAndCannotBeOverwrittenSilently' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testGenuinelyCorruptStateIsStillReportedAfterARaceFreeReRead' started at 2026-09-09 19:09:56.438
+Test Case 'OfflineWalletTests.testGenuinelyCorruptStateIsStillReportedAfterARaceFreeReRead' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testGrantShapeValidation' started at 2026-09-09 19:09:56.439
+Test Case 'OfflineWalletTests.testGrantShapeValidation' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testIntegrityPrimitivesMatchPublishedVectors' started at 2026-09-09 19:09:56.443
+Test Case 'OfflineWalletTests.testIntegrityPrimitivesMatchPublishedVectors' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testInterleavedClearConflictsInsteadOfDroppingAConcurrentWrite' started at 2026-09-09 19:09:56.444
+Test Case 'OfflineWalletTests.testInterleavedClearConflictsInsteadOfDroppingAConcurrentWrite' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testInterleavedReplaceFromASecondInstanceConflictsAndKeepsTheCommittedReceipt' started at 2026-09-09 19:09:56.446
+Test Case 'OfflineWalletTests.testInterleavedReplaceFromASecondInstanceConflictsAndKeepsTheCommittedReceipt' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testKeychainStatusMapping' started at 2026-09-09 19:09:56.448
+Test Case 'OfflineWalletTests.testKeychainStatusMapping' passed (0.0 seconds)
+Test Case 'OfflineWalletTests.testLaggingFenceCommitBehindAFasterWriterNeitherRegressesNorFails' started at 2026-09-09 19:09:56.448
+Test Case 'OfflineWalletTests.testLaggingFenceCommitBehindAFasterWriterNeitherRegressesNorFails' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable' started at 2026-09-09 19:09:56.450
+Test Case 'OfflineWalletTests.testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testLosingTheFenceBesideTheWalletRetiresEveryOlderEnvelope' started at 2026-09-09 19:09:56.452
+Test Case 'OfflineWalletTests.testLosingTheFenceBesideTheWalletRetiresEveryOlderEnvelope' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testMissingIntegrityKeyIsReportedNotTreatedAsEmpty' started at 2026-09-09 19:09:56.455
+Test Case 'OfflineWalletTests.testMissingIntegrityKeyIsReportedNotTreatedAsEmpty' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testMissingKeyWithOrphanedFenceBlocksWritesUntilDiscard' started at 2026-09-09 19:09:56.456
+Test Case 'OfflineWalletTests.testMissingKeyWithOrphanedFenceBlocksWritesUntilDiscard' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testMissingOrCorruptFenceBesideAWalletIsTamperedAndDiscardable' started at 2026-09-09 19:09:56.458
+Test Case 'OfflineWalletTests.testMissingOrCorruptFenceBesideAWalletIsTamperedAndDiscardable' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testOwnerIdMustBeCanonicalBeforeAnyStoreAccess' started at 2026-09-09 19:09:56.460
+Test Case 'OfflineWalletTests.testOwnerIdMustBeCanonicalBeforeAnyStoreAccess' passed (0.0 seconds)
+Test Case 'OfflineWalletTests.testOwnersAreIsolated' started at 2026-09-09 19:09:56.460
+Test Case 'OfflineWalletTests.testOwnersAreIsolated' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReceiptShapeValidation' started at 2026-09-09 19:09:56.462
+Test Case 'OfflineWalletTests.testReceiptShapeValidation' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReplaceAtTheLastSafeRevisionFailsTypedInsteadOfProducingAnUnrepresentableRevision' started at 2026-09-09 19:09:56.464
+Test Case 'OfflineWalletTests.testReplaceAtTheLastSafeRevisionFailsTypedInsteadOfProducingAnUnrepresentableRevision' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReplacePersistsGrantsAndReceiptsAndBumpsRevision' started at 2026-09-09 19:09:56.465
+Test Case 'OfflineWalletTests.testReplacePersistsGrantsAndReceiptsAndBumpsRevision' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReplaceRacingAnotherInstancesFirstWriteConflictsAndKeepsTheirReceipt' started at 2026-09-09 19:09:56.467
+Test Case 'OfflineWalletTests.testReplaceRacingAnotherInstancesFirstWriteConflictsAndKeepsTheirReceipt' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReplaceRejectsStaleRevisionAndLeavesStoredStateUntouched' started at 2026-09-09 19:09:56.470
+Test Case 'OfflineWalletTests.testReplaceRejectsStaleRevisionAndLeavesStoredStateUntouched' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testReplaceWritesTheWholeWalletInOneStoreWriteAfterValidation' started at 2026-09-09 19:09:56.472
+Test Case 'OfflineWalletTests.testReplaceWritesTheWholeWalletInOneStoreWriteAfterValidation' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testRevisionBridgeParsing' started at 2026-09-09 19:09:56.473
+Test Case 'OfflineWalletTests.testRevisionBridgeParsing' passed (0.0 seconds)
+Test Case 'OfflineWalletTests.testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence' started at 2026-09-09 19:09:56.473
+Test Case 'OfflineWalletTests.testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testSealedEnvelopeBindsVersionAccountAndKey' started at 2026-09-09 19:09:56.477
+Test Case 'OfflineWalletTests.testSealedEnvelopeBindsVersionAccountAndKey' passed (0.0 seconds)
+Test Case 'OfflineWalletTests.testStateThatNeverSettlesFailsTypedAndDeletesNothing' started at 2026-09-09 19:09:56.477
+Test Case 'OfflineWalletTests.testStateThatNeverSettlesFailsTypedAndDeletesNothing' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testStoreReadFaultsAreTypedNotTreatedAsEmpty' started at 2026-09-09 19:09:56.478
+Test Case 'OfflineWalletTests.testStoreReadFaultsAreTypedNotTreatedAsEmpty' passed (0.001 seconds)
+Test Case 'OfflineWalletTests.testStoredRevisionBeyondBridgeRangeIsTamperedNotReadableOrTrapping' started at 2026-09-09 19:09:56.479
+Test Case 'OfflineWalletTests.testStoredRevisionBeyondBridgeRangeIsTamperedNotReadableOrTrapping' passed (0.004 seconds)
+Test Case 'OfflineWalletTests.testUndecodableBytesAreTampered' started at 2026-09-09 19:09:56.484
+Test Case 'OfflineWalletTests.testUndecodableBytesAreTampered' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testUnsupportedEnvelopeVersionIsRejectedAndDiscardable' started at 2026-09-09 19:09:56.486
+Test Case 'OfflineWalletTests.testUnsupportedEnvelopeVersionIsRejectedAndDiscardable' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testVanishedWalletIsIsolatedToItsOwner' started at 2026-09-09 19:09:56.488
+Test Case 'OfflineWalletTests.testVanishedWalletIsIsolatedToItsOwner' passed (0.003 seconds)
+Test Case 'OfflineWalletTests.testWalletAheadOfFenceIsReadableAndTheFenceIsRepairedOnTheNextWrite' started at 2026-09-09 19:09:56.490
+Test Case 'OfflineWalletTests.testWalletAheadOfFenceIsReadableAndTheFenceIsRepairedOnTheNextWrite' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testWalletBytesMovedBetweenOwnersAreTampered' started at 2026-09-09 19:09:56.492
+Test Case 'OfflineWalletTests.testWalletBytesMovedBetweenOwnersAreTampered' passed (0.002 seconds)
+Test Case 'OfflineWalletTests.testWalletVanishingWithoutClearIsAFaultNotAnEmptyWallet' started at 2026-09-09 19:09:56.494
+Test Case 'OfflineWalletTests.testWalletVanishingWithoutClearIsAFaultNotAnEmptyWallet' passed (0.002 seconds)
+Test Suite 'OfflineWalletTests' passed at 2026-09-09 19:09:56.497
+	 Executed 57 tests, with 0 failures (0 unexpected) in 1.121 (1.121) seconds
+Test Suite 'debug.xctest' passed at 2026-09-09 19:09:56.497
+	 Executed 57 tests, with 0 failures (0 unexpected) in 1.121 (1.121) seconds
+Test Suite 'All tests' passed at 2026-09-09 19:09:56.497
+	 Executed 57 tests, with 0 failures (0 unexpected) in 1.121 (1.121) seconds
+◇ Test run started.
+↳ Testing Library Version: 6.0.3 (18c42c19cac3faf)
+✔ Test run with 0 tests passed after 0.001 seconds.
