@@ -557,6 +557,10 @@ const JOURNAL_FULL_MESSAGE =
  * flow, so nothing was sent and the outcome is known — nothing happened. */
 const CONFIRMATION_UNSENT_MESSAGE =
   'This deletion attempt could not be confirmed from here, so no confirmation was sent. Nothing was deleted — start again.';
+/** The Keychain did not hand over the confirmation for a challenge that
+ * was never confirmed: nothing was sent, so the outcome is known. */
+const CONFIRMATION_UNAVAILABLE_MESSAGE =
+  'This phone could not provide the stored confirmation, so none was sent. Nothing was deleted — start again.';
 
 function requestIssueMessage(issue: DeletionIssue | null): string {
   switch (issue) {
@@ -770,6 +774,13 @@ function unresolvedConfirmationMessage(entry: DeletionJournalEntry): string {
     : confirmIssueMessage(entry.lastIssue);
 }
 
+/** A refusal the server paced (`Retry-After`, or the transport's default)
+ * stands only until that pacing has elapsed; afterwards it is the server's
+ * word at an earlier moment, to be re-asked rather than kept as a lock. */
+function refusalStale(entry: DeletionJournalEntry, nowMs: number): boolean {
+  return nowMs >= entry.nextAttemptAtMs;
+}
+
 function durableState(
   entry: DeletionJournalEntry,
   handle: DeletionOperationHandle,
@@ -877,9 +888,16 @@ function resumable(
 }
 
 function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
+  /** Resolves a held result against the journal row it names: the row's
+   * verified receipt is the proof when the Keychain cannot answer, and the
+   * row itself (or null when the journal cannot be read) is handed to
+   * `unresolved` so it can say what the row proves. */
   async function settle(
     result: DeletionOperationResult,
-    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+    unresolved: (
+      reason: DeletionIssue | null,
+      journaled: DeletionJournalEntry | null,
+    ) => AccountDeletionState,
     reopened = false,
   ): Promise<AccountDeletionState> {
     if (result.kind === 'available')
@@ -898,25 +916,24 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
         if (view.kind === 'available') return settle(view, unresolved, true);
         if (view.kind === 'held') held = view.reason;
       }
-      if (isKeychainUnanswered(held)) {
-        const receipt = await journaledReceipt(result.jobId);
-        if (receipt) return completedState(receipt);
-      }
+      const journaled = await journaledEntry(result.jobId);
+      if (journaled?.receipt && isKeychainUnanswered(held))
+        return completedState(journaled.receipt);
+      return unresolved(result.reason, journaled);
     }
-    return unresolved(result.kind === 'held' ? result.reason : null);
+    return unresolved(result.kind === 'held' ? result.reason : null, null);
   }
 
-  /** The verified receipt journaled under `jobId`, when the foundation holds
-   * the job behind a Keychain record it cannot read: the row itself is
-   * readable and the receipt in it was verified against the operation, so
-   * the deletion is complete even though cleanup stays held. */
-  async function journaledReceipt(
+  /** The journal row under `jobId`, when the foundation holds the job behind
+   * a Keychain record it cannot read: the row itself is readable, its
+   * verified receipt (if any) was verified against the operation, and its
+   * phase says whether a confirmation ever left this device. */
+  async function journaledEntry(
     jobId: string,
-  ): Promise<DeletionReceipt | null> {
+  ): Promise<DeletionJournalEntry | null> {
     const listed = await foundation.list();
     if (listed.kind !== 'entries') return null;
-    const entry = listed.entries.find(candidate => candidate.jobId === jobId);
-    return entry?.receipt ?? null;
+    return listed.entries.find(candidate => candidate.jobId === jobId) ?? null;
   }
 
   function requestFailed(reason: DeletionIssue | null): AccountDeletionState {
@@ -935,13 +952,33 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     };
   }
 
+  /** A confirmation the foundation could not carry: when the Keychain did
+   * not answer for the record and the journal row still shows the
+   * confirmation was never sent, the outcome is known — nothing left this
+   * device — and only a sent confirmation stays unresolved. */
   function confirmUnresolved(attempt: AccountDeletionAttempt) {
-    return (reason: DeletionIssue | null): AccountDeletionState => ({
-      status: 'confirm_unknown',
-      attempt,
-      nextAttemptAtMs: 0,
-      message: confirmIssueMessage(reason),
-    });
+    return (
+      reason: DeletionIssue | null,
+      journaled: DeletionJournalEntry | null,
+    ): AccountDeletionState => {
+      if (
+        reason !== null &&
+        isKeychainUnanswered(reason) &&
+        journaled !== null &&
+        !confirmationSent(journaled)
+      )
+        return {
+          status: 'failed',
+          outcome: 'nothing_deleted',
+          message: CONFIRMATION_UNAVAILABLE_MESSAGE,
+        };
+      return {
+        status: 'confirm_unknown',
+        attempt,
+        nextAttemptAtMs: 0,
+        message: confirmIssueMessage(reason),
+      };
+    };
   }
 
   /** Runs `operate` on the attempt's handle; a handle the foundation no
@@ -950,9 +987,12 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
   async function operate(
     attempt: AccountDeletionAttempt,
     run: (handle: DeletionOperationHandle) => Promise<DeletionOperationResult>,
-    unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
+    unresolved: (
+      reason: DeletionIssue | null,
+      journaled: DeletionJournalEntry | null,
+    ) => AccountDeletionState,
   ): Promise<AccountDeletionState> {
-    if (attempt.kind !== 'durable') return unresolved(null);
+    if (attempt.kind !== 'durable') return unresolved(null, null);
     let result: DeletionOperationResult | null = attempt.handle
       ? await run(attempt.handle)
       : null;
@@ -1019,7 +1059,20 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
       for (const candidate of candidates) {
         const opened = await foundation.open(candidate.jobId);
         if (opened.kind === 'available') {
-          const state = durableState(opened.entry, opened.handle, nowMs);
+          let state = durableState(opened.entry, opened.handle, nowMs);
+          // A refusal ("a confirmed deletion is already in progress") whose
+          // pacing has passed is re-asked under the same job: the server
+          // answers with the refusal again, or with a fresh challenge. Only
+          // what it answers now is shown; a re-ask the server did not answer
+          // is presented as any unanswered request is (paced "Retry request").
+          if (
+            state.status === 'already_in_progress' &&
+            refusalStale(opened.entry, nowMs)
+          ) {
+            const asked = await foundation.retryRequest(opened.handle, {});
+            if (asked.kind === 'available')
+              state = durableState(asked.entry, asked.handle, nowMs);
+          }
           // A request that never became confirmable is nothing to resume.
           if (state.status === 'failed' && state.outcome === 'nothing_deleted')
             continue;
@@ -1049,7 +1102,7 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
           jobId: candidate.jobId,
           operationId: candidate.operationId,
           handle: null,
-        })(opened.kind === 'held' ? opened.reason : null);
+        })(opened.kind === 'held' ? opened.reason : null, candidate);
       }
       return idle();
     },
