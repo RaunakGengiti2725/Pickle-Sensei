@@ -27,7 +27,7 @@
 --     body), never settling twice; a new receipt is HELD when the edge could
 --     not verify its evidence (hold reason), when it names another owner,
 --     when its operation already has a receipt, when the ticket's allocation
---     does not match the grant/generation/installation it claims, or when
+--     LINEAGE does not admit the grant it claims (see below), or when
 --     consume_offline_ticket() reports the ticket consumed by another rating,
 --     released, unknown or the rating not chargeable under it; otherwise it
 --     settles through consume_offline_ticket() in the same transaction, so
@@ -35,6 +35,28 @@
 --     or not at all. A held receipt leaves its ticket exactly as it was
 --     (reserved — never released, never re-executed): recovery is a
 --     reconciliation decision, not a refund.
+--   * Lineage: issue_offline_grant() re-issues an installation's outstanding
+--     tickets under the NEXT generation (a new grant id) and writes no new
+--     allocation row, so a receipt rendered after a lease refresh — or by the
+--     original installation of a deleted-and-re-created account — names the
+--     ticket exactly as the refreshed grant lists it. The ticket is bound to
+--     its allocation lineage: the receipt's grant must be a grant of the
+--     caller for the allocating installation, issued at or after the
+--     allocation, at the generation the receipt claims. Foreign
+--     installations, grants and generations the lineage never had stay HELD.
+--   * A receipt that names a session the account has not synced yet
+--     (consume_offline_ticket() = shot.session_not_found) is answered
+--     `pending` with NOTHING durable: the ticket stays reserved and the very
+--     same receipt settles once the session exists — a transient condition
+--     is not evidence against the receipt.
+--   * lifecycleSequence and generation are the shared contract's positive
+--     safe integers (≤ 2^53-1), parsed and stored as bigint, so a
+--     contract-valid receipt always receives a durable verdict.
+--   * public.read_analysis_release_policy_lineage(sha256) lets the edge
+--     (service role only) read the release policy a delayed receipt's grant
+--     was issued under — approvals, withdrawal and validity included — so
+--     routine policy rotation does not strand outstanding grants while a
+--     WITHDRAWN release still holds every receipt rendered under it.
 -- Nothing here reclaims an allocation, widens a grant or bypasses the shots
 -- gate: the only rating write is the existing consume_offline_ticket().
 
@@ -51,13 +73,13 @@ create table if not exists public.offline_receipt_settlements (
   grant_id uuid not null,
   grant_jws_sha256 text not null,
   allocation_id uuid,
-  generation integer,
+  generation bigint,
   ticket_id uuid,
   operation_id text not null,
   result_id text not null,
   full_output_sha256 text not null,
   billing_disposition text not null,
-  lifecycle_sequence integer not null,
+  lifecycle_sequence bigint not null,
   status text not null,
   reason_code text,
   financial_disposition text not null,
@@ -80,7 +102,9 @@ create table if not exists public.offline_receipt_settlements (
   constraint offline_receipt_settlements_billing_disposition
     check (billing_disposition in ('joint_verification_required', 'not_chargeable')),
   constraint offline_receipt_settlements_lifecycle_sequence
-    check (lifecycle_sequence >= 1),
+    check (lifecycle_sequence between 1 and 9007199254740991),
+  constraint offline_receipt_settlements_generation
+    check (generation is null or generation between 1 and 9007199254740991),
   constraint offline_receipt_settlements_ticket_complete
     check ((allocation_id is null) = (ticket_id is null) and (generation is null) = (ticket_id is null)),
   constraint offline_receipt_settlements_status
@@ -176,13 +200,13 @@ declare
   v_grant_id uuid;
   v_grant_jws_sha256 text;
   v_allocation_id uuid;
-  v_generation integer;
+  v_generation bigint;
   v_ticket_id uuid;
   v_operation_id text;
   v_result_id text;
   v_output_sha256 text;
   v_billing text;
-  v_sequence integer;
+  v_sequence bigint;
   v_ticket jsonb;
   v_known public.offline_receipt_settlements%rowtype;
   v_allocation public.offline_allocation_ledger%rowtype;
@@ -218,11 +242,11 @@ begin
     v_result_id := p_receipt ->> 'resultId';
     v_output_sha256 := p_receipt ->> 'fullOutputSha256';
     v_billing := p_receipt ->> 'billingDisposition';
-    v_sequence := (p_receipt ->> 'lifecycleSequence')::integer;
+    v_sequence := (p_receipt ->> 'lifecycleSequence')::bigint;
     v_ticket := p_receipt -> 'ticket';
     if v_ticket is not null and jsonb_typeof(v_ticket) = 'object' then
       v_allocation_id := (v_ticket ->> 'allocationId')::uuid;
-      v_generation := (v_ticket ->> 'generation')::integer;
+      v_generation := (v_ticket ->> 'generation')::bigint;
       v_ticket_id := (v_ticket ->> 'ticketId')::uuid;
     end if;
   exception when others then
@@ -238,11 +262,14 @@ begin
      or v_result_id is null or v_result_id !~ '^[A-Za-z0-9._:/+=-]{1,128}$'
      or v_output_sha256 is null or v_output_sha256 !~ '^[0-9a-f]{64}$'
      or v_billing is null or v_billing not in ('joint_verification_required', 'not_chargeable')
-     or v_sequence is null or v_sequence < 1
+     or v_sequence is null or v_sequence < 1 or v_sequence > 9007199254740991
+     or jsonb_typeof(p_receipt -> 'lifecycleSequence') <> 'number'
      or v_ticket is null
      or (jsonb_typeof(v_ticket) <> 'null' and (
        jsonb_typeof(v_ticket) <> 'object'
-       or v_allocation_id is null or v_generation is null or v_generation < 1 or v_ticket_id is null)) then
+       or v_allocation_id is null or v_ticket_id is null
+       or v_generation is null or v_generation < 1 or v_generation > 9007199254740991
+       or jsonb_typeof(v_ticket -> 'generation') <> 'number')) then
     return query select 'offline.invalid_input'::text, null::text, null::text, null::text, null::text, null::text;
     return;
   end if;
@@ -297,18 +324,32 @@ begin
     -- Pro lease: no ticket to consume; the result is recorded as delivered.
     v_recorded_result := v_result_id;
   else
-    -- The ticket's allocation must be the one the receipt claims: same grant,
-    -- same generation, same installation, and owned by the caller.
+    -- The ticket's allocation must be owned by the caller and made to the
+    -- installation the receipt names, and the grant the receipt claims must
+    -- belong to that ticket's lineage: a grant of the caller for that same
+    -- installation, issued at or after the allocation, at the generation the
+    -- receipt claims — the allocating grant itself or a later one that
+    -- restated the outstanding ticket (lease refresh, original-owner
+    -- recovery). Anything else is evidence about some other allocation.
     select * into v_allocation
     from public.offline_allocation_ledger a
     where a.ticket_id = v_ticket_id
       and a.event = 'allocated'
       and api_private.offline_ticket_owned_by(a.user_id, a.identity_hashes, a.ticket_id, v_uid);
     if not found
-       or v_allocation.grant_id <> v_grant_id
-       or v_allocation.grant_id <> v_allocation_id
-       or v_allocation.generation <> v_generation
-       or v_allocation.installation_key_id <> v_installation_key_id then
+       or v_allocation.installation_key_id <> v_installation_key_id
+       or v_allocation_id <> v_grant_id
+       or not exists (
+         select 1
+         from public.offline_grants g
+         join public.offline_devices d on d.id = g.device_id
+         where g.id = v_grant_id
+           and g.user_id = v_uid
+           and g.entitlement_source = 'identity_lifetime_free'
+           and g.generation = v_generation
+           and g.issued_at >= v_allocation.created_at
+           and d.installation_key_id = v_allocation.installation_key_id
+       ) then
       v_status := 'reconciliation_required';
       v_reason := 'evidence_ambiguous';
     elsif v_billing = 'not_chargeable' then
@@ -336,7 +377,15 @@ begin
         -- this ticket or this rating: hold, leave the ticket as it is.
         v_status := 'reconciliation_required';
         v_reason := 'conflicting_receipt';
-      elsif v_verdict in ('offline.ticket_not_found', 'offline.invalid_input', 'shot.session_not_found')
+      elsif v_verdict = 'shot.session_not_found' then
+        -- The session the rating belongs to has not synced yet (the app's
+        -- session outbox may land after the receipt): transient, so no
+        -- verdict is recorded — the ticket stays reserved and the identical
+        -- redelivery settles once the session exists.
+        return query select 'accepted'::text, 'pending'::text, 'pending'::text, null::text,
+          v_financial, null::text;
+        return;
+      elsif v_verdict in ('offline.ticket_not_found', 'offline.invalid_input')
             or v_verdict ~ '^shot\.write_failed:2[23]' then
         -- Unknown ticket, unparseable output or an output the shots table
         -- refuses (SQLSTATE class 22 data / 23 integrity): the evidence
@@ -371,7 +420,63 @@ end;
 $$;
 
 comment on function public.settle_offline_receipt(jsonb, text, jsonb, text) is
-  'Settles one delayed offline consumption receipt for the caller (live API session required) under access_lock_key(uid) then offline_ticket_lock_key(ticket): a receipt already held is replayed (same canonical digest) or reported as offline.receipt_conflict (same id, other body) — never settled twice; a new receipt is held as reconciliation_required (edge hold reason, owner mismatch, second receipt for the operation, allocation not matching the grant/generation/installation, ticket consumed by another rating or released, rating not chargeable) with its ticket left exactly as it was, or settled through consume_offline_ticket() in the same transaction. Returns (result accepted | offline.invalid_input | offline.receipt_conflict, delivery settled | replayed | held, status, reason_code, financial_disposition consumed | reserved | not_applicable, result_id).';
+  'Settles one delayed offline consumption receipt for the caller (live API session required) under access_lock_key(uid) then offline_ticket_lock_key(ticket): a receipt already held is replayed (same canonical digest) or reported as offline.receipt_conflict (same id, other body) — never settled twice; a new receipt is held as reconciliation_required (edge hold reason, owner mismatch, second receipt for the operation, grant outside the ticket''s allocation lineage — a grant of the caller for the allocating installation issued at or after the allocation at the claimed generation — ticket consumed by another rating or released, rating not chargeable) with its ticket left exactly as it was, answered pending with nothing recorded while the session it names has not synced, or settled through consume_offline_ticket() in the same transaction. lifecycleSequence and generation are positive safe integers (bigint). Returns (result accepted | offline.invalid_input | offline.receipt_conflict, delivery settled | replayed | held | pending, status, reason_code, financial_disposition consumed | reserved | not_applicable, result_id).';
 
 revoke all on function public.settle_offline_receipt(jsonb, text, jsonb, text) from public, anon, service_role;
 grant execute on function public.settle_offline_receipt(jsonb, text, jsonb, text) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 3. The release a delayed receipt's grant was issued under
+-- ---------------------------------------------------------------------------
+-- read_analysis_release_policy() exposes the ACTIVE policy only. A grant is
+-- signed over the release it was issued under, and a receipt can arrive days
+-- after that release stopped being the active one, so the edge needs to read
+-- an installed policy BY DIGEST to verify the grant's release binding. Same
+-- shape as the active reader (document, canonical bytes, approval with
+-- withdrawal) so the same integrity verifier applies; a withdrawn release
+-- reports denyNewAuthorizations = true exactly as the active reader would
+-- once withdraw_analysis_release_policy() ran; an unknown digest answers the
+-- "nothing installed" row (document null, approval null, deny = true). Read
+-- only — nothing here activates, approves or withdraws — and, like the active
+-- reader, callable by the service role alone.
+create or replace function public.read_analysis_release_policy_lineage(p_policy_sha256 text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(
+    (
+      select jsonb_build_object(
+        'document', p.document,
+        'canonicalDocument', p.canonical_document,
+        'denyNewAuthorizations',
+          case when p.sha256 = c.active_policy_sha256 then c.deny_new_authorizations
+               else p.withdrawn_at is not null end,
+        'approval', jsonb_build_object(
+          'policy', jsonb_build_object('version', p.version, 'sha256', p.sha256),
+          'mechanicsApprovedAt', floor(extract(epoch from p.mechanics_approved_at)),
+          'benchmarkApprovedAt', floor(extract(epoch from p.benchmark_approved_at)),
+          'withdrawnAt', floor(extract(epoch from p.withdrawn_at)),
+          'denyNewAuthorizations',
+            case when p.sha256 = c.active_policy_sha256 then c.deny_new_authorizations
+                 else p.withdrawn_at is not null end))
+      from api_private.analysis_release_policies p
+      cross join api_private.analysis_release_control c
+      where c.singleton
+        and p_policy_sha256 ~ '^[0-9a-f]{64}$'
+        and p.sha256 = p_policy_sha256
+    ),
+    jsonb_build_object(
+      'document', null, 'canonicalDocument', null,
+      'denyNewAuthorizations', true, 'approval', null)
+  )
+$$;
+
+comment on function public.read_analysis_release_policy_lineage(text) is
+  'The installed analysis release policy with this digest — active or superseded — in the shape of read_analysis_release_policy() (document, canonicalDocument, denyNewAuthorizations, approval incl. withdrawnAt), so the edge can verify the release binding of a grant whose receipt arrives after the active policy rotated. Unknown digest: the nothing-installed row. Service role only; read only.';
+
+revoke all on function public.read_analysis_release_policy_lineage(text) from public, anon, authenticated, service_role;
+grant execute on function public.read_analysis_release_policy_lineage(text) to service_role;
+notify pgrst, 'reload schema';
