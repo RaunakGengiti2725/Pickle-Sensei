@@ -126,6 +126,7 @@ export const ACCOUNT_DELETION_UNREAD_TABLES: Readonly<Record<string, UnreadTable
     analysis_permit_tombstones: "cascade_only",
     account_deletion_feedback: "cascade_only",
     "api_private.billing_verification_tickets": "cascade_only",
+    offline_receipt_settlements: "cascade_only",
     free_rating_ledger: "retained",
     webhook_events: "retained",
     "api_private.account_deletion_operations": "retained",
