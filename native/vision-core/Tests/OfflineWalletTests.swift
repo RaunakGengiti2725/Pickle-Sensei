@@ -1249,9 +1249,10 @@ final class OfflineWalletTests: XCTestCase {
     XCTAssertNil(try wallet.load(ownerId: ownerA))
   }
 
-  /// A store whose owner items change on every read (a writer storm or a
-  /// misbehaving backend) never settles into a classifiable state; that is a
-  /// storage failure the caller retries, never a verdict that deletes items.
+  /// A store whose owner items look corrupt in a different way on every read
+  /// (a writer storm or a misbehaving backend) never settles into a stable
+  /// corrupt view; that is a storage failure the caller retries, never a
+  /// verdict that deletes items.
   func testOwnerStateThatNeverSettlesIsAStorageFailureNotAVerdict() throws {
     let store = MemoryWalletStore()
     let wallet = OfflineWallet(store: store)
@@ -1260,10 +1261,15 @@ final class OfflineWalletTests: XCTestCase {
     let key = try XCTUnwrap(store.items[keyAccount])
     let walletBytes = try XCTUnwrap(store.items[OfflineWallet.walletAccount(ownerId: ownerA)])
     var flips = 0
+    store.items[keyAccount] = Data([0x01, 0x02, 0x03])
     store.onReadWalletAccount = { account in
       guard account == keyAccount else { return }
       flips += 1
-      if store.items[keyAccount] == nil { store.items[keyAccount] = key } else { store.items.removeValue(forKey: keyAccount) }
+      if store.items[keyAccount] == nil {
+        store.items[keyAccount] = Data([0x01, 0x02, 0x03])
+      } else {
+        store.items.removeValue(forKey: keyAccount)
+      }
     }
 
     assertFailure(.storageFailure, "an unstable view is neither healthy nor corrupt") { try wallet.load(ownerId: ownerA) }
