@@ -26,7 +26,6 @@ import {
 } from '@pickle/shared-types';
 import type { LocalDb } from '../src/data/db';
 import type { TrustedTimeReading } from '../src/data/trustedTime';
-import type { CapturedClip } from '../src/camera/capture';
 
 jest.mock('../src/config/authConfig', () => ({
   GOOGLE_WEB_CLIENT_ID: null,
@@ -84,13 +83,12 @@ jest.mock('../src/data/trustedTime', () => {
   };
 });
 
-let mockCaptureImpl: () => Promise<CapturedClip> = () =>
-  Promise.reject(new Error('capture is not part of this test'));
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
   return {
     ...actual,
-    captureStrokeVideo: () => mockCaptureImpl(),
+    captureStrokeVideo: () =>
+      Promise.reject(new Error('capture is not part of this test')),
     importStrokeVideo: () => Promise.reject(new Error('out of scope')),
     cancelCameraOperation: () => undefined,
     subscribeToCameraEvents: () => () => undefined,
@@ -234,8 +232,8 @@ function grantResponse(
 }
 
 function issuedGrant(
-  entitlementSource: 'identity_lifetime_free' | 'verified_store' =
-    'identity_lifetime_free',
+  entitlementSource:
+    'identity_lifetime_free' | 'verified_store' = 'identity_lifetime_free',
 ): IssuedOfflineGrant {
   const parsed = parseIssuedOfflineGrant(grantResponse(entitlementSource));
   if (!parsed) throw new Error('fixture grant response must parse');
@@ -378,8 +376,8 @@ function expectDossierCompliant(copy: string) {
 }
 
 async function holdGrant(
-  entitlementSource: 'identity_lifetime_free' | 'verified_store' =
-    'identity_lifetime_free',
+  entitlementSource:
+    'identity_lifetime_free' | 'verified_store' = 'identity_lifetime_free',
 ) {
   await holdOfflineGrant(db, issuedGrant(entitlementSource), BINDING);
 }
@@ -392,11 +390,9 @@ async function spend(operationId: string) {
  * arrives: the journal entry stays `in_flight`, which the wallet reports as a
  * HOLD. Exactly the shipping drain path (`reconcileOfflineWallet`). */
 async function presentAndLoseConnection() {
-  fetchSpy = jest
-    .spyOn(globalThis, 'fetch')
-    .mockImplementation(async () => {
-      throw new TypeError('Network request failed');
-    });
+  fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+    throw new TypeError('Network request failed');
+  });
   await expect(
     reconcileOfflineWallet(
       db,
@@ -607,9 +603,20 @@ describe('W05-04 Settings surfaces the offline journey', () => {
 });
 
 describe('W05-04 Analyze surfaces the offline journey', () => {
+  /** The wallet is read where the player reviews it (Settings); the Analyze
+   * ready surface shows that read without opening the wallet itself. */
+  async function visitSettings() {
+    const settings = await render(<SettingsScreen />);
+    await settle();
+    card(settings);
+    await act(async () => settings.unmount());
+    mounted = null;
+  }
+
   it('shows the held allocation and lease on the ready screen', async () => {
     await holdGrant();
     await spend('op-1');
+    await visitSettings();
     const renderer = await render(<AnalyzeScreen />);
     await settle();
     const copy = textOf(card(renderer));
@@ -624,6 +631,7 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     await holdGrant();
     await spend('op-1');
     await presentAndLoseConnection();
+    await visitSettings();
     const renderer = await render(<AnalyzeScreen />);
     await settle();
     const copy = textOf(card(renderer));
@@ -632,9 +640,20 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     expectDossierCompliant(copy);
   });
 
+  it('keeps the ready surface free of wallet reads — it persists nothing before an attempt', async () => {
+    await holdGrant();
+    await visitSettings();
+    handle.calls.length = 0;
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(handle.calls).toHaveLength(0);
+  });
+
   it('never shows another account’s allocation', async () => {
     await holdGrant();
     await spend('op-1');
+    await visitSettings();
     setActiveDataOwner(OTHER_OWNER);
     establishApiSession({
       apiBaseUrl: 'https://api.test',
@@ -644,9 +663,34 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     });
     const renderer = await render(<AnalyzeScreen />);
     await settle();
-    const copy = textOf(card(renderer));
-    expect(badgeOf(renderer)).toBe('NONE HELD');
-    expect(copy).not.toContain('1 of 2');
-    expect(copy).not.toContain('waiting');
+    expect(cards(renderer)).toHaveLength(0);
+    expect(textOf(renderer.root)).not.toContain('1 of 2');
+    expect(textOf(renderer.root)).not.toContain('waiting');
+  });
+
+  it('never shows a read taken under an earlier sign-in of the same account', async () => {
+    await holdGrant();
+    await spend('op-1');
+    const settings = await render(<SettingsScreen />);
+    setActiveDataOwner(OTHER_OWNER);
+    establishApiSession({
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token-2',
+      canonicalAppUserId: OTHER_OWNER,
+      provider: 'apple',
+    });
+    await settle();
+    await act(async () => settings.unmount());
+    mounted = null;
+    setActiveDataOwner(OWNER);
+    establishApiSession({
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token-3',
+      canonicalAppUserId: OWNER,
+      provider: 'apple',
+    });
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    expect(cards(renderer)).toHaveLength(0);
   });
 });
