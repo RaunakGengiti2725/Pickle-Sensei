@@ -398,6 +398,25 @@ $$;
 
 revoke all on function api_private.offline_ticket_owned_by(uuid, text[], uuid, uuid) from public, anon, authenticated, service_role;
 
+-- Advisory-lock key serializing the terminal event of ONE ticket. The
+-- per-user key does not cover two accounts that own the same ticket through a
+-- shared sign-in identity (an account deleted and re-created per identity);
+-- consume_offline_ticket() and release_offline_ticket() take this key after
+-- access_lock_key(uid), always in that order, so the loser re-reads the
+-- terminal state and answers with the contract verdict instead of racing the
+-- ledger's uniqueness.
+create or replace function api_private.offline_ticket_lock_key(p_ticket_id uuid)
+returns bigint
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select pg_catalog.hashtextextended('pickle.offline_ticket:' || p_ticket_id::text, 0)
+$$;
+
+revoke all on function api_private.offline_ticket_lock_key(uuid) from public, anon, authenticated, service_role;
+
 -- Every allocated ticket an account owns, by any of the three arms above —
 -- the one set offline_hold_count() counts and the late-link trigger extends.
 create or replace function api_private.offline_owned_allocations(p_uid uuid)
@@ -1480,6 +1499,7 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+  perform pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id));
 
   select * into v_allocation
   from public.offline_allocation_ledger a
@@ -1620,7 +1640,7 @@ end;
 $$;
 
 comment on function public.consume_offline_ticket(uuid, jsonb) is
-  'Settles one outstanding ticket owned by the caller''s account or sign-in identities against the scored shot the device rendered under it (live API session required), under access_lock_key(uid): appends the consumed event and writes the shot itself (analysis_permit_id NULL) in one transaction, vouching through pickle.offline_ticket_id. A shot that already exists, names an analysisPermitId, or is not scored is never chargeable. Idempotent for the same (ticket, shot id). Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.ticket_released | offline.shot_not_chargeable | offline.invalid_input | access.paywall_required | shot.session_not_found | shot.write_failed:<SQLSTATE>.';
+  'Settles one outstanding ticket owned by the caller''s account or sign-in identities against the scored shot the device rendered under it (live API session required), under access_lock_key(uid) and then the ticket''s own lock (api_private.offline_ticket_lock_key — two heirs of one identity race on the ticket, not on a user key): appends the consumed event and writes the shot itself (analysis_permit_id NULL) in one transaction, vouching through pickle.offline_ticket_id. A shot that already exists, names an analysisPermitId, or is not scored is never chargeable. Idempotent for the same (ticket, shot id). Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.ticket_released | offline.shot_not_chargeable | offline.invalid_input | access.paywall_required | shot.session_not_found | shot.write_failed:<SQLSTATE>.';
 
 revoke all on function public.consume_offline_ticket(uuid, jsonb) from public, anon, service_role;
 grant execute on function public.consume_offline_ticket(uuid, jsonb) to authenticated;
@@ -1645,6 +1665,7 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+  perform pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id));
 
   select * into v_allocation
   from public.offline_allocation_ledger a
@@ -1673,7 +1694,7 @@ end;
 $$;
 
 comment on function public.release_offline_ticket(uuid, text) is
-  'Explicit, terminal return of one outstanding ticket owned by the caller''s account or sign-in identities (live API session required); the only client reason is unused_ticket_returned — support_review is written by support through the table, never self-asserted here. A released ticket still counts against the entitlement and can never be consumed; a consumed ticket cannot be released. Idempotent. Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.invalid_input.';
+  'Explicit, terminal return of one outstanding ticket owned by the caller''s account or sign-in identities (live API session required), under access_lock_key(uid) and then the ticket''s own lock; the only client reason is unused_ticket_returned — support_review is written by support through the table, never self-asserted here. A released ticket still counts against the entitlement and can never be consumed; a consumed ticket cannot be released. Idempotent. Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.invalid_input.';
 
 revoke all on function public.release_offline_ticket(uuid, text) from public, anon, service_role;
 grant execute on function public.release_offline_ticket(uuid, text) to authenticated;
