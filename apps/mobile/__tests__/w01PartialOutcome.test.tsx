@@ -687,11 +687,11 @@ describe('W01-05 — mechanics-only partial outcome', () => {
   });
 
   it.each([
-    ['empty', ''],
-    ['513 characters', 'x'.repeat(513)],
-    ['2000 characters', 'y'.repeat(2000)],
+    ['an empty', ''],
+    ['a 513-character', 'x'.repeat(513)],
+    ['a 2000-character', 'y'.repeat(2000)],
   ])(
-    'a %s refusal message is normalized once and the first run, its replay and Result agree',
+    '%s refusal message is normalized once and the first run, its replay and Result agree',
     async (_label, message) => {
       const { calls, server, outcome, req, before } = await runPartial(
         `w01-message-${message.length}`,
@@ -717,7 +717,8 @@ describe('W01-05 — mechanics-only partial outcome', () => {
       expect(snapshotAccess()).toEqual(before);
 
       const copy = await expectPartialResult(partial.analysisId, stored);
-      expect(copy).not.toContain(message.slice(0, 513));
+      if (message.length > 512)
+        expect(copy).not.toContain(message.slice(0, 513));
     },
   );
 
