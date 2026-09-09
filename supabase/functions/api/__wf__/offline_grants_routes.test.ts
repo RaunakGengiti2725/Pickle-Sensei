@@ -546,7 +546,6 @@ Deno.test(
 
 Deno.test("POST /v1/offline/grants refuses malformed accepted rows without signing", async () => {
   reset();
-  const user = freshUser();
   const issuedAt = nowSeconds() - 2;
   const base = proRow({ issuedAt, leaseSeconds: DAY, entitlementExpiresAt: issuedAt + 30 * DAY });
   for (const row of [
@@ -562,13 +561,18 @@ Deno.test("POST /v1/offline/grants refuses malformed accepted rows without signi
     { ...freeRow({ issuedAt }), ticket_ids: [TICKET_A, TICKET_B, GRANT_ID] },
     { ...freeRow({ issuedAt }), entitlement_expires_at: iso(issuedAt + DAY) },
   ]) {
+    // A fresh account per row: the refusal, not the route budget, must answer.
     h.rpcs.issue_offline_grant = [row];
-    const response = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, user.token);
+    const response = await post(
+      GRANTS_PATH,
+      { installationKeyId: INSTALLATION_KEY },
+      freshUser().token,
+    );
     assertEquals(response.status, 503, JSON.stringify(row));
     assert(!(await response.text()).includes("compactJws"));
   }
   h.rpcs.issue_offline_grant = [];
-  const empty = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, user.token);
+  const empty = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, freshUser().token);
   assertEquals(empty.status, 503);
   await empty.text();
 });

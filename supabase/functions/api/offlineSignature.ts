@@ -1,14 +1,21 @@
 import { base64url, importJWK, jwtVerify, SignJWT, type JWK, type JWTPayload } from "jose";
 import {
+  OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
+  OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
+  OFFLINE_FREE_ALLOCATION_POLICY,
+  OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
   OFFLINE_GRANT_AUDIENCE,
   OFFLINE_GRANT_JWS_TYPE,
   OFFLINE_JWS_REQUIREMENTS,
+  OFFLINE_PRO_LEASE_MAX_SECONDS,
+  OFFLINE_PRO_LEASE_SCHEMA_VERSION,
   OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
   validateOfflineExecutionGrantMetadata,
   validateOfflineSignedGrantShape,
   type OfflineExecutionGrantClaims,
   type OfflineGrantBinding,
   type OfflineGrantProtectedHeader,
+  type OfflineProLease,
   type OfflineReleasedArtifacts,
   type OfflineSignedExecutionGrant,
 } from "../../../packages/shared-types/src/offlineAuthorization.ts";
@@ -90,6 +97,213 @@ export async function importOfflineGrantVerificationKey(
   } catch {
     throw new OfflineGrantCryptoError("invalid_key");
   }
+}
+
+/** Server-only signing key from configuration (a private P-256 JWK carrying
+ * its `kid`). The key is imported non-extractable with the single `sign`
+ * usage; anything else — a public key, a foreign curve, a missing kid, extra
+ * members — is `invalid_key`. Provisioning and rotation happen outside. */
+export async function importOfflineGrantSigningKey(privateJwk: unknown): Promise<OfflineGrantKey> {
+  try {
+    const jwk: JWK = JSON.parse(canonicalizeOfflineJson(privateJwk));
+    const allowedFields = ["kty", "crv", "x", "y", "d", "alg", "use", "key_ops", "kid", "ext"];
+    if (
+      !jwk ||
+      Object.keys(jwk).some((key) => !allowedFields.includes(key)) ||
+      jwk.kty !== "EC" ||
+      jwk.crv !== "P-256" ||
+      !isKeyIdentifier(jwk.kid) ||
+      (jwk.alg !== undefined && jwk.alg !== "ES256") ||
+      (jwk.use !== undefined && jwk.use !== "sig") ||
+      (jwk.ext !== undefined && typeof jwk.ext !== "boolean") ||
+      (jwk.key_ops !== undefined &&
+        (!Array.isArray(jwk.key_ops) || jwk.key_ops.length !== 1 || jwk.key_ops[0] !== "sign"))
+    ) {
+      throw new OfflineGrantCryptoError("invalid_key");
+    }
+    for (const coordinate of [jwk.x, jwk.y, jwk.d]) {
+      if (typeof coordinate !== "string") throw new OfflineGrantCryptoError("invalid_key");
+      const decoded = base64url.decode(coordinate);
+      if (decoded.byteLength !== 32 || base64url.encode(decoded) !== coordinate) {
+        throw new OfflineGrantCryptoError("invalid_key");
+      }
+    }
+    const key = await importJWK({ ...jwk, ext: false }, "ES256");
+    if (!(key instanceof CryptoKey)) throw new OfflineGrantCryptoError("invalid_key");
+    const entry = Object.freeze({
+      purpose: OFFLINE_JWS_REQUIREMENTS.keyPurpose,
+      kid: jwk.kid,
+      key,
+    });
+    requireKey(entry, "sign");
+    return entry;
+  } catch {
+    throw new OfflineGrantCryptoError("invalid_key");
+  }
+}
+
+/** What the server already established about the caller and the release
+ * before it asked the database for a grant. Never taken from the request. */
+export interface OfflineGrantIssuanceBinding {
+  readonly issuer: string;
+  readonly ownerId: string;
+  readonly installationKeyId: string;
+  readonly release: OfflineReleasedArtifacts;
+}
+
+export type OfflineGrantIssuanceRefusal =
+  | "row_malformed"
+  | "row_not_accepted"
+  | "expiry_not_after_issuance"
+  | "expiry_exceeds_maximum"
+  | "expiry_exceeds_entitlement"
+  | "entitlement_expired"
+  | "tickets_invalid"
+  | "claims_invalid";
+
+export class OfflineGrantIssuanceError extends Error {
+  constructor(readonly reason: OfflineGrantIssuanceRefusal) {
+    super(`Offline grant issuance refused: ${reason}`);
+    this.name = "OfflineGrantIssuanceError";
+  }
+}
+
+/** Claims for an `issue_offline_grant()` row that the database ACCEPTED. The
+ * SQL decided authorization, allocation and expiry; this only re-checks the
+ * row against the shared grant contract (uuid ids, positive generation,
+ * `issued < expires ≤ issued + 7d`, a Pro lease never past its verified
+ * entitlement, 1–2 unique free tickets and none for Pro) and refuses to
+ * build claims from anything else. Instants are floored to whole seconds,
+ * so a lease never rounds past what the row allows. */
+export function offlineGrantClaimsFromIssuance(
+  row: unknown,
+  binding: OfflineGrantIssuanceBinding,
+): OfflineExecutionGrantClaims {
+  if (!isPlainRecord(row)) throw new OfflineGrantIssuanceError("row_malformed");
+  if (row.result !== "accepted") throw new OfflineGrantIssuanceError("row_not_accepted");
+  const grantId = row.grant_id;
+  const generation = row.generation;
+  const source = row.entitlement_source;
+  const issuedAt = epochSecondsOf(row.issued_at);
+  const expiresAt = epochSecondsOf(row.expires_at);
+  if (
+    !isUuid(grantId) ||
+    typeof generation !== "number" ||
+    !Number.isSafeInteger(generation) ||
+    generation <= 0 ||
+    (source !== "verified_store" && source !== "identity_lifetime_free") ||
+    issuedAt === null ||
+    expiresAt === null
+  ) {
+    throw new OfflineGrantIssuanceError("row_malformed");
+  }
+  if (expiresAt <= issuedAt) throw new OfflineGrantIssuanceError("expiry_not_after_issuance");
+  if (expiresAt - issuedAt > OFFLINE_PRO_LEASE_MAX_SECONDS) {
+    throw new OfflineGrantIssuanceError("expiry_exceeds_maximum");
+  }
+  const ticketIds = row.ticket_ids;
+  if (!Array.isArray(ticketIds) || !ticketIds.every(isUuid)) {
+    throw new OfflineGrantIssuanceError("row_malformed");
+  }
+  const base = {
+    schemaVersion: OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
+    protocolVersion: OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
+    iss: binding.issuer,
+    aud: OFFLINE_GRANT_AUDIENCE,
+    sub: binding.ownerId,
+    jti: grantId,
+    installationKeyId: binding.installationKeyId,
+    iat: issuedAt,
+    exp: expiresAt,
+    capabilities: ["analyze_joint_output"] as const,
+    release: binding.release,
+  };
+  let claims: OfflineExecutionGrantClaims;
+  if (source === "verified_store") {
+    if (ticketIds.length !== 0) throw new OfflineGrantIssuanceError("tickets_invalid");
+    let lease: OfflineProLease;
+    if (row.entitlement_expires_at === null) {
+      lease = {
+        schemaVersion: OFFLINE_PRO_LEASE_SCHEMA_VERSION,
+        kind: "lifetime",
+        verifiedEntitlementExpiresAt: null,
+      };
+    } else {
+      const entitlementExpiresAt = epochSecondsOf(row.entitlement_expires_at);
+      if (entitlementExpiresAt === null) throw new OfflineGrantIssuanceError("row_malformed");
+      if (entitlementExpiresAt <= issuedAt) {
+        throw new OfflineGrantIssuanceError("entitlement_expired");
+      }
+      if (expiresAt > entitlementExpiresAt) {
+        throw new OfflineGrantIssuanceError("expiry_exceeds_entitlement");
+      }
+      lease = {
+        schemaVersion: OFFLINE_PRO_LEASE_SCHEMA_VERSION,
+        kind: "subscription",
+        verifiedEntitlementExpiresAt: entitlementExpiresAt,
+      };
+    }
+    claims = { ...base, entitlementSource: "verified_store", lease };
+  } else {
+    if (row.entitlement_expires_at !== null) throw new OfflineGrantIssuanceError("row_malformed");
+    if (
+      ticketIds.length < 1 ||
+      ticketIds.length > 2 ||
+      new Set(ticketIds).size !== ticketIds.length
+    ) {
+      throw new OfflineGrantIssuanceError("tickets_invalid");
+    }
+    claims = {
+      ...base,
+      entitlementSource: "identity_lifetime_free",
+      allocation: {
+        schemaVersion: OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
+        allocationId: grantId,
+        generation,
+        ticketIds: [...ticketIds],
+        budgetPolicy: OFFLINE_FREE_ALLOCATION_POLICY.id,
+        financialExpiry: "reconciliation_only",
+      },
+    };
+  }
+  const checked = validateOfflineExecutionGrantMetadata(
+    { alg: "ES256", typ: OFFLINE_GRANT_JWS_TYPE, kid: ISSUANCE_SHAPE_CHECK_KID },
+    claims,
+    {
+      issuer: binding.issuer,
+      allowedKeyIds: [ISSUANCE_SHAPE_CHECK_KID],
+      ownerId: binding.ownerId,
+      installationKeyId: binding.installationKeyId,
+    },
+  );
+  if (!checked.ok) throw new OfflineGrantIssuanceError("claims_invalid");
+  return checked.value;
+}
+
+/** Placeholder kid for the shape check above only: the real protected header
+ * is built by `signOfflineExecutionGrant` from the configured signing key. */
+const ISSUANCE_SHAPE_CHECK_KID = "issuance-shape-check";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const isUuid = (value: unknown): value is string =>
+  typeof value === "string" && UUID_PATTERN.test(value);
+
+function isKeyIdentifier(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9._:/+=-]{1,128}$/.test(value);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** A PostgREST/to_jsonb timestamptz (`2026-09-09T04:25:00.123456+00:00`) or
+ * an ISO-8601 UTC instant, floored to whole seconds; anything else is null. */
+const INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+function epochSecondsOf(value: unknown): number | null {
+  if (typeof value !== "string" || !INSTANT_PATTERN.test(value)) return null;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  return Math.floor(ms / 1000);
 }
 
 export async function signOfflineExecutionGrant(

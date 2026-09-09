@@ -89,6 +89,14 @@ import {
 } from "./releasePolicy.ts";
 import { canonicalizeOfflineJson, digestCanonicalOfflineJson } from "./canonicalDigest.ts";
 import {
+  importOfflineGrantSigningKey,
+  offlineGrantClaimsFromIssuance,
+  OfflineGrantIssuanceError,
+  signOfflineExecutionGrant,
+  type OfflineGrantKey,
+} from "./offlineSignature.ts";
+import type { OfflineReleasedArtifacts } from "../../../packages/shared-types/src/offlineAuthorization.ts";
+import {
   cacheDel,
   cacheFence,
   cacheGet,
@@ -4692,6 +4700,280 @@ async function accountDeletionStatusRoute(request: Request, ip: string): Promise
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Offline execution grants (W04-02): device registration + signed grant issuance
+//
+// The database RPCs (migration 20260908160000) own every decision — live
+// session, device ownership, attestation, identity-lifetime budget, Pro lease
+// = min(issued + 7d, verified entitlement expiry). The edge fn adds only what
+// SQL cannot: the ES256 signature binding the accepted row to the
+// authenticated owner, the installation, the verified release lineage and the
+// server-only signing key. Both routes run as the CALLER (never the service
+// role), after the per-user route budget and the uncached live-session check.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const OFFLINE_INVALID_INPUT_CODE = "offline.invalid_input";
+/** Mirrors the `offline_devices_installation_key_bounds` CHECK exactly, so a
+ * malformed key is refused here before the RPC would refuse it. */
+const OFFLINE_INSTALLATION_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const isOfflineInstallationKey = (value: unknown): value is string =>
+  typeof value === "string" && OFFLINE_INSTALLATION_KEY_RE.test(value);
+const OFFLINE_GRANT_ISSUER = `${SUPABASE_URL}/functions/v1/api`;
+const OFFLINE_GRANT_SIGNING_JWK_ENV = "OFFLINE_GRANT_SIGNING_JWK";
+
+/** Categorical audit line for every grant decision: grant id, generation,
+ * source, key id and outcome. Never the owner, the installation key, the
+ * bearer or the signed grant. */
+function emitOfflineGrantAudit(entry: {
+  outcome: "issued" | "refused";
+  reason?: string;
+  grantId?: string;
+  generation?: number;
+  entitlementSource?: string;
+  keyId?: string;
+}): void {
+  console.warn("[api] offline grant", { evt: "offline_grant_audit", ...entry });
+}
+
+/** The configured private signing JWK, imported once per distinct secret
+ * value (rotation = new value = fresh import). A missing or unusable secret
+ * is `null`: the route answers 503 and spends nothing. */
+let offlineSigningKeyCache: { raw: string; key: OfflineGrantKey } | null = null;
+async function offlineGrantSigningKey(): Promise<OfflineGrantKey | null> {
+  const raw = Deno.env.get(OFFLINE_GRANT_SIGNING_JWK_ENV) ?? "";
+  if (raw.trim() === "") return null;
+  if (offlineSigningKeyCache?.raw === raw) return offlineSigningKeyCache.key;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  try {
+    const key = await importOfflineGrantSigningKey(parsed);
+    offlineSigningKeyCache = { raw, key };
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+function offlineReleaseArtifacts(policy: VerifiedReleasePolicy): OfflineReleasedArtifacts {
+  return {
+    policy: { version: policy.approval.policy.version, sha256: policy.approval.policy.sha256 },
+    mechanicsModel: {
+      version: policy.document.mechanics.lineage.model.version,
+      sha256: policy.document.mechanics.lineage.model.sha256,
+    },
+    benchmarkModel: {
+      version: policy.document.benchmark.lineage.model.version,
+      sha256: policy.document.benchmark.lineage.model.sha256,
+    },
+  };
+}
+
+/** The single row a `returns table` RPC yields, or null for anything else. */
+function singleRpcRow(data: unknown): Record<string, unknown> | null {
+  const row = Array.isArray(data) ? (data.length === 1 ? data[0] : null) : data;
+  return isRecord(row) ? row : null;
+}
+
+/** POST /v1/devices/register — body { installationKeyId, attestationEnvironment }.
+ * No App Attest verification exists in this function yet, so every
+ * registration is recorded UNATTESTED regardless of what the body claims; the
+ * RPC never downgrades an already-attested row and refuses an environment
+ * change for a known installation. */
+async function registerOfflineDevice(authed: AuthedUser, request: Request): Promise<Response> {
+  const body = await readBody(request);
+  const installationKeyId = body.installationKeyId;
+  const environment = body.attestationEnvironment;
+  if (
+    !isOfflineInstallationKey(installationKeyId) ||
+    (environment !== "production" && environment !== "development")
+  ) {
+    return codedError(
+      400,
+      OFFLINE_INVALID_INPUT_CODE,
+      "installationKeyId (1-128 of [A-Za-z0-9._:-], starting alphanumeric) and attestationEnvironment (production|development) are required.",
+    );
+  }
+  const registered = await authed.db.rpc("register_offline_device", {
+    p_installation_key_id: installationKeyId,
+    p_attestation_environment: environment,
+    p_attested: false,
+  });
+  if (registered.error) {
+    return serviceUnavailable("Device registration", registered.error, {
+      status: registered.status,
+    });
+  }
+  const row = singleRpcRow(registered.data);
+  if (!row) return serviceUnavailable("Device registration", { name: "UnexpectedRpcRow" });
+  switch (row.result) {
+    case "accepted": {
+      const state = row.attestation_state;
+      if (!isUuid(row.device_id) || (state !== "unattested" && state !== "attested")) {
+        return serviceUnavailable("Device registration", { name: "UnexpectedRpcRow" });
+      }
+      return json(200, {
+        device: {
+          deviceId: row.device_id,
+          installationKeyId,
+          attestationEnvironment: environment,
+          attestationState: state,
+        },
+      });
+    }
+    case OFFLINE_INVALID_INPUT_CODE:
+      return codedError(
+        400,
+        OFFLINE_INVALID_INPUT_CODE,
+        "The device registration was not accepted.",
+      );
+    case "offline.device_environment_mismatch":
+      return codedError(
+        409,
+        "offline.device_environment_mismatch",
+        "This installation is already registered for a different attestation environment.",
+      );
+    default:
+      return serviceUnavailable("Device registration", { name: "UnexpectedRpcResult" });
+  }
+}
+
+const OFFLINE_GRANT_REFUSALS = new Map<string, { status: number; message: string }>([
+  [
+    "offline.device_not_registered",
+    { status: 409, message: "Register this installation before requesting an offline grant." },
+  ],
+  [
+    "offline.device_not_attested",
+    { status: 403, message: "Offline grants are issued only to attested installations." },
+  ],
+  [
+    "access.paywall_required",
+    {
+      status: 402,
+      message:
+        "Both lifetime free ratings have been used or reserved. Membership is required for offline ratings.",
+    },
+  ],
+  [
+    OFFLINE_INVALID_INPUT_CODE,
+    { status: 400, message: "The offline grant request was not accepted." },
+  ],
+]);
+
+/** POST /v1/offline/grants — body { installationKeyId, requestedTickets? (0-2, default 2) }.
+ * Order matters: input, signing key and release authority are checked BEFORE
+ * the RPC, so a request that cannot end in a signed grant never spends a
+ * grant generation. An accepted row that fails the claim contract (expiry
+ * past 7 days or past the verified entitlement, malformed ids) is refused
+ * with a generic 503 and audited; no grant leaves the server unsigned. */
+async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<Response> {
+  const body = await readBody(request);
+  const installationKeyId = body.installationKeyId;
+  const requestedTickets = body.requestedTickets ?? 2;
+  if (
+    !isOfflineInstallationKey(installationKeyId) ||
+    typeof requestedTickets !== "number" ||
+    !Number.isInteger(requestedTickets) ||
+    requestedTickets < 0 ||
+    requestedTickets > 2
+  ) {
+    return codedError(
+      400,
+      OFFLINE_INVALID_INPUT_CODE,
+      "installationKeyId (1-128 of [A-Za-z0-9._:-], starting alphanumeric) is required; requestedTickets must be an integer 0-2.",
+    );
+  }
+
+  const signingKey = await offlineGrantSigningKey();
+  if (!signingKey) {
+    return serviceUnavailable("Offline grant issuance", { name: "SigningKeyUnavailable" });
+  }
+
+  const release = await chargeableReleaseAdmission();
+  if (release.status === "unavailable") {
+    return serviceUnavailable("Offline grant issuance", release.error);
+  }
+  if (release.status === "ineligible") return releaseNotAuthorized(release.reasonCode);
+  const releaseArtifacts = offlineReleaseArtifacts(release.policy);
+
+  const issued = await authed.db.rpc("issue_offline_grant", {
+    p_installation_key_id: installationKeyId,
+    p_requested_tickets: requestedTickets,
+  });
+  if (issued.error) {
+    return serviceUnavailable("Offline grant issuance", issued.error, { status: issued.status });
+  }
+  const row = singleRpcRow(issued.data);
+  if (!row) {
+    emitOfflineGrantAudit({ outcome: "refused", reason: "row_malformed", keyId: signingKey.kid });
+    return serviceUnavailable("Offline grant issuance", { name: "UnexpectedRpcRow" });
+  }
+  const result = row.result;
+  if (result !== "accepted") {
+    const refusal = typeof result === "string" ? OFFLINE_GRANT_REFUSALS.get(result) : undefined;
+    if (typeof result !== "string" || !refusal) {
+      emitOfflineGrantAudit({
+        outcome: "refused",
+        reason: "unexpected_rpc_result",
+        keyId: signingKey.kid,
+      });
+      return serviceUnavailable("Offline grant issuance", { name: "UnexpectedRpcResult" });
+    }
+    return codedError(refusal.status, result, refusal.message);
+  }
+
+  const generation = typeof row.generation === "number" ? row.generation : undefined;
+  const audited = {
+    grantId: isUuid(row.grant_id) ? row.grant_id : undefined,
+    generation,
+    entitlementSource:
+      typeof row.entitlement_source === "string" ? row.entitlement_source : undefined,
+    keyId: signingKey.kid,
+  };
+  try {
+    const claims = offlineGrantClaimsFromIssuance(row, {
+      issuer: OFFLINE_GRANT_ISSUER,
+      ownerId: authed.id,
+      installationKeyId,
+      release: releaseArtifacts,
+    });
+    const grant = await signOfflineExecutionGrant(claims, signingKey, {
+      binding: {
+        issuer: OFFLINE_GRANT_ISSUER,
+        allowedKeyIds: [signingKey.kid],
+        ownerId: authed.id,
+        installationKeyId,
+      },
+      release: releaseArtifacts,
+      nowEpochSeconds: Math.floor(Date.now() / 1000),
+    });
+    emitOfflineGrantAudit({ outcome: "issued", ...audited });
+    return json(200, {
+      grantId: claims.jti,
+      generation,
+      entitlementSource: claims.entitlementSource,
+      issuedAt: claims.iat,
+      expiresAt: claims.exp,
+      entitlementExpiresAt:
+        claims.entitlementSource === "verified_store"
+          ? claims.lease.verifiedEntitlementExpiresAt
+          : null,
+      ticketIds:
+        claims.entitlementSource === "identity_lifetime_free" ? claims.allocation.ticketIds : [],
+      keyId: signingKey.kid,
+      grant,
+    });
+  } catch (error) {
+    const reason = error instanceof OfflineGrantIssuanceError ? error.reason : "signing_failed";
+    emitOfflineGrantAudit({ outcome: "refused", reason, ...audited });
+    return serviceUnavailable("Offline grant issuance", error);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -4746,6 +5028,18 @@ const ROUTE_LIMITS: Array<{
     scope: "delete_confirm",
     limit: 5,
     windowSeconds: 3_600,
+  },
+  {
+    match: (m, p) => m === "POST" && p === "/v1/devices/register",
+    scope: "device_register",
+    limit: 10,
+    windowSeconds: 60,
+  },
+  {
+    match: (m, p) => m === "POST" && p === "/v1/offline/grants",
+    scope: "offline_grants",
+    limit: 10,
+    windowSeconds: 60,
   },
 ];
 
@@ -5440,6 +5734,12 @@ async function handleRequest(request: Request): Promise<Response> {
 
     case "GET /v1/me/saved-drills":
       return listSavedDrills(authed);
+
+    case "POST /v1/devices/register":
+      return registerOfflineDevice(authed, request);
+
+    case "POST /v1/offline/grants":
+      return issueOfflineGrant(authed, request);
 
     // ── Training plans: honest empty states. Plans require published,
     // coach-validated drill content; none exists (0 real coach reviews — the

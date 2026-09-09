@@ -273,6 +273,10 @@ const ROUTE_WORDS = new Set([
   "delete-request",
   "delete-confirm",
   "delete-status",
+  "devices",
+  "register",
+  "offline",
+  "grants",
 ]);
 export function routeTemplate(pathname: string): string {
   return pathname

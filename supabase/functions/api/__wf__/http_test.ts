@@ -292,7 +292,7 @@ Deno.test(
       const matches = source.match(/\bconsole\s*(?:\.|\[)/g) ?? [];
       if (matches.length) sinks[entry.name] = matches.length;
     }
-    assertEquals(sinks, { "http.ts": 2, "index.ts": 18 });
+    assertEquals(sinks, { "http.ts": 2, "index.ts": 19 });
     const deletion = await Deno.readTextFile(
       new URL("../accountDeletionOperations.ts", import.meta.url),
     );
