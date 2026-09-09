@@ -30,6 +30,13 @@ import {
   saveLocalOnlyAnalysis,
 } from '../data/repository';
 import { makeUuid } from '../util/uuid';
+import {
+  isSettledRefusalRun,
+  readPartialCaptureAnalysisRecord,
+  readPartialOutcome,
+  readReservationRefusal,
+  type PartialOutcomeMarker,
+} from './partialOutcome';
 import { commitPracticeSet } from './practiceSet';
 import {
   analysisAttemptJournal,
@@ -173,7 +180,11 @@ export interface OriginalAnalysisOperation {
   readonly finalRecordId: string | null;
   readonly winningAttemptId: string | null;
   readonly completionKind:
-    'scored' | 'low_confidence' | 'needs_technique_confirmation' | null;
+    | 'scored'
+    | 'low_confidence'
+    | 'needs_technique_confirmation'
+    | 'partial'
+    | null;
 }
 export interface OriginalAnalysisAttempt {
   readonly run: RunJournalEntry;
@@ -303,12 +314,22 @@ function decodeOperation(
       : operation.finalRecordId !== operation.analysisId ||
         operation.winningAttemptId === null ||
         operation.winningAttemptId !== operation.currentAttemptId ||
-        !['scored', 'low_confidence', 'needs_technique_confirmation'].includes(
-          operation.completionKind ?? '',
-        )
+        ![
+          'scored',
+          'low_confidence',
+          'needs_technique_confirmation',
+          'partial',
+        ].includes(operation.completionKind ?? '')
   )
     held('invalid_result_pointer');
   return operation;
+}
+/** A PARTIAL completion is backed by exactly one settled, permit-less attempt:
+ * the authority refused the reservation, so nothing was ever chargeable. The
+ * same attempt is what a later run of the operation reconnects to when its
+ * mechanics record has not landed yet. */
+export function isSettledRefusal(attempt: OriginalAnalysisAttempt): boolean {
+  return attempt.technicalFailure === null && isSettledRefusalRun(attempt.run);
 }
 async function read(
   db: LocalDb,
@@ -600,11 +621,13 @@ export async function loadSavedOriginalAnalysis(
           (operation.completionKind === 'scored'
             ? attempt.run.state !== 'committed' ||
               attempt.run.resultId !== operation.finalRecordId
-            : attempt.run.permitId === null ||
-              attempt.run.releaseOutcome !== 'low_confidence' ||
-              !['release_pending', 'released', 'terminal'].includes(
-                attempt.run.state,
-              ))
+            : operation.completionKind === 'partial'
+              ? !isSettledRefusal(attempt)
+              : attempt.run.permitId === null ||
+                attempt.run.releaseOutcome !== 'low_confidence' ||
+                !['release_pending', 'released', 'terminal'].includes(
+                  attempt.run.state,
+                ))
         )
           held('invalid_result_pointer');
         // Do NOT compare the current declaration with the original here: the
@@ -1161,7 +1184,9 @@ function recordMatches(
   if (
     record.kind === 'needs_technique_confirmation'
       ? !parseNeedsTechniqueConfirmationRecord(record, metadata).ok
-      : !isVerifiedCompletedCaptureRecord(record, metadata)
+      : readPartialOutcome(record) !== null
+        ? readPartialCaptureAnalysisRecord(record, metadata) === null
+        : !isVerifiedCompletedCaptureRecord(record, metadata)
   )
     return false;
   const selection = record.inputSelection;
@@ -1202,6 +1227,7 @@ async function commit(
   operationId: string,
   run: RunJournalIdentity,
   record: CaptureAnalysisRecord,
+  withheld: PartialOutcomeMarker | null = null,
 ): Promise<void> {
   await currentTransaction(db, execution, async tx => {
     const operation = await assertCurrentAttempt(
@@ -1211,8 +1237,16 @@ async function commit(
       run,
     );
     const attempt = await readAttempt(tx, operation, run.operationId);
+    const partial = readPartialOutcome(record);
     if (
-      attempt.run.state !== 'reserved' ||
+      (withheld === null
+        ? attempt.run.state !== 'reserved' || partial !== null
+        : !isSettledRefusal(attempt) ||
+          partial === null ||
+          originalCanonicalJson(partial) !== originalCanonicalJson(withheld) ||
+          originalCanonicalJson(
+            await readReservationRefusal(tx, attempt.run),
+          ) !== originalCanonicalJson(withheld)) ||
       attempt.technicalFailure !== null ||
       !recordMatches(operation, attempt.run, record) ||
       operation.finalRecordId !== null ||
@@ -1230,7 +1264,7 @@ async function commit(
         await commitPracticeSet(ownerDb, operation.snapshot.practiceSet);
       await saveAnalysis(ownerDb, record.result!, attempt.run.permitId!);
       await analysisAttemptJournal.commit(tx, run, record.id);
-    } else {
+    } else if (partial === null) {
       if (record.result) await saveLocalOnlyAnalysis(ownerDb, record.result);
       await analysisAttemptJournal.requestRelease(tx, run, 'low_confidence');
     }
@@ -1242,9 +1276,11 @@ async function commit(
         run.operationId,
         scored
           ? 'scored'
-          : record.kind === 'needs_technique_confirmation'
-            ? 'needs_technique_confirmation'
-            : 'low_confidence',
+          : partial !== null
+            ? 'partial'
+            : record.kind === 'needs_technique_confirmation'
+              ? 'needs_technique_confirmation'
+              : 'low_confidence',
         Date.now(),
         run.ownerKey,
         operationId,
@@ -1292,6 +1328,17 @@ async function loadCompletion(
       const parsed = parseNeedsTechniqueConfirmationRecord(value, metadata);
       if (!parsed.ok || row.shot_id !== null) held('invalid_result');
       record = parsed.value;
+    } else if (operation.completionKind === 'partial') {
+      const partial = readPartialCaptureAnalysisRecord(value, metadata);
+      if (
+        partial === null ||
+        row.shot_id !== null ||
+        !isSettledRefusal(attempt) ||
+        originalCanonicalJson(await readReservationRefusal(tx, attempt.run)) !==
+          originalCanonicalJson(partial.partialOutcome)
+      )
+        held('invalid_result');
+      record = partial;
     } else {
       if (!isVerifiedCompletedCaptureRecord(value, metadata))
         held('invalid_result');
@@ -1318,7 +1365,10 @@ async function loadCompletion(
       (operation.completionKind === 'scored'
         ? attempt.run.state !== 'committed' ||
           attempt.run.resultId !== record.id
-        : attempt.run.releaseOutcome !== 'low_confidence')
+        : operation.completionKind === 'partial'
+          ? readPartialOutcome(record) === null
+          : attempt.run.releaseOutcome !== 'low_confidence' ||
+            readPartialOutcome(record) !== null)
     )
       held('invalid_result');
     execution.assertCurrent();
