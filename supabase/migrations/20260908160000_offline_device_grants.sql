@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Pickle Sensei — server-authoritative offline grants: device registry,
 -- per-device grants with bounded expiry, append-only allocation ledger
--- (W04-01; follows 20260908100000).
+-- (W04-01; follows 20260908150000).
 --
 -- THE GAP. packages/shared-types/src/offlineAuthorization.ts fixes the wire
 -- shape of an offline execution grant (device challenge/registration, free
@@ -97,6 +97,16 @@
 --      row the settlement path itself wrote, bound to the ticket — never a
 --      pre-existing row: a rating already counted (online-paid, direct, or a
 --      forged created_at) can never settle a ticket.
+--   7. Serialization (round 7). Identity recovery lets DIFFERENT accounts own
+--      one ticket, so a per-CALLER lock cannot order two settlements of it:
+--      every terminal write (consume, release, and the ledger guard itself)
+--      first takes pg_advisory_xact_lock(offline_ticket_lock_key(ticket)),
+--      and the ledger carries ONE partial unique index over the terminal
+--      events so a second terminal row for a ticket is impossible for every
+--      role, whatever lock it holds. Device registration takes the caller's
+--      access_lock_key() before it looks the key up (a FOR UPDATE on a row
+--      that does not exist yet locks nothing), so a double submit yields one
+--      row and two `accepted` answers naming it, never a 23505.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -264,6 +274,11 @@ comment on table public.offline_allocation_ledger is
 
 create unique index if not exists offline_allocation_ledger_shot_idx
   on public.offline_allocation_ledger (shot_id) where shot_id is not null;
+-- ONE terminal event per ticket, decided by the index rather than by a read:
+-- a consume on one recovered account beside a release on another still
+-- collides here even if both passed the guard's read-committed check.
+create unique index if not exists offline_allocation_ledger_one_terminal_idx
+  on public.offline_allocation_ledger (ticket_id) where event in ('consumed', 'released');
 create index if not exists offline_allocation_ledger_user_event_idx
   on public.offline_allocation_ledger (user_id, event, created_at);
 create index if not exists offline_allocation_ledger_ticket_idx
@@ -390,6 +405,23 @@ as $$
 $$;
 
 revoke all on function api_private.offline_ticket_owned_by(uuid, text[], uuid, uuid) from public, anon, authenticated, service_role;
+
+-- Advisory-lock key serializing the terminal settlement of ONE ticket across
+-- every account that may own it (the allocating account and every recovered
+-- sibling). Taken by consume_offline_ticket(), release_offline_ticket() and
+-- the ledger event guard BEFORE the allocation or a terminal row is read;
+-- the per-user access_lock_key() stays in place beside it for the budget.
+create or replace function api_private.offline_ticket_lock_key(p_ticket_id uuid)
+returns bigint
+language sql
+immutable
+security definer
+set search_path = ''
+as $$
+  select pg_catalog.hashtextextended('pickle.offline-ticket:' || p_ticket_id::text, 0)
+$$;
+
+revoke all on function api_private.offline_ticket_lock_key(uuid) from public, anon, authenticated, service_role;
 
 -- Every allocated ticket an account owns, by any of the three arms above —
 -- the one set offline_hold_count() counts and the late-link trigger extends.
@@ -520,6 +552,9 @@ begin
     end if;
     return new;
   end if;
+  -- A terminal row is written under the ticket's lock, whoever the caller
+  -- is: a direct writer (support) queues behind the RPCs and sees their row.
+  perform pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(new.ticket_id));
   select * into v_allocation
   from public.offline_allocation_ledger a
   where a.ticket_id = new.ticket_id and a.event = 'allocated';
@@ -978,8 +1013,9 @@ revoke execute on function public.enforce_scored_shot_permit()
   from public, anon, authenticated;
 
 -- 4c. apply_synced_shot(): the free-limit backstop counts outstanding offline
---     tickets beside the lifetime scored count. Everything else is
---     byte-for-byte 20260907100000.
+--     tickets beside the lifetime scored count. Everything else — the
+--     settlement-receipt verification, the binding-decided replay, the
+--     receipt written beside the shot — is byte-for-byte 20260908110000.
 create or replace function public.apply_synced_shot(shot jsonb)
 returns text
 language plpgsql
@@ -996,6 +1032,13 @@ declare
   v_premium boolean;
   v_consumed integer;
   entry jsonb;
+  v_transport jsonb;
+  v_canonical text;
+  v_receipt jsonb;
+  v_binding jsonb;
+  v_claim jsonb;
+  v_stored public.settlement_receipts%rowtype;
+  v_attempt integer;
 begin
   if v_uid is null then
     return 'auth.required';
@@ -1006,80 +1049,162 @@ begin
   v_session_id := nullif(shot ->> 'sessionId', '')::uuid;
   v_result_kind := shot ->> 'resultKind';
 
-  -- Idempotent replay: this user already owns the row. Checked before the
-  -- lock so replays never contend.
-  if exists (select 1 from public.shots s where s.id = v_id and s.user_id = v_uid) then
-    return 'accepted';
+  -- The settlement receipt (optional for callers that predate it). When
+  -- present it must be exactly the receipt of THIS settlement, or nothing
+  -- happens. Verified before any lock, lookup or write.
+  v_transport := shot -> 'settlementReceipt';
+  if v_transport is not null and jsonb_typeof(v_transport) = 'null' then
+    v_transport := null;
+  end if;
+  if v_transport is not null then
+    if jsonb_typeof(v_transport) <> 'object'
+       or jsonb_typeof(v_transport -> 'canonical') <> 'string'
+       or jsonb_typeof(v_transport -> 'sha256') <> 'string' then
+      return 'shot.receipt_invalid';
+    end if;
+    v_canonical := v_transport ->> 'canonical';
+    if length(v_canonical) < 2 or length(v_canonical) > 65536
+       or (v_transport ->> 'sha256') !~ '^[0-9a-f]{64}$'
+       or encode(pg_catalog.sha256(convert_to(v_canonical, 'UTF8')), 'hex')
+          <> (v_transport ->> 'sha256') then
+      return 'shot.receipt_invalid';
+    end if;
+    begin
+      v_receipt := v_canonical::jsonb;
+    exception
+      when others then
+        return 'shot.receipt_invalid';
+    end;
+    if jsonb_typeof(v_receipt) <> 'object'
+       or (v_receipt -> 'schemaVersion') is distinct from '1'::jsonb
+       or (v_receipt ->> 'kind') is distinct from 'settlement_receipt'
+       or coalesce(jsonb_typeof(v_receipt -> 'binding'), 'missing') <> 'object'
+       or coalesce(v_receipt ->> 'bindingSha256', '') !~ '^[0-9a-f]{64}$' then
+      return 'shot.receipt_invalid';
+    end if;
+    v_binding := v_receipt -> 'binding';
+    if (v_binding ->> 'ownerId') is distinct from v_uid::text
+       or (v_binding ->> 'shotId') is distinct from v_id::text
+       or (v_binding ->> 'analysisPermitId') is distinct from v_permit_id::text
+       or (v_binding ->> 'resultKind') is distinct from v_result_kind
+       or coalesce(v_binding ->> 'payloadSha256', '') !~ '^[0-9a-f]{64}$' then
+      return 'shot.receipt_invalid';
+    end if;
+    -- Claims: each is null (recorded as absent) or exactly its shape.
+    if coalesce(jsonb_typeof(v_binding -> 'installationKeyId'), 'missing') not in ('null', 'string')
+       or (jsonb_typeof(v_binding -> 'installationKeyId') = 'string'
+           and (v_binding ->> 'installationKeyId') !~ '^[A-Za-z0-9._:/+=-]{1,128}$')
+       or coalesce(jsonb_typeof(v_binding -> 'operationId'), 'missing') not in ('null', 'string')
+       or (jsonb_typeof(v_binding -> 'operationId') = 'string'
+           and (v_binding ->> 'operationId') !~ '^[A-Za-z0-9._:/+=-]{1,128}$') then
+      return 'shot.receipt_invalid';
+    end if;
+    v_claim := v_binding -> 'grant';
+    if coalesce(jsonb_typeof(v_claim), 'missing') not in ('null', 'object')
+       or (jsonb_typeof(v_claim) = 'object' and (
+             coalesce(v_claim ->> 'grantId', '') !~ '^[A-Za-z0-9._:/+=-]{1,128}$'
+             or coalesce(v_claim ->> 'grantJwsSha256', '') !~ '^[0-9a-f]{64}$'
+           )) then
+      return 'shot.receipt_invalid';
+    end if;
+    v_claim := v_binding -> 'ticket';
+    if coalesce(jsonb_typeof(v_claim), 'missing') not in ('null', 'object')
+       or (jsonb_typeof(v_claim) = 'object' and (
+             coalesce(v_claim ->> 'allocationId', '') !~ '^[A-Za-z0-9._:/+=-]{1,128}$'
+             or coalesce(v_claim ->> 'ticketId', '') !~ '^[A-Za-z0-9._:/+=-]{1,128}$'
+             or coalesce(jsonb_typeof(v_claim -> 'generation'), 'missing') <> 'number'
+             or (v_claim ->> 'generation') !~ '^[1-9][0-9]{0,8}$'
+           )) then
+      return 'shot.receipt_invalid';
+    end if;
+    -- Policy lineage: a scored settlement is admitted under a verified
+    -- release policy and must say which; an abstention carries none.
+    v_claim := v_receipt -> 'policy';
+    if coalesce(jsonb_typeof(v_claim), 'missing') not in ('null', 'object')
+       or (v_result_kind = 'scored' and jsonb_typeof(v_claim) <> 'object')
+       or (jsonb_typeof(v_claim) = 'object' and (
+             length(coalesce(v_claim ->> 'version', '')) not between 1 and 128
+             or coalesce(v_claim ->> 'sha256', '') !~ '^[0-9a-f]{64}$'
+           )) then
+      return 'shot.receipt_invalid';
+    end if;
   end if;
 
-  -- FREE-LIMIT BACKSTOP (1/2): take the same per-user lock reserve_analysis_
-  -- permit uses, so the scored-shot count below cannot change under us and
-  -- two concurrent syncs holding DIFFERENT permits cannot both pass it.
-  perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+  -- Replay is decided on the binding and the policy lineage — once before
+  -- the per-user lock (a settled shot never contends) and once under it (the
+  -- racing settlement of the same id). Both run before the permit is touched.
+  for v_attempt in 1..2 loop
+    if exists (
+      select 1
+      from public.shots s
+      where s.id = v_id
+        and s.user_id = v_uid
+    ) then
+      select * into v_stored
+      from public.settlement_receipts r
+      where r.shot_id = v_id
+        and r.user_id = v_uid;
+      if not found then
+        -- Settled before receipts existed: the ownership verdict stands.
+        return 'accepted';
+      end if;
+      if v_receipt is not null
+         and v_stored.binding_sha256 = (v_receipt ->> 'bindingSha256')
+         and v_stored.receipt -> 'binding' = v_binding
+         and (v_stored.receipt -> 'policy') is not distinct from (v_receipt -> 'policy') then
+        return 'accepted';
+      end if;
+      return 'shot.receipt_mismatch';
+    end if;
+    if v_attempt = 1 then
+      perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+    end if;
+  end loop;
 
-  -- Idempotent replay, again, now that we hold the lock: a concurrent copy of
-  -- this very sync may have committed while we waited. Its permit is already
-  -- finalized/released, so the permit checks below would hand us a permanent
-  -- verdict for a row the server holds. Ownership decides first.
-  if exists (select 1 from public.shots s where s.id = v_id and s.user_id = v_uid) then
-    return 'accepted';
-  end if;
-
-  -- Lock the permit so a concurrent retry of the same sync serializes here.
   select * into v_permit
   from public.analysis_permits p
-  where p.id = v_permit_id and p.user_id = v_uid
+  where p.id = v_permit_id
+    and p.user_id = v_uid
   for update;
+
   if not found then
-    -- A settled permit of this user that the owner role deleted is consumed,
-    -- not unknown: the same permanent verdict its row would have given.
     if public.permit_tombstoned(v_permit_id) then
       return 'access.permit_not_reserved';
     end if;
     return 'access.permit_not_found';
   end if;
 
-  -- A permit this user reserved backs the shot at ANY age: still 'reserved'
-  -- (the stale-permit sweep has not run), or already swept to
-  -- released/expired while the device was offline. Every other state —
-  -- consumed (finalized), released for the free limit, cancelled, any other
-  -- abstention outcome, or a NULL/unknown outcome — cannot back a new shot
-  -- (permit_backs_sync is NULL-safe: unknown → false → refused). The free
-  -- allowance is decided by the lifetime count below, never by permit age.
   if not public.permit_backs_sync(v_permit.status, v_permit.outcome) then
     return 'access.permit_not_reserved';
   end if;
 
-  -- ONE-PERMIT-ONE-SHOT, data layer: a permit id already linked to a shot is
-  -- consumed whatever its row says (or however it came to exist again).
-  if exists (select 1 from public.shots s where s.analysis_permit_id = v_permit_id) then
+  if exists (
+    select 1
+    from public.shots s
+    where s.analysis_permit_id = v_permit_id
+  ) then
     return 'access.permit_not_reserved';
   end if;
 
-  -- FREE-LIMIT BACKSTOP (2/2): holding a permit is not by itself authority to
-  -- record a scored shot. If an extra permit was ever issued (every build
-  -- before reserve_analysis_permit could do this), or a swept permit's slot
-  -- was re-spent while the device was offline, a non-premium account still
-  -- may not exceed two lifetime scored ratings. The permit is released rather
-  -- than left reserved so it stops occupying an allowance slot and the sweep
-  -- has nothing to collect.
-  -- IDENTITY LEDGER: the count is lifetime_scored_count(), so a re-created
-  -- account whose identity already spent both ratings is refused here too.
-  -- OFFLINE HOLDS: a ticket handed to a device is a rating that device
-  -- renders offline and will settle; it is never reclaimed, so the online
-  -- rating fits only beside it.
   if v_result_kind = 'scored' then
     select coalesce((
-      select b.premium and (b.expires_at is null or b.expires_at > now())
+      select b.premium
+        and (b.expires_at is null or b.expires_at > now())
       from public.billing_entitlements b
       where b.user_id = v_uid
-    ), false) into v_premium;
+    ), false)
+    into v_premium;
 
+    -- OFFLINE HOLDS: a ticket handed to a device is a rating that device
+    -- renders offline and will settle; it is never reclaimed, so the online
+    -- rating fits only beside it.
     if not v_premium
        and public.lifetime_scored_count() + public.offline_hold_count() >= 2 then
       update public.analysis_permits
-         set status = 'released', outcome = 'free_limit_exceeded'
-       where id = v_permit_id and user_id = v_uid
+         set status = 'released',
+             outcome = 'free_limit_exceeded'
+       where id = v_permit_id
+         and user_id = v_uid
          and public.permit_backs_sync(status, outcome);
       return 'access.paywall_required';
     end if;
@@ -1092,14 +1217,13 @@ begin
     return 'shot.session_not_found';
   end if;
 
-  -- Atomic write block: any failure rolls back the shot, its details, AND
-  -- leaves the permit untouched (still backing a clean retry). The vouch is
-  -- set inside the block so a failure reverts it with everything else.
+  -- Atomic write block: any failure rolls back the shot, its details, the
+  -- receipt, AND leaves the permit untouched (still backing a clean retry).
+  -- The vouch and the receipt bytes are set inside the block so a failure
+  -- reverts them with everything else.
   begin
-    -- Tell the shots BEFORE INSERT gate which permit backs this row: the one
-    -- locked and validated above, whatever its age. The gate decides on this
-    -- permit alone, and the row records it (shots_analysis_permit_unique).
     perform pg_catalog.set_config('pickle.sync_permit_id', v_permit_id::text, true);
+    perform pg_catalog.set_config('pickle.sync_settlement_receipt', coalesce(v_canonical, ''), true);
 
     insert into public.shots (
       id, user_id, session_id, analysis_permit_id, shot_type, camera_view,
@@ -1133,6 +1257,7 @@ begin
     );
 
     perform pg_catalog.set_config('pickle.sync_permit_id', '', true);
+    perform pg_catalog.set_config('pickle.sync_settlement_receipt', '', true);
 
     for entry in select * from jsonb_array_elements(coalesce(shot -> 'phases', '[]'::jsonb))
     loop
@@ -1170,10 +1295,9 @@ begin
     end loop;
 
     -- A scored shot finalizes its permit; an abstention releases it — in the
-    -- SAME transaction as the shot write. A late or swept permit ends in
-    -- exactly the state a fresh one does, so it can never back a second shot.
-    -- ONE-PERMIT-ONE-SHOT: the row locked above must be the row consumed
-    -- here; anything else rolls the whole write back.
+    -- SAME transaction as the shot write. ONE-PERMIT-ONE-SHOT: the row locked
+    -- above must be the row consumed here; anything else rolls the whole
+    -- write back.
     update public.analysis_permits
        set status = case when v_result_kind = 'scored' then 'finalized' else 'released' end,
            outcome = v_result_kind
@@ -1189,12 +1313,22 @@ begin
     return 'accepted';
   exception
     when unique_violation then
-      -- The shot id settled concurrently. Ours → replay-accept; the permit
-      -- already backs another row (shots_analysis_permit_unique) → the permit
-      -- verdict; a different user's id (invisible under RLS) → permanent
-      -- conflict.
+      -- The shot id settled concurrently. Ours → the binding decides (the
+      -- same rule as above); the permit already backs another row
+      -- (shots_analysis_permit_unique) → the permit verdict; a different
+      -- user's id (invisible under RLS) → permanent conflict.
       if exists (select 1 from public.shots s where s.id = v_id and s.user_id = v_uid) then
-        return 'accepted';
+        select * into v_stored
+        from public.settlement_receipts r
+        where r.shot_id = v_id
+          and r.user_id = v_uid;
+        if not found
+           or (v_receipt is not null
+               and v_stored.binding_sha256 = (v_receipt ->> 'bindingSha256')
+               and v_stored.receipt -> 'binding' = v_binding) then
+          return 'accepted';
+        end if;
+        return 'shot.receipt_mismatch';
       end if;
       if exists (select 1 from public.shots s where s.analysis_permit_id = v_permit_id) then
         return 'access.permit_not_reserved';
@@ -1202,23 +1336,23 @@ begin
       return 'shot.id_conflict';
     when sqlstate 'PKP01' then
       -- The shots gate refused THIS permit under the vouch: a contract
-      -- verdict the outbox settles, never a transient grant error. (Any real
-      -- 42501 falls through to write_failed and keeps the rating on-device.)
+      -- verdict the outbox settles, never a transient grant error.
       return 'access.permit_not_reserved';
     when sqlstate 'PKP02' then
       return 'access.paywall_required';
     when others then
-      -- SQLSTATE ONLY: sqlerrm echoes the client's input for cast failures
-      -- and would carry it into the edge function's logs. The five-char class
-      -- is enough for operators; the edge maps every write_failed:* to the
-      -- stable client code.
+      -- SQLSTATE ONLY: the five-char class is enough for operators; the edge
+      -- maps every write_failed:* to the stable client code.
       return 'shot.write_failed:' || sqlstate;
   end;
 end;
 $$;
 
+revoke all on function public.apply_synced_shot(jsonb) from public, anon;
+grant execute on function public.apply_synced_shot(jsonb) to authenticated;
+
 comment on function public.apply_synced_shot(jsonb) is
-  'Atomic POST /v1/shots:sync write: shot + phases + checkpoints + permit consumption in one transaction under the caller''s RLS. Idempotent on the client-generated shot id: ownership is checked before AND after the per-user advisory lock, so a duplicate copy that lost the race replays as accepted instead of seeing its already-consumed permit. Backing is decided by permit_backs_sync() — reserved at any age, or swept to released/expired — NULL-safe and default-deny, so a released/NULL or any other settled permit is refused (access.permit_not_reserved) and the shot is never written; a permit id already recorded on a shot (shots.analysis_permit_id, unique) is refused the same way, as is a permit id of this user that was deleted while settled (analysis_permit_tombstones via permit_tombstoned()); the finalize UPDATE must consume exactly that one permit. Enforces the lifetime free-rating limit for scored shots (access.paywall_required) under the shared per-user advisory lock using the identity-aware lifetime_scored_count() plus the caller''s outstanding offline tickets (offline_hold_count()) — a ticket handed to a device is never reclaimed, so an online rating fits only beside it. A shots-gate refusal surfaces as its verdict (hint), never as shot.write_failed:42501. Other write failures return shot.write_failed:<SQLSTATE> only — never sqlerrm, which echoes client input.';
+  'Atomic POST /v1/shots:sync write: shot + phases + checkpoints + permit consumption in one transaction under the caller''s RLS. Idempotent on the client-generated shot id: ownership is checked before AND after the per-user advisory lock, so a duplicate copy that lost the race replays as accepted instead of seeing its already-consumed permit. Backing is decided by permit_backs_sync() — reserved at any age, or swept to released/expired — NULL-safe and default-deny, so a released/NULL or any other settled permit is refused (access.permit_not_reserved) and the shot is never written; a permit id already recorded on a shot (shots.analysis_permit_id, unique) is refused the same way, as is a permit id of this user that was deleted while settled (analysis_permit_tombstones via permit_tombstoned()); the finalize UPDATE must consume exactly that one permit. Enforces the lifetime free-rating limit for scored shots (access.paywall_required) under the shared per-user advisory lock using the identity-aware lifetime_scored_count() plus the caller''s outstanding offline tickets (offline_hold_count()) — a ticket handed to a device is never reclaimed, so an online rating fits only beside it. A shots-gate refusal surfaces as its verdict (hint), never as shot.write_failed:42501. Other write failures return shot.write_failed:<SQLSTATE> only — never sqlerrm, which echoes client input. Verifies the optional settlement receipt before any lock or write and records it beside the shot (20260908110000).';
 
 -- ---------------------------------------------------------------------------
 -- 5. Mutating RPCs — the only write path. Each one: live API session or
@@ -1251,43 +1385,67 @@ begin
     return;
   end if;
 
+  -- Serialize per caller BEFORE the lookup: FOR UPDATE on a row that does not
+  -- exist yet locks nothing, so two first registrations of one key would both
+  -- reach the INSERT and one would surface as 23505 instead of `accepted`.
+  perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+
   select * into v_device
   from public.offline_devices d
   where d.user_id = v_uid and d.installation_key_id = p_installation_key_id
   for update;
 
-  if found then
-    if v_device.attestation_environment <> p_attestation_environment then
-      result := 'offline.device_environment_mismatch';
+  if not found then
+    begin
+      insert into public.offline_devices (
+        user_id, installation_key_id, attestation_environment, attestation_state, attested_at
+      ) values (
+        v_uid, p_installation_key_id, p_attestation_environment,
+        case when p_attested then 'attested' else 'unattested' end,
+        case when p_attested then now() else null end
+      )
+      returning * into v_device;
+
+      result := 'accepted';
       device_id := v_device.id;
       attestation_state := v_device.attestation_state;
       return next;
       return;
-    end if;
-    -- Re-registration never downgrades: an attested device stays attested.
-    update public.offline_devices d
-    set last_registered_at = now(),
-        attestation_state = case
-          when d.attestation_state = 'attested' or p_attested then 'attested'
-          else 'unattested'
-        end,
-        attested_at = case
-          when d.attested_at is not null then d.attested_at
-          when p_attested then now()
-          else null
-        end
-    where d.id = v_device.id
-    returning * into v_device;
-  else
-    insert into public.offline_devices (
-      user_id, installation_key_id, attestation_environment, attestation_state, attested_at
-    ) values (
-      v_uid, p_installation_key_id, p_attestation_environment,
-      case when p_attested then 'attested' else 'unattested' end,
-      case when p_attested then now() else null end
-    )
-    returning * into v_device;
+    exception
+      when unique_violation then
+        -- The key was registered by a writer this lock does not order (an
+        -- owner-role insert). Idempotent contract: answer for that row.
+        select * into v_device
+        from public.offline_devices d
+        where d.user_id = v_uid and d.installation_key_id = p_installation_key_id
+        for update;
+        if not found then
+          raise;
+        end if;
+    end;
   end if;
+
+  if v_device.attestation_environment <> p_attestation_environment then
+    result := 'offline.device_environment_mismatch';
+    device_id := v_device.id;
+    attestation_state := v_device.attestation_state;
+    return next;
+    return;
+  end if;
+  -- Re-registration never downgrades: an attested device stays attested.
+  update public.offline_devices d
+  set last_registered_at = now(),
+      attestation_state = case
+        when d.attestation_state = 'attested' or p_attested then 'attested'
+        else 'unattested'
+      end,
+      attested_at = case
+        when d.attested_at is not null then d.attested_at
+        when p_attested then now()
+        else null
+      end
+  where d.id = v_device.id
+  returning * into v_device;
 
   result := 'accepted';
   device_id := v_device.id;
@@ -1298,7 +1456,7 @@ end;
 $$;
 
 comment on function public.register_offline_device(text, text, boolean) is
-  'Idempotent device registration for the caller (live API session required). Records the installation key and its attestation environment/state; never downgrades an attested device; refuses an environment change for a known key. Returns accepted | offline.invalid_input | offline.device_environment_mismatch.';
+  'Idempotent device registration for the caller (live API session required), serialized per caller under access_lock_key() so a concurrent double submit of a new key yields one row and two accepted answers naming it. Records the installation key and its attestation environment/state; never downgrades an attested device; refuses an environment change for a known key. Returns accepted | offline.invalid_input | offline.device_environment_mismatch.';
 
 revoke all on function public.register_offline_device(text, text, boolean) from public, anon, service_role;
 grant execute on function public.register_offline_device(text, text, boolean) to authenticated;
@@ -1529,6 +1687,10 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+  -- The ticket's own lock: recovered sibling accounts hold DIFFERENT user
+  -- locks, so only this key orders their settlements of the same ticket. Taken
+  -- before either ledger read below, so the loser sees the winner's row.
+  perform pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id));
 
   select * into v_allocation
   from public.offline_allocation_ledger a
@@ -1667,6 +1829,14 @@ begin
       if exists (select 1 from public.shots s where s.id = v_id and s.user_id = v_uid) then
         return 'offline.shot_not_chargeable';
       end if;
+      -- The ticket itself settled (shots_offline_ticket_unique or the ledger's
+      -- one-terminal index): the ticket verdict, never a shot-id conflict.
+      select * into v_terminal
+      from public.offline_allocation_ledger t
+      where t.ticket_id = p_ticket_id and t.event in ('consumed', 'released');
+      if found then
+        return case when v_terminal.event = 'consumed' then 'offline.ticket_consumed' else 'offline.ticket_released' end;
+      end if;
       return 'shot.id_conflict';
     when others then
       -- SQLSTATE ONLY: sqlerrm echoes the client's input for cast failures
@@ -1677,7 +1847,7 @@ end;
 $$;
 
 comment on function public.consume_offline_ticket(uuid, jsonb) is
-  'Settles one outstanding ticket owned by the caller''s account or sign-in identities with the durably delivered scored rating the device rendered under it (live API session required): writes the shot (+ phases/checkpoints) with shots.offline_ticket_id = ticket under the gate''s ticket vouch and appends the ledger''s consumed event in the same transaction. A rating the server already holds — online-synced, direct, or counted before the ticket existed — is never chargeable, whatever its created_at says. Idempotent for the same (ticket, shot). Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.ticket_released | offline.shot_not_chargeable | offline.invalid_input | shot.session_not_found | shot.id_conflict | shot.write_failed:<SQLSTATE>.';
+  'Settles one outstanding ticket owned by the caller''s account or sign-in identities with the durably delivered scored rating the device rendered under it (live API session required), under the caller''s access_lock_key() AND the ticket''s own advisory lock (recovered sibling accounts settle the same ticket in order; exactly one terminal event ever exists): writes the shot (+ phases/checkpoints) with shots.offline_ticket_id = ticket under the gate''s ticket vouch and appends the ledger''s consumed event in the same transaction. A rating the server already holds — online-synced, direct, or counted before the ticket existed — is never chargeable, whatever its created_at says. Idempotent for the same (ticket, shot). Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.ticket_released | offline.shot_not_chargeable | offline.invalid_input | shot.session_not_found | shot.id_conflict | shot.write_failed:<SQLSTATE>.';
 
 revoke all on function public.consume_offline_ticket(uuid, jsonb) from public, anon, service_role;
 grant execute on function public.consume_offline_ticket(uuid, jsonb) to authenticated;
@@ -1702,6 +1872,9 @@ begin
   end if;
 
   perform pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid));
+  -- Same ticket lock as consume_offline_ticket(): a release racing a consume
+  -- from a recovered sibling account waits here and then reads its row.
+  perform pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id));
 
   select * into v_allocation
   from public.offline_allocation_ledger a
@@ -1719,18 +1892,31 @@ begin
     return case when v_terminal.event = 'consumed' then 'offline.ticket_consumed' else 'accepted' end;
   end if;
 
-  insert into public.offline_allocation_ledger (
-    user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id
-  ) values (
-    v_uid, v_allocation.device_id, v_allocation.grant_id, v_allocation.generation,
-    p_ticket_id, 'released', p_reason, v_allocation.identity_hashes, v_allocation.installation_key_id
-  );
+  begin
+    insert into public.offline_allocation_ledger (
+      user_id, device_id, grant_id, generation, ticket_id, event, reason, identity_hashes, installation_key_id
+    ) values (
+      v_uid, v_allocation.device_id, v_allocation.grant_id, v_allocation.generation,
+      p_ticket_id, 'released', p_reason, v_allocation.identity_hashes, v_allocation.installation_key_id
+    );
+  exception
+    when unique_violation then
+      -- The one-terminal index arbitrated a writer this lock does not order:
+      -- answer for the row that won.
+      select * into v_terminal
+      from public.offline_allocation_ledger t
+      where t.ticket_id = p_ticket_id and t.event in ('consumed', 'released');
+      if not found then
+        raise;
+      end if;
+      return case when v_terminal.event = 'consumed' then 'offline.ticket_consumed' else 'accepted' end;
+  end;
   return 'accepted';
 end;
 $$;
 
 comment on function public.release_offline_ticket(uuid, text) is
-  'Explicit, terminal return of one outstanding ticket owned by the caller''s account or sign-in identities (live API session required); the only client reason is unused_ticket_returned — support_review is written by support through the table, never self-asserted here. A released ticket still counts against the entitlement and can never be consumed; a consumed ticket cannot be released. Idempotent. Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.invalid_input.';
+  'Explicit, terminal return of one outstanding ticket owned by the caller''s account or sign-in identities (live API session required), under the caller''s access_lock_key() AND the ticket''s own advisory lock so a release racing a recovered sibling''s consume yields exactly one terminal event; the only client reason is unused_ticket_returned — support_review is written by support through the table, never self-asserted here. A released ticket still counts against the entitlement and can never be consumed; a consumed ticket cannot be released. Idempotent. Returns accepted | offline.ticket_not_found | offline.ticket_consumed | offline.invalid_input.';
 
 revoke all on function public.release_offline_ticket(uuid, text) from public, anon, service_role;
 grant execute on function public.release_offline_ticket(uuid, text) to authenticated;
