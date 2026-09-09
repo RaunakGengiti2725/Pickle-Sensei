@@ -112,6 +112,10 @@ import {
   type ExtractionEtaState,
 } from '../components/AnalysisProgress';
 import {
+  OfflineAllocationCard,
+  usePublishedOfflineJourney,
+} from '../components/OfflineAllocationCard';
+import {
   clearTryAgainHandoff,
   consumeTryAgainHandoff,
   techniqueIntentFromHandoff,
@@ -749,6 +753,7 @@ export function AnalyzeScreen({
     getDataOwnerSnapshot,
   );
   const mountOwner = useRef(ownerEpoch);
+  const offlineJourney = usePublishedOfflineJourney();
   const [mountService] = useState(currentAnalysisService);
   const [routeController] = useState(() => new AbortController());
   const routeExecution = useRef<OriginalAnalysisExecution | null>(null);
@@ -3016,6 +3021,13 @@ export function AnalyzeScreen({
             </Text>
           </View>
         </View>
+        {offlineJourney ? (
+          <OfflineAllocationCard
+            dark
+            state={offlineJourney}
+            style={styles.offlineCard}
+          />
+        ) : null}
         {accessibleLayout ? (
           <Text style={[type.caption, styles.footerHint]}>
             Camera opens first. You control record.
@@ -3206,6 +3218,7 @@ const styles = StyleSheet.create({
   notes: { paddingVertical: space.lg, gap: space.md },
   noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   noteCopy: { color: color.onDarkSubtle, flex: 1 },
+  offlineCard: { marginBottom: space.lg },
   footer: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
