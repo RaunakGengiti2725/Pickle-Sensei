@@ -5438,6 +5438,1305 @@ begin
   end if;
 end $$;
 rollback;
+-- ----------------------------------------------------------------------------
+-- W07-T. Durable transfer queue + verification barrier
+-- (20260908150000_billing_recovery_transfer.sql). A RevenueCat TRANSFER moves
+-- purchases from a source account to a destination account. The destination
+-- must NOT become premium on the strength of its own provider verdict until
+-- every source is provider-confirmed (or authoritatively absent): a source
+-- confirmed as no longer entitled releases the destination and the transfer
+-- confirms; a source the provider still reports entitled parks the transfer as
+-- held, and both accounts then mirror exactly what the provider confirmed for
+-- each of them (the provider, never the event, decides who is premium). The
+-- source loses as soon as its verdict lands; an applied destination side is
+-- never barred again; every step is append-only audited; the queue is
+-- reachable only through service-role RPCs.
+-- ----------------------------------------------------------------------------
+begin;
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('00000000-0000-4000-8000-0000000000b1', 'transfer-src-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b2', 'transfer-dst-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b3', 'transfer-src-2@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b4', 'transfer-dst-2@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b5', 'transfer-src-3@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b6', 'transfer-dst-3@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b8', 'transfer-dst-4@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000b9', 'transfer-src-8@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-0000000000ba', 'transfer-dst-8@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c01', 'transfer-src-r2-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c02', 'transfer-dst-r2-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c03', 'transfer-src-r2-2@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c04', 'transfer-dst-r2-2@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c05', 'transfer-src-r2-3a@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c06', 'transfer-src-r2-3b@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c07', 'transfer-dst-r2-3@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c08', 'transfer-src-r2-4@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c09', 'transfer-dst-r2-4@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c0a', 'transfer-src-r2-5@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000c0b', 'transfer-dst-r2-5@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d01', 'transfer-src-r3-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d02', 'transfer-dst-r3-1@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d03', 'transfer-src-r3-2@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d04', 'transfer-dst-r3-2a@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d05', 'transfer-dst-r3-2b@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d06', 'transfer-r3-3a@example.test', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000d07', 'transfer-r3-3b@example.test', '{"provider":"apple"}');
+do $$
+declare
+  r text;
+  t regclass;
+  f regprocedure;
+begin
+  foreach t in array array[
+    'api_private.billing_transfers'::regclass,
+    'api_private.billing_transfer_sides'::regclass,
+    'api_private.billing_transfer_audit'::regclass
+  ] loop
+    if not (select relrowsecurity from pg_class where oid = t) then
+      raise exception 'W07-T1: transfer queue table % must enable RLS', t;
+    end if;
+    if exists (select 1 from pg_policy where polrelid = t) then
+      raise exception 'W07-T2: transfer queue table % must have no client policies', t;
+    end if;
+    foreach r in array array['anon','authenticated','service_role'] loop
+      if has_table_privilege(r, t, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') then
+        raise exception 'W07-T3: % must hold no direct privileges on %', r, t;
+      end if;
+    end loop;
+  end loop;
+  foreach r in array array['anon','authenticated','service_role'] loop
+    if has_sequence_privilege(r, 'api_private.billing_transfer_audit_id_seq', 'SELECT,UPDATE,USAGE') then
+      raise exception 'W07-T4: % must hold no privileges on the transfer audit sequence', r;
+    end if;
+  end loop;
+  foreach f in array array[
+    'public.enqueue_billing_transfer(text,jsonb,uuid)'::regprocedure,
+    'public.billing_transfer_recovery(uuid)'::regprocedure,
+    'public.persist_billing_verdict(uuid,uuid,jsonb)'::regprocedure
+  ] loop
+    if not has_function_privilege('service_role', f, 'EXECUTE') then
+      raise exception 'W07-T5: transfer helper % requires an explicit service-role execution grant', f;
+    end if;
+    foreach r in array array['anon','authenticated'] loop
+      if has_function_privilege(r, f, 'EXECUTE') then
+        raise exception 'W07-T6: clients cannot execute transfer helper %', f;
+      end if;
+    end loop;
+    if not exists (select 1 from pg_proc where oid = f and prosecdef and proconfig @> array['search_path=""']) then
+      raise exception 'W07-T7: transfer helper % must be a definer with an empty search_path', f;
+    end if;
+  end loop;
+  foreach f in array array[
+    'api_private.settle_billing_transfer(uuid)'::regprocedure,
+    'api_private.apply_billing_transfer_side(api_private.billing_transfers,api_private.billing_transfer_sides)'::regprocedure,
+    'api_private.note_billing_transfer(api_private.billing_transfers,uuid,text,jsonb)'::regprocedure,
+    'api_private.billing_transfer_summary(api_private.billing_transfers)'::regprocedure,
+    'api_private.billing_transfer_party_ids(jsonb,text)'::regprocedure,
+    'api_private.billing_verdict_active(jsonb,timestamptz)'::regprocedure,
+    'api_private.guard_billing_transfer_history()'::regprocedure,
+    'api_private.lock_billing_transfers(uuid)'::regprocedure,
+    'api_private.reconcile_billing_transfer_sources(uuid)'::regprocedure,
+    'api_private.billing_destination_blocker(uuid)'::regprocedure,
+    'api_private.reconcile_billing_destination(uuid)'::regprocedure
+  ] loop
+    foreach r in array array['anon','authenticated','service_role'] loop
+      if has_function_privilege(r, f, 'EXECUTE') then
+        raise exception 'W07-T8: private transfer helper % must not be executable by %', f, r;
+      end if;
+    end loop;
+  end loop;
+end $$;
+
+set local role authenticated;
+do $$
+begin
+  begin
+    perform public.enqueue_billing_transfer('w07-t-client', '{"event":{"type":"TRANSFER"}}'::jsonb, gen_random_uuid());
+    raise exception 'W07-T9: an authenticated API caller must not queue billing transfers';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.billing_transfer_recovery('00000000-0000-4000-8000-0000000000b2');
+    raise exception 'W07-T10: an authenticated API caller must not read the transfer recovery queue';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+set local role anon;
+do $$
+begin
+  begin
+    perform public.enqueue_billing_transfer('w07-t-client', '{"event":{"type":"TRANSFER"}}'::jsonb, gen_random_uuid());
+    raise exception 'W07-T11: an anonymous caller must not queue billing transfers';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-0000000000b1';
+  dst uuid := '00000000-0000-4000-8000-0000000000b2';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-transfer-1', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  queued jsonb;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  r jsonb;
+  tid uuid;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-1', payload)->>'lease_token')::uuid;
+  begin
+    perform public.enqueue_billing_transfer('w07-transfer-1', payload, gen_random_uuid());
+    raise exception 'W07-T12: a foreign lease must not queue a transfer';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.enqueue_billing_transfer('w07-transfer-1', payload, null);
+    raise exception 'W07-T13: a transfer cannot be queued without the delivery lease';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  queued := public.enqueue_billing_transfer('w07-transfer-1', payload, lease);
+  if queued->>'outcome' <> 'queued' or queued->>'state' <> 'pending'
+     or queued->'sources'->0->>'user_id' <> src::text or (queued->'sources'->0->>'verified')::boolean
+     or queued->'destinations'->0->>'user_id' <> dst::text or (queued->'destinations'->0->>'applied')::boolean then
+    raise exception 'W07-T14: queueing a transfer must record both sides as pending (got %)', queued;
+  end if;
+  tid := (queued->>'transfer_id')::uuid;
+  r := public.enqueue_billing_transfer('w07-transfer-1', payload, lease);
+  if (r->>'transfer_id')::uuid <> tid or r->>'state' <> 'pending' then
+    raise exception 'W07-T15: re-queueing the same delivery must be idempotent (got %)', r;
+  end if;
+  begin
+    perform public.enqueue_billing_transfer('w07-transfer-1', payload || '{"replayed":true}'::jsonb, lease);
+    raise exception 'W07-T16: a different payload must not re-scope a queued transfer';
+  exception when invalid_parameter_value then null;
+  end;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-transfer-1', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  -- Destination verified first: the provider already reports it premium, but
+  -- the source has not been confirmed yet.
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if r->>'outcome' <> 'persisted' or (r->>'applied')::boolean or not (r->>'withheld')::boolean
+     or (r->'billing'->>'premium')::boolean or r->'billing'->>'verifiedAt' is null then
+    raise exception 'W07-T17: a destination verdict must be withheld until the source is confirmed (got %)', r;
+  end if;
+  if exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T18: the destination must not be premium before provider confirmation of the source';
+  end if;
+  begin
+    perform public.persist_billing_verdict(dst, dst_ticket, inactive);
+    raise exception 'W07-T19: a withheld destination verdict must still seal its ticket';
+  exception when invalid_parameter_value then null;
+  end;
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'applied')::boolean or not (r->>'withheld')::boolean
+     or exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T20: replaying a withheld destination verdict must stay withheld';
+  end if;
+  begin
+    perform public.complete_billing_webhook('w07-transfer-1', payload,
+      jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+    raise exception 'W07-T21: a transfer with an unconfirmed source must not complete its webhook audit';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  if exists (select 1 from public.webhook_events where id = 'w07-transfer-1' and processed_at is not null) then
+    raise exception 'W07-T22: an unconfirmed transfer must not write a completion marker';
+  end if;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'pending'
+     or not (r->0->'destinations'->0->>'verified')::boolean or (r->0->'destinations'->0->>'applied')::boolean then
+    raise exception 'W07-T23: the recovery queue must expose the unsettled transfer (got %)', r;
+  end if;
+  -- Provider confirms the source lost its entitlement: the source loses and
+  -- the withheld destination is released in the same step.
+  r := public.persist_billing_verdict(src, src_ticket, inactive);
+  if r->>'outcome' <> 'persisted' or not (r->>'applied')::boolean or (r->>'withheld')::boolean
+     or (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-T24: the source verdict must apply immediately (got %)', r;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T25: the destination must gain premium once the provider confirms the source lost it';
+  end if;
+  if jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0
+     or jsonb_array_length(public.billing_transfer_recovery(src)) <> 0 then
+    raise exception 'W07-T27: a confirmed transfer must leave the recovery queue';
+  end if;
+  r := public.complete_billing_webhook('w07-transfer-1', payload,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean
+     or not exists (select 1 from public.webhook_events where id = 'w07-transfer-1' and processed_at is not null) then
+    raise exception 'W07-T28: a confirmed transfer must complete its webhook audit (got %)', r;
+  end if;
+end $$;
+reset role;
+do $$
+declare
+  dst uuid := '00000000-0000-4000-8000-0000000000b2';
+  t api_private.billing_transfers%rowtype;
+begin
+  select * into strict t from api_private.billing_transfers where event_id = 'w07-transfer-1';
+  if t.state <> 'confirmed' or t.settled_at is null then
+    raise exception 'W07-T26: a fully reconciled transfer must be confirmed';
+  end if;
+  if not exists (select 1 from public.billing_entitlements e
+      join api_private.billing_transfer_sides s on s.user_id = e.user_id and s.transfer_id = t.id
+      join api_private.billing_verification_tickets k on k.id = s.ticket_id
+      where e.user_id = dst and e.premium and e.verification_order = k.verification_order
+        and k.event_id = 'w07-transfer-1' and s.applied_at is not null) then
+    raise exception 'W07-T25b: the destination must be applied at its own transfer ticket order';
+  end if;
+  if (select array_agg(action order by id) from api_private.billing_transfer_audit where transfer_id = t.id)
+     <> array['enqueued','destination_verified','destination_withheld','source_verified','destination_applied','confirmed'] then
+    raise exception 'W07-T29: the transfer audit must record every reconciliation step (got %)',
+      (select array_agg(action order by id) from api_private.billing_transfer_audit where transfer_id = t.id);
+  end if;
+end $$;
+set local role service_role;
+
+-- Source verified first: the destination applies as soon as its own verdict
+-- lands because the barrier is already satisfied.
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-0000000000b3';
+  dst uuid := '00000000-0000-4000-8000-0000000000b4';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-transfer-2', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_annual', 'expiresAt', null,
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-2', payload)->>'lease_token')::uuid;
+  perform public.enqueue_billing_transfer('w07-transfer-2', payload, lease);
+  issued := public.begin_billing_verification(array[src, dst], 'w07-transfer-2', payload, lease);
+  perform public.persist_billing_verdict(src,
+    (select (item->>'ticket_id')::uuid from jsonb_array_elements(issued) item where item->>'user_id' = src::text), inactive);
+  r := public.persist_billing_verdict(dst,
+    (select (item->>'ticket_id')::uuid from jsonb_array_elements(issued) item where item->>'user_id' = dst::text), active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean
+     or not exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T30: a destination verified after the source is confirmed must gain immediately (got %)', r;
+  end if;
+  if jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-T31: a source-first transfer must confirm once the destination is applied';
+  end if;
+end $$;
+
+-- Source still entitled per the provider: the transfer parks as held. Both
+-- sides are now provider-confirmed, so the destination's own confirmed verdict
+-- applies (the provider says both accounts are entitled; the event does not
+-- override it), the delivery completes, and the transfer confirms only once a
+-- later provider verdict says the source lost the entitlement.
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-0000000000b5';
+  dst uuid := '00000000-0000-4000-8000-0000000000b6';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-transfer-3', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  sync_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-3', payload)->>'lease_token')::uuid;
+  perform public.enqueue_billing_transfer('w07-transfer-3', payload, lease);
+  issued := public.begin_billing_verification(array[src, dst], 'w07-transfer-3', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  perform public.persist_billing_verdict(src, src_ticket, active);
+  if public.billing_transfer_recovery(dst)->0->>'state' <> 'held'
+     or exists (select 1 from public.billing_entitlements where user_id = dst) then
+    raise exception 'W07-T32: a source that still holds the entitlement must park the transfer as held (got %)',
+      public.billing_transfer_recovery(dst);
+  end if;
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean
+     or not exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T33: a destination whose source is provider-confirmed must apply its own confirmed verdict (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-transfer-3', payload,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean
+     or not exists (select 1 from public.webhook_events where id = 'w07-transfer-3' and processed_at is not null) then
+    raise exception 'W07-T34: a held transfer with both sides provider-confirmed must complete its delivery (got %)', r;
+  end if;
+  r := public.billing_transfer_recovery(src);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'held' or not (r->0->'sources'->0->>'active')::boolean
+     or not (r->0->'destinations'->0->>'applied')::boolean then
+    raise exception 'W07-T35: the recovery queue must expose the held transfer with its applied destination (got %)', r;
+  end if;
+  sync_ticket := (public.begin_billing_verification(array[src])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(src, sync_ticket, inactive);
+  if not (r->>'applied')::boolean or (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-T36: a later provider verdict for the source must apply (got %)', r;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-T37: a later provider verdict that the source lost entitlement must confirm the held transfer';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select array_agg(t.state) from api_private.billing_transfers t where t.event_id in ('w07-transfer-2', 'w07-transfer-3'))
+     <> array['confirmed', 'confirmed'] then
+    raise exception 'W07-T37b: settled transfers must be confirmed in the durable queue';
+  end if;
+  if (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+      join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-transfer-3')
+     <> array['enqueued','source_verified','held','destination_verified','destination_applied','source_verified','confirmed'] then
+    raise exception 'W07-T38: the held transfer audit must record the hold and its release (got %)',
+      (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+        join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-transfer-3');
+  end if;
+end $$;
+set local role service_role;
+
+-- A source that is authoritatively absent from Auth is terminal (mirrors
+-- W07-23): the destination applies on its own verdict.
+do $$
+declare
+  missing uuid := '00000000-0000-4000-8000-0000000000b7';
+  dst uuid := '00000000-0000-4000-8000-0000000000b8';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-transfer-4', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(missing::text, '$RCAnonymousID:ab12'),
+    'transferred_to', jsonb_build_array(upper(dst::text))));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_lifetime', 'expiresAt', null,
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  lease uuid;
+  queued jsonb;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-4', payload)->>'lease_token')::uuid;
+  queued := public.enqueue_billing_transfer('w07-transfer-4', payload, lease);
+  if queued->>'state' <> 'pending' or not (queued->'sources'->0->>'missing')::boolean
+     or jsonb_array_length(queued->'sources') <> 1 or queued->'destinations'->0->>'user_id' <> dst::text then
+    raise exception 'W07-T39: queueing must normalise subjects and mark an absent source (got %)', queued;
+  end if;
+  r := public.begin_billing_verification(array[missing, dst], 'w07-transfer-4', payload, lease);
+  r := public.persist_billing_verdict(dst,
+    (select (item->>'ticket_id')::uuid from jsonb_array_elements(r) item where item->>'user_id' = dst::text), active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean
+     or not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-T40: an absent source must not hold the destination (got %)', r;
+  end if;
+end $$;
+
+-- Malformed transfer events are rejected before anything is queued.
+do $$
+declare
+  payload jsonb;
+  lease uuid;
+  r jsonb;
+begin
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-5', 'type', 'RENEWAL',
+    'app_user_id', '00000000-0000-4000-8000-0000000000b1'));
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-5', payload)->>'lease_token')::uuid;
+  begin
+    perform public.enqueue_billing_transfer('w07-transfer-5', payload, lease);
+    raise exception 'W07-T41: a non-transfer event must not be queued as a transfer';
+  exception when invalid_parameter_value then null;
+  end;
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-6', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array('00000000-0000-4000-8000-0000000000b1'),
+    'transferred_to', jsonb_build_array('00000000-0000-4000-8000-0000000000B1')));
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-6', payload)->>'lease_token')::uuid;
+  r := public.enqueue_billing_transfer('w07-transfer-6', payload, lease);
+  if r->>'outcome' <> 'no_subjects' then
+    raise exception 'W07-T42: a subject on both sides has nothing to move and must not poison the delivery (got %)', r;
+  end if;
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-6b', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array('00000000-0000-4000-8000-0000000000b1'),
+    'transferred_to', jsonb_build_array('00000000-0000-4000-8000-0000000000B1', '00000000-0000-4000-8000-0000000000b8')));
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-6b', payload)->>'lease_token')::uuid;
+  r := public.enqueue_billing_transfer('w07-transfer-6b', payload, lease);
+  if r->>'outcome' <> 'queued' or jsonb_array_length(r->'sources') <> 0
+     or jsonb_array_length(r->'destinations') <> 1
+     or r->'destinations'->0->>'user_id' <> '00000000-0000-4000-8000-0000000000b8' then
+    raise exception 'W07-T42b: a subject on both sides is dropped from both; the other destination still queues (got %)', r;
+  end if;
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-6c', 'type', 'TRANSFER',
+    'app_user_id', '00000000-0000-4000-8000-0000000000b8',
+    'transferred_from', '00000000-0000-4000-8000-0000000000b1'));
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-6c', payload)->>'lease_token')::uuid;
+  r := public.begin_billing_verification(array['00000000-0000-4000-8000-0000000000b8'::uuid], 'w07-transfer-6c', payload, lease);
+  if jsonb_array_length(r) <> 1 or r->0->>'outcome' <> 'issued' then
+    raise exception 'W07-T42c: a transfer whose parties are not arrays still verifies its subject directly (got %)', r;
+  end if;
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-transfer-7', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array('$RCAnonymousID:one'), 'transferred_to', jsonb_build_array('$RCAnonymousID:two')));
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-7', payload)->>'lease_token')::uuid;
+  r := public.enqueue_billing_transfer('w07-transfer-7', payload, lease);
+  if r->>'outcome' <> 'no_subjects' then
+    raise exception 'W07-T43: an anonymous-only transfer has nothing to reconcile (got %)', r;
+  end if;
+end $$;
+
+-- Shipping webhook path: the edge function only calls
+-- begin_billing_verification / persist_billing_verdict / complete_billing_webhook,
+-- so issuing verification for a TRANSFER event must queue the transfer and
+-- the barrier must hold without any explicit enqueue call.
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-0000000000b9';
+  dst uuid := '00000000-0000-4000-8000-0000000000ba';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-transfer-8', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-transfer-8', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-transfer-8', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 1 or r->0->>'event_id' <> 'w07-transfer-8' or r->0->>'state' <> 'pending' then
+    raise exception 'W07-T52: issuing webhook verification for a transfer must queue it (got %)', r;
+  end if;
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'applied')::boolean or not (r->>'withheld')::boolean or (r->'billing'->>'premium')::boolean
+     or exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T53: the shipping path must withhold the destination until the source is confirmed (got %)', r;
+  end if;
+  begin
+    perform public.complete_billing_webhook('w07-transfer-8', payload,
+      jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+    raise exception 'W07-T54: the shipping path must not complete a transfer whose source is unconfirmed';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  r := public.persist_billing_verdict(src, src_ticket, inactive);
+  if not (r->>'applied')::boolean
+     or not exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-T55: the shipping path must release the destination once the source is confirmed lost (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-transfer-8', payload,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-T56: the shipping path must complete once the transfer is confirmed (got %)', r;
+  end if;
+  -- A non-transfer event on the same path queues nothing.
+  payload := jsonb_build_object('event', jsonb_build_object('id', 'w07-renewal-8', 'type', 'RENEWAL',
+    'app_user_id', dst::text));
+  lease := (public.claim_billing_webhook_delivery('w07-renewal-8', payload)->>'lease_token')::uuid;
+  perform public.begin_billing_verification(array[dst], 'w07-renewal-8', payload, lease);
+  if jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-T57: a non-transfer event must not enter the transfer queue';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select state from api_private.billing_transfers where event_id = 'w07-transfer-8') <> 'confirmed'
+     or exists (select 1 from api_private.billing_transfers where event_id = 'w07-renewal-8') then
+    raise exception 'W07-T58: the shipping path must leave exactly the transfer confirmed in the durable queue';
+  end if;
+  if exists (select 1 from api_private.billing_transfers where event_id in ('w07-transfer-5', 'w07-transfer-6', 'w07-transfer-6c', 'w07-transfer-7')) then
+    raise exception 'W07-T44: rejected or subject-less transfer events must not leave queue rows';
+  end if;
+  if (select source_user_ids || destination_user_ids from api_private.billing_transfers where event_id = 'w07-transfer-6b')
+     <> array['00000000-0000-4000-8000-0000000000b8'::uuid] then
+    raise exception 'W07-T44c: a subject listed on both sides must not be queued on either';
+  end if;
+  if (select state from api_private.billing_transfers where event_id = 'w07-transfer-4') <> 'confirmed'
+     or not exists (select 1 from api_private.billing_transfer_audit a join api_private.billing_transfers t on t.id = a.transfer_id
+       where t.event_id = 'w07-transfer-4' and a.action = 'source_missing') then
+    raise exception 'W07-T44b: an absent source must be audited and the transfer confirmed';
+  end if;
+end $$;
+set local role service_role;
+
+-- The barrier is user-wide, not ticket-wide: while the destination is party
+-- to a transfer whose source is still UNVERIFIED, its OWN sync verdict (no
+-- transfer binding) must not grant premium either.
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c01';
+  dst uuid := '00000000-0000-4000-8000-000000000c02';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-1', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  sync_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-1', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-1', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  -- The destination device syncs on its own while the source is unverified.
+  sync_ticket := (public.begin_billing_verification(array[dst])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst, sync_ticket, active);
+  if r->>'outcome' <> 'persisted' or (r->>'applied')::boolean or not (r->>'withheld')::boolean
+     or (r->'billing'->>'premium')::boolean or r->'transfer'->>'event_id' <> 'w07-r2-transfer-1'
+     or r->'transfer'->>'state' <> 'pending' then
+    raise exception 'W07-R2-1: a destination sync verdict must be withheld while its transfer is pending (got %)', r;
+  end if;
+  if exists (select 1 from public.billing_entitlements where user_id = dst) then
+    raise exception 'W07-R2-2: a withheld sync verdict must not write a destination entitlement row';
+  end if;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'pending'
+     or not (r->0->'destinations'->0->>'verified')::boolean or (r->0->'destinations'->0->>'applied')::boolean then
+    raise exception 'W07-R2-3: the withheld sync verdict must be recorded on the queued side (got %)', r;
+  end if;
+  r := public.persist_billing_verdict(src, src_ticket, inactive);
+  if not (r->>'applied')::boolean or (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-4: the source verdict must apply immediately (got %)', r;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-R2-5: the recorded sync verdict must be released once the source is confirmed lost';
+  end if;
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-6: the transfer ticket verdict after release reports the applied entitlement (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r2-transfer-1', payload,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-R2-7: the transfer webhook completes once the barrier released (got %)', r;
+  end if;
+end $$;
+
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c03';
+  dst uuid := '00000000-0000-4000-8000-000000000c04';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-2', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  sync_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-2', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-2', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  -- The destination device syncs on its own while the source is unverified.
+  sync_ticket := (public.begin_billing_verification(array[dst])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst, sync_ticket, active);
+  if (r->>'applied')::boolean or not (r->>'withheld')::boolean or (r->'billing'->>'premium')::boolean
+     or r->'transfer'->>'state' <> 'pending'
+     or exists (select 1 from public.billing_entitlements where user_id = dst) then
+    raise exception 'W07-R2-8: a destination sync verdict must be withheld while its source is unverified (got %)', r;
+  end if;
+  perform public.persist_billing_verdict(src, src_ticket, active);
+  if public.billing_transfer_recovery(dst)->0->>'state' <> 'held' then
+    raise exception 'W07-R2-9: a source that still holds the entitlement must park the transfer as held (got %)',
+      public.billing_transfer_recovery(dst);
+  end if;
+  -- The source is provider-confirmed entitled: the hold is the provider's
+  -- answer, so the destination's recorded provider verdict applies too.
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or not exists (select 1 from public.billing_entitlements where user_id = src and premium) then
+    raise exception 'W07-R2-10: once the source is provider-confirmed the recorded destination verdict applies (got %)',
+      public.billing_transfer_recovery(dst);
+  end if;
+  sync_ticket := (public.begin_billing_verification(array[dst])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst, sync_ticket, active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-11: repeated destination syncs apply while the transfer is held (got %)', r;
+  end if;
+  sync_ticket := (public.begin_billing_verification(array[src])->0->>'ticket_id')::uuid;
+  perform public.persist_billing_verdict(src, sync_ticket, inactive);
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or exists (select 1 from public.billing_entitlements where user_id = src and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-R2-12: the held transfer confirms when the source loses';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+      join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r2-transfer-1')
+     <> array['enqueued','destination_verified','destination_withheld','source_verified','destination_applied','confirmed'] then
+    raise exception 'W07-R2-13: a withheld sync verdict must be audited like any destination verdict (got %)',
+      (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+        join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r2-transfer-1');
+  end if;
+  if (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+      join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r2-transfer-2')
+     <> array['enqueued','destination_verified','destination_withheld','source_verified','held',
+              'destination_applied','source_verified','confirmed'] then
+    raise exception 'W07-R2-14: the hold and the release of the recorded destination verdict must be audited (got %)',
+      (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+        join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r2-transfer-2');
+  end if;
+end $$;
+set local role service_role;
+
+-- A destination shared by two unsettled transfers gains only once EVERY
+-- source of EVERY transfer is confirmed; the response is coherent (withheld
+-- implies non-premium and no entitlement row at that verification order).
+do $$
+declare
+  src1 uuid := '00000000-0000-4000-8000-000000000c05';
+  src2 uuid := '00000000-0000-4000-8000-000000000c06';
+  dst uuid := '00000000-0000-4000-8000-000000000c07';
+  payload1 jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-3a', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src1::text), 'transferred_to', jsonb_build_array(dst::text)));
+  payload2 jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-3b', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src2::text), 'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_annual',
+    'expiresAt', (clock_timestamp() + interval '300 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease1 uuid;
+  lease2 uuid;
+  issued1 jsonb;
+  issued2 jsonb;
+  src1_ticket uuid;
+  src2_ticket uuid;
+  dst1_ticket uuid;
+  dst2_ticket uuid;
+  r jsonb;
+begin
+  lease1 := (public.claim_billing_webhook_delivery('w07-r2-transfer-3a', payload1)->>'lease_token')::uuid;
+  issued1 := public.begin_billing_verification(array[src1, dst], 'w07-r2-transfer-3a', payload1, lease1);
+  lease2 := (public.claim_billing_webhook_delivery('w07-r2-transfer-3b', payload2)->>'lease_token')::uuid;
+  issued2 := public.begin_billing_verification(array[src2, dst], 'w07-r2-transfer-3b', payload2, lease2);
+  select (item->>'ticket_id')::uuid into src1_ticket from jsonb_array_elements(issued1) item where item->>'user_id' = src1::text;
+  select (item->>'ticket_id')::uuid into dst1_ticket from jsonb_array_elements(issued1) item where item->>'user_id' = dst::text;
+  select (item->>'ticket_id')::uuid into src2_ticket from jsonb_array_elements(issued2) item where item->>'user_id' = src2::text;
+  select (item->>'ticket_id')::uuid into dst2_ticket from jsonb_array_elements(issued2) item where item->>'user_id' = dst::text;
+  if jsonb_array_length(public.billing_transfer_recovery(dst)) <> 2 then
+    raise exception 'W07-R2-15: both transfers must be queued for the shared destination';
+  end if;
+  r := public.persist_billing_verdict(dst, dst2_ticket, active);
+  if (r->>'applied')::boolean or not (r->>'withheld')::boolean or (r->'billing'->>'premium')::boolean
+     or r->'transfer'->>'event_id' <> 'w07-r2-transfer-3a' then
+    raise exception 'W07-R2-16: the second transfer''s ticket must be withheld by the first unsettled transfer (got %)', r;
+  end if;
+  if exists (select 1 from public.billing_entitlements where user_id = dst) then
+    raise exception 'W07-R2-17: a withheld verdict must leave no destination entitlement row';
+  end if;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 2
+     or exists (select 1 from jsonb_array_elements(r) t
+          where t->>'state' <> 'pending' or (t->'destinations'->0->>'applied')::boolean
+             or not (t->'destinations'->0->>'verified')::boolean) then
+    raise exception 'W07-R2-18: one destination verdict is recorded on every queued transfer and applied on none (got %)', r;
+  end if;
+  r := public.persist_billing_verdict(src1, src1_ticket, inactive);
+  if not (r->>'applied')::boolean then
+    raise exception 'W07-R2-19: the first source verdict must apply (got %)', r;
+  end if;
+  if exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 2 then
+    raise exception 'W07-R2-20: the destination stays non-premium while the second transfer''s source is unconfirmed';
+  end if;
+  r := public.persist_billing_verdict(dst, dst1_ticket, active);
+  if (r->>'applied')::boolean or not (r->>'withheld')::boolean or (r->'billing'->>'premium')::boolean
+     or r->'transfer'->>'event_id' <> 'w07-r2-transfer-3b' then
+    raise exception 'W07-R2-21: the first transfer''s ticket is withheld by the second unsettled transfer (got %)', r;
+  end if;
+  begin
+    perform public.complete_billing_webhook('w07-r2-transfer-3a', payload1,
+      jsonb_build_object(src1::text, src1_ticket, dst::text, dst1_ticket), lease1);
+    raise exception 'W07-R2-22: a transfer whose destination is still barred must not complete';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  r := public.persist_billing_verdict(src2, src2_ticket, inactive);
+  if not (r->>'applied')::boolean then
+    raise exception 'W07-R2-23: the second source verdict must apply (got %)', r;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-R2-24: the destination gains once the last source is confirmed and both transfers confirm';
+  end if;
+  r := public.complete_billing_webhook('w07-r2-transfer-3a', payload1,
+    jsonb_build_object(src1::text, src1_ticket, dst::text, dst1_ticket), lease1);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-R2-25: the first transfer webhook completes after both settle (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r2-transfer-3b', payload2,
+    jsonb_build_object(src2::text, src2_ticket, dst::text, dst2_ticket), lease2);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-R2-26: the second transfer webhook completes after both settle (got %)', r;
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select array_agg(state order by event_id) from api_private.billing_transfers
+      where event_id in ('w07-r2-transfer-3a', 'w07-r2-transfer-3b')) <> array['confirmed', 'confirmed'] then
+    raise exception 'W07-R2-27: both shared-destination transfers must be confirmed';
+  end if;
+  if (select count(*) from api_private.billing_transfer_sides s join api_private.billing_transfers t on t.id = s.transfer_id
+      where t.event_id in ('w07-r2-transfer-3a', 'w07-r2-transfer-3b') and s.role = 'destination' and s.applied_at is not null) <> 2 then
+    raise exception 'W07-R2-28: the destination side of both transfers must be applied';
+  end if;
+end $$;
+
+-- A held source that is later deleted from Auth is authoritatively absent:
+-- redelivery (the worker died before completing) reclassifies it, confirms
+-- the transfer and completes.
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c08';
+  dst uuid := '00000000-0000-4000-8000-000000000c09';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-4', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text), 'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-4', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-4', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  perform public.persist_billing_verdict(src, src_ticket, active);
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'withheld')::boolean or not (r->>'applied')::boolean
+     or public.billing_transfer_recovery(dst)->0->>'state' <> 'held' then
+    raise exception 'W07-R2-29: an entitled source parks the transfer as held while the confirmed destination applies (got %)', r;
+  end if;
+  if exists (select 1 from public.webhook_events where id = 'w07-r2-transfer-4' and processed_at is not null) then
+    raise exception 'W07-R2-30: the delivery is not complete until the worker completes it';
+  end if;
+  perform public.release_billing_webhook_delivery('w07-r2-transfer-4', payload, lease);
+end $$;
+reset role;
+delete from auth.users where id = '00000000-0000-4000-8000-000000000c08';
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c08';
+  dst uuid := '00000000-0000-4000-8000-000000000c09';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-4', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text), 'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  lease uuid;
+  issued jsonb;
+  dst_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-4', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-4', payload, lease);
+  if not exists (select 1 from jsonb_array_elements(issued) item where item->>'user_id' = src::text and item->>'outcome' = 'user_missing') then
+    raise exception 'W07-R2-31: redelivery must report the deleted source as missing (got %)', issued;
+  end if;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-R2-32: a source absent from Auth releases the held destination on redelivery (got %)',
+      public.billing_transfer_recovery(dst);
+  end if;
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-33: the destination verdict applies once the source is authoritatively absent (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r2-transfer-4', payload, jsonb_build_object(dst::text, dst_ticket), lease);
+  if not (r->>'received')::boolean or (r->>'verified')::boolean then
+    raise exception 'W07-R2-34: the redelivered transfer webhook completes, reporting the absent subject as unverified (got %)', r;
+  end if;
+end $$;
+reset role;
+do $$
+declare
+  t api_private.billing_transfers%rowtype;
+begin
+  select * into strict t from api_private.billing_transfers where event_id = 'w07-r2-transfer-4';
+  if t.state <> 'confirmed'
+     or not exists (select 1 from public.webhook_events where id = 'w07-r2-transfer-4' and processed_at is not null)
+     or exists (select 1 from api_private.billing_webhook_claims where event_id = 'w07-r2-transfer-4' and lease_token is not null) then
+    raise exception 'W07-R2-35: the transfer must confirm and the delivery must be settled once its only source is absent';
+  end if;
+  if not exists (select 1 from api_private.billing_transfer_sides where transfer_id = t.id and role = 'source' and user_missing_at is not null)
+     or not exists (select 1 from api_private.billing_transfer_audit where transfer_id = t.id and action = 'source_missing'
+          and (detail->>'verified')::boolean) then
+    raise exception 'W07-R2-36: a verified source later deleted from Auth must be marked missing and audited';
+  end if;
+end $$;
+
+-- "Source loses" is independent of the destination: a destination whose
+-- profile row is unavailable must not roll back the source's confirmed loss.
+create temp table w07_r2_state (src_ticket uuid, lease uuid);
+grant select, insert on w07_r2_state to service_role;
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c0a';
+  dst uuid := '00000000-0000-4000-8000-000000000c0b';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-5', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text), 'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  issued jsonb;
+  lease uuid;
+  r jsonb;
+begin
+  issued := public.begin_billing_verification(array[src]);
+  perform public.persist_billing_verdict(src, (issued->0->>'ticket_id')::uuid, active);
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-5', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-5', payload, lease);
+  r := public.persist_billing_verdict(dst,
+    (select (item->>'ticket_id')::uuid from jsonb_array_elements(issued) item where item->>'user_id' = dst::text), active);
+  if not (r->>'withheld')::boolean then
+    raise exception 'W07-R2-37: the destination must be withheld before the source is confirmed (got %)', r;
+  end if;
+  insert into pg_temp.w07_r2_state
+    select (item->>'ticket_id')::uuid, lease
+    from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+end $$;
+reset role;
+delete from public.profiles where id = '00000000-0000-4000-8000-000000000c0b';
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c0a';
+  dst uuid := '00000000-0000-4000-8000-000000000c0b';
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  r jsonb;
+begin
+  r := public.persist_billing_verdict(src, (select s.src_ticket from pg_temp.w07_r2_state s), inactive);
+  if not (r->>'applied')::boolean or (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-38: the source loss must persist even though the destination cannot be applied (got %)', r;
+  end if;
+  if exists (select 1 from public.billing_entitlements where user_id = src and premium) then
+    raise exception 'W07-R2-39: the source must not keep premium after a provider-confirmed loss';
+  end if;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'pending' or (r->0->'destinations'->0->>'applied')::boolean
+     or (r->0->'destinations'->0->>'missing')::boolean then
+    raise exception 'W07-R2-40: a destination without a profile row stays recoverable, not missing (got %)', r;
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if not exists (select 1 from api_private.billing_transfer_audit a join api_private.billing_transfers t on t.id = a.transfer_id
+      where t.event_id = 'w07-r2-transfer-5' and a.action = 'destination_deferred') then
+    raise exception 'W07-R2-41: an unapplied destination must be audited as deferred';
+  end if;
+end $$;
+insert into public.profiles (id, email, provider)
+  values ('00000000-0000-4000-8000-000000000c0b', 'transfer-dst-r2-5@example.test', 'apple');
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000c0a';
+  dst uuid := '00000000-0000-4000-8000-000000000c0b';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r2-transfer-5', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text), 'transferred_to', jsonb_build_array(dst::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  r jsonb;
+begin
+  perform public.release_billing_webhook_delivery('w07-r2-transfer-5', payload, (select s.lease from pg_temp.w07_r2_state s));
+  lease := (public.claim_billing_webhook_delivery('w07-r2-transfer-5', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r2-transfer-5', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  if not exists (select 1 from public.billing_entitlements where user_id = dst and premium)
+     or jsonb_array_length(public.billing_transfer_recovery(dst)) <> 0 then
+    raise exception 'W07-R2-42: redelivery applies the recorded destination verdict once its profile is back (got %)',
+      public.billing_transfer_recovery(dst);
+  end if;
+  perform public.persist_billing_verdict(src, src_ticket, '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}'::jsonb);
+  r := public.persist_billing_verdict(dst, dst_ticket, active);
+  if (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R2-43: the destination re-verification applies after recovery (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r2-transfer-5', payload,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-R2-44: the recovered transfer webhook completes (got %)', r;
+  end if;
+end $$;
+reset role;
+drop table pg_temp.w07_r2_state;
+
+-- A stale TRANSFER (the device switched back before delivery: the provider
+-- says the source is still entitled, the destination is not) parks as held
+-- with both sides confirmed. The destination's OWN later purchase is its own
+-- provider-confirmed entitlement: it applies, its webhook completes, and its
+-- syncs keep applying while the stale transfer stays held (recoverable).
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000d01';
+  dst uuid := '00000000-0000-4000-8000-000000000d02';
+  transfer jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r3-stale', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text), 'transferred_to', jsonb_build_array(dst::text)));
+  purchase jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r3-purchase', 'type', 'INITIAL_PURCHASE', 'app_user_id', dst::text));
+  lifetime jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_lifetime', 'expiresAt', null,
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst_ticket uuid;
+  own_ticket uuid;
+  r jsonb;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r3-stale', transfer)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst], 'w07-r3-stale', transfer, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst::text;
+  perform public.persist_billing_verdict(src, src_ticket, lifetime);
+  r := public.persist_billing_verdict(dst, dst_ticket, inactive);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or (r->'billing'->>'premium')::boolean
+     or public.billing_transfer_recovery(dst)->0->>'state' <> 'held' then
+    raise exception 'W07-R3-1: a stale transfer parks as held and the destination mirrors its confirmed inactive verdict (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r3-stale', transfer,
+    jsonb_build_object(src::text, src_ticket, dst::text, dst_ticket), lease);
+  if not (r->>'verified')::boolean then
+    raise exception 'W07-R3-2: a held transfer whose sides are both provider-confirmed completes its delivery (got %)', r;
+  end if;
+  -- The destination buys a subscription of its own.
+  lease := (public.claim_billing_webhook_delivery('w07-r3-purchase', purchase)->>'lease_token')::uuid;
+  own_ticket := (public.begin_billing_verification(array[dst], 'w07-r3-purchase', purchase, lease)->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst, own_ticket, active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean
+     or not exists (select 1 from public.billing_entitlements where user_id = dst and premium) then
+    raise exception 'W07-R3-3: a held stale transfer must not withhold the destination''s own provider-confirmed purchase (got %)', r;
+  end if;
+  r := public.complete_billing_webhook('w07-r3-purchase', purchase, jsonb_build_object(dst::text, own_ticket), lease);
+  if not (r->>'verified')::boolean
+     or not exists (select 1 from public.webhook_events where id = 'w07-r3-purchase' and processed_at is not null) then
+    raise exception 'W07-R3-4: the destination''s own purchase webhook completes (got %)', r;
+  end if;
+  own_ticket := (public.begin_billing_verification(array[dst])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst, own_ticket, active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean then
+    raise exception 'W07-R3-5: the destination''s own syncs keep applying while the stale transfer is held (got %)', r;
+  end if;
+  r := public.billing_transfer_recovery(dst);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'held'
+     or not (r->0->'sources'->0->>'active')::boolean or not (r->0->'destinations'->0->>'applied')::boolean then
+    raise exception 'W07-R3-6: the stale transfer stays held and recoverable, not silently confirmed (got %)', r;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = src and premium) then
+    raise exception 'W07-R3-7: the source keeps the entitlement the provider confirmed for it';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+      join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r3-stale')
+     <> array['enqueued','source_verified','held','destination_verified','destination_applied'] then
+    raise exception 'W07-R3-8: a held stale transfer audits the hold and the applied destination verdict, nothing more (got %)',
+      (select array_agg(a.action order by a.id) from api_private.billing_transfer_audit a
+        join api_private.billing_transfers t on t.id = a.transfer_id where t.event_id = 'w07-r3-stale');
+  end if;
+end $$;
+
+-- An applied destination side is settled for good: when the source later
+-- buys a new subscription of its own, the transfer (still open for another
+-- destination) re-parks as held, but the applied destination's own renewal
+-- applies and advances its expiry.
+set local role service_role;
+do $$
+declare
+  src uuid := '00000000-0000-4000-8000-000000000d03';
+  dst1 uuid := '00000000-0000-4000-8000-000000000d04';
+  dst2 uuid := '00000000-0000-4000-8000-000000000d05';
+  payload jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r3-applied', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(src::text),
+    'transferred_to', jsonb_build_array(dst1::text, dst2::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '30 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  renewed jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_monthly',
+    'expiresAt', (clock_timestamp() + interval '60 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  inactive jsonb := '{"premium":false,"productKey":null,"expiresAt":null,"activeEntitlements":[]}';
+  lease uuid;
+  issued jsonb;
+  src_ticket uuid;
+  dst1_ticket uuid;
+  own_ticket uuid;
+  r jsonb;
+  e public.billing_entitlements%rowtype;
+begin
+  lease := (public.claim_billing_webhook_delivery('w07-r3-applied', payload)->>'lease_token')::uuid;
+  issued := public.begin_billing_verification(array[src, dst1, dst2], 'w07-r3-applied', payload, lease);
+  select (item->>'ticket_id')::uuid into src_ticket from jsonb_array_elements(issued) item where item->>'user_id' = src::text;
+  select (item->>'ticket_id')::uuid into dst1_ticket from jsonb_array_elements(issued) item where item->>'user_id' = dst1::text;
+  perform public.persist_billing_verdict(src, src_ticket, inactive);
+  r := public.persist_billing_verdict(dst1, dst1_ticket, active);
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean then
+    raise exception 'W07-R3-9: the first destination applies once the source is confirmed lost (got %)', r;
+  end if;
+  r := public.billing_transfer_recovery(dst1);
+  if jsonb_array_length(r) <> 1 or r->0->>'state' <> 'pending'
+     or not exists (select 1 from jsonb_array_elements(r->0->'destinations') d
+          where d->>'user_id' = dst1::text and (d->>'applied')::boolean)
+     or not exists (select 1 from jsonb_array_elements(r->0->'destinations') d
+          where d->>'user_id' = dst2::text and not (d->>'verified')::boolean) then
+    raise exception 'W07-R3-10: the transfer stays open for the unverified second destination (got %)', r;
+  end if;
+  -- The source buys a new subscription of its own.
+  own_ticket := (public.begin_billing_verification(array[src])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(src, own_ticket, active);
+  if not (r->>'applied')::boolean or not (r->'billing'->>'premium')::boolean
+     or public.billing_transfer_recovery(dst1)->0->>'state' <> 'held' then
+    raise exception 'W07-R3-11: the source''s own new purchase applies and re-parks the open transfer as held (got %)', r;
+  end if;
+  -- The applied destination renews.
+  own_ticket := (public.begin_billing_verification(array[dst1])->0->>'ticket_id')::uuid;
+  r := public.persist_billing_verdict(dst1, own_ticket, renewed);
+  select * into strict e from public.billing_entitlements where user_id = dst1;
+  if not (r->>'applied')::boolean or (r->>'withheld')::boolean or not (r->'billing'->>'premium')::boolean
+     or not e.premium or e.expires_at < clock_timestamp() + interval '59 days' then
+    raise exception 'W07-R3-12: an already-applied destination is never barred again; its renewal advances expiry (got %, expires %)',
+      r, e.expires_at;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = src and premium) then
+    raise exception 'W07-R3-13: the source keeps its own new purchase';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if not exists (select 1 from api_private.billing_transfer_sides s join api_private.billing_transfers t on t.id = s.transfer_id
+      where t.event_id = 'w07-r3-applied' and s.user_id = '00000000-0000-4000-8000-000000000d04' and s.applied_at is not null
+        and s.ticket_id = (select id from api_private.billing_verification_tickets
+          where user_id = '00000000-0000-4000-8000-000000000d04' and event_id = 'w07-r3-applied')) then
+    raise exception 'W07-R3-14: the applied destination side keeps the verdict it was applied with';
+  end if;
+end $$;
+
+-- Mutual transfers (S->D, then D->S; the device switched twice) with both
+-- accounts provider-confirmed active on their own tickets: neither is losing
+-- anything, so neither may be withheld — two paying accounts are never both
+-- locked out.
+set local role service_role;
+do $$
+declare
+  s uuid := '00000000-0000-4000-8000-000000000d06';
+  d uuid := '00000000-0000-4000-8000-000000000d07';
+  t1 jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r3-mutual-1', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(s::text), 'transferred_to', jsonb_build_array(d::text)));
+  t2 jsonb := jsonb_build_object('event', jsonb_build_object(
+    'id', 'w07-r3-mutual-2', 'type', 'TRANSFER',
+    'transferred_from', jsonb_build_array(d::text), 'transferred_to', jsonb_build_array(s::text)));
+  active jsonb := jsonb_build_object(
+    'premium', true, 'productKey', 'pickle_sensei_pro_annual',
+    'expiresAt', (clock_timestamp() + interval '300 days'),
+    'activeEntitlements', jsonb_build_array('pickle_sensei_pro'));
+  lease1 uuid;
+  lease2 uuid;
+  issued1 jsonb;
+  issued2 jsonb;
+  s_ticket1 uuid;
+  d_ticket1 uuid;
+  s_ticket2 uuid;
+  d_ticket2 uuid;
+  rs jsonb;
+  rd jsonb;
+begin
+  lease1 := (public.claim_billing_webhook_delivery('w07-r3-mutual-1', t1)->>'lease_token')::uuid;
+  issued1 := public.begin_billing_verification(array[s, d], 'w07-r3-mutual-1', t1, lease1);
+  lease2 := (public.claim_billing_webhook_delivery('w07-r3-mutual-2', t2)->>'lease_token')::uuid;
+  issued2 := public.begin_billing_verification(array[d, s], 'w07-r3-mutual-2', t2, lease2);
+  select (item->>'ticket_id')::uuid into s_ticket1 from jsonb_array_elements(issued1) item where item->>'user_id' = s::text;
+  select (item->>'ticket_id')::uuid into d_ticket1 from jsonb_array_elements(issued1) item where item->>'user_id' = d::text;
+  select (item->>'ticket_id')::uuid into s_ticket2 from jsonb_array_elements(issued2) item where item->>'user_id' = s::text;
+  select (item->>'ticket_id')::uuid into d_ticket2 from jsonb_array_elements(issued2) item where item->>'user_id' = d::text;
+  rs := public.persist_billing_verdict(s, s_ticket1, active);
+  if (rs->>'applied')::boolean or not (rs->>'withheld')::boolean or (rs->'billing'->>'premium')::boolean then
+    raise exception 'W07-R3-15: the first account is withheld while its own transfer source is unverified (got %)', rs;
+  end if;
+  rd := public.persist_billing_verdict(d, d_ticket1, active);
+  if not (rd->>'applied')::boolean or (rd->>'withheld')::boolean or not (rd->'billing'->>'premium')::boolean then
+    raise exception 'W07-R3-16: the second account applies once the first is provider-confirmed (got %)', rd;
+  end if;
+  if not exists (select 1 from public.billing_entitlements where user_id = s and premium)
+     or not exists (select 1 from public.billing_entitlements where user_id = d and premium) then
+    raise exception 'W07-R3-17: both provider-confirmed-active accounts must be premium (s=%, d=%)',
+      (select premium from public.billing_entitlements where user_id = s),
+      (select premium from public.billing_entitlements where user_id = d);
+  end if;
+  rs := public.persist_billing_verdict(s, s_ticket2, active);
+  rd := public.persist_billing_verdict(d, d_ticket2, active);
+  if not (rs->>'applied')::boolean or (rs->>'withheld')::boolean
+     or not (rd->>'applied')::boolean or (rd->>'withheld')::boolean then
+    raise exception 'W07-R3-18: the second transfer''s tickets apply for both accounts (got % / %)', rs, rd;
+  end if;
+  rs := public.complete_billing_webhook('w07-r3-mutual-1', t1, jsonb_build_object(s::text, s_ticket1, d::text, d_ticket1), lease1);
+  rd := public.complete_billing_webhook('w07-r3-mutual-2', t2, jsonb_build_object(d::text, d_ticket2, s::text, s_ticket2), lease2);
+  if not (rs->>'verified')::boolean or not (rd->>'verified')::boolean then
+    raise exception 'W07-R3-19: both mutual transfer deliveries complete (got % / %)', rs, rd;
+  end if;
+  if exists (select 1 from jsonb_array_elements(public.billing_transfer_recovery(s)) t where t->>'state' <> 'held')
+     or jsonb_array_length(public.billing_transfer_recovery(s)) <> 2 then
+    raise exception 'W07-R3-20: both mutual transfers stay held and recoverable (got %)', public.billing_transfer_recovery(s);
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select array_agg(state order by event_id) from api_private.billing_transfers
+      where event_id in ('w07-r3-mutual-1', 'w07-r3-mutual-2')) <> array['held', 'held'] then
+    raise exception 'W07-R3-21: mutual transfers with both sources entitled are held, not confirmed';
+  end if;
+  if (select count(*) from api_private.billing_transfer_sides s join api_private.billing_transfers t on t.id = s.transfer_id
+      where t.event_id in ('w07-r3-mutual-1', 'w07-r3-mutual-2') and s.role = 'destination' and s.applied_at is not null) <> 2 then
+    raise exception 'W07-R3-22: the destination side of both mutual transfers must be applied';
+  end if;
+end $$;
+
+-- Append-only audit and immutable settled history, even for the table owner.
+do $$
+declare
+  tid uuid := (select id from api_private.billing_transfers where event_id = 'w07-transfer-1');
+begin
+  begin
+    update api_private.billing_transfer_audit set action = 'confirmed' where transfer_id = tid and action = 'destination_withheld';
+    raise exception 'W07-T45: transfer audit rows must be immutable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from api_private.billing_transfer_audit where transfer_id = tid;
+    raise exception 'W07-T46: transfer audit rows must not be deletable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update api_private.billing_transfers set state = 'pending', settled_at = null where id = tid;
+    raise exception 'W07-T47: a confirmed transfer must not reopen';
+  exception when check_violation then null;
+  end;
+  begin
+    update api_private.billing_transfers set destination_user_ids = array['00000000-0000-4000-8000-0000000000b8'::uuid] where id = tid;
+    raise exception 'W07-T48: transfer scope must be immutable';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from api_private.billing_transfers where id = tid;
+    raise exception 'W07-T49: transfer rows must not be deletable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update api_private.billing_transfer_sides set verdict = null, ticket_id = null, verification_order = null, verified_at = null, applied_at = null
+      where transfer_id = tid and role = 'destination';
+    raise exception 'W07-T50: an applied destination side must be immutable';
+  exception when check_violation then null;
+  end;
+  begin
+    update api_private.billing_transfer_sides set verification_order = verification_order - 1
+      where transfer_id = tid and role = 'source';
+    raise exception 'W07-T51: a side verdict must never regress to an older verification order';
+  exception when check_violation then null;
+  end;
+  begin
+    delete from api_private.billing_transfer_sides where transfer_id = tid;
+    raise exception 'W07-T59: transfer sides must not be deletable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfer_audit;
+    raise exception 'W07-T60: the transfer audit must not be truncatable, even by the owner';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfer_sides;
+    raise exception 'W07-T61: transfer sides must not be truncatable, even by the owner';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate api_private.billing_transfers cascade;
+    raise exception 'W07-T62: transfers must not be truncatable, even by the owner';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+rollback;
+
 
 -- ============================================================================
 -- T. (W01-03, 20260908110000) settlement receipts bind the scored settlement
