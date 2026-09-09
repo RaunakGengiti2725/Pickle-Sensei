@@ -111,32 +111,71 @@ function parseRow(row: Record<string, unknown>): DeletionJournalEntry {
   return entry;
 }
 
+type UnreadableIdentity = Omit<DeletionJournalUnreadableRow, 'reason'>;
+
+function unreadableIdentity(
+  jobId: unknown,
+  ownerId: unknown,
+  apiOrigin: unknown,
+  operationId: unknown,
+  phase: unknown,
+): UnreadableIdentity | null {
+  if (
+    !deletionUuid(jobId) ||
+    !deletionUuid(ownerId) ||
+    !deletionOrigin(apiOrigin) ||
+    (operationId !== null && !deletionUuid(operationId)) ||
+    !deletionMember(phase, DELETION_PHASES)
+  )
+    return null;
+  return { jobId, ownerId, apiOrigin, operationId, phase };
+}
+
+/** Who an unreadable row belongs to: its identifying columns when they are
+ * well-formed, otherwise the same fields of its document when THAT still
+ * reads. A row neither names is nobody's — it cannot hold any owner's
+ * re-entry without being attributed to every owner on the device. */
+function unreadableRowIdentity(
+  row: Record<string, unknown>,
+): UnreadableIdentity | null {
+  const columns = unreadableIdentity(
+    row.job_id,
+    row.owner_id,
+    row.api_origin,
+    row.operation_id,
+    row.phase,
+  );
+  if (columns) return columns;
+  if (typeof row.document !== 'string') return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(row.document);
+  } catch {
+    return null;
+  }
+  if (!deletionRecord(value)) return null;
+  return unreadableIdentity(
+    value.jobId,
+    value.ownerId,
+    value.apiOrigin,
+    value.operationId,
+    value.phase,
+  );
+}
+
 function unreadableRow(
   row: Record<string, unknown>,
   error: unknown,
-): DeletionJournalUnreadableRow {
+): DeletionJournalUnreadableRow | null {
   if (
     !(error instanceof DeletionFoundationError) ||
     (error.code !== 'journal_invalid' && error.code !== 'journal_unsupported')
   )
     throw error;
-  const { job_id, owner_id, api_origin, operation_id, phase } = row;
-  if (
-    !deletionUuid(job_id) ||
-    !deletionUuid(owner_id) ||
-    !deletionOrigin(api_origin) ||
-    (operation_id !== null && !deletionUuid(operation_id)) ||
-    !deletionMember(phase, DELETION_PHASES)
-  )
-    throw error;
-  return Object.freeze({
-    jobId: job_id,
-    ownerId: owner_id,
-    apiOrigin: api_origin,
-    operationId: operation_id,
-    phase,
-    reason: error.code,
-  });
+  const identity = unreadableRowIdentity(row);
+  return identity === null
+    ? null
+    : Object.freeze({ ...identity, reason: error.code });
 }
 
 function validateTransition(
@@ -252,7 +291,8 @@ export function createDeletionOperationJournal(db: LocalDb) {
           try {
             entries.push(parseRow(row));
           } catch (error) {
-            unreadable.push(unreadableRow(row, error));
+            const attributed = unreadableRow(row, error);
+            if (attributed !== null) unreadable.push(attributed);
           }
         }
         return Object.freeze({
