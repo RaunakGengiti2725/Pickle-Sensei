@@ -140,6 +140,18 @@ stop_log_stream
 # again before claiming survival through the complete observation interval.
 if ! kill -0 "$PID" 2>/dev/null; then ALIVE=0; fi
 
+# Same install, same ad-hoc signature: store wallet contents through the
+# shipping native bridge, SIGKILL the process, relaunch and read them back.
+# Only a surviving launch is worth probing; a missing verdict is a failure.
+WALLET_STATUS=0
+WALLET_OK=0
+if [ "$ALIVE" = "1" ]; then
+  "$HERE/wallet-persistence-check.sh" "$UDID" "$BUNDLE_ID" "$APP_PATH" "$OUT_DIR/wallet" "$PID" || WALLET_STATUS=$?
+  if [ -f "$OUT_DIR/wallet/wallet-summary.txt" ]; then
+    WALLET_OK="$(sed -n 's/^wallet_persistence_ok=//p' "$OUT_DIR/wallet/wallet-summary.txt")"
+  fi
+fi
+
 # Crash reports written during this check.
 CRASHES=0
 if [ -d "$HOME/Library/Logs/DiagnosticReports" ]; then
@@ -165,6 +177,7 @@ KEYCHAIN_LINES="$(grep -E 'Code=-34018|error:\[-34018\]|neither application-iden
   echo "log_stream_stop_status=$LOG_STOP_STATUS"
   echo "fatal_log_lines=$(printf '%s' "$FATAL_LINES" | grep -c . || true)"
   echo "keychain_entitlement_errors=$(printf '%s' "$KEYCHAIN_LINES" | grep -c . || true)"
+  echo "wallet_persistence_ok=$WALLET_OK"
 } | tee "$OUT_DIR/launch-summary.txt"
 
 STATUS=0
@@ -184,8 +197,18 @@ if [ -n "$KEYCHAIN_LINES" ]; then
   echo "::error::simulator secure storage is unavailable because signing entitlements are missing"
   STATUS=1
 fi
+if [ "$ALIVE" != "1" ]; then
+  echo "::error::wallet persistence check not run: $APP_NAME did not survive the launch"
+  STATUS=1
+elif [ "$WALLET_STATUS" != "0" ]; then
+  echo "::error::wallet persistence check failed (status $WALLET_STATUS)"
+  STATUS=1
+elif [ "$WALLET_OK" != "1" ]; then
+  echo "::error::wallet persistence check produced no verdict (wallet_persistence_ok=$WALLET_OK)"
+  STATUS=1
+fi
 
 if [ "$STATUS" = "0" ]; then
-  echo "launch check passed: $APP_NAME stayed alive for ${SETTLE_SECONDS}s with no crash report or fatal JS error"
+  echo "launch check passed: $APP_NAME stayed alive for ${SETTLE_SECONDS}s with no crash report or fatal JS error, and wallet contents survived force-quit"
 fi
 exit "$STATUS"
