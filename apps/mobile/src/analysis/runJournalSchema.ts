@@ -91,6 +91,17 @@ export const RUN_JOURNAL_DDL: readonly string[] = [
     BEGIN
       SELECT RAISE(ABORT, 'Invalid analysis run journal transition');
     END`,
+  `CREATE TABLE IF NOT EXISTS analysis_reservation_refusal (
+    owner_key TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    analysis_id TEXT NOT NULL,
+    capture_id TEXT NOT NULL,
+    reason_code TEXT NOT NULL CHECK (length(reason_code) BETWEEN 1 AND 128),
+    message TEXT NOT NULL CHECK (length(message) BETWEEN 1 AND 512),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    PRIMARY KEY (owner_key, operation_id),
+    FOREIGN KEY (owner_key, operation_id) REFERENCES analysis_run_journal(owner_key, operation_id)
+  )`,
 ];
 
 /** Additive storage version. Never migrate a legacy request into an invented
@@ -110,7 +121,7 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
     current_attempt_id TEXT,
     final_record_id TEXT,
     winning_attempt_id TEXT,
-    completion_kind TEXT CHECK (completion_kind IN ('scored','low_confidence','needs_technique_confirmation')),
+    completion_kind TEXT CHECK (completion_kind IN ('scored','low_confidence','needs_technique_confirmation','partial')),
     created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
     updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms >= created_at_ms),
     PRIMARY KEY (owner_key, operation_id),
@@ -254,6 +265,8 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
         SELECT 1 FROM analysis_execution_attempts a JOIN local_analysis_record r ON r.owner_key = a.owner_key AND r.id = a.analysis_id
         WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.winning_attempt_id AND a.analysis_id = NEW.final_record_id
           AND ((NEW.completion_kind = 'scored' AND a.state = 'committed' AND a.result_id = NEW.analysis_id) OR
-            (NEW.completion_kind <> 'scored' AND a.state = 'release_pending' AND a.release_outcome = 'low_confidence'))))
+            (NEW.completion_kind = 'partial' AND a.state = 'terminal' AND a.terminal_reason = 'reservation_rejected'
+              AND a.permit_id IS NULL AND a.result_id IS NULL AND a.technical_failure IS NULL) OR
+            (NEW.completion_kind NOT IN ('scored','partial') AND a.state = 'release_pending' AND a.release_outcome = 'low_confidence'))))
     BEGIN SELECT RAISE(ABORT, 'Original analysis is immutable'); END`,
 ];

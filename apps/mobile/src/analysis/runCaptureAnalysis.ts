@@ -98,6 +98,17 @@ import {
   type OriginalModelPolicy,
   type OriginalModelDescriptor,
 } from './originalAnalysisSnapshot';
+import {
+  isReleaseNotAuthorized,
+  isSettledRefusalRun,
+  partialOutcomeMarker,
+  readPartialCaptureAnalysisRecord,
+  readReservationRefusal,
+  saveReservationRefusal,
+  toPartialCaptureAnalysisRecord,
+  type PartialCaptureAnalysisRecord,
+  type PartialOutcomeMarker,
+} from './partialOutcome';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -194,6 +205,21 @@ export type RunCaptureAnalysisOutcome =
       replayed?: true;
       analysisId: string;
       record: NeedsTechniqueConfirmationRecord;
+    }
+  | {
+      /**
+       * Mechanics were measured and delivered, but the release authority
+       * refused the reservation (typed 409 `access.release_not_authorized`):
+       * no validated technique benchmark exists. No permit was ever held, so
+       * nothing is chargeable, no product rating row or outbox item exists,
+       * and Result presents the benchmark as unavailable — never a score,
+       * confidence or range.
+       */
+      kind: 'partial';
+      replayed?: true;
+      analysisId: string;
+      record: PartialCaptureAnalysisRecord;
+      partialOutcome: PartialOutcomeMarker;
     };
 
 export interface RunCaptureAnalysisRequest {
@@ -314,6 +340,7 @@ export async function runCaptureAnalysis(
     telemetry &&
     telemetry.consentActive &&
     outcome.kind !== 'needs_technique_confirmation' &&
+    outcome.kind !== 'partial' &&
     !('replayed' in outcome && outcome.replayed) &&
     isDataOwnerContextCurrent(ownerContext) &&
     !request.signal?.aborted
@@ -338,6 +365,7 @@ export async function runCaptureAnalysis(
     request.signal?.aborted &&
     (outcome.kind === 'scored' ||
       outcome.kind === 'low_confidence' ||
+      outcome.kind === 'partial' ||
       outcome.kind === 'needs_technique_confirmation')
   ) {
     return outcome.kind === 'scored'
@@ -379,6 +407,44 @@ function poseQualityBlockedReason(gate: PreAnalysisGateDecision): string {
 
 function isPaywallRequired(error: ApiError): boolean {
   return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
+}
+
+/**
+ * A run the release authority refused BEFORE any permit existed settles in
+ * the journal as terminal `reservation_rejected` with no permit. When that
+ * run delivered a mechanics-only partial, replaying the same operation
+ * returns the durable partial instead of holding for recovery.
+ */
+async function readPartialReplay(
+  db: LocalDb,
+  owner: DataOwnerContext,
+  run: RunJournalEntry,
+): Promise<Extract<RunCaptureAnalysisOutcome, { kind: 'partial' }> | null> {
+  if (!isSettledRefusalRun(run)) return null;
+  const { rows } = await forDataOwner(db, owner).execute(
+    `SELECT record FROM local_analysis_record WHERE owner_key = ? AND id = ? AND capture_id = ?`,
+    [run.ownerKey, run.analysisId, run.captureId],
+  );
+  const payload = rows[0]?.['record'];
+  if (typeof payload !== 'string' || payload.length === 0) return null;
+  let record: unknown;
+  try {
+    record = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  const stored = readPartialCaptureAnalysisRecord(record, {
+    id: run.analysisId,
+    captureId: run.captureId,
+  });
+  if (stored === null) return null;
+  return {
+    kind: 'partial',
+    replayed: true,
+    analysisId: run.analysisId,
+    record: stored,
+    partialOutcome: stored.partialOutcome,
+  };
 }
 
 function accountChangedOutcome(): CaptureAnalysisOutcome {
@@ -701,6 +767,20 @@ async function originalCompletionOutcome(
       record,
       ...replay,
     };
+  if (completed.operation.completionKind === 'partial') {
+    const partial = readPartialCaptureAnalysisRecord(record, {
+      id: record.id,
+      captureId: record.captureId,
+    });
+    if (partial === null) return recoveryPendingOutcome();
+    return {
+      kind: 'partial',
+      analysisId: partial.id,
+      record: partial,
+      partialOutcome: partial.partialOutcome,
+      ...replay,
+    };
+  }
   if (record.result?.resultKind === 'scored')
     return {
       kind: 'scored',
@@ -1185,16 +1265,29 @@ async function runCaptureAnalysisCore(
           runJournal.activeOperationIds(scope).includes(continuationOperationId)
         )
           return recoveryPendingOutcome();
+        const partial = await readPartialReplay(
+          request.db,
+          ownerContext,
+          existing,
+        );
+        assertCurrent();
+        if (partial) return partial;
+        // A settled refusal whose mechanics record never landed is resumed by
+        // this same operation below; nothing about it is a hold.
+        const refusal = await readReservationRefusal(request.db, existing);
+        assertCurrent();
         // Completion is authoritative even when a stale screen now chooses
         // another technique or the original media/model is unavailable. The
         // stored request hash is validated against its immutable record, not
         // against a request that will never be executed. Uncertain work holds.
         if (
+          !refusal &&
           existing.state !== 'committed' &&
           existing.releaseOutcome !== 'low_confidence'
         )
           return recoveryPendingOutcome();
-        return await readJournalOutcome(request, ownerContext, existing);
+        if (!refusal)
+          return await readJournalOutcome(request, ownerContext, existing);
       }
     } catch {
       if (!isDataOwnerContextCurrent(ownerContext))
@@ -1380,13 +1473,28 @@ async function runCaptureAnalysisCore(
         return recoveryPendingOutcome();
     }
     if (request.techniqueConfirmation && existing) {
-      if (
-        existing.captureId !== request.captureId ||
-        (existing.state !== 'committed' &&
-          existing.releaseOutcome !== 'low_confidence')
-      )
+      if (existing.captureId !== request.captureId)
         return recoveryPendingOutcome();
-      return await readJournalOutcome(request, ownerContext, existing);
+      // A continuation the authority already settled as a permit-less
+      // refusal is answered from its durable partial (or resumed from its
+      // recorded refusal) before any generic hold classification.
+      const partial = await readPartialReplay(
+        request.db,
+        ownerContext,
+        existing,
+      );
+      assertCurrent();
+      if (partial) return partial;
+      const refusal = await readReservationRefusal(request.db, existing);
+      assertCurrent();
+      if (!refusal) {
+        if (
+          existing.state !== 'committed' &&
+          existing.releaseOutcome !== 'low_confidence'
+        )
+          return recoveryPendingOutcome();
+        return await readJournalOutcome(request, ownerContext, existing);
+      }
     }
     let admission: TechniqueConfirmationAdmission | undefined;
     try {
@@ -1474,52 +1582,106 @@ async function runCaptureAnalysisCore(
         : await runJournal.begin(request.db, identity);
     run = begun.run;
     assertCurrent();
-    if (!begun.created)
-      return await readJournalOutcome(request, ownerContext, begun.run);
-    let reserved: ReservedAnalysisPermitWithAccess;
-    try {
-      reserved = await permits.reserve(run.reservationKey);
-    } catch (error) {
-      if (original) {
-        technicalFailure =
-          error instanceof TypeError ||
-          (error instanceof ApiError &&
-            (error.status === 408 ||
-              error.status === 429 ||
-              error.status >= 500))
-            ? 'reservation_transport'
-            : null;
-        await originalAnalysisOperations
-          .requestRelease(request.db, run, 'failed', technicalFailure)
-          .catch(() => {});
-      }
-      await journal.reservationFailed(request.db, run, error).catch(() => {});
-      if (!isDataOwnerContextCurrent(ownerContext))
-        return accountChangedOutcome();
-      if (request.signal?.aborted) return cancelledOutcome();
-      if (error instanceof ApiError && isPaywallRequired(error)) {
-        return {
-          kind: 'unavailable',
-          reason: error.message,
-          cause: 'paywall_required',
-        };
-      }
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : 'The rating service could not be reached. Your capture is saved and can be scored later.';
-      return { kind: 'unavailable', reason: message };
+    let resumedRefusal: PartialOutcomeMarker | null = null;
+    if (!begun.created) {
+      const partial = await readPartialReplay(
+        request.db,
+        ownerContext,
+        begun.run,
+      );
+      assertCurrent();
+      if (partial) return partial;
+      // The same operation whose settled refusal was recorded but whose
+      // mechanics record never landed resumes here without reserving again.
+      resumedRefusal = await readReservationRefusal(request.db, begun.run);
+      assertCurrent();
+      if (!resumedRefusal)
+        return await readJournalOutcome(request, ownerContext, begun.run);
     }
-    const saved = await journal.reserved(request.db, run, reserved.permit.id);
-    assertCurrent();
-    if (saved?.state !== 'reserved' || saved.permitId === null)
-      return recoveryPendingOutcome();
-    const permitId = saved.permitId;
-    freeLimitReached =
-      reserved.permit.accessSource === 'free' &&
-      reserved.access !== null &&
-      !reserved.access.premium &&
-      reserved.access.freeRatings.availableToReserve === 0;
+    let reserved: ReservedAnalysisPermitWithAccess | PartialOutcomeMarker;
+    const settledRun = run;
+    if (resumedRefusal) reserved = resumedRefusal;
+    else
+      try {
+        reserved = await permits.reserve(run.reservationKey);
+      } catch (error) {
+        const refused = isReleaseNotAuthorized(error);
+        if (original) {
+          technicalFailure =
+            error instanceof TypeError ||
+            (error instanceof ApiError &&
+              (error.status === 408 ||
+                error.status === 429 ||
+                error.status >= 500))
+              ? 'reservation_transport'
+              : null;
+          await originalAnalysisOperations
+            .requestRelease(request.db, run, 'failed', technicalFailure)
+            .catch(() => {});
+        }
+        if (refused && !original) {
+          // Settle the row and keep the authority's own refusal beside it in
+          // one transaction, so a later mechanics-record failure can still be
+          // resumed by the same operation without a second reservation.
+          const marker = partialOutcomeMarker(error);
+          await withTransaction(request.db, async tx => {
+            await journal.reservationFailed(tx, settledRun, error);
+            await saveReservationRefusal(tx, settledRun, marker);
+          }).catch(() => {});
+        } else
+          await journal
+            .reservationFailed(request.db, run, error)
+            .catch(() => {});
+        if (!isDataOwnerContextCurrent(ownerContext))
+          return accountChangedOutcome();
+        if (request.signal?.aborted) return cancelledOutcome();
+        if (error instanceof ApiError && isPaywallRequired(error)) {
+          return {
+            kind: 'unavailable',
+            reason: error.message,
+            cause: 'paywall_required',
+          };
+        }
+        if (!refused) {
+          const message =
+            error instanceof ApiError
+              ? error.message
+              : 'The rating service could not be reached. Your capture is saved and can be scored later.';
+          return { kind: 'unavailable', reason: message };
+        }
+        // The authority settled this run as non-chargeable with no permit:
+        // the journal row is terminal (reservation_rejected). Mechanics still
+        // run and are delivered as a PARTIAL; the benchmark stays withheld.
+        reserved = partialOutcomeMarker(error);
+      }
+    let settlement:
+      | { kind: 'permit'; permitId: string }
+      | { kind: 'partial'; marker: PartialOutcomeMarker };
+    if ('permit' in reserved) {
+      const saved = await journal.reserved(request.db, run, reserved.permit.id);
+      assertCurrent();
+      if (saved?.state !== 'reserved' || saved.permitId === null)
+        return recoveryPendingOutcome();
+      settlement = { kind: 'permit', permitId: saved.permitId };
+      freeLimitReached =
+        reserved.permit.accessSource === 'free' &&
+        reserved.access !== null &&
+        !reserved.access.premium &&
+        reserved.access.freeRatings.availableToReserve === 0;
+    } else {
+      // Only a row the journal really settled as a permit-less refusal may
+      // carry a partial; anything else stays held for ordinary recovery.
+      const settled = await journal.read(request.db, reference);
+      assertCurrent();
+      if (
+        !settled ||
+        !isSettledRefusalRun(settled) ||
+        settled.analysisId !== run.analysisId ||
+        settled.captureId !== run.captureId
+      )
+        return recoveryPendingOutcome();
+      settlement = { kind: 'partial', marker: reserved };
+    }
     assertCurrent();
     // Imported clips carry no measured trigger: the analysis window is
     // honestly the whole clip, and the provenance says exactly that instead
@@ -1642,6 +1804,17 @@ async function runCaptureAnalysisCore(
       throw new RunJournalError('identity_conflict');
     }
     const journalRun = run;
+    const withheld = settlement.kind === 'partial' ? settlement.marker : null;
+    if (withheld && record.kind === 'needs_technique_confirmation') {
+      // A confirmation continuation settles through a live reservation; with
+      // none, the authority's own refusal is the honest answer and nothing
+      // half-settled is saved for a later continuation to inherit.
+      return { kind: 'unavailable', reason: withheld.message };
+    }
+    const partial =
+      withheld && record.kind !== 'needs_technique_confirmation'
+        ? toPartialCaptureAnalysisRecord(record, withheld)
+        : null;
     // Every run is durably recorded, scored or not — reprocessing history.
     phase = 'commit';
     if (original) {
@@ -1650,10 +1823,32 @@ async function runCaptureAnalysisCore(
         original.execution,
         original.operation.operationId,
         journalRun,
-        record,
+        partial ?? record,
+        withheld,
       );
+    } else if (settlement.kind === 'partial') {
+      if (!partial) throw new RunJournalError('identity_conflict');
+      await withTransaction(request.db, async rawTransaction => {
+        const settled = await journal.read(rawTransaction, reference);
+        if (
+          !settled ||
+          !isSettledRefusalRun(settled) ||
+          settled.analysisId !== partial.id ||
+          settled.captureId !== partial.captureId
+        )
+          throw new RunJournalError('invalid_transition');
+        const db = forDataOwner(rawTransaction, ownerContext);
+        // No permit was held: the mechanics record is the whole delivery.
+        // Nothing reaches local_shot or the outbox, so nothing can be synced
+        // or charged; the terminal journal row needs no release.
+        await saveAnalysisRecord(db, partial);
+        assertCurrent();
+        await markCaptureAnalyzed(db, request.captureId);
+        assertCurrent();
+      });
     } else
       await withTransaction(request.db, async rawTransaction => {
+        const { permitId } = settlement;
         const db = forDataOwner(rawTransaction, ownerContext);
         await saveAnalysisRecord(db, record);
         assertCurrent();
@@ -1689,6 +1884,14 @@ async function runCaptureAnalysisCore(
       });
     assertCurrent();
 
+    if (partial && withheld) {
+      return {
+        kind: 'partial',
+        analysisId,
+        record: partial,
+        partialOutcome: withheld,
+      };
+    }
     if (record.result?.resultKind === 'scored') {
       return { kind: 'scored', analysisId, record, freeLimitReached };
     }
