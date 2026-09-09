@@ -363,29 +363,49 @@ Deno.test("refresh without a refreshToken is a 400 validation error", async () =
   assertEquals(h.callsTo("/auth/v1/token").length, 0);
 });
 
-Deno.test("refused refreshes count toward the per-IP auth-failure budget", async () => {
-  const h = await loadSessionHarness();
-  const ip = freshIp();
-  await withFrozenClock(async () => {
-    for (let i = 0; i < 30; i += 1) {
-      const response = await h.handler(
-        apiRequest("POST", "/v1/auth/refresh", {
-          token: null,
-          ip,
-          body: { refreshToken: `rt-bogus-${i}` },
-        }),
+Deno.test(
+  "refused refreshes count toward the auth-failure budget: the guessing handset is throttled, a good bearer from the same IP is not",
+  async () => {
+    const h = await loadSessionHarness();
+    const ip = freshIp();
+    await withFrozenClock(async () => {
+      for (let i = 0; i < 30; i += 1) {
+        const response = await h.handler(
+          apiRequest("POST", "/v1/auth/refresh", {
+            token: null,
+            ip,
+            body: { refreshToken: `rt-bogus-${i}` },
+          }),
+        );
+        assertEquals(response.status, 401);
+        await response.body?.cancel();
+      }
+      assertEquals(
+        h.callsTo("/auth/v1/token").length,
+        30,
+        "every distinct refresh token was judged by GoTrue",
       );
-      assertEquals(response.status, 401);
-      await response.body?.cancel();
-    }
-    const minted = h.mintSession(GOOGLE_USER_ID);
-    const blocked = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }));
-    assertEquals(blocked.status, 429, "a good bearer from the failing IP is throttled");
-    assert(Number(blocked.headers.get("Retry-After")) >= 1);
-    await blocked.body?.cancel();
-    assertEquals(h.callsTo("/auth/v1/user").length, 0);
-  });
-});
+
+      // The 30 refused guesses saturate the address's stuffing signal: the
+      // guesser's next forged credential is judged, refused, and throttled.
+      const guess = await h.handler(
+        apiRequest("GET", "/v1/me", { token: forgedSessionToken(), ip }),
+      );
+      assertEquals(guess.status, 429, "the 31st distinct guess from the address is throttled");
+      assert(Number(guess.headers.get("Retry-After")) >= 1);
+      await guess.body?.cancel();
+      assertEquals(h.callsTo("/auth/v1/user").length, 1, "after GoTrue refused it");
+
+      const minted = h.mintSession(GOOGLE_USER_ID);
+      const served = await h.handler(
+        apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }),
+      );
+      assertEquals(served.status, 200, "a good bearer from the same IP is verified and served");
+      await served.body?.cancel();
+      assertEquals(h.callsTo("/auth/v1/user").length, 2);
+    });
+  },
+);
 
 Deno.test(
   "refresh has its own per-IP budget: the 31st rotation in a minute is 429 even when every token is valid",

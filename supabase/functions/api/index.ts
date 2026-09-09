@@ -101,7 +101,18 @@ import {
   redisConfigured,
   sha256Hex,
 } from "./cache.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import {
+  authErrorRefusalKind,
+  authFailureIdentity,
+  authRefusal,
+  authRefusalKind,
+  authRefusalOf,
+  chargeAuthFailure,
+  enforceRateLimit,
+  peekAuthFailureBudget,
+  rateLimitResponse,
+  type AuthRefusalKind,
+} from "./rateLimit.ts";
 import {
   accessLogEntry,
   clientIp,
@@ -749,8 +760,20 @@ function authUpstreamTimeoutMs(): number {
 
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; detail: ReturnType<typeof failureDetail> }
+  | {
+      kind: "refused";
+      status: number;
+      detail: ReturnType<typeof failureDetail>;
+      refusal: AuthRefusalKind;
+    }
   | { kind: "unavailable"; detail: ReturnType<typeof failureDetail>; retryAfterSeconds: number };
+
+/** A 401 decided here without consulting Supabase Auth (no bearer, junk,
+ * expired, wrong issuer): nothing was guessed, so it charges no budget. */
+const LOCAL_REFUSAL = { kind: "local" } as const;
+/** A 401 for a real session that is merely dead here (fenced by logout,
+ * not a Google/Apple account): charged to its own shard, never as stuffing. */
+const LIVENESS_REFUSAL = { kind: "liveness" } as const;
 
 interface AuthUserLike {
   id: string;
@@ -969,6 +992,7 @@ async function authRequest<T>(
       kind: "refused",
       status: answer.status,
       detail: authResponseErrorDetail(answer.status, body),
+      refusal: authRefusalKind(body),
     };
   }
   if (answer.status >= 200 && answer.status < 300) {
@@ -1128,18 +1152,21 @@ async function authenticateProviderToken(request: Request): Promise<
   | Response
 > {
   const token = bearerOf(request);
-  if (!token) return errorJson(401, "Missing bearer token.");
+  if (!token) return authRefusal(errorJson(401, "Missing bearer token."), LOCAL_REFUSAL);
   const payload = decodeJwtPayload(token);
   const provider = providerForIssuer(payload?.iss);
   if (!provider) {
-    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
+    return authRefusal(
+      errorJson(401, "Bearer token is not a Google or Apple ID token."),
+      LOCAL_REFUSAL,
+    );
   }
   if (bearerExpired(payload)) {
-    return errorJson(401, "The identity token has expired.");
+    return authRefusal(errorJson(401, "The identity token has expired."), LOCAL_REFUSAL);
   }
   const providerSubject = payload?.sub;
   if (typeof providerSubject !== "string" || !providerSubject) {
-    return errorJson(401, "The identity token has no subject.");
+    return authRefusal(errorJson(401, "The identity token has no subject."), LOCAL_REFUSAL);
   }
   const signIn = await anonAuthClient(request)
     .auth.signInWithIdToken({ provider, token })
@@ -1148,7 +1175,9 @@ async function authenticateProviderToken(request: Request): Promise<
     if (isRetryableAuthError(signIn.error)) {
       return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
     }
-    return errorJson(401, "The identity token could not be verified.");
+    return authRefusal(errorJson(401, "The identity token could not be verified."), {
+      kind: authErrorRefusalKind(signIn.error),
+    });
   }
   return {
     authed: {
@@ -1173,18 +1202,24 @@ async function authenticateProviderToken(request: Request): Promise<
  *    Remove this branch once no such build is in the field. */
 async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const token = bearerOf(request);
-  if (!token) return errorJson(401, "Missing bearer token.");
+  if (!token) return authRefusal(errorJson(401, "Missing bearer token."), LOCAL_REFUSAL);
 
   const payload = decodeJwtPayload(token);
   const provider = providerForIssuer(payload?.iss);
   const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
   if (!provider && !supabaseIssued) {
-    return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
+    return authRefusal(
+      errorJson(401, "Bearer token is not a session token or a Google/Apple ID token."),
+      LOCAL_REFUSAL,
+    );
   }
   if (bearerExpired(payload)) {
-    return errorJson(
-      401,
-      provider ? "The identity token has expired." : "The session token has expired.",
+    return authRefusal(
+      errorJson(
+        401,
+        provider ? "The identity token has expired." : "The session token has expired.",
+      ),
+      LOCAL_REFUSAL,
     );
   }
 
@@ -1194,7 +1229,10 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const cacheKey = await authCacheKey(token);
   const cached = await readAuthCache(cacheKey, provider, sessionId);
   if (cached.revoked) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(
+      errorJson(401, "The session is no longer valid. Sign in again."),
+      LIVENESS_REFUSAL,
+    );
   }
   if (cached.authed) return cached.authed;
 
@@ -1206,7 +1244,9 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
       if (isRetryableAuthError(signIn.error)) {
         return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
       }
-      return errorJson(401, "The identity token could not be verified.");
+      return authRefusal(errorJson(401, "The identity token could not be verified."), {
+        kind: authErrorRefusalKind(signIn.error),
+      });
     }
     await writeAuthCache(
       cacheKey,
@@ -1234,18 +1274,26 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     });
   }
   if (verified.kind === "refused") {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(errorJson(401, "The session is no longer valid. Sign in again."), {
+      kind: verified.refusal,
+    });
   }
   const user = verified.value;
   const sessionProvider = providerOfUser(user);
   if (!sessionProvider) {
-    return errorJson(401, "The session does not belong to a Google or Apple account.");
+    return authRefusal(
+      errorJson(401, "The session does not belong to a Google or Apple account."),
+      LIVENESS_REFUSAL,
+    );
   }
   // The session may have been logged out while getUser() was in flight: a
   // verification that raced its own revocation must neither be served nor
   // cached. (Revocation is fenced again on every later read regardless.)
   if (sessionId && (await cacheIsRevoked(authRevokedKey(sessionId))) === true) {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return authRefusal(
+      errorJson(401, "The session is no longer valid. Sign in again."),
+      LIVENESS_REFUSAL,
+    );
   }
   await writeAuthCache(
     cacheKey,
@@ -1303,7 +1351,7 @@ function validSession(value: unknown): value is SupabaseSessionLike {
  * already rotated away): the app must sign in again. Anything else — Auth
  * down, rate-limiting us, unreachable, answering nonsense — is 503 with a
  * Retry-After, and the app keeps its session and tries again. */
-async function refreshSessionRoute(request: Request): Promise<Response> {
+async function refreshSessionRoute(request: Request, ip: string): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
   if (
@@ -1314,6 +1362,11 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
+  // The refresh token in the body is the credential being judged: its own
+  // shard gates the rotation, not the bearer header (which is not judged).
+  const identity = await authFailureIdentity(refreshToken.trim());
+  const budget = await peekAuthFailureBudget(ip, identity, AUTH_FAILURE_LIMIT);
+  if (!budget.allowed) return rateLimitResponse(budget);
   const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
     return serviceUnavailable("Session refresh", rotated.detail, {
@@ -1321,7 +1374,10 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
     });
   }
   if (rotated.kind === "refused") {
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+    return authRefusal(errorJson(401, "The session could not be refreshed. Sign in again."), {
+      kind: rotated.refusal,
+      identity,
+    });
   }
   return json(200, { session: sessionView(rotated.value) });
 }
@@ -4995,13 +5051,6 @@ async function handleRequest(request: Request): Promise<Response> {
   // probing) — those never even reach Supabase Auth once tripped.
   const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
-  const authFailures = await peekRateLimit(
-    "authfail",
-    ip,
-    AUTH_FAILURE_LIMIT.limit,
-    AUTH_FAILURE_LIMIT.windowSeconds,
-  );
-  if (!authFailures.allowed) return rateLimitResponse(authFailures);
 
   // The gateway may present the pathname as /functions/v1/api/v1/… or /api/v1/…
   // depending on where it strips the mount prefix — route on everything from
@@ -5011,14 +5060,35 @@ async function handleRequest(request: Request): Promise<Response> {
   const path = v1 >= 0 ? url.pathname.slice(v1) : url.pathname;
   const route = `${request.method} ${path}`;
 
+  // The auth-failure budget is kept per credential (ip + bearer digest) so a
+  // co-tenant's failures behind a shared NAT egress never gate this bearer;
+  // refresh judges the token in its body instead (refreshSessionRoute).
+  const credential = await authFailureIdentity(bearerOf(request));
+  if (route !== "POST /v1/auth/refresh") {
+    const authFailures = await peekAuthFailureBudget(ip, credential, AUTH_FAILURE_LIMIT);
+    if (!authFailures.allowed) return rateLimitResponse(authFailures);
+  }
+
   // Atomic INCR on the aligned auth-failure window (peeked above) — never a
   // read-then-write, so concurrent bad bearers cannot under-count.
-  const recordAuthFailure = () =>
-    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+  const recordAuthFailure = async (refused: Response): Promise<Response> => {
+    const stuffing = await chargeAuthFailure(
+      ip,
+      credential,
+      authRefusalOf(refused),
+      AUTH_FAILURE_LIMIT,
+    );
+    if (stuffing === null) return refused;
+    await refused.body?.cancel();
+    return rateLimitResponse(stuffing);
+  };
 
   if (isAccountDeletionStatusCapability(bearerOf(request))) {
-    await recordAuthFailure();
-    return errorJson(401, "A deletion status capability cannot authorize this route.");
+    const refused = authRefusal(
+      errorJson(401, "A deletion status capability cannot authorize this route."),
+      LOCAL_REFUSAL,
+    );
+    return recordAuthFailure(refused);
   }
 
   // ── Session establishment and rotation run BEFORE general authentication:
@@ -5036,7 +5106,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
-      if (exchanged.status === 401) await recordAuthFailure();
+      if (exchanged.status === 401) return recordAuthFailure(exchanged);
       return exchanged;
     }
     const userLimit = await enforceRateLimit(
@@ -5061,14 +5131,14 @@ async function handleRequest(request: Request): Promise<Response> {
       AUTH_REFRESH_LIMIT.windowSeconds,
     );
     if (!rl.allowed) return rateLimitResponse(rl);
-    const refreshed = await refreshSessionRoute(request);
-    if (refreshed.status === 401) await recordAuthFailure();
+    const refreshed = await refreshSessionRoute(request, ip);
+    if (refreshed.status === 401) return recordAuthFailure(refreshed);
     return refreshed;
   }
 
   const authed = await authenticate(request);
   if (authed instanceof Response) {
-    if (authed.status === 401) await recordAuthFailure();
+    if (authed.status === 401) return recordAuthFailure(authed);
     return authed;
   }
 
