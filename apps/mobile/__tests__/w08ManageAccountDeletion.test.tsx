@@ -3146,6 +3146,46 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         }
       });
 
+      it.each([
+        [
+          '429',
+          () =>
+            reply('delete-request', rateLimitedError(), 429, {
+              headers: { 'retry-after': '60' },
+            }),
+        ],
+        [
+          '403',
+          () =>
+            reply(
+              'delete-request',
+              { error: { code: 'forbidden', message: 'Forbidden.' } },
+              403,
+            ),
+        ],
+      ])(
+        'a %s refusing the request states the known outcome once, never "Nothing was deleted. Nothing has been deleted."',
+        async (_status, answer) => {
+          route({ 'delete-request': answer });
+          const renderer = renderScreen();
+          try {
+            await openReview(renderer);
+            await press(renderer, sheetButton(renderer, 'Continue to delete'));
+            await act(async () => {});
+            expect(calls('delete-request')).toHaveLength(1);
+            const text = allText(renderer);
+            expect(text).toContain('Nothing was deleted');
+            expect(text).not.toMatch(
+              /Nothing was deleted\.\s*Nothing has been deleted\./,
+            );
+            expect(sheetButtons(renderer, 'Retry request')).toHaveLength(1);
+            expectNotDeleted(renderer);
+          } finally {
+            act(() => renderer.unmount());
+          }
+        },
+      );
+
       it('"Continue to delete" is disabled while the journal is still being resumed, and one request goes out once it has settled', async () => {
         route({
           'delete-request': () => reply('delete-request', requestPayload()),
