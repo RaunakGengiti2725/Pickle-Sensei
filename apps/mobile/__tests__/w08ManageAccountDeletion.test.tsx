@@ -868,8 +868,12 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
   });
 
   it('a `superseded` status after a lost confirmation proves the account is present: nothing deleted, and the review step lets the owner start again', async () => {
+    let requests = 0;
     route({
-      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-request': () => {
+        requests += 1;
+        return reply('delete-request', requestPayload(requests * 10));
+      },
       'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
       'delete-status': () =>
         reply('delete-status', statusPayload('superseded')),
