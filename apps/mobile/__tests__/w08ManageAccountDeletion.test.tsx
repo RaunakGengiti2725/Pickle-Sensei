@@ -2423,6 +2423,68 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     });
   });
 
+  describe('device clock rollback never stretches a local pacing wait', () => {
+    it('the retry wait after a lost confirmation stays within the backoff cap when the wall clock jumps back an hour', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('pending')),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectUnknownOutcome(first);
+        expect(journalRows()).toMatchObject([{ phase: 'confirm_pending' }]);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      jest.setSystemTime(Date.now() - 60 * 60 * 1000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectUnknownOutcome(second);
+        const label = String(sheetButton(second, 'Retry deletion').props.label);
+        const paced = /\((\d+)\)$/.exec(label);
+        expect(paced ? Number(paced[1]) : 0).toBeLessThanOrEqual(60);
+
+        await pressWhenArmed(second, 'Retry deletion');
+        expect(calls('delete-status')).toHaveLength(1);
+        expectUnknownOutcome(second);
+        expectNotDeleted(second);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('the review pause before "Permanently delete" is not re-armed for an hour when the wall clock jumps back after it elapsed', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', completionPayload()),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        expect(sheetButton(renderer, 'Permanently delete').props.disabled).toBe(
+          false,
+        );
+        jest.setSystemTime(Date.now() - 60 * 60 * 1000);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        await act(async () => {});
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(
+          useAuthStore.getState().completeAccountDeletion,
+        ).toHaveBeenCalledTimes(1);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'receipt_verified' },
+        ]);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+  });
+
   describe('request-step copy', () => {
     it('a 429 with a long Retry-After says nothing was deleted exactly once and does not promise "a moment"', async () => {
       route({
