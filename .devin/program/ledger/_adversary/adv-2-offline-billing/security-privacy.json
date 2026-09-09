@@ -1,0 +1,147 @@
+{
+  "area": "security-privacy",
+  "breaks": [
+    {
+      "expected": "Both scans exit 0 (no findings) at the integration head; no tracked file assigns a literal value to a secret-bearing env name (ledger records must redact secrets from stored repro commands or the value must be rotated + purged from history).",
+      "observed": "VERIFIED: scripts/security-scan.sh --tree exits 1 (findings) and --history exits 1; a tracked JSON ledger file embeds three repro command lines that assign a 46-char literal to XC_PGRST_JWT_SECRET. scripts/verify-cloud.sh --tier pr runs scripts/security-scan.sh in its `security` stage, so the canonical PR gate fails on this head. INFERRED (read the surrounding command text, value not printed): the value is a local PostgREST test-harness JWT secret used against a disposable postgres:16, not a production credential.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_secret_scan.test.ts  (equivalently: scripts/security-scan.sh --tree ; scripts/security-scan.sh --history --log-opts '--full-history HEAD'). Exit 1; 0 passed / 3 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_secret_scan.log",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_secret_scan.test.ts",
+      "title": "CI security stage is red at HEAD: gitleaks --tree and --history report 3 tracked findings (XC_PGRST_JWT_SECRET=<value> inside .devin/program/ledger/W08-06/wave-7-keep/record.json lines 269/277/292)"
+    },
+    {
+      "expected": "sanitizeUserText removes all default-ignorable / format (Cf) spoofing code points, so free text stored via onboarding contains only visible characters and ordinary whitespace (AGENTS.md: free-text inputs are sanitized).",
+      "observed": "VERIFIED: stored first_name = U+0053 U+0061 U+006D U+061C U+2060 U+00AD U+E0041 U+0061 U+006E U+0074 U+0068 U+0061 — ALM, word joiner, soft hyphen and a Unicode TAG character survive the sanitizer and are written to the DB / echoed back to the client.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts  -> tests 'sanitizeUserText strips every invisible/bidi spoofing primitive…' and 'PUT /v1/me/onboarding: the stored firstName carries no invisible spoofing characters' FAIL. Exit 1; 3 passed / 4 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_input_sanitization.log",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+      "title": "sanitizeUserText leaves invisible/bidi spoofing characters (U+061C, U+00AD, U+180E, U+2060-2064, U+FFF9-FFFB, U+E0000-E007F tag chars) and PUT /v1/me/onboarding persists them in first_name"
+    },
+    {
+      "expected": "ZWJ is preserved when it joins two letters/emoji (legitimate grapheme cluster) and removed only when standalone/leading/trailing/repeated.",
+      "observed": "VERIFIED: Sinhala 'ශ්‍රී' loses its ZWJ and renders as a different word; emoji family sequences are split into separate glyphs.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts -> 'sanitizeUserText does not corrupt legitimate ZWJ sequences' FAILS (same run as above).",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+      "title": "sanitizeUserText strips U+200D unconditionally, corrupting legitimate names (Sinhala conjuncts, emoji ZWJ sequences)"
+    },
+    {
+      "expected": "Blank/filler-only input sanitizes to an empty string and is rejected like whitespace-only input.",
+      "observed": "VERIFIED: filler-only inputs come back non-empty and are accepted as a first name.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts -> 'sanitizeUserText refuses names made only of blank/filler glyphs' FAILS (same run).",
+      "severity": "P3",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+      "title": "sanitizeUserText accepts names made only of blank/filler glyphs (Hangul filler U+3164, U+115F, U+FFA0, braille blank U+2800, ideographic space)"
+    },
+    {
+      "expected": "Access logs never contain secret-shaped client-supplied strings; ids that match known credential prefixes (or that are not UUID/ULID-shaped) are replaced by a server-generated UUID.",
+      "observed": "VERIFIED: resolveRequestId (http.ts) only rejects the caller's exact bearer and 43-char base64url refresh-token shapes; 'sk_live_XCANARY_LEAK_7f3a9ABCDEFGH' passes /^[A-Za-z0-9._-]{8,64}$/ and appears in the access-log line and response header.",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_log_leakage.test.ts -> 'x-request-id: provider-key-shaped ids … are not echoed into logs' FAILS. Exit 1; 7 passed / 2 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_log_leakage.log",
+      "severity": "P2",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_log_leakage.test.ts",
+      "title": "x-request-id: provider-key-shaped values (sk_live_…, ghp_…, AKIA…, appl_…, sbp_…) are accepted and echoed verbatim into the structured access log and the x-request-id response header"
+    },
+    {
+      "expected": "Error bodies are generic (e.g. 'Unknown endpoint.') and never reflect client-supplied path material.",
+      "observed": "VERIFIED: GET /v1/sessions/%2FUsers%2FXCANARY…%2Fbackhand.mov/shots returns {\"error\":{\"message\":\"Unknown endpoint: GET /v1/sessions/%2FUsers%2FXCANARY_LEAK_7f3a9%2FMovies%2Fbackhand.mov/shots.\"}} (JSON-encoded, so no injection; the access log itself is correctly redacted).",
+      "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_log_leakage.test.ts -> '4xx bodies do not reflect the raw request path (unknown-endpoint echo)' FAILS (same run).",
+      "severity": "P3",
+      "test_file": "supabase/functions/api/__wf__/adv_secprv_log_leakage.test.ts",
+      "title": "Unknown-endpoint 404 body reflects the raw request path (including percent-encoded email/filesystem-path segments)"
+    },
+    {
+      "expected": "Per REVIEW.md/AGENTS.md the analytics guard rejects media URIs, filesystem paths, emails, free text, base64 data and device identifiers; token/identifier/phone/path shapes above should produce a violation and the event should be dropped.",
+      "observed": "VERIFIED: 25 planted values (compact JWT, Bearer value, appl_/sk_live_/ghp_/sbp_/AIza keys, 43-char base64url token, UUID, IPv4/IPv6, phone, IMG_*.MOV, *.heic, Documents/…, ~/Library/…, /Library/…, percent-encoded file URL, Photos localIdentifier, C:\\Users\\…, 'at:/var/mobile/…', free text) are all accepted with zero violations. Guard only catches absolute /var|/private|/Users|/data|/storage|/tmp|/home paths, URI schemes at string start, emails, long base64, >200 chars, and a fixed forbidden-key list. INFERRED: the package is consumed only by legacy services/api and services/media-worker, not by apps/mobile or supabase/functions/api, so no shipping path is affected today.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/secprvAnalyticsRedaction.test.ts  Exit 1; 25 failed / 4 passed / 29 total. Artifact: artifacts/adv-security-privacy/attack-mobile-secprvAnalyticsRedaction.log",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/secprvAnalyticsRedaction.test.ts",
+      "title": "@pickle/analytics findPrivacyViolations accepts tokens, UUIDs, IPs, phone numbers, media basenames, relative/Windows/Library paths, percent-encoded file URLs and multi-word free text in categorical string fields; unnamed identifier keys (userId/installId/ip) pass"
+    },
+    {
+      "expected": "Free-text scrubber redacts every token/network-identifier/path encoding the deny categories claim to cover.",
+      "observed": "VERIFIED: scrubDiagnosticText('fe80::1ff:fe23:4567:890a'), ('+44 20 7946 0958'), ('AAAAAAAAAAAAAAAAAAAAA-_____________________') return the input unchanged; 'file%3A%2F%2F%2Fvar%2Fmobile%2F…' keeps the canary. The only shipping caller is native frame `function` symbols (the structural allow-list removes every other free-text field), so exposure is limited to symbol names.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/secprvDiagnosticsPipeline.test.ts -> 4 'free-text scrubber — deny coverage probes' cases FAIL. Exit 1; 4 failed / 27 passed / 31 total. Artifact: artifacts/adv-security-privacy/attack-mobile-secprvDiagnosticsPipeline.log",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/secprvDiagnosticsPipeline.test.ts",
+      "title": "diagnostics scrubDiagnosticText misses percent-encoded file URLs, compressed IPv6 (fe80::…), international phone numbers with spaces, and 43-char base64url refresh-token shapes"
+    }
+  ],
+  "head_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+  "label": "int-adversary-security-privacy-2994371e",
+  "result": {
+    "attachment_urls": [],
+    "attack_branch": "devin/pp/adv/security-privacy-2994371e",
+    "attack_branch_sha": "9d650398e7ab794ad78c5256d963575c40dd7d91",
+    "attacked_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+    "attacks_tried": 13,
+    "breaks": [
+      {
+        "expected": "Both scans exit 0 (no findings) at the integration head; no tracked file assigns a literal value to a secret-bearing env name (ledger records must redact secrets from stored repro commands or the value must be rotated + purged from history).",
+        "observed": "VERIFIED: scripts/security-scan.sh --tree exits 1 (findings) and --history exits 1; a tracked JSON ledger file embeds three repro command lines that assign a 46-char literal to XC_PGRST_JWT_SECRET. scripts/verify-cloud.sh --tier pr runs scripts/security-scan.sh in its `security` stage, so the canonical PR gate fails on this head. INFERRED (read the surrounding command text, value not printed): the value is a local PostgREST test-harness JWT secret used against a disposable postgres:16, not a production credential.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_secret_scan.test.ts  (equivalently: scripts/security-scan.sh --tree ; scripts/security-scan.sh --history --log-opts '--full-history HEAD'). Exit 1; 0 passed / 3 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_secret_scan.log",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_secret_scan.test.ts",
+        "title": "CI security stage is red at HEAD: gitleaks --tree and --history report 3 tracked findings (XC_PGRST_JWT_SECRET=<value> inside .devin/program/ledger/W08-06/wave-7-keep/record.json lines 269/277/292)"
+      },
+      {
+        "expected": "sanitizeUserText removes all default-ignorable / format (Cf) spoofing code points, so free text stored via onboarding contains only visible characters and ordinary whitespace (AGENTS.md: free-text inputs are sanitized).",
+        "observed": "VERIFIED: stored first_name = U+0053 U+0061 U+006D U+061C U+2060 U+00AD U+E0041 U+0061 U+006E U+0074 U+0068 U+0061 — ALM, word joiner, soft hyphen and a Unicode TAG character survive the sanitizer and are written to the DB / echoed back to the client.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts  -> tests 'sanitizeUserText strips every invisible/bidi spoofing primitive…' and 'PUT /v1/me/onboarding: the stored firstName carries no invisible spoofing characters' FAIL. Exit 1; 3 passed / 4 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_input_sanitization.log",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+        "title": "sanitizeUserText leaves invisible/bidi spoofing characters (U+061C, U+00AD, U+180E, U+2060-2064, U+FFF9-FFFB, U+E0000-E007F tag chars) and PUT /v1/me/onboarding persists them in first_name"
+      },
+      {
+        "expected": "ZWJ is preserved when it joins two letters/emoji (legitimate grapheme cluster) and removed only when standalone/leading/trailing/repeated.",
+        "observed": "VERIFIED: Sinhala 'ශ්‍රී' loses its ZWJ and renders as a different word; emoji family sequences are split into separate glyphs.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts -> 'sanitizeUserText does not corrupt legitimate ZWJ sequences' FAILS (same run as above).",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+        "title": "sanitizeUserText strips U+200D unconditionally, corrupting legitimate names (Sinhala conjuncts, emoji ZWJ sequences)"
+      },
+      {
+        "expected": "Blank/filler-only input sanitizes to an empty string and is rejected like whitespace-only input.",
+        "observed": "VERIFIED: filler-only inputs come back non-empty and are accepted as a first name.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_input_sanitization.test.ts -> 'sanitizeUserText refuses names made only of blank/filler glyphs' FAILS (same run).",
+        "severity": "P3",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_input_sanitization.test.ts",
+        "title": "sanitizeUserText accepts names made only of blank/filler glyphs (Hangul filler U+3164, U+115F, U+FFA0, braille blank U+2800, ideographic space)"
+      },
+      {
+        "expected": "Access logs never contain secret-shaped client-supplied strings; ids that match known credential prefixes (or that are not UUID/ULID-shaped) are replaced by a server-generated UUID.",
+        "observed": "VERIFIED: resolveRequestId (http.ts) only rejects the caller's exact bearer and 43-char base64url refresh-token shapes; 'sk_live_XCANARY_LEAK_7f3a9ABCDEFGH' passes /^[A-Za-z0-9._-]{8,64}$/ and appears in the access-log line and response header.",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_log_leakage.test.ts -> 'x-request-id: provider-key-shaped ids … are not echoed into logs' FAILS. Exit 1; 7 passed / 2 failed. Artifact: artifacts/adv-security-privacy/attack-edge-adv_secprv_log_leakage.log",
+        "severity": "P2",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_log_leakage.test.ts",
+        "title": "x-request-id: provider-key-shaped values (sk_live_…, ghp_…, AKIA…, appl_…, sbp_…) are accepted and echoed verbatim into the structured access log and the x-request-id response header"
+      },
+      {
+        "expected": "Error bodies are generic (e.g. 'Unknown endpoint.') and never reflect client-supplied path material.",
+        "observed": "VERIFIED: GET /v1/sessions/%2FUsers%2FXCANARY…%2Fbackhand.mov/shots returns {\"error\":{\"message\":\"Unknown endpoint: GET /v1/sessions/%2FUsers%2FXCANARY_LEAK_7f3a9%2FMovies%2Fbackhand.mov/shots.\"}} (JSON-encoded, so no injection; the access log itself is correctly redacted).",
+        "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_log_leakage.test.ts -> '4xx bodies do not reflect the raw request path (unknown-endpoint echo)' FAILS (same run).",
+        "severity": "P3",
+        "test_file": "supabase/functions/api/__wf__/adv_secprv_log_leakage.test.ts",
+        "title": "Unknown-endpoint 404 body reflects the raw request path (including percent-encoded email/filesystem-path segments)"
+      },
+      {
+        "expected": "Per REVIEW.md/AGENTS.md the analytics guard rejects media URIs, filesystem paths, emails, free text, base64 data and device identifiers; token/identifier/phone/path shapes above should produce a violation and the event should be dropped.",
+        "observed": "VERIFIED: 25 planted values (compact JWT, Bearer value, appl_/sk_live_/ghp_/sbp_/AIza keys, 43-char base64url token, UUID, IPv4/IPv6, phone, IMG_*.MOV, *.heic, Documents/…, ~/Library/…, /Library/…, percent-encoded file URL, Photos localIdentifier, C:\\Users\\…, 'at:/var/mobile/…', free text) are all accepted with zero violations. Guard only catches absolute /var|/private|/Users|/data|/storage|/tmp|/home paths, URI schemes at string start, emails, long base64, >200 chars, and a fixed forbidden-key list. INFERRED: the package is consumed only by legacy services/api and services/media-worker, not by apps/mobile or supabase/functions/api, so no shipping path is affected today.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/secprvAnalyticsRedaction.test.ts  Exit 1; 25 failed / 4 passed / 29 total. Artifact: artifacts/adv-security-privacy/attack-mobile-secprvAnalyticsRedaction.log",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/secprvAnalyticsRedaction.test.ts",
+        "title": "@pickle/analytics findPrivacyViolations accepts tokens, UUIDs, IPs, phone numbers, media basenames, relative/Windows/Library paths, percent-encoded file URLs and multi-word free text in categorical string fields; unnamed identifier keys (userId/installId/ip) pass"
+      },
+      {
+        "expected": "Free-text scrubber redacts every token/network-identifier/path encoding the deny categories claim to cover.",
+        "observed": "VERIFIED: scrubDiagnosticText('fe80::1ff:fe23:4567:890a'), ('+44 20 7946 0958'), ('AAAAAAAAAAAAAAAAAAAAA-_____________________') return the input unchanged; 'file%3A%2F%2F%2Fvar%2Fmobile%2F…' keeps the canary. The only shipping caller is native frame `function` symbols (the structural allow-list removes every other free-text field), so exposure is limited to symbol names.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/secprvDiagnosticsPipeline.test.ts -> 4 'free-text scrubber — deny coverage probes' cases FAIL. Exit 1; 4 failed / 27 passed / 31 total. Artifact: artifacts/adv-security-privacy/attack-mobile-secprvDiagnosticsPipeline.log",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/secprvDiagnosticsPipeline.test.ts",
+        "title": "diagnostics scrubDiagnosticText misses percent-encoded file URLs, compressed IPv6 (fe80::…), international phone numbers with spaces, and 43-char base64url refresh-token shapes"
+      }
+    ],
+    "package_id": "INT-security-privacy",
+    "summary": "INT-security-privacy adversarial pass against 2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1 (branch devin/1788854799-production-program-integration). Attack branch devin/pp/adv/security-privacy-2994371e @ 9d650398e7ab794ad78c5256d963575c40dd7d91 (tests only; no production code, existing tests, migrations or comments touched; no PR opened). 5 new test files, 13 attack boundaries, 8 confirmed breaks (1×P1, 4×P2, 3×P3), 0×P0.\n\nHELD (attacks that did NOT break anything — all VERIFIED on the SHA above):\n- Edge access log redaction of hostile route segments (email/path/token/traversal): `cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adv_secprv_log_leakage.test.ts` → ok (7 of 9 pass; log artifact artifacts/adv-security-privacy/attack-edge-adv_secprv_log_leakage.log). Also held: email/path/token-shaped and oversize x-request-id replaced (only provider-key prefixes slip — see break); hostile PostgREST error details never reach body or logs; unhandled throws with hostile name/message/code/stack logged categorically only; RevenueCat webhook hostile ids/aliases/product ids/secrets never surface; client IP / X-Forwarded-For / UA / referer / cookies absent from logs and responses; public + 5xx responses carry hardening headers and generic bodies.\n- Bounded request bodies: chunked body without Content-Length over the small-route cap → 413 with no leak; hostile/huge advisory Content-Length refused before read without crash; invalid UTF-8, non-object JSON, __proto__/constructor keys, 20k-deep JSON → generic 400 (adv_secprv_input_sanitization.test.ts, 3 of 7 pass).\n- Mobile diagnostics gate: runtime config ships transportEnabled/providerApproved/disclosuresApproved/nativePrivacyApproved=false, dsn=null; initializeDiagnostics()→'disabled', native='blocked_unverified_native_filtering', persistentQueue=false, provider module never loaded; capture entry points inert and non-throwing before init; 9 hostile DSN variants (http, look-alike host, userinfo, query, trailing path, uppercase key, newline, tunnel path) → blocked_dsn even with all approvals true; missing generated release identity → blocked_identity; null-DSN options are enabled:false and beforeSend/beforeBreadcrumb/beforeSendTransaction return null. `cd apps/mobile && npx jest --ci __tests__/adv/secprvDiagnosticsPipeline.test.ts` (27 of 31 pass; artifact attack-mobile-secprvDiagnosticsPipeline.log).\n- Reporter: error with hostile name/message/code/user/request/stack → allow-listed event, 'Error details removed', only app:///<bundle> frames, no canary; same error object never re-reported, hard cap 20 events; >32 KiB stack never parsed; string/number/null/undefined throwables handled; throwing Proxy traps, throwing parser, rejecting captureEvent, throwing clearScopes never escape.\n- Scrubbed transport: JS envelope with user/request/breadcrumbs/extra/contexts/server_name/fingerprint/vars/context_line/attachment+session items/hostile envelope header → sink receives only {event_id,sent_at} header + one event with the fixed allow-listed key set and identity tags; native cocoa envelope with hostile symbols/packages/device contexts/threads/uuid/kernel/response headers → all stripped, unreferenced images dropped, frames bounded to 50 and limited to function/image_addr/in_app/instruction_addr/package; cyclic, 100k-frame and Proxy-trapped events bounded or refused without throw; 1M-item envelope → null; hostile identity (path in modelVersion, email in policyVersion, non-hex revision) disables the transport.\n- BufferedAnalytics: 100 violating events → 0 transported, pendingCount 0, onViolation receives only path+rule (no canary/email); failing transport re-buffer bounded (≤20 after 50 failed rounds).\n- Repo-wide: `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (artifacts/adv-security-privacy/edge-frozen-check.log). `pnpm --filter @pickle/analytics test` exit 0, 43/43 (baseline-analytics.log). `cd apps/mobile && npx jest --ci src/diagnostics` baseline 6 suites / 122 tests pass (baseline-mobile-diagnostics.log). Full Edge suite `cd supabase/functions/api/__wf__ && deno task test` → 843 passed (31 steps), 9 failed, 58 ignored, exit 1 (edge-full-suite.log): the 9 failures are exactly the 9 new attack tests listed under breaks; the 58 ignored are the pre-existing XC_PG_URL-gated live-Postgres tests (no Postgres in this run — not counted as a pass). New test hygiene: `deno fmt/lint/check` on adv_secprv_*.test.ts exit 0 (edge-lint-check.log); `cd apps/mobile && npx tsc --noEmit` exit 0 (mobile-tsc.log); root `npx eslint apps/mobile/__tests__/adv/secprv*.test.ts` exit 0 (mobile-eslint.log); `npx prettier --check` clean.\n\nNOT_YET_VERIFIABLE (needs Mac/device): native Sentry SDK actually initialising with autoSessionTracking/attachScreenshot/attachViewHierarchy/enableNative disabled at runtime, and no native crash queue on disk — requires `scripts/mac-full-verify.sh` on the M4 runner (coordinator-owned; not run) plus a device/simulator inspection of the app container for `io.sentry` cache directories after a forced crash. Not attempted: any production Supabase, RevenueCat or App Store Connect interaction.\n\nUNKNOWN: whether the XC_PGRST_JWT_SECRET value in the ledger was ever used against anything other than a disposable local postgres (value not printed or inspected).\n\nSeverity rationale: no P0 — no media/pose/token leaves the device and diagnostics transport is provably disabled; the P1 is the red CI security gate at the integration head; sanitizer and request-id gaps are P2 (supported-path incorrect behaviour, no data exfiltration); reflected 404 path, filler-only names and the free-text scrubber gaps are P3."
+  },
+  "status": "DONE"
+}

@@ -1,0 +1,247 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W04-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "2b7e5f8c27b9504c9455a9c3ef8a2d37a863a66e38b101668b09060f182544bd",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-02-r1",
+      "phase": "review",
+      "prompt_sha256": "ccb4c235729e3e2c2206e7ffafe87b8c50bb3ff952b2e28bf69436933addc1e8",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-02-r1",
+      "phase": "adversary",
+      "prompt_sha256": "51851c50cbd1ed20b7282aaa8bfca8b17bba7286781d538c7b6aaf9e9cf2e1d1",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+  "candidate": {
+    "branch": "devin/pp/w04-02/impl-r1",
+    "head_sha": "90bf7e3db9e4ae36c9218842bd3e720feb1ab04a",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/25001963-8cea-46d2-a6b0-3daa36512c44/attack_harness.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e36c17fc-c48f-4bb2-819e-1350a0548782/attack_db.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ce4daca-bd15-4890-bd35-55b0c1e5a14f/ac1_typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5390029-7315-4188-ba9c-846101c98807/ac2_full_edge_suite_both_urls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bcd9ca59-e4f9-4653-89d9-e177dd2d72e4/ac2_full_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e8fab1e-ea3f-4874-ac49-ebe510b1319d/baseline_candidate_suite.log"
+        ],
+        "attack_branch": "devin/pp/w04-02/attack-90bf7e3d",
+        "attack_branch_sha": "a381e68c10fb7e274594f6a2dc0da9b81236f332",
+        "attacked_sha": "90bf7e3db9e4ae36c9218842bd3e720feb1ab04a",
+        "attacks_tried": 21,
+        "breaks": [
+          {
+            "expected": "A row the database ACCEPTED and committed must be deliverable (sign with iat clamped/tolerated for small skew, or read the isolate clock before the RPC and refuse BEFORE spending), so a generation is never spent for a response the client never receives. Free-path callers recover on retry (tickets are re-issued), Pro callers burn a generation per retry while the skew persists; every retry lands 503 again if skew >= 1 s persists, so the route is effectively down for that deployment pair while nothing is 'unavailable'.",
+            "observed": "VERIFIED: the RPC is called exactly once (generation 1 committed on the DB side), then the route answers 503 {\"error\":{\"message\":\"Offline grant issuance is temporarily unavailable. Please try again.\"}} and audits {outcome:'refused', reason:'signing_failed'}. Root cause (VERIFIED by code read): signOfflineExecutionGrant() -> validateBoundClaims() throws OfflineGrantCryptoError('invalid_time') when context.nowEpochSeconds < claims.iat; index.ts only computes nowEpochSeconds AFTER the RPC returned, so a DB-committed row can never be delivered when floor(db now()) > floor(isolate Date.now()). No skew tolerance exists on the issuance side.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json attack_w04_02_offline_grants.test.ts --filter 'issued_at 2 s ahead'  (exit 1). Harness stubs issue_offline_grant to return an otherwise valid accepted Pro row whose issued_at is now+2 s (the RPC's v_now := now() on a Postgres whose clock is ahead of the Edge isolate); POST /v1/offline/grants once.",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_02_offline_grants.test.ts",
+            "title": "DB clock ahead of the isolate clock (>= 1 s at whole-second floor) refuses a grant the database already committed — 503 after issue_offline_grant() spent the generation"
+          },
+          {
+            "expected": "The audit line carries the categorical reason the code already produced (e.g. 'invalid_time'), so an operator can tell a clock-skew refusal from an actual key/crypto failure; 'signing_failed' should be reserved for the SignJWT failure the signer raises itself.",
+            "observed": "VERIFIED: offline_grant_audit line is {evt:'offline_grant_audit', outcome:'refused', reason:'signing_failed', grantId, generation:1, entitlementSource:'verified_store', keyId}. index.ts: `const reason = error instanceof OfflineGrantIssuanceError ? error.reason : \"signing_failed\"` — every non-issuance error, including validateBoundClaims()'s categorical OfflineGrantCryptoError.reason, is collapsed to signing_failed even though SignJWT.sign() never ran.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json attack_w04_02_offline_grants.test.ts --filter 'never reached the signer'  (exit 1).",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_02_offline_grants.test.ts",
+            "title": "Pre-signature refusals are audited as reason='signing_failed' — the OfflineGrantCryptoError reason (invalid_time / invalid_metadata / invalid_release_binding) is discarded"
+          },
+          {
+            "expected": "Either the SQL refuses a lease shorter than 1 s (fall through to the free path / paywall as it already does for an entitlement that has lapsed) or the Edge treats it as a refusal WITHOUT having spent a generation. Minor: a Pro subscription in its final second is a rare boundary and the free path recovers on the next call once the entitlement has lapsed.",
+            "observed": "VERIFIED on the live DB: billing_entitlements.expires_at = date_trunc('second', clock_timestamp()) + 999 ms → issue_offline_grant() returns result='accepted', entitlement_source='verified_store', expires_at > issued_at by < 1 s, row committed in public.offline_grants; offlineGrantClaimsFromIssuance() then throws OfflineGrantIssuanceError('expiry_not_after_issuance') → route 503, generation spent.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_02_offline_grants_db.test.ts --filter 'expiring within the issuance second' (exit 0 — the test PASSES by asserting the current behaviour) and the harness test 'a DB-valid lease that starts and ends inside the same second is refused without a signature (documented)' in attack_w04_02_offline_grants.test.ts.",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_02_offline_grants_db.test.ts",
+            "title": "Pro entitlement expiring inside the issuance second: the RPC commits a real sub-second lease that the Edge cannot sign (exp == iat after flooring) → 503 with the generation spent (documented boundary)"
+          }
+        ],
+        "package_id": "W04-02",
+        "summary": "ADVERSARY W04-02 vs candidate 90bf7e3db9e4ae36c9218842bd3e720feb1ab04a (branch devin/pp/w04-02/impl-r1). Attack branch devin/pp/w04-02/attack-90bf7e3d @ a381e68c10fb7e274594f6a2dc0da9b81236f332 (pushed; no PR; only two ADDITIVE test files, 1749 insertions; candidate production code and offline_grants_routes.test.ts untouched — `git diff --stat 90bf7e3d HEAD` shows only the two attack files). No push to main/ci/mac-*, no force-push, no production Supabase access; disposable postgres:16 container pickle-xc-pg on 127.0.0.1:55433.\n\nEVIDENCE (all VERIFIED, logs in artifacts/w04-02-attack/ in the checkout — gitignored — and uploaded above):\n- Candidate baseline: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_grants_routes.test.ts` → exit 0, 22 passed / 0 failed / 0 ignored (baseline_candidate_suite.log).\n- Harness attacks: `cd supabase/functions/api/__wf__ && XC_PG_URL=... deno test -A --no-check --config deno.json attack_w04_02_offline_grants.test.ts` → exit 1, 16 executed, 14 passed / 2 FAILED / 0 ignored (attack_harness.log). The 2 failures are breaks #1 and #2.\n- Live-DB attacks: `... attack_w04_02_offline_grants_db.test.ts` → exit 0, 5 executed, 5 passed / 0 failed / 0 ignored (attack_db.log); re-run 3× for stability, 5/5 each time. Break #3 is asserted as documented behaviour inside this file.\n- W04-02-AC1: `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` → exit 0 (ac1_typecheck.log).\n- W04-02-AC2 as specified (`XC_PG_URL=... deno task test` in __wf__): exit 1, 920 passed (31 steps) / 2 failed / 12 IGNORED (ac2_full_edge_suite.log). The 2 failures are the two attack tests above (every candidate/base test passes). The 12 ignored are the pre-existing BASE_SHA file w06_01_golden_parity.test.ts, which reads only PICKLE_AUDIT_PG_URL — NOT a W04-02 defect, but the AC2 criterion 'ignored == 0' is NOT met by XC_PG_URL alone. Re-run with BOTH `PICKLE_AUDIT_PG_URL=... XC_PG_URL=... deno task test` → 932 passed (31 steps) / 2 failed / 0 ignored, exit 1 (ac2_full_edge_suite_both_urls.log); the only 2 failures are the attack tests. INFERRED: without the attack files the candidate suite is green (every non-attack test passed in both runs).\n- deno lint + deno fmt --check on the two attack files: exit 0.\n\nCONFIRMED BREAKS: 3 (P2 ×1, P3 ×2) — see `breaks`. No P0/P1 found: no money/data loss, leak, privilege escalation or crash on a supported path; the P2 is a spurious-503-with-spent-generation under DB-ahead clock skew (the code has no issuance-side skew tolerance and reads the isolate clock only after the RPC returned).\n\nATTACKS TRIED THAT DID NOT BREAK THE CANDIDATE (18, all VERIFIED by passing attack tests):\n1. Clock: accepted row issued in the current second signs (allowed path).\n2. Boundary: PostgREST microsecond timestamps at exactly 7 days sign; 7 d + 1 µs beyond the floor refused unsigned (max_duration_exceeded).\n3. Input: non-object / invalid JSON / array / string / null bodies → 400 on both routes, RPC never called, nothing spent.\n4. Boundary: installationKeyId 1 and 128 chars accepted verbatim; 129 chars, empty, whitespace, leading '-', NUL, non-string refused 400; requestedTickets 0/1/2 accepted, -1/3/1.5/NaN/'2'/null refused 400 — none reach the RPC.\n5. Concurrency: 30 parallel POST /v1/offline/grants from one account → exactly 10×200 + 20×429 with Retry-After, RPC called exactly 10 times.\n6. Concurrency: parallel registration + grant traffic keeps the device_register and offline_grants budgets independent; every signed grant verifies only for its own caller (sub binding).\n7. Network: failures BEFORE the grant RPC (session check 5xx/throw, release authority missing) → 503, issue_offline_grant never called.\n8. Network: grant RPC 500 / 429 / 3xx redirect / thrown fetch / non-JSON / wrong cardinality (0 or 2 rows) → generic 503, nothing signed, no bearer/owner/JWS in body or logs.\n9. Network: registration RPC 5xx / redirect / throw / wrong shape → generic 503, never 500.\n10. Rotation: a rotated OFFLINE_GRANT_SIGNING_JWK is used on the next request; a corrupt secret yields 503 and never falls back to the cached previous key; rotating back re-imports.\n11. Replay: an identical RPC row served to two callers yields owner-bound grants that never cross-verify.\n12. Corrupt state: Pro rows past entitlement / with tickets / expired entitlement, free rows with entitlement expiry, uuid with trailing space, non-integer generation → refused unsigned with categorical audit reason, never a 200.\n13. Integrity: every unsigned field echoed in the 200 body equals the verified claim it mirrors (Pro subscription, lifetime, free).\n14. Live roles: anon, service_role, authenticated without API-key header, without session claim, with another user's session, with a revoked (not_after past) session → 42501 from BOTH RPCs, no rows written; live caller admitted; unattested device refused device_not_attested spending nothing; anon/service_role have no table privilege; owner sees only own rows and only through the API; no client UPDATE/DELETE on offline_devices / offline_grants / offline_allocation_ledger.\n15. Live isolation + conservation: one installation key across two accounts never shares tickets; re-issue returns the same two tickets at generation+1 with no new ledger rows; requestedTickets 0/1 on a holding device still returns its 2; a second device of the same account gets paywall_required (allocation never reclaimed); offline_hold_count()=2; account deletion + re-creation with the same sign-in identity recovers the SAME two tickets on the original installation and nothing on a new one; the other account is unaffected.\n16. Live concurrency: two overlapping issue_offline_grant() calls for one device (advisory lock) → generations {1,2}, identical ticket sets, exactly 2 ledger rows; 3 parallel registrations (one unattested) → one device row, still attested; environment switch → device_environment_mismatch.\n17. Live clocks: year-9999 entitlement caps the lease at exactly 7 days; premium=true with expires_at in the past falls to the free path (never a Pro lease); lifetime (null) signs a lifetime lease; expires_at='infinity' is refused by the Edge builder (row_malformed) — fail closed.\n18. Live boundary: lease crossing a second boundary with < 1 s duration signs when floor(exp) > floor(iat) (the complementary allowed path of break #3).\n\nNOT ATTEMPTED / UNKNOWN: process death mid-request in a real Deno Deploy isolate (only simulated via thrown fetch), Upstash-backed rate limits (harness uses per-isolate memory), copy/accessibility (no user-facing copy in this package), the actual mobile client (not in write_paths). Release readiness is NOT claimed."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/w04-02/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC1",
+            "note": "VERIFIED on HEAD 90bf7e3d (re-run after the final comment-only edit). Output: 'Check file:///…/supabase/functions/api/index.ts', exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w04-02/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 913,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC2",
+            "note": "VERIFIED: 'ok | 913 passed (31 steps) | 0 failed', ignored == 0. Disposable DB = ./xc_pg_up.sh (postgres:16 + shim_auth.sql + every migration, 127.0.0.1:55433, never a hosted project). The same disposable URL is also exported as PICKLE_AUDIT_PG_URL because the 12 W06-01 golden/audit tests read that variable (docs/devin/TEST_MATRIX.md §2.2) — with XC_PG_URL alone they are ignored (12 ignored on BASE_SHA and on HEAD alike), so the literal placeholder substitution cannot reach ignored==0. An earlier HEAD-minus-pin run with XC_PG_URL only: 900 passed | 1 failed (sink inventory pin, since recorded in http_test.ts) | 12 ignored. Also VERIFIED: pnpm format:check exit 0 (artifacts/w04-02/format_check.log), git diff --check exit 0, npx eslint on all five changed files exit 0 (artifacts/w04-02/eslint_scoped.log).",
+            "passed": 913,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/w04-02/ac3_candidate.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_grants_routes.test.ts  (run at c7920a09 = BASE_SHA + ONLY the new test file, then on the candidate)",
+            "executed": 22,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC3",
+            "note": "BASE run (test-only commit c7920a09 on 2994371e): exit 1, 'FAILED | 2 passed | 20 failed' (routes 404) — artifacts/w04-02/ac3_base.log. The 2 base passes are the pure live-DB CHECK-constraint tests (SQLSTATE 23514) which hold independent of the routes. Candidate: exit 0, 22 passed | 0 failed. Allowed paths asserted: Pro subscription lease (expires = min(issued+7d, entitlement)), lifetime Pro lease (7d, verifiedEntitlementExpiresAt null), free 2-ticket and 1-ticket allocations, owner/install/release binding verified through verifyOfflineExecutionGrant. Denied paths asserted: accepted row with expires_at > issued+7d → 503 + no JWS; expires_at > entitlement_expires_at → 503; entitlement already expired → 503; malformed rows (fresh account per row) → 503; device_not_registered 409, device_not_attested 403, paywall_required 402, invalid_input 400; missing/unusable signing key and unavailable/withdrawn/corrupt release policy → no RPC call; inactive session 401; independent per-user budgets 429 + Retry-After; audit line free of owner/install key/bearer/JWS; live DB CHECKs refuse >7d and >entitlement expiry. The candidate log predates one comment-only edit to index.ts (constraint name in a doc comment); the same 22 tests re-passed inside the AC2 full-suite run (913 passed).",
+            "passed": 22,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: wrote offline_grants_routes.test.ts against the routesHarness with a stubbed PostgREST (asserting the caller bearer on RPC calls, forced p_attested=false, the ES256 grant verifying under verifyOfflineExecutionGrant with the owner/install/release binding, and refusal of >7d / >entitlement expiry / malformed rows) plus live disposable-DB tests for the SQL CHECKs; proved failure on BASE_SHA; committed alone. Then the minimal general implementation confined to write_paths plus two additive wiring edits (http.ts route words, http_test.ts sink-inventory count). All decisions stay in SQL; the edge fn only signs what SQL accepted after re-validating the row.",
+        "attachment_urls": [],
+        "base_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable> deno task test — on BASE_SHA the 12 W06-01 golden/audit tests are `ignored` because they gate on PICKLE_AUDIT_PG_URL, not XC_PG_URL (not a failure; recorded because the literal acceptance command cannot reach ignored==0 without also exporting PICKLE_AUDIT_PG_URL)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w04-02/impl-r1",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/offlineSignature.ts",
+          "supabase/functions/api/__wf__/offline_grants_routes.test.ts",
+          "supabase/functions/api/http.ts",
+          "supabase/functions/api/__wf__/http_test.ts"
+        ],
+        "head_sha": "90bf7e3db9e4ae36c9218842bd3e720feb1ab04a",
+        "out_of_scope_files": [
+          "supabase/functions/api/http.ts — additive: four static words (devices, register, offline, grants) appended to the route-template allowlist so access logs name POST /v1/devices/register and /v1/offline/grants instead of templating the segments to :id; not under any serial_group_paths prefix",
+          "supabase/functions/api/__wf__/http_test.ts — the static console-sink inventory pin moved {index.ts: 18} → {index.ts: 19} to record the one new categorical offline_grant_audit console.warn required by the objective (an inventory count, same maintenance the test exists for; no assertion removed or weakened); not under any serial_group_paths prefix"
+        ],
+        "package_id": "W04-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/offline_grants_routes.test.ts (22 tests; committed alone as c7920a09680c6cc6198db77eb7074dd4de8a1d2a)"
+        ],
+        "residual_risks": [
+          "OFFLINE_GRANT_SIGNING_JWK is not provisioned anywhere (not set in this session — no secrets touched); until it is set on the project, POST /v1/offline/grants answers generic 503 (audit reason key_unavailable) and never spends a grant. Provisioning + verifier-side public JWK distribution is a separate package.",
+          "The mobile app does not yet call either route (out of W04-02 scope).",
+          "AC2's literal command (XC_PG_URL only) leaves the 12 W06-01 golden tests ignored on both BASE and HEAD; ignored==0 requires also exporting PICKLE_AUDIT_PG_URL to the same disposable DB, as done here.",
+          "Two files outside write_paths were edited additively (http.ts allowlist words; http_test.ts inventory pin 18→19); the reviewer decides whether that is justified wiring."
+        ],
+        "summary": "Gap on BASE_SHA (VERIFIED): supabase/functions/api/index.ts had no dispatch for POST /v1/devices/register or POST /v1/offline/grants — the static-route switch (around the 'POST /v1/analysis/permits' case) fell through to 404 — and offlineSignature.ts exposed only signOfflineExecutionGrant()/verify with no key import or issuance→claims mapping, so migration 20260908160000's register_offline_device()/issue_offline_grant() RPCs were unreachable from the shipping app and nothing signed a grant (base run of the new suite: 20/22 failed with 404). Fix (HEAD 90bf7e3d, two commits: test c7920a09 then impl): offlineSignature.ts gains importOfflineGrantSigningKey(privateJwk) (strict EC/P-256/ES256 JWK, canonical 32-byte coords, single 'sign' usage, safe kid, all failures → invalid_key) and offlineGrantClaimsFromIssuance(row, binding) (re-validates every accepted RPC row — uuid grant, positive generation, strict ISO timestamps, expires>issued, duration ≤ OFFLINE_PRO_LEASE_MAX_SECONDS, Pro: 0 tickets and expiry ≤ verified entitlement expiry (null only for lifetime), free: 1–2 unique tickets + null entitlement expiry — then runs the shared validateOfflineExecutionGrantMetadata). index.ts adds registerOfflineDevice() (caller-scoped authed.db.rpc('register_offline_device', {…, p_attested: false}) — client can never claim attestation; invalid_input→400, device_environment_mismatch→409, anything else generic 503) and issueOfflineGrant() (validates body, loads OFFLINE_GRANT_SIGNING_JWK and reads readChargeableReleaseAdmission BEFORE any RPC so no grant is spent when key/release authority is unavailable; caller-scoped issue_offline_grant; device_not_registered 409 / device_not_attested 403 / paywall_required 402 / invalid_input 400; builds claims bound to owner sub, installationKeyId, issuer, audience, trusted release artifacts from the verified policy, signs only via signOfflineExecutionGrant; returns grant metadata + signed envelope + keyId), two independent per-user route budgets (device_register, offline_grants: 10/60s, 429 + Retry-After) and a categorical offline_grant_audit console.warn (outcome/reason/grantId/generation/source/keyId only). Wiring hunks in index.ts are additive (imports, new block, two budget entries, two switch cases). Pushed to origin devin/pp/w04-02/impl-r1; no PR opened; production untouched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce81aa9e-f1c3-4513-b5a0-3a1796ac740f/ac1_deno_check.log",
+            "command": "cd /home/ubuntu/repos/Pickle-Sensei && npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC1",
+            "note": "VERIFIED on HEAD 90bf7e3d. Output 'Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts', exit 0. Deno emitted pre-existing warnings that 'lock'/'nodeModulesDir' belong in the workspace-root deno.json; not introduced by the candidate.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5400c4eb-1e20-41a8-ba47-d3b45cf43a07/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 913,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC2",
+            "note": "VERIFIED on HEAD 90bf7e3d: 'ok | 913 passed (31 steps) | 0 failed', no 'ignored' in the summary. Disposable DB created by ./xc_pg_up.sh (postgres:16 container pickle-xc-pg on 127.0.0.1:55433, shim_auth.sql + every migration; production never touched). The 22 offline_grants_routes tests ran inside this suite (3 of them live-DB). Literal command with XC_PG_URL only (also run, exit 0): 901 passed | 0 failed | 12 ignored — the 12 are the W06-01 golden tests that gate on PICKLE_AUDIT_PG_URL (docs/devin/TEST_MATRIX.md §2.2), pre-existing on BASE_SHA; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/109c5b7d-5f06-4707-9269-e6f36c4a7f65/ac2_literal_xc_only.log",
+            "passed": 913,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e20475d0-5184-4eb9-a9d4-cec1e00eef43/ac3_candidate.log",
+            "command": "git worktree add <wt> 2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1 && git show 90bf7e3d:supabase/functions/api/__wf__/offline_grants_routes.test.ts > <wt>/supabase/functions/api/__wf__/offline_grants_routes.test.ts && cd <wt>/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_grants_routes.test.ts ; then same command in the candidate checkout at 90bf7e3d",
+            "executed": 22,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-02-AC3",
+            "note": "PROOF HOLDS. BASE run (2994371e + ONLY the new test file, git status showed only '?? offline_grants_routes.test.ts'): exit 1, 'FAILED | 2 passed | 20 failed' — both routes 404 and offlineGrantClaimsFromIssuance/importOfflineGrantSigningKey are not exported on base; the 2 base passes are the two 401 tests (unauthenticated / inactive session), which authenticate() rejects before routing. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/672140dd-32f6-417d-9f3b-13a4cf632b0b/ac3_base.log. CANDIDATE run (HEAD 90bf7e3d): exit 0, 'ok | 22 passed | 0 failed', 0 ignored (XC_PG_URL set so the 3 live-DB tests ran). Criterion coverage verified by reading the test file: allowed paths (Pro subscription lease expires = min(issued+7d, entitlement), lifetime Pro 7d lease, free 2-ticket and 1-ticket allocations, envelope verifies for owner+installation via verifyOfflineExecutionGrant) and denied paths (accepted row with expires_at > issued+7d → 503 no JWS; expires_at > entitlement_expires_at → 503; expired entitlement → 503; malformed rows → 503; live DB CHECKs refuse >7d and >entitlement (SQLSTATE 23514); device_not_registered 409, device_not_attested 403, paywall_required 402, invalid_input 400; missing/unusable signing key and unavailable/withdrawn release policy → no RPC; 401; 429 + Retry-After per-user budgets; access log and audit line free of owner/install key/bearer/JWS).",
+            "passed": 22,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce81aa9e-f1c3-4513-b5a0-3a1796ac740f/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5400c4eb-1e20-41a8-ba47-d3b45cf43a07/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/109c5b7d-5f06-4707-9269-e6f36c4a7f65/ac2_literal_xc_only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/672140dd-32f6-417d-9f3b-13a4cf632b0b/ac3_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e20475d0-5184-4eb9-a9d4-cec1e00eef43/ac3_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f4682f65-b4fb-4f36-84c5-ebba37b529d6/eslint_changed.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/464a3f5c-a9f0-4214-9471-885c31f56224/prettier_changed.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Implementer's AC3 note misidentifies the 2 tests that pass on BASE_SHA: on base the 2 passes are the two 401 tests ('refuses a caller whose session is no longer live (401) before any RPC' and 'refuses an unauthenticated request'), which pass because authenticate() rejects before routing; the live-DB CHECK-constraint test FAILED on base (it depends on the earlier live-DB registration tests). Does not affect the proof (20/22 fail on base, 22/22 pass on HEAD).",
+          "Implementer note says a missing signing key is 'audited (reason key_unavailable)'; the code (index.ts issueOfflineGrant) returns serviceUnavailable('Offline grant issuance', {name:'SigningKeyUnavailable'}) without an emitOfflineGrantAudit line. Behaviour (generic 503, no RPC, no grant spent) is correct and tested; only the claim wording is off.",
+          "Defence-in-depth path: if issue_offline_grant() ever returned an accepted row that offlineGrantClaimsFromIssuance refuses (>7d, >entitlement, malformed), the grant row/generation already exists in the DB while the client receives a generic 503 and no signed grant. This is unreachable in practice because the table CHECKs (verified live) refuse those rows before the RPC can return them, and the refusal is audited; noted only so a future reconcile package knows an undelivered accepted row is possible in theory.",
+          "Literal AC2 command (XC_PG_URL only) yields 901 passed | 0 failed | 12 ignored (the 12 W06-01 golden tests gate on PICKLE_AUDIT_PG_URL per docs/devin/TEST_MATRIX.md §2.2); this is pre-existing on BASE_SHA and unrelated to the candidate. ignored==0 (913 passed) is reached by also exporting PICKLE_AUDIT_PG_URL to the same disposable DB, which is what the reported AC2 run did.",
+          "OFFLINE_GRANT_SIGNING_JWK is not provisioned; until it is set, POST /v1/offline/grants answers generic 503 and spends nothing (matches implementer's residual risk; provisioning is a separate package). The mobile app does not yet call either route."
+        ],
+        "package_id": "W04-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "90bf7e3db9e4ae36c9218842bd3e720feb1ab04a",
+        "scope_violation": false,
+        "summary": "APPROVE W04-02 at reviewed_sha 90bf7e3db9e4ae36c9218842bd3e720feb1ab04a (branch devin/pp/w04-02/impl-r1, base 2994371e). SCOPE (VERIFIED via git diff --stat base..HEAD): 5 files, 1560 insertions / 1 deletion. index.ts (+300), offlineSignature.ts (+214), __wf__/offline_grants_routes.test.ts (+1041 new) are write_paths. Two out-of-scope edits are minimal additive wiring, both listed by the implementer and neither under a serial_group_paths prefix of a group this package does not hold: http.ts +4 lines (route-template allowlist words 'devices','register','offline','grants' so access logs name the new routes) and http_test.ts 1-line change of the static console-sink inventory pin {index.ts: 18}→{index.ts: 19} for the one new categorical offline_grant_audit console.warn (an inventory count the test exists to maintain; no assertion removed). The ONLY removed line in the whole diff is that pin — no existing comments modified, no migration files touched (supabase/migrations untouched; RPCs register_offline_device/issue_offline_grant come from the pre-existing 20260908160000 migration). scope_violation=false. SHIPPING PATH (VERIFIED by reading index.ts): handleRequest's authenticated static-route switch dispatches 'POST /v1/devices/register' → registerOfflineDevice(authed, request) and 'POST /v1/offline/grants' → issueOfflineGrant(authed, request); both use authed.db (caller-scoped client, RLS applies) and go through the existing authenticate() + live-session path; the 401 tests confirm. Per-user budgets added to the route-budget table: device_register and offline_grants, 10/60s each, 429 + Retry-After (tested). ACCEPTANCE (all re-run by me): AC1 frozen deno 2.5.6 check exit 0; AC2 full Edge suite with disposable postgres:16 (xc_pg_up.sh, 127.0.0.1:55433) exit 0, 913 passed / 0 failed / 0 ignored; AC3 regression proof: BASE + only the new test file → exit 1, 2 passed / 20 failed (routes 404, claim builder absent); HEAD → exit 0, 22 passed / 0 failed. regression_fails_on_base=true. INVARIANTS (VERIFIED by diff read + tests): registration always passes p_attested:false (client can never claim attestation); grant issuance validates input, loads OFFLINE_GRANT_SIGNING_JWK and reads release admission BEFORE the RPC so an unsignable request never spends a grant generation; offlineGrantClaimsFromIssuance re-validates every accepted row (uuid grant, positive generation, strict ISO timestamps, expires>issued, duration ≤ OFFLINE_PRO_LEASE_MAX_SECONDS (7d), Pro: 0 tickets and exp ≤ verified entitlement expiry with null only for lifetime, free: 1–2 unique tickets) then runs the shared metadata validator; the JWS is bound to owner sub + installationKeyId + issuer + audience + trusted release artifacts and signed only via the existing signOfflineExecutionGrant; importOfflineGrantSigningKey requires a private EC P-256 ES256 JWK with 32-byte coords, safe kid, single 'sign' usage, ext:false. RPC refusals map to 400/402/403/409 coded errors; every other failure is a generic serviceUnavailable 503. Audit line (console.warn offline_grant_audit) carries only outcome/reason/grantId/generation/entitlementSource/keyId — never owner, installation key, bearer, email or JWS (tested). No token persistence, no RLS/grant widening, no session-check weakening, no user-facing copy beyond neutral coded error messages, no Android/3D/guest scope. No forbidden patterns in added lines (grep for @ts-ignore, eslint-disable, || true, passWithNoTests, any, Deno.exit, sanitizeOps/Resources: none). Supplementary: prettier --check on the 5 changed files exit 0; eslint on the 5 changed files exit 0; git diff --check exit 0. No PR opened, nothing pushed, production Supabase untouched, no secrets read or set. Non-blocking notes recorded in non_blocking_issues (two small inaccuracies in the implementer's prose, the theoretical undelivered-accepted-row path, the 12 W06-01 ignores under the literal XC_PG_URL-only command, and unprovisioned signing key).",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-14-keep"
+}

@@ -1,0 +1,105 @@
+{
+  "agents": [
+    {
+      "label": "int-adversary-backend-sql-rls-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "5fb0056218863ff5efd0f45199730709f4cedd19bb948c0bbebd3a5c32e9cca9",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-billing-entitlement-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "181eb0c7d3069f845d4b8bc5b7f939b060e59d99549f7a0ca20c407f8bd289b5",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-charging-permits-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "ff758c7399a0fc8ad0a4ea05704de629a40a1e9a60d54deba7577c4e15fdaeb4",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-offline-lease-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "798cb2ea91c0ab89ee29003c46c190045be2ac11e3c23b81d90b06ffee28d600",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-security-privacy-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "8f788c6c30802d17fa4e39d3c81015a0277a2bfe93b0da39c071e6ae4c654477",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-state-consistency-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "a74f4c2ed6db91cd82d28cb9dd4dcb575eaf48f7ea53ad0d76b1591873bbd204",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-sync-outbox-persistence-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "cb76766bb7d2b2f3f7d0598b19b34b2262972a50a0ed0987df9638bfa3e692e3",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-deletion-managed-media-2994371e",
+      "phase": "attack",
+      "prompt_sha256": "220acb42d0a704e7bb2b7c86807f550a0bc403c4e778a6c4040edb992e77a4f2",
+      "role": "integration-adversary",
+      "status": "completed"
+    }
+  ],
+  "areas": {
+    "backend-sql-rls": {
+      "blocking": 0,
+      "breaks": 2,
+      "status": "DONE"
+    },
+    "billing-entitlement": {
+      "blocking": 0,
+      "breaks": 1,
+      "status": "DONE"
+    },
+    "charging-permits": {
+      "blocking": 4,
+      "breaks": 5,
+      "status": "DONE"
+    },
+    "deletion-managed-media": {
+      "blocking": 5,
+      "breaks": 5,
+      "status": "DONE"
+    },
+    "offline-lease": {
+      "blocking": 3,
+      "breaks": 3,
+      "status": "DONE"
+    },
+    "security-privacy": {
+      "blocking": 1,
+      "breaks": 8,
+      "status": "DONE"
+    },
+    "state-consistency": {
+      "blocking": 1,
+      "breaks": 7,
+      "status": "DONE"
+    },
+    "sync-outbox-persistence": {
+      "blocking": 1,
+      "breaks": 2,
+      "status": "DONE"
+    }
+  },
+  "fanout_id": "adv-2-offline-billing",
+  "head_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+  "lib_version": "2026-09-08.8"
+}

@@ -1,0 +1,23 @@
+{
+  "base_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+  "integration_order": {},
+  "packages": {
+    "W04-02": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w04-02/impl-r1",
+        "head_sha": "90bf7e3db9e4ae36c9218842bd3e720feb1ab04a",
+        "lane": 1,
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-14-keep"
+}

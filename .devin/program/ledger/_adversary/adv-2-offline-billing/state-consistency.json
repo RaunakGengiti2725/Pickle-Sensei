@@ -1,0 +1,134 @@
+{
+  "area": "state-consistency",
+  "breaks": [
+    {
+      "expected": "Fail closed for STORE actions (purchase/restore) — which the sibling test confirms — but the free-rating allowance is a server-authoritative read independent of the journal; a corrupt local row must not lock a free user out of rating (and out of the paywall) with no recovery path short of reinstalling. Per AGENTS.md, corrupt state must never become fabricated authorization; here it becomes a permanent, unrecoverable denial of a supported path.",
+      "observed": "VERIFIED: `clients.backend.getAccess` called 0 times across initialize(), retryPendingFulfilment(), refreshAccess() and a simulated relaunch (fresh configure + initialize). `loadAccess()` (accessStore.ts:630) awaits `loadPending()` first, which throws `billing.backend_verification_pending` on the unparsable row, so `canonicalAccess` stays null, status='error', `selectCanStartRating`=false, and the retryable error re-reads the same corrupt row on every retry. No store code path removes or quarantines an unparsable row (the only `storage.remove` is the compare-and-delete of a verified record, accessStore.ts:604).",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-01 corrupt pending-fulfilment journal row .* still consults' (exit 1; 1 failed / 0 passed of 1 executed). Real node:sqlite kv row `billing.pending-fulfilment:<owner>` = '{\"schemaVersion\":1,\"garbage\"'.",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+      "title": "A corrupt pending-fulfilment journal row blocks the server-authoritative free-allowance read forever (initialize, retry, refresh and relaunch all fail without ever calling GET /v1/me/access)"
+    },
+    {
+      "expected": "A passive refresh inside the backoff window should either not re-verify the pending record (publish the last known state) or at least not bump `attempts`/`lastAttemptAtMs`. As is, every Settings visit or Analyze unmount while offline pushes the automatic reconciliation deadline out (attempts -> exponential backoff up to the 5-minute cap) and fires an extra network request each time.",
+      "observed": "VERIFIED: `backend.syncBilling` called 4 times (expected 1) and `pendingFulfilment.attempts` = 4 (expected 1). `refreshAccess()` -> `loadAccess()` -> `verifyPending()` (accessStore.ts:546) bumps attempts, rewrites the journal and calls the backend unconditionally; `pendingFulfilmentRetryDue` is consulted only in `retryPendingFulfilment` (line 955) and automatic `reconcileBilling` (line 1037).",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-03' (exit 1; 1 failed of 1 executed). Purchase with syncBilling offline (attempts=1, lastAttemptAtMs=now, retry due in 5s), then three refreshAccess() calls within the same fake-timer instant.",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+      "title": "refreshAccess() (Settings focus / Analyze unmount) re-verifies a pending fulfilment on every call, bypassing the retry backoff and inflating `attempts`"
+    },
+    {
+      "expected": "A refresh requested during an in-flight refresh should be re-run once the in-flight one lands (or the in-flight one re-fetched), so the post-consumption snapshot is what `useRatingRouteGate`/Settings render. Server remains authoritative (no money impact), so P2.",
+      "observed": "VERIFIED: after both settle, `canonicalAccess.freeRatings.remaining`=1, `canStartRating`=true, `paywallRequired`=false (expected 0/false/true). `begin()` returns null when status==='loading' (accessStore.ts), so the newer request is discarded rather than coalesced/re-run; the only later correction is the next Settings focus. AGENTS.md documents the skip-while-in-flight behaviour for Settings, but the Analyze-unmount read (which is the one that sees the consumed permit) is subject to the same drop when it races a Settings/foreground refresh.",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-04' (exit 1; 1 failed of 1 executed). First getAccess deferred (returns 1 rating left), second refreshAccess() issued while the first is pending (server would now return 0 left).",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+      "title": "Stale access snapshot after scoring: a refreshAccess() requested while an older refresh is in flight is dropped, so the pre-consumption allowance stays published"
+    },
+    {
+      "expected": "A server-accepted onboarding profile must survive a concurrent same-owner hydrate: either the save wins (kv written, state set) or the hydrate re-reads canonical after the save. Otherwise the user is bounced back into onboarding until relaunch even though the server already holds their answers.",
+      "observed": "VERIFIED: `saveCanonicalOnboardingProfile` called once and accepted, yet final `profile` is null (expected the saved profile). The hydrate() bumps `profileRevision`, the onboarding save's post-await `assertCurrent()` fails so the local kv write is skipped, and the hydrate's canonical read (null, issued before the save landed) is published. Trigger in the shipping app: App.tsx re-runs `hydrateApp()` whenever the `session` object changes (`[desiredOwner, hydrateApp, session]`), which happens on the background silent Google restore (authStore.ts ~1130) and on the retry button — INFERRED path, store-level race VERIFIED.",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyProfileConsent.adv.test.ts -t 'ADV-12' (exit 1; 1 failed of 1 executed). completeOnboarding save deferred; hydrate() starts (canonical fetch deferred, resolves null); save resolves first, then fetch.",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyProfileConsent.adv.test.ts",
+      "title": "completeOnboarding() racing a same-owner hydrate() loses the server-accepted profile locally and in state"
+    },
+    {
+      "expected": "A pass that performs no verification should not change the user-visible error state; a dismissed error stays dismissed until a new attempt fails.",
+      "observed": "VERIFIED: `syncBilling` still called only once (nothing verified), but `reconciliation.error` is back to {code:'billing.backend_unavailable', ...} and `selectMembershipState` differs from the dismissed state. The not-due branch (accessStore.ts ~955-1037) re-publishes the tracker's last error without making a request.",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-02' (exit 1; 1 failed of 1 executed). Purchase with backend offline -> reconciliation.error set; clearError(); reconcileBilling() inside the 5s backoff.",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+      "title": "reconcileBilling() with nothing due resurrects a reconciliation error the user just dismissed"
+    },
+    {
+      "expected": "A configuration that can never become current should surface as `status:'unconfigured'` with a BillingError (as the invalid_canonical_app_user_id branch does), not as a silent idle store.",
+      "observed": "VERIFIED: after configureAccessStore({owner: A}) while the data owner is signed-out, then setActiveDataOwner(A), initialize() and refreshAccess() both return early via `begin()` -> `isCurrentConfiguration`=false -> `set(dataDefaults())`; status stays 'idle', error null, canonicalAccess null. INFERRED: authStore.ts orders setActiveDataOwner (597) before configureAccessStore (600), so the shipping caller does not hit this; it is a defensive-boundary weakness for any future caller, not a user-visible break today.",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-08' (exit 1; 1 failed of 1 executed).",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+      "title": "Billing configured with a stale/absent owner context (owner set after configureAccessStore) yields an idle store that silently ignores initialize/refresh instead of an explicit unconfigured/error state"
+    },
+    {
+      "expected": "A failed mutation that invalidated the pending hydrate should restore a resolved availability ('ready' from the last status or 'unavailable'), never leave 'loading' with nothing loading.",
+      "observed": "VERIFIED: setModelTrainingConsent() bumps `requestRevision`, so the hydrate's response is dropped (`isCurrentSession` false) and the failed mutation only sets `busy:false,error`; `availability` remains 'loading' with no in-flight work. INFERRED: ConsentSettingsScreen disables the toggle while availability !== 'ready', so the UI cannot reach this today; store-level only.",
+      "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyProfileConsent.adv.test.ts -t 'ADV-15' (exit 1; 1 failed of 1 executed).",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/stateConsistencyProfileConsent.adv.test.ts",
+      "title": "consentStore: a toggle issued during an in-flight hydrate whose own request fails leaves availability stuck at 'loading'"
+    }
+  ],
+  "head_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+  "label": "int-adversary-state-consistency-2994371e",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/749b2a4a-d91d-4d47-8da4-b22a82b69189/jest-adv-state-consistency.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d525cc5-e797-458d-8201-59627fc20c59/jest-baseline-existing.log"
+    ],
+    "attack_branch": "devin/pp/adv/state-consistency-2994371e",
+    "attack_branch_sha": "8dd470b69df9ebd01dd2b0774afdf283021262c4",
+    "attacked_sha": "2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1",
+    "attacks_tried": 18,
+    "breaks": [
+      {
+        "expected": "Fail closed for STORE actions (purchase/restore) — which the sibling test confirms — but the free-rating allowance is a server-authoritative read independent of the journal; a corrupt local row must not lock a free user out of rating (and out of the paywall) with no recovery path short of reinstalling. Per AGENTS.md, corrupt state must never become fabricated authorization; here it becomes a permanent, unrecoverable denial of a supported path.",
+        "observed": "VERIFIED: `clients.backend.getAccess` called 0 times across initialize(), retryPendingFulfilment(), refreshAccess() and a simulated relaunch (fresh configure + initialize). `loadAccess()` (accessStore.ts:630) awaits `loadPending()` first, which throws `billing.backend_verification_pending` on the unparsable row, so `canonicalAccess` stays null, status='error', `selectCanStartRating`=false, and the retryable error re-reads the same corrupt row on every retry. No store code path removes or quarantines an unparsable row (the only `storage.remove` is the compare-and-delete of a verified record, accessStore.ts:604).",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-01 corrupt pending-fulfilment journal row .* still consults' (exit 1; 1 failed / 0 passed of 1 executed). Real node:sqlite kv row `billing.pending-fulfilment:<owner>` = '{\"schemaVersion\":1,\"garbage\"'.",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+        "title": "A corrupt pending-fulfilment journal row blocks the server-authoritative free-allowance read forever (initialize, retry, refresh and relaunch all fail without ever calling GET /v1/me/access)"
+      },
+      {
+        "expected": "A passive refresh inside the backoff window should either not re-verify the pending record (publish the last known state) or at least not bump `attempts`/`lastAttemptAtMs`. As is, every Settings visit or Analyze unmount while offline pushes the automatic reconciliation deadline out (attempts -> exponential backoff up to the 5-minute cap) and fires an extra network request each time.",
+        "observed": "VERIFIED: `backend.syncBilling` called 4 times (expected 1) and `pendingFulfilment.attempts` = 4 (expected 1). `refreshAccess()` -> `loadAccess()` -> `verifyPending()` (accessStore.ts:546) bumps attempts, rewrites the journal and calls the backend unconditionally; `pendingFulfilmentRetryDue` is consulted only in `retryPendingFulfilment` (line 955) and automatic `reconcileBilling` (line 1037).",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-03' (exit 1; 1 failed of 1 executed). Purchase with syncBilling offline (attempts=1, lastAttemptAtMs=now, retry due in 5s), then three refreshAccess() calls within the same fake-timer instant.",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+        "title": "refreshAccess() (Settings focus / Analyze unmount) re-verifies a pending fulfilment on every call, bypassing the retry backoff and inflating `attempts`"
+      },
+      {
+        "expected": "A refresh requested during an in-flight refresh should be re-run once the in-flight one lands (or the in-flight one re-fetched), so the post-consumption snapshot is what `useRatingRouteGate`/Settings render. Server remains authoritative (no money impact), so P2.",
+        "observed": "VERIFIED: after both settle, `canonicalAccess.freeRatings.remaining`=1, `canStartRating`=true, `paywallRequired`=false (expected 0/false/true). `begin()` returns null when status==='loading' (accessStore.ts), so the newer request is discarded rather than coalesced/re-run; the only later correction is the next Settings focus. AGENTS.md documents the skip-while-in-flight behaviour for Settings, but the Analyze-unmount read (which is the one that sees the consumed permit) is subject to the same drop when it races a Settings/foreground refresh.",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-04' (exit 1; 1 failed of 1 executed). First getAccess deferred (returns 1 rating left), second refreshAccess() issued while the first is pending (server would now return 0 left).",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+        "title": "Stale access snapshot after scoring: a refreshAccess() requested while an older refresh is in flight is dropped, so the pre-consumption allowance stays published"
+      },
+      {
+        "expected": "A server-accepted onboarding profile must survive a concurrent same-owner hydrate: either the save wins (kv written, state set) or the hydrate re-reads canonical after the save. Otherwise the user is bounced back into onboarding until relaunch even though the server already holds their answers.",
+        "observed": "VERIFIED: `saveCanonicalOnboardingProfile` called once and accepted, yet final `profile` is null (expected the saved profile). The hydrate() bumps `profileRevision`, the onboarding save's post-await `assertCurrent()` fails so the local kv write is skipped, and the hydrate's canonical read (null, issued before the save landed) is published. Trigger in the shipping app: App.tsx re-runs `hydrateApp()` whenever the `session` object changes (`[desiredOwner, hydrateApp, session]`), which happens on the background silent Google restore (authStore.ts ~1130) and on the retry button — INFERRED path, store-level race VERIFIED.",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyProfileConsent.adv.test.ts -t 'ADV-12' (exit 1; 1 failed of 1 executed). completeOnboarding save deferred; hydrate() starts (canonical fetch deferred, resolves null); save resolves first, then fetch.",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyProfileConsent.adv.test.ts",
+        "title": "completeOnboarding() racing a same-owner hydrate() loses the server-accepted profile locally and in state"
+      },
+      {
+        "expected": "A pass that performs no verification should not change the user-visible error state; a dismissed error stays dismissed until a new attempt fails.",
+        "observed": "VERIFIED: `syncBilling` still called only once (nothing verified), but `reconciliation.error` is back to {code:'billing.backend_unavailable', ...} and `selectMembershipState` differs from the dismissed state. The not-due branch (accessStore.ts ~955-1037) re-publishes the tracker's last error without making a request.",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-02' (exit 1; 1 failed of 1 executed). Purchase with backend offline -> reconciliation.error set; clearError(); reconcileBilling() inside the 5s backoff.",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+        "title": "reconcileBilling() with nothing due resurrects a reconciliation error the user just dismissed"
+      },
+      {
+        "expected": "A configuration that can never become current should surface as `status:'unconfigured'` with a BillingError (as the invalid_canonical_app_user_id branch does), not as a silent idle store.",
+        "observed": "VERIFIED: after configureAccessStore({owner: A}) while the data owner is signed-out, then setActiveDataOwner(A), initialize() and refreshAccess() both return early via `begin()` -> `isCurrentConfiguration`=false -> `set(dataDefaults())`; status stays 'idle', error null, canonicalAccess null. INFERRED: authStore.ts orders setActiveDataOwner (597) before configureAccessStore (600), so the shipping caller does not hit this; it is a defensive-boundary weakness for any future caller, not a user-visible break today.",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyAccessStore.adv.test.ts -t 'ADV-08' (exit 1; 1 failed of 1 executed).",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyAccessStore.adv.test.ts",
+        "title": "Billing configured with a stale/absent owner context (owner set after configureAccessStore) yields an idle store that silently ignores initialize/refresh instead of an explicit unconfigured/error state"
+      },
+      {
+        "expected": "A failed mutation that invalidated the pending hydrate should restore a resolved availability ('ready' from the last status or 'unavailable'), never leave 'loading' with nothing loading.",
+        "observed": "VERIFIED: setModelTrainingConsent() bumps `requestRevision`, so the hydrate's response is dropped (`isCurrentSession` false) and the failed mutation only sets `busy:false,error`; `availability` remains 'loading' with no in-flight work. INFERRED: ConsentSettingsScreen disables the toggle while availability !== 'ready', so the UI cannot reach this today; store-level only.",
+        "repro": "cd apps/mobile && npx jest --runInBand __tests__/adv/stateConsistencyProfileConsent.adv.test.ts -t 'ADV-15' (exit 1; 1 failed of 1 executed).",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/stateConsistencyProfileConsent.adv.test.ts",
+        "title": "consentStore: a toggle issued during an in-flight hydrate whose own request fails leaves availability stuck at 'loading'"
+      }
+    ],
+    "package_id": "INT-state-consistency",
+    "summary": "INT-state-consistency adversarial pass against 2994371e1c5edf9a1e9bb12f6c6e4751e3fb4ea1 (attacked_sha = git rev-parse HEAD, VERIFIED). Attack branch devin/pp/adv/state-consistency-2994371e @ 8dd470b69df9ebd01dd2b0774afdf283021262c4 adds ONLY two new Jest files under apps/mobile/__tests__/adv/ (no production code or existing tests touched; `git status` before commit showed only `?? apps/mobile/__tests__/adv/`). Full run: `cd apps/mobile && npx jest --runInBand --verbose __tests__/adv/` -> exit 1, 2 suites, 18 executed / 11 passed / 7 failed / 0 skipped (log: artifacts/adv/state-consistency/jest-adv-state-consistency.log, uploaded above). The 7 failures are the 7 confirmed breaks in `breaks`. Baseline existing suites on the same HEAD (`npx jest --runInBand __tests__/accessStore.test.ts __tests__/billingRecovery.test.ts __tests__/consentStore.test.ts __tests__/appStorePreAuthOnboarding.test.ts`) -> exit 0, 4 suites, 122 passed / 0 failed / 0 skipped. Lint/format on the new files: root `npx eslint apps/mobile/__tests__/adv/` exit 0; `npx prettier --write` applied (root 3.9.6); `cd apps/mobile && npx tsc --noEmit -p .` reports 0 errors in __tests__/adv (pre-existing unrelated errors in src/diagnostics/sentry.ts: missing @sentry/* type packages in this checkout, not introduced by this branch — UNVERIFIED whether they reproduce in CI).\n\nATTACKS THAT DID NOT BREAK (11 passing, all under the same command; each is real evidence the boundary holds):\n- ADV-01a corrupt journal row (real node:sqlite) -> purchase/restore never reach the store SDK, no fabricated premium, fulfilmentStatus='unavailable'. PASS.\n- ADV-05 reset() mid-purchase after the store already charged -> completed purchase is journaled for the owner, next initialize verifies it and clears it, purchase() called exactly once, a second purchaseSelected() does not re-charge. PASS.\n- ADV-06 store.configure() never resolves (slow SDK) with fast backend -> after BILLING_REQUEST_TIMEOUT_MS (10s fake timers) the verified free allowance is published, status leaves 'loading'. PASS.\n- ADV-07 account switch A->B while A's attempt-bump INSERT is inside its SQLite transaction -> ROLLBACK observed, A's row stays at attempts=1, B reads null, A's backend verify never fires. PASS.\n- ADV-09 backend verdict for a journaled record lands after sign-out and re-sign-in as the SAME owner -> previous generation's verdict is not published; new generation re-verifies. PASS.\n- ADV-10a journal write fails ('disk full') right after the store charged -> completion is remembered in-process and recovered/re-verified without a second charge. PASS.\n- ADV-10b corrupt row left by an interrupted process cannot be silently replaced by a new purchase's journal write (write throws, row intact). PASS.\n- ADV-11 corrupt owner profile JSON + malformed pre-auth onboarding stash + empty canonical -> profile stays null, hydrateError not fabricated, save never called, both corrupt rows retained byte-for-byte. PASS.\n- ADV-13 local profile write fails after the server accepted onboarding -> onboardingError surfaced, no fabricated profile; relaunch hydrate recovers from canonical without re-asking or re-saving. PASS.\n- ADV-14 owner A's canonical profile fetch resolves after A signs out and B signs in -> B's profile/state intact, nothing written to A's or B's bucket from the stale response. PASS.\n- ADV-16 A's consent grant resolves after sign-out and B signs in -> B stays modelTrainingActive=false, availability 'ready', busy=false. PASS.\n\nNOT_YET_VERIFIABLE on Linux (no verdict guessed): real RevenueCat/StoreKit sandbox purchase + process kill between `purchasePackage` resolving and the SQLite journal commit; real device relaunch with a corrupt `billing.pending-fulfilment:<owner>` kv row; Keychain-vault-driven silent session restore re-running App.tsx hydrate while onboarding is mid-save (ADV-12 trigger). Mac/device command: `scripts/mac-full-verify.sh` on the coordinator-owned runner (do NOT run --remote from this branch), then a Debug build on an iPhone with a Sandbox Apple Account: `cd apps/mobile && npx react-native run-ios --device` with a breakpoint/kill after `purchasePackage` returns and before `withTransaction` commits. General conditions covered by the 18 tests: happy path (ADV-05/06/13 recovery legs), malformed input (ADV-01/10b/11), network loss (ADV-02/03/10a/15), interrupted session/process death (ADV-05/10/13), slow response (ADV-06), relaunch (ADV-01b/13), corrupted persisted state (ADV-01/10b/11), repeated/double actions (ADV-03/04/12), account switch (ADV-07/09/14/16), hydrate ordering (ADV-08/12). Missing permissions / missing media are not applicable to the store layer and were not exercised."
+  },
+  "status": "DONE"
+}
