@@ -290,6 +290,103 @@ describe('offline wallet native bridge', () => {
     expect(await loadOfflineWallet(OWNER)).toEqual(atLimit);
   });
 
+  it('refuses replace contents it could not read back, before native is called', async () => {
+    const grant = (grantId: string) => ({ grantId, compactJws: 'a.b.c' });
+    const receipt = (receiptId: string, payloadJson = '{}') => ({
+      receiptId,
+      kind: 'result' as const,
+      payloadJson,
+    });
+    const cases: Array<
+      [OfflineWalletError['failure'], string, Parameters<typeof replaceOfflineWallet>[2]]
+    > = [
+      [
+        'invalid_receipt',
+        'receipt payloadJson is not a JSON object',
+        { grants: [], receipts: [receipt('r', '\uFEFF{"a":1}')] },
+      ],
+      [
+        'invalid_receipt',
+        'receipt payloadJson is not a JSON object',
+        { grants: [], receipts: [receipt('r', '{"a":1,}')] },
+      ],
+      [
+        'invalid_receipt',
+        'receipt payloadJson is not a JSON object',
+        { grants: [], receipts: [receipt('r', '[1]')] },
+      ],
+      [
+        'invalid_receipt',
+        'receipt payloadJson is not a JSON object',
+        { grants: [], receipts: [receipt('r', '')] },
+      ],
+      [
+        'invalid_receipt',
+        'empty receiptId',
+        { grants: [], receipts: [receipt('')] },
+      ],
+      [
+        'invalid_receipt',
+        'duplicate receiptId',
+        { grants: [], receipts: [receipt('dup'), receipt('dup')] },
+      ],
+      [
+        'invalid_grant',
+        'empty grant field',
+        { grants: [grant('')], receipts: [] },
+      ],
+      [
+        'invalid_grant',
+        'empty grant field',
+        { grants: [{ grantId: 'g', compactJws: '' }], receipts: [] },
+      ],
+      [
+        'invalid_grant',
+        'duplicate grantId',
+        { grants: [grant('dup'), grant('dup')], receipts: [] },
+      ],
+      [
+        'capacity_exceeded',
+        'grant count',
+        {
+          grants: Array.from({ length: 9 }, (_, i) => grant(`g${i}`)),
+          receipts: [],
+        },
+      ],
+      [
+        'capacity_exceeded',
+        'receipt count',
+        {
+          grants: [],
+          receipts: Array.from({ length: 65 }, (_, i) => receipt(`r${i}`)),
+        },
+      ],
+    ];
+    for (const [failure, detail, contents] of cases) {
+      const error = await expectFailure(
+        replaceOfflineWallet(OWNER, 0, contents),
+        failure,
+      );
+      expect(error.message).toContain(detail);
+      expect(error.status).toBeNull();
+    }
+    expect(mockReplaceWallet).not.toHaveBeenCalled();
+
+    const atLimit = {
+      grants: Array.from({ length: 8 }, (_, i) => grant(`g${i}`)),
+      receipts: Array.from({ length: 64 }, (_, i) =>
+        receipt(`r${i}`, ' {"a":[1,{"b":null}],"c":"\\u00e9"} '),
+      ),
+    };
+    mockReplaceWallet.mockResolvedValueOnce({
+      ownerId: OWNER,
+      revision: 1,
+      ...atLimit,
+    });
+    expect((await replaceOfflineWallet(OWNER, 0, atLimit)).revision).toBe(1);
+    expect(mockReplaceWallet).toHaveBeenCalledTimes(1);
+  });
+
   it('only accepts unreadable-state failures as a discard outcome', async () => {
     for (const outcome of OFFLINE_WALLET_NATIVE_FAILURES) {
       mockDiscardCorruptWallet.mockResolvedValueOnce(outcome);

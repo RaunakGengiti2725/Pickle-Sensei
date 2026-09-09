@@ -637,6 +637,241 @@ final class OfflineWalletTests: XCTestCase {
       try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [])).revision, 1)
   }
 
+  func testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision() throws {
+    let store = MemoryWalletStore()
+    let account = OfflineWallet.walletAccount(ownerId: ownerA)
+    let fenceAccount = OfflineWallet.fenceAccount(ownerId: ownerA)
+    let crashed = OfflineWallet(store: store)
+    _ = try crashed.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    let fenceAtOne = try XCTUnwrap(store.items[fenceAccount])
+    _ = try crashed.replace(
+      ownerId: ownerA, expectedRevision: 1,
+      contents: OfflineWalletContents(grants: [], receipts: [receipt(id: "receipt-spent")])
+    )
+    store.items[fenceAccount] = fenceAtOne
+    let revisionTwoBytes = try XCTUnwrap(store.items[account])
+
+    let relaunched = OfflineWallet(store: store)
+    XCTAssertEqual(try XCTUnwrap(try relaunched.load(ownerId: ownerA)).revision, 2)
+    try relaunched.clear(ownerId: ownerA, expectedRevision: 2)
+    XCTAssertNil(try relaunched.load(ownerId: ownerA))
+    let key = try XCTUnwrap(store.items[OfflineWallet.integrityKeyAccount(ownerId: ownerA)])
+    XCTAssertEqual(
+      try OfflineWallet.openFence(try XCTUnwrap(store.items[fenceAccount]), ownerId: ownerA, key: key), 2,
+      "clear commits the fence to the revision it observed")
+
+    store.items[account] = revisionTwoBytes
+    assertFailure(.tampered, "the pre-clear envelope must not replay as current state") { try relaunched.load(ownerId: ownerA) }
+    XCTAssertEqual(try relaunched.discardCorrupt(ownerId: ownerA), .tampered)
+    let next = try relaunched.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+    XCTAssertEqual(next.revision, 3, "revision 2 was already handed out")
+  }
+
+  func testClearOfAnAbsentWalletLeavesTheFenceAlone() throws {
+    let store = MemoryWalletStore()
+    let wallet = OfflineWallet(store: store)
+    try wallet.clear(ownerId: ownerA, expectedRevision: 0)
+    XCTAssertEqual(store.writeCount, 0)
+    XCTAssertTrue(store.items.isEmpty)
+
+    _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+    try wallet.clear(ownerId: ownerA, expectedRevision: 1)
+    let fenceAfterClear = try XCTUnwrap(store.items[OfflineWallet.fenceAccount(ownerId: ownerA)])
+    let writes = store.writeCount
+    try wallet.clear(ownerId: ownerA, expectedRevision: 0)
+    XCTAssertEqual(store.writeCount, writes, "clearing nothing writes nothing")
+    XCTAssertEqual(store.items[OfflineWallet.fenceAccount(ownerId: ownerA)], fenceAfterClear)
+  }
+
+  func testClearRacingAReplaceThatAlreadyAdvancedTheFenceStillConflicts() throws {
+    let store = MemoryWalletStore()
+    let first = OfflineWallet(store: store)
+    let second = OfflineWallet(store: store)
+    _ = try first.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+
+    var interleaved = false
+    store.onReadWalletAccount = { [ownerA] account in
+      guard !interleaved, account == OfflineWallet.walletAccount(ownerId: ownerA) else { return }
+      interleaved = true
+      _ = try second.replace(
+        ownerId: ownerA, expectedRevision: 1,
+        contents: OfflineWalletContents(grants: [], receipts: [self.receipt(id: "receipt-late")])
+      )
+    }
+    assertFailure(.revisionConflict) { try first.clear(ownerId: ownerA, expectedRevision: 1) }
+    store.onReadWalletAccount = nil
+    let kept = try XCTUnwrap(try first.load(ownerId: ownerA))
+    XCTAssertEqual(kept.revision, 2)
+    XCTAssertEqual(kept.contents.receipts.map(\.receiptId), ["receipt-late"])
+  }
+
+  // MARK: - Multi-instance races around an owner's first write
+
+  /// Runs `second`'s first write for `ownerA` while `first` is between its
+  /// reads of the owner's items (`triggerAccount` is the read that fires it).
+  private func armFirstWriteRace(
+    store: MemoryWalletStore, second: OfflineWallet, triggerAccount: String, receiptId: String
+  ) -> () -> Bool {
+    var fired = false
+    store.onReadWalletAccount = { account in
+      guard !fired, account == triggerAccount else { return }
+      fired = true
+      _ = try second.replace(
+        ownerId: self.ownerA, expectedRevision: 0,
+        contents: OfflineWalletContents(grants: [], receipts: [self.receipt(id: receiptId)])
+      )
+    }
+    return { fired }
+  }
+
+  func testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable() throws {
+    for trigger in [OfflineWallet.integrityKeyAccount(ownerId: ownerA), OfflineWallet.fenceAccount(ownerId: ownerA)] {
+      let store = MemoryWalletStore()
+      let first = OfflineWallet(store: store)
+      let second = OfflineWallet(store: store)
+      let fired = armFirstWriteRace(store: store, second: second, triggerAccount: trigger, receiptId: "receipt-unsent")
+
+      let observed = try first.load(ownerId: ownerA)
+      XCTAssertTrue(fired(), trigger)
+      if let observed {
+        XCTAssertEqual(observed.revision, 1, trigger)
+        XCTAssertEqual(observed.contents.receipts.map(\.receiptId), ["receipt-unsent"], trigger)
+      }
+      store.onReadWalletAccount = nil
+      XCTAssertEqual(try XCTUnwrap(try first.load(ownerId: ownerA)).contents.receipts.map(\.receiptId), ["receipt-unsent"], trigger)
+    }
+  }
+
+  func testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet() throws {
+    for trigger in [OfflineWallet.integrityKeyAccount(ownerId: ownerA), OfflineWallet.fenceAccount(ownerId: ownerA)] {
+      let store = MemoryWalletStore()
+      let first = OfflineWallet(store: store)
+      let second = OfflineWallet(store: store)
+      let fired = armFirstWriteRace(store: store, second: second, triggerAccount: trigger, receiptId: "receipt-unsent")
+
+      assertFailure(.notCorrupt, trigger) { try first.discardCorrupt(ownerId: ownerA) }
+      XCTAssertTrue(fired(), trigger)
+      store.onReadWalletAccount = nil
+      XCTAssertEqual(store.items.count, 3, "key, fence and wallet all survive — \(trigger)")
+      let kept = try XCTUnwrap(try first.load(ownerId: ownerA), trigger)
+      XCTAssertEqual(kept.revision, 1, trigger)
+      XCTAssertEqual(kept.contents.receipts.map(\.receiptId), ["receipt-unsent"], trigger)
+    }
+  }
+
+  func testReplaceRacingAnotherInstancesFirstWriteConflictsAndKeepsTheirReceipt() throws {
+    for trigger in [OfflineWallet.integrityKeyAccount(ownerId: ownerA), OfflineWallet.fenceAccount(ownerId: ownerA)] {
+      let store = MemoryWalletStore()
+      let first = OfflineWallet(store: store)
+      let second = OfflineWallet(store: store)
+      let fired = armFirstWriteRace(store: store, second: second, triggerAccount: trigger, receiptId: "receipt-unsent")
+
+      assertFailure(.revisionConflict, trigger) {
+        try first.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+      }
+      XCTAssertTrue(fired(), trigger)
+      store.onReadWalletAccount = nil
+      XCTAssertEqual(store.items.count, 3, trigger)
+      let kept = try XCTUnwrap(try first.load(ownerId: ownerA), trigger)
+      XCTAssertEqual(kept.revision, 1, trigger)
+      XCTAssertEqual(kept.contents.receipts.map(\.receiptId), ["receipt-unsent"], trigger)
+      XCTAssertEqual(store.writesByAccount[OfflineWallet.integrityKeyAccount(ownerId: ownerA)], 1, "one key per owner — \(trigger)")
+    }
+  }
+
+  func testGenuinelyCorruptStateIsStillReportedAfterARaceFreeReRead() throws {
+    let store = MemoryWalletStore()
+    let wallet = OfflineWallet(store: store)
+    _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    store.items.removeValue(forKey: OfflineWallet.integrityKeyAccount(ownerId: ownerA))
+    assertFailure(.integrityKeyMissing) { try wallet.load(ownerId: ownerA) }
+    XCTAssertEqual(try wallet.discardCorrupt(ownerId: ownerA), .integrityKeyMissing)
+    XCTAssertTrue(store.items.isEmpty)
+  }
+
+  func testStateThatNeverSettlesFailsTypedAndDeletesNothing() throws {
+    let store = MemoryWalletStore()
+    let wallet = OfflineWallet(store: store)
+    _ = try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [grant(id: "g")], receipts: []))
+    let keyAccount = OfflineWallet.integrityKeyAccount(ownerId: ownerA)
+    let walletAccount = OfflineWallet.walletAccount(ownerId: ownerA)
+    let fenceAccount = OfflineWallet.fenceAccount(ownerId: ownerA)
+    let healthy = store.items
+    let key = try XCTUnwrap(healthy[keyAccount])
+    let goodWallet = try XCTUnwrap(healthy[walletAccount])
+
+    // Every pass observes a different, individually corrupt-looking state:
+    // key gone with a good wallet, then key back with a garbage wallet, ...
+    store.items.removeValue(forKey: keyAccount)
+    var walletReads = 0
+    store.onReadWalletAccount = { account in
+      guard account == walletAccount else { return }
+      walletReads += 1
+      if walletReads % 2 == 1 {
+        store.items[keyAccount] = key
+        store.items[walletAccount] = Data(repeating: UInt8(truncatingIfNeeded: walletReads), count: 8)
+      } else {
+        store.items.removeValue(forKey: keyAccount)
+        store.items[walletAccount] = goodWallet
+      }
+    }
+    assertFailure(.revisionConflict, "load") { try wallet.load(ownerId: ownerA) }
+    XCTAssertGreaterThanOrEqual(walletReads, 2, "the state was re-read before giving up")
+    let readsBeforeDiscard = walletReads
+    assertFailure(.revisionConflict, "discardCorrupt") { try wallet.discardCorrupt(ownerId: ownerA) }
+    XCTAssertGreaterThan(walletReads, readsBeforeDiscard)
+    XCTAssertNotNil(store.items[walletAccount], "nothing is deleted while the state is still moving")
+    XCTAssertNotNil(store.items[fenceAccount], "nothing is deleted while the state is still moving")
+    store.onReadWalletAccount = nil
+    store.items = healthy
+    XCTAssertEqual(try XCTUnwrap(try wallet.load(ownerId: ownerA)).contents.grants.map(\.grantId), ["g"])
+  }
+
+  func testConcurrentFirstWritesKeepOneKeyAndConflictTheLoser() throws {
+    let store = MemoryWalletStore()
+    let first = OfflineWallet(store: store)
+    let second = OfflineWallet(store: store)
+    let fired = armFirstWriteRace(
+      store: store, second: second, triggerAccount: OfflineWallet.walletAccount(ownerId: ownerA), receiptId: "receipt-second")
+
+    assertFailure(.revisionConflict) {
+      try first.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [receipt(id: "receipt-first")]))
+    }
+    XCTAssertTrue(fired())
+    store.onReadWalletAccount = nil
+    XCTAssertEqual(store.writesByAccount[OfflineWallet.integrityKeyAccount(ownerId: ownerA)], 1)
+    XCTAssertEqual(try XCTUnwrap(try first.load(ownerId: ownerA)).contents.receipts.map(\.receiptId), ["receipt-second"])
+  }
+
+  func testLaggingFenceCommitBehindAFasterWriterNeitherRegressesNorFails() throws {
+    let store = MemoryWalletStore()
+    let slow = OfflineWallet(store: store)
+    let fast = OfflineWallet(store: store)
+    let walletAccount = OfflineWallet.walletAccount(ownerId: ownerA)
+    let fenceAccount = OfflineWallet.fenceAccount(ownerId: ownerA)
+    _ = try slow.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: []))
+
+    var fired = false
+    store.onWrite = { [ownerA] account in
+      guard !fired, account == walletAccount else { return }
+      fired = true
+      _ = try fast.replace(
+        ownerId: ownerA, expectedRevision: 2,
+        contents: OfflineWalletContents(grants: [], receipts: [self.receipt(id: "receipt-fast")])
+      )
+    }
+    let two = try slow.replace(ownerId: ownerA, expectedRevision: 1, contents: OfflineWalletContents(grants: [self.grant(id: "g")], receipts: []))
+    XCTAssertEqual(two.revision, 2)
+    XCTAssertTrue(fired)
+    store.onWrite = nil
+
+    let key = try XCTUnwrap(store.items[OfflineWallet.integrityKeyAccount(ownerId: ownerA)])
+    XCTAssertEqual(try OfflineWallet.openFence(try XCTUnwrap(store.items[fenceAccount]), ownerId: ownerA, key: key), 3)
+    let current = try XCTUnwrap(try slow.load(ownerId: ownerA))
+    XCTAssertEqual(current.revision, 3)
+    XCTAssertEqual(current.contents.receipts.map(\.receiptId), ["receipt-fast"])
+  }
+
   // MARK: - Revision bounds
 
   func testStoredRevisionBeyondBridgeRangeIsTamperedNotReadableOrTrapping() throws {
@@ -731,7 +966,7 @@ final class OfflineWalletTests: XCTestCase {
         receiptId: "receipt-1", kind: .result,
         payloadJson: "{\"blob\":\"\(String(repeating: "x", count: OfflineWallet.Limits.maxReceiptPayloadBytes))\"}"
       ),
-    ]
+    ] + jsCannotParse.map { OfflineStoredReceipt(receiptId: "receipt-1", kind: .result, payloadJson: $0) }
     for candidate in cases {
       assertFailure(.invalidReceipt, "\(candidate.receiptId) \(candidate.payloadJson.prefix(16))") {
         try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [candidate]))
@@ -741,6 +976,88 @@ final class OfflineWalletTests: XCTestCase {
       try wallet.replace(ownerId: ownerA, expectedRevision: 0, contents: OfflineWalletContents(grants: [], receipts: [good, good]))
     }
     XCTAssertEqual(store.writeCount, 0)
+
+    let accepted = try wallet.replace(
+      ownerId: ownerA, expectedRevision: 0,
+      contents: OfflineWalletContents(
+        grants: [],
+        receipts: jsParsesAsObject.enumerated().map { OfflineStoredReceipt(receiptId: "receipt-\($0.offset)", kind: .result, payloadJson: $0.element) }
+      )
+    )
+    XCTAssertEqual(accepted.contents.receipts.map(\.payloadJson), jsParsesAsObject, "strict JSON that JSON.parse accepts stays accepted")
+  }
+
+  /// Receipt payload texts `JSON.parse` throws on (verified with node 22) even
+  /// though lenient parsers such as Foundation's `JSONSerialization` accept
+  /// some of them. Anything the native side commits must read back through the
+  /// typed bridge, so every one of these is `invalidReceipt` before any write.
+  private var jsCannotParse: [String] {
+    [
+      "\u{FEFF}{\"a\":1}",
+      "{\"a\":1,}",
+      "{\"a\":[1,]}",
+      "{'a':1}",
+      "{a:1}",
+      "{\"a\":01}",
+      "{\"a\":+1}",
+      "{\"a\":0x1}",
+      "{\"a\":NaN}",
+      "{\"a\":Infinity}",
+      "{\"a\":1.}",
+      "{\"a\":.5}",
+      "{\"a\":-}",
+      "{\"a\":1}//c",
+      "{/*c*/\"a\":1}",
+      "{\"a\":1}x",
+      "{}{}",
+      "{\"a\":1}\u{0}",
+      "\u{A0}{\"a\":1}",
+      "{\"a\":\u{A0}1}",
+      "\u{0C}{\"a\":1}",
+      "{\"a\":\u{0B}1}",
+      "{\"a\":\u{2028}1}",
+      "{\"a\":\"x\ty\"}",
+      "{\"a\":\"x\ny\"}",
+      "{\"a\":\"x\u{01}y\"}",
+      "{\"a\":\"\\x41\"}",
+      "{\"a\":\"\\u12G4\"}",
+      "{\"a\":\"\\u12\"}",
+      "{\"a\":True}",
+      "{\"a\":undefined}",
+      "{\"a\" 1}",
+      "{\"a\":}",
+      "{,}",
+      "{\"a\":1,,\"b\":2}",
+      "{\"a\":[,1]}",
+      "{\"a\":tru}",
+      "{\"a\":\"unterminated}",
+      "{\"a\":1",
+      "{\"a\":[1}",
+      " ",
+      "{\"a\":1e}",
+      "{\"a\":1e+}",
+      "{\"a\":--1}",
+      "{\"a\":\"\u{7F}\"x}",
+    ]
+  }
+
+  /// Strict JSON objects `JSON.parse` accepts (verified with node 22); the
+  /// native validator must accept exactly these shapes too.
+  private var jsParsesAsObject: [String] {
+    [
+      "{}",
+      "{\"\":1}",
+      "{\"a\":1,\"a\":2}",
+      "{\"a\":{\"b\":[1,2,{\"c\":null}]}}",
+      " \t\r\n{ \"a\" : 1 , \"b\" : [ true , false , null , -0.5e+3 ] } \n",
+      "{\"a\":1E5,\"b\":1e-5,\"c\":-0,\"d\":0.0,\"e\":12345678901234567890}",
+      "{\"a\":\"\\\"\\\\\\/\\b\\f\\n\\r\\t\\u00e9\\uD83D\\uDE00\"}",
+      "{\"a\":\"\\uD800\"}",
+      "{\"a\":\"\u{7F}\u{E9}\u{1F600}\"}",
+      "{\"a\":" + String(repeating: "[", count: 100) + String(repeating: "]", count: 100) + "}",
+      "{\"a\":[]}",
+      "{\"a\":[[],{}]}",
+    ]
   }
 
   func testCapacityLimitsAreEnforced() throws {
@@ -1095,6 +1412,7 @@ private final class MemoryWalletStore: OfflineWalletSecureStore {
   var failNextWrite: OfflineWalletError?
   var failNextRead: OfflineWalletError?
   var onReadWalletAccount: ((String) throws -> Void)?
+  var onWrite: ((String) throws -> Void)?
 
   func read(account: String) throws -> Data? {
     if let failure = failNextRead {
@@ -1117,6 +1435,7 @@ private final class MemoryWalletStore: OfflineWalletSecureStore {
     writesByAccount[account, default: 0] += 1
     writeOrder.append(account)
     items[account] = data
+    try onWrite?(account)
     return true
   }
 
