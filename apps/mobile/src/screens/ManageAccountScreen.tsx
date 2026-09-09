@@ -43,6 +43,7 @@ import { getDb } from '../data/db';
 import { getApiSession, type ApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
+  ACCOUNT_DELETION_OWNER_CHANGED_UNRESOLVED_MESSAGE,
   ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
   ACCOUNT_DELETION_UNKNOWN_MESSAGE,
   AccountDeletionError,
@@ -478,6 +479,15 @@ function DeleteAccountDialog(props: {
     return stopTimers;
   }, [entrance, props.visible, reduced]);
 
+  /** Unmounting ends the presentation: a reply that lands afterwards is
+   * not shown and schedules nothing — the journal keeps the operation. */
+  useEffect(
+    () => () => {
+      presentationRef.current += 1;
+    },
+    [],
+  );
+
   /** Page change with motion: the card re-lays out smoothly (LayoutAnimation)
    * while the new page slides in from the side it came from. */
   const goTo = (next: DeleteAccountStep, direction: PageDirection) => {
@@ -702,13 +712,23 @@ function DeleteAccountDialog(props: {
       } catch (e) {
         if (presentation !== presentationRef.current) return;
         const failure = fallback(sent);
-        const message =
-          e instanceof AccountDeletionError ? e.message : failure.message;
-        stopTimers();
-        setCompletionUnknown(
+        const unresolved =
           failure.step.phase === 'confirm_unknown' ||
-            failure.step.phase === 'observing',
-        );
+          failure.step.phase === 'observing';
+        // Refused before anything was sent, over a confirmation that HAD been
+        // sent earlier: the owner check failed, and the earlier operation is
+        // still the earlier owner's — it is not something to start again.
+        const message =
+          !sent &&
+          unresolved &&
+          e instanceof AccountDeletionError &&
+          e.code === 'deletion.rejected'
+            ? ACCOUNT_DELETION_OWNER_CHANGED_UNRESOLVED_MESSAGE
+            : e instanceof AccountDeletionError
+              ? e.message
+              : failure.message;
+        stopTimers();
+        setCompletionUnknown(unresolved);
         setStep(failure.step);
         setError(message);
       }

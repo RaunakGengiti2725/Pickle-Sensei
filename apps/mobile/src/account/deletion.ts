@@ -10,16 +10,19 @@ import { deviceKeychainForVault } from './sessionVault';
 import { makeUuid } from '../util/uuid';
 import {
   createDeletionOperationFoundation,
+  deletionPacingCapMs,
+  deletionPacingDeadline,
   type DeletionJournalRowStub,
   type DeletionOperationHandle,
   type DeletionOperationResult,
 } from './deletionOperation';
-import type {
-  DeletionHttpRequest,
-  DeletionIssue,
-  DeletionJournalEntry,
-  DeletionReceipt,
-  DeletionRuntimePort,
+import {
+  DELETION_FOUNDATION_LIMITS,
+  type DeletionHttpRequest,
+  type DeletionIssue,
+  type DeletionJournalEntry,
+  type DeletionReceipt,
+  type DeletionRuntimePort,
 } from './deletionOperationContracts';
 
 /**
@@ -114,11 +117,22 @@ export interface AccountDeletionContext extends DataOwnerContext {
 export const ACCOUNT_DELETION_UNKNOWN_MESSAGE =
   'We could not confirm whether your account was deleted. The request may have completed. Check your connection and retry, or contact support if you still cannot confirm.';
 
+/** The signed-in account changed after a confirmation for the earlier
+ * account had been sent: nothing can be asked on its behalf from here, and
+ * that deletion may still be carried out by the server. */
+export const ACCOUNT_DELETION_OWNER_CHANGED_UNRESOLVED_MESSAGE =
+  'The signed-in account changed, so this phone cannot ask the server about the earlier account’s deletion right now. That deletion was already requested and may still be carried out. Sign in with that account to check on it.';
+
 /** The server refused a request because a confirmed deletion of this
  * account is already being carried out (HTTP 409
  * `account.deletion_in_progress`). Nothing new was requested. */
 export const ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE =
   'A deletion of this account was already confirmed and is being carried out by the server. This attempt requested nothing new — close this dialog and check back later.';
+
+/** The same refusal, once the wait the server asked for has passed: what
+ * it said then is not known to hold now, so it is asked again. */
+export const ACCOUNT_DELETION_IN_PROGRESS_EARLIER_MESSAGE =
+  'The server reported earlier that a deletion of this account was already confirmed and being carried out. This attempt requested nothing new. Retry to ask the server where things stand now.';
 
 /** The journal that would say whether a confirmation was ever sent cannot
  * be read. Without it the account is not known to be present, so no new
@@ -423,6 +437,10 @@ const deletionRuntime: DeletionRuntimePort = Object.freeze({
 
 type DeletionFoundation = ReturnType<typeof createDeletionOperationFoundation>;
 
+/** One flow per foundation, so the operations it is carrying are known to
+ * every presentation of the screen over the same database. */
+const flowCache = new WeakMap<DeletionFoundation, AccountDeletionFlow>();
+
 let foundationCache: {
   readonly db: LocalDb;
   readonly foundation: DeletionFoundation;
@@ -567,7 +585,7 @@ function requestIssueMessage(issue: DeletionIssue | null): string {
       return ACCOUNT_CHANGED_MESSAGE;
     case 'rate_limited':
     case 'retry_later':
-      return 'The server asked us to wait before another attempt. Nothing was deleted.';
+      return 'Too many attempts. The server asked us to wait before another attempt. Nothing was deleted.';
     case 'raw_transactional_db_required':
     case 'journal_schema_invalid':
     case 'journal_unavailable':
@@ -625,9 +643,9 @@ function terminalMessage(
     case 'superseded':
       return {
         status: 'failed',
-        outcome: 'unknown',
+        outcome: 'nothing_deleted',
         message:
-          'A newer deletion request replaced this one. Start again to continue.',
+          'A newer deletion request replaced this one before it was confirmed. Nothing was deleted — start again when you are ready.',
       };
   }
 }
@@ -731,19 +749,38 @@ function durableState(
   };
   if (isTerminalServerState(entry)) return terminalMessage(entry.serverState);
   if (statusWindowClosed(entry, nowMs)) return statusWindowClosedState();
+  const nextAttemptAtMs = deletionPacingDeadline(
+    entry.nextAttemptAtMs,
+    nowMs,
+    deletionPacingCapMs(entry),
+  );
+  const reviewAfterMs = deletionPacingDeadline(
+    entry.reviewAfterMs ?? 0,
+    nowMs,
+    DELETION_FOUNDATION_LIMITS.reviewMilliseconds,
+  );
   switch (entry.phase) {
     case 'request_pending':
     case 'request_unknown':
       if (entry.lastIssue === 'in_progress') {
+        // The refusal holds for as long as the server asked; after that it
+        // is a fact about an earlier moment and the server is asked again.
+        if (nowMs < nextAttemptAtMs)
+          return {
+            status: 'already_in_progress',
+            message: ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+          };
         return {
-          status: 'already_in_progress',
-          message: ACCOUNT_DELETION_ALREADY_IN_PROGRESS_MESSAGE,
+          status: 'request_unknown',
+          attempt,
+          nextAttemptAtMs,
+          message: ACCOUNT_DELETION_IN_PROGRESS_EARLIER_MESSAGE,
         };
       }
       return {
         status: 'request_unknown',
         attempt,
-        nextAttemptAtMs: entry.nextAttemptAtMs,
+        nextAttemptAtMs,
         message:
           entry.lastIssue === null ||
           entry.lastIssue === 'unknown' ||
@@ -763,10 +800,7 @@ function durableState(
       return {
         status: 'ready',
         attempt,
-        reviewAfterMs: Math.max(
-          entry.reviewAfterMs ?? 0,
-          entry.nextAttemptAtMs,
-        ),
+        reviewAfterMs: Math.max(reviewAfterMs, nextAttemptAtMs),
         message: null,
       };
     case 'receipt_pending':
@@ -777,14 +811,14 @@ function durableState(
       return {
         status: 'confirm_unknown',
         attempt,
-        nextAttemptAtMs: entry.nextAttemptAtMs,
+        nextAttemptAtMs,
         message: unresolvedConfirmationMessage(entry),
       };
     case 'confirm_pending':
       return {
         status: 'confirm_unknown',
         attempt,
-        nextAttemptAtMs: entry.nextAttemptAtMs,
+        nextAttemptAtMs,
         message: unresolvedConfirmationMessage(entry),
       };
     case 'observing':
@@ -792,12 +826,12 @@ function durableState(
         ? {
             status: 'in_progress',
             attempt,
-            nextAttemptAtMs: entry.nextAttemptAtMs,
+            nextAttemptAtMs,
           }
         : {
             status: 'confirm_unknown',
             attempt,
-            nextAttemptAtMs: entry.nextAttemptAtMs,
+            nextAttemptAtMs,
             message: unresolvedConfirmationMessage(entry),
           };
     case 'receipt_verified':
@@ -807,7 +841,7 @@ function durableState(
         return {
           status: 'confirm_unknown',
           attempt,
-          nextAttemptAtMs: entry.nextAttemptAtMs,
+          nextAttemptAtMs,
           message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
         };
       }
@@ -874,6 +908,11 @@ function resumable(
 }
 
 function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
+  /** Jobs this flow is carrying right now (a send or poll still awaiting
+   * its reply). A second presentation of the same owner meeting one of
+   * them is told the outcome is not yet known — the account did not change. */
+  const carrying = new Set<string>();
+
   /** The completion a job's journal row already proves: a receipt the
    * transport verified against the operation, kept even when the Keychain
    * refused the seal. A Keychain that contradicts it proves nothing. */
@@ -947,21 +986,27 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
     unresolved: (reason: DeletionIssue | null) => AccountDeletionState,
   ): Promise<AccountDeletionState> {
     if (attempt.kind !== 'durable') return unresolved(null);
-    let result: DeletionOperationResult | null = attempt.handle
-      ? await run(attempt.handle)
-      : null;
-    if (
-      result === null ||
-      (result.kind === 'held' &&
-        result.reason === 'stale_handler' &&
-        result.jobId === undefined)
-    ) {
-      const reopened = await foundation.open(attempt.jobId);
-      if (reopened.kind !== 'available')
-        return settle(reopened, unresolved, true);
-      result = await run(reopened.handle);
+    if (carrying.has(attempt.jobId)) return unresolved(null);
+    carrying.add(attempt.jobId);
+    try {
+      let result: DeletionOperationResult | null = attempt.handle
+        ? await run(attempt.handle)
+        : null;
+      if (
+        result === null ||
+        (result.kind === 'held' &&
+          result.reason === 'stale_handler' &&
+          result.jobId === undefined)
+      ) {
+        const reopened = await foundation.open(attempt.jobId);
+        if (reopened.kind !== 'available')
+          return settle(reopened, unresolved, true);
+        result = await run(reopened.handle);
+      }
+      return settle(result, unresolved);
+    } finally {
+      carrying.delete(attempt.jobId);
     }
-    return settle(result, unresolved);
   }
 
   function requestBody(
@@ -998,6 +1043,13 @@ function durableFlow(foundation: DeletionFoundation): AccountDeletionFlow {
         .filter(entry => resumable(entry, context, apiOrigin, nowMs))
         .sort((a, b) => b.createdAtMs - a.createdAtMs);
       for (const candidate of candidates) {
+        if (carrying.has(candidate.jobId) && confirmationSent(candidate))
+          return confirmUnresolved({
+            kind: 'durable',
+            jobId: candidate.jobId,
+            operationId: candidate.operationId,
+            handle: null,
+          })(null);
         const opened = await foundation.open(candidate.jobId);
         if (opened.kind === 'available') {
           const state = durableState(opened.entry, opened.handle, nowMs);
@@ -1210,5 +1262,10 @@ export function durableAccountDeletionFlow(
   openDb: () => LocalDb,
 ): AccountDeletionFlow | null {
   const foundation = durableDeletionFoundation(openDb);
-  return foundation ? durableFlow(foundation) : null;
+  if (!foundation) return null;
+  const cached = flowCache.get(foundation);
+  if (cached) return cached;
+  const flow = durableFlow(foundation);
+  flowCache.set(foundation, flow);
+  return flow;
 }

@@ -126,6 +126,27 @@ function remoteIssue(reply: DeletionTransportFailure): DeletionIssue {
   return reply.kind === 'stale' ? 'stale_handler' : reply.kind;
 }
 
+/** The longest wait the foundation stamps before another attempt on `entry`:
+ * a server-asked Retry-After is honoured up to a day, local backoff caps at
+ * a minute. */
+export function deletionPacingCapMs(entry: DeletionJournalEntry): number {
+  return entry.lastIssue === 'in_progress' || entry.lastIssue === 'rate_limited'
+    ? 86_400_000
+    : 60_000;
+}
+
+/** A pacing deadline is a wall-clock stamp. When the clock reads further
+ * before it than any wait that could have been stamped, the clock has moved
+ * backwards since; the wait then counts as served instead of being re-run
+ * for the length of the rollback. */
+export function deletionPacingDeadline(
+  deadline: number,
+  nowMs: number,
+  capMs: number,
+): number {
+  return deadline - nowMs > capMs ? nowMs : deadline;
+}
+
 export function createDeletionOperationFoundation(
   input: DeletionFoundationDependencies,
 ) {
@@ -225,6 +246,11 @@ export function createDeletionOperationFoundation(
         throw new DeletionFoundationError('stale_handler');
       return operation({ context: ticket.context, entry: current });
     });
+  }
+
+  function paced(deadline: number | null, capMs: number): boolean {
+    if (deadline === null) return false;
+    return now() < deletionPacingDeadline(deadline, now(), capMs);
   }
 
   function delay(
@@ -452,7 +478,7 @@ export function createDeletionOperationFoundation(
           throw new DeletionFoundationError('request_unknown');
         if (context.activeOwner.ownerKey !== entry.ownerId)
           throw new DeletionFoundationError('session_required');
-        if (now() < entry.nextAttemptAtMs)
+        if (paced(entry.nextAttemptAtMs, deletionPacingCapMs(entry)))
           throw new DeletionFoundationError('retry_later');
         const pending = await update(entry, { phase: 'request_pending' });
         return submitRequest(pending, context, body);
@@ -466,11 +492,16 @@ export function createDeletionOperationFoundation(
           throw new DeletionFoundationError('session_required');
         if (entry.phase !== 'ready')
           throw new DeletionFoundationError('confirmation_unknown');
-        if (now() < entry.reviewAfterMs!)
+        if (
+          paced(
+            entry.reviewAfterMs,
+            DELETION_FOUNDATION_LIMITS.reviewMilliseconds,
+          )
+        )
           throw new DeletionFoundationError('review_required');
         if (now() >= Date.parse(entry.expiresAt!))
           throw new DeletionFoundationError('confirmation_expired');
-        if (now() < entry.nextAttemptAtMs)
+        if (paced(entry.nextAttemptAtMs, deletionPacingCapMs(entry)))
           throw new DeletionFoundationError('retry_later');
         const record = await secure(entry);
         requireCurrent(context);
@@ -498,7 +529,7 @@ export function createDeletionOperationFoundation(
           throw new DeletionFoundationError('request_unknown');
         if (now() >= Date.parse(entry.statusExpiresAt!))
           throw new DeletionFoundationError('status_expired');
-        if (now() < entry.nextAttemptAtMs)
+        if (paced(entry.nextAttemptAtMs, deletionPacingCapMs(entry)))
           throw new DeletionFoundationError('retry_later');
         const record = await secure(entry);
         requireCurrent(context);
