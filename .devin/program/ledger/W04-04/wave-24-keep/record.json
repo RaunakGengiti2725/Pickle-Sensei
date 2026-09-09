@@ -12,7 +12,21 @@
       "phase": "implement",
       "prompt_sha256": "d3bd6647adf0d71e3562fb0f723c6079829d6b2eab1a8e2c6f151ee762680ea1",
       "role": "implementer",
-      "status": "launched"
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-04-r3",
+      "phase": "review",
+      "prompt_sha256": "613c790f353e094acbb066580d7be40bbbad0e75da7d64e89ccef35dc4242fc2",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-04-r3",
+      "phase": "adversary",
+      "prompt_sha256": "1d269223e8a49164ccb780322f8e33d043ff30f1fe614a5930a8df77d11bf618",
+      "role": "adversary",
+      "status": "completed"
     }
   ],
   "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
