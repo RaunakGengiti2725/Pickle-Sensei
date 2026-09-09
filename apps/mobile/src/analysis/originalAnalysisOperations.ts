@@ -32,11 +32,13 @@ import {
 import { makeUuid } from '../util/uuid';
 import {
   isSettledRefusalRun,
+  isSettledRefusalTechnicalFailure,
   readPartialCaptureAnalysisRecord,
   readPartialOutcome,
   readReservationRefusal,
   type PartialOutcomeMarker,
 } from './partialOutcome';
+import { ensureOriginalAnalysisSchema } from './originalAnalysisSchema';
 import { commitPracticeSet } from './practiceSet';
 import {
   analysisAttemptJournal,
@@ -216,6 +218,8 @@ async function currentTransaction<T>(
 ): Promise<T> {
   rawOnly(db);
   execution.assertCurrent();
+  await ensureOriginalAnalysisSchema(db);
+  execution.assertCurrent();
   const value = await withTransaction(db, async tx => {
     execution.assertCurrent();
     const result = await operation(tx);
@@ -329,7 +333,10 @@ function decodeOperation(
  * same attempt is what a later run of the operation reconnects to when its
  * mechanics record has not landed yet. */
 export function isSettledRefusal(attempt: OriginalAnalysisAttempt): boolean {
-  return attempt.technicalFailure === null && isSettledRefusalRun(attempt.run);
+  return (
+    isSettledRefusalTechnicalFailure(attempt.technicalFailure) &&
+    isSettledRefusalRun(attempt.run)
+  );
 }
 async function read(
   db: LocalDb,
@@ -1240,14 +1247,15 @@ async function commit(
     const partial = readPartialOutcome(record);
     if (
       (withheld === null
-        ? attempt.run.state !== 'reserved' || partial !== null
+        ? attempt.run.state !== 'reserved' ||
+          partial !== null ||
+          attempt.technicalFailure !== null
         : !isSettledRefusal(attempt) ||
           partial === null ||
           originalCanonicalJson(partial) !== originalCanonicalJson(withheld) ||
           originalCanonicalJson(
             await readReservationRefusal(tx, attempt.run),
           ) !== originalCanonicalJson(withheld)) ||
-      attempt.technicalFailure !== null ||
       !recordMatches(operation, attempt.run, record) ||
       operation.finalRecordId !== null ||
       (await hasProduct(tx, operation))

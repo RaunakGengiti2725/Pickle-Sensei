@@ -93,10 +93,16 @@ export const RUN_JOURNAL_DDL: readonly string[] = [
     END`,
 ];
 
-/** Additive storage version. Never migrate a legacy request into an invented
- * original snapshot, or remove its unique analysis-id/transition controls. */
-export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS analysis_logical_operations (
+export const ORIGINAL_ANALYSIS_OPERATIONS_TABLE = 'analysis_logical_operations';
+
+export const ORIGINAL_ANALYSIS_COMPLETION_KINDS = [
+  'scored',
+  'low_confidence',
+  'needs_technique_confirmation',
+  'partial',
+] as const;
+
+export const ORIGINAL_ANALYSIS_OPERATIONS_DDL = `CREATE TABLE IF NOT EXISTS analysis_logical_operations (
     owner_key TEXT NOT NULL,
     operation_id TEXT NOT NULL,
     capture_id TEXT NOT NULL,
@@ -126,7 +132,12 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
     CHECK ((final_record_id IS NULL AND winning_attempt_id IS NULL AND completion_kind IS NULL) OR
       (final_record_id IS NOT NULL AND final_record_id = analysis_id AND winning_attempt_id IS NOT NULL AND
        current_attempt_id IS NOT NULL AND winning_attempt_id = current_attempt_id AND completion_kind IS NOT NULL))
-  )`,
+  )`;
+
+/** Additive storage version. Never migrate a legacy request into an invented
+ * original snapshot, or remove its unique analysis-id/transition controls. */
+export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
+  ORIGINAL_ANALYSIS_OPERATIONS_DDL,
   `CREATE TABLE IF NOT EXISTS analysis_execution_attempts (
     owner_key TEXT NOT NULL,
     operation_id TEXT NOT NULL,
@@ -255,7 +266,8 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
         WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.winning_attempt_id AND a.analysis_id = NEW.final_record_id
           AND ((NEW.completion_kind = 'scored' AND a.state = 'committed' AND a.result_id = NEW.analysis_id) OR
             (NEW.completion_kind = 'partial' AND a.state = 'terminal' AND a.terminal_reason = 'reservation_rejected'
-              AND a.permit_id IS NULL AND a.result_id IS NULL AND a.technical_failure IS NULL
+              AND a.permit_id IS NULL AND a.result_id IS NULL
+              AND (a.technical_failure IS NULL OR a.technical_failure = 'reservation_transport')
               AND EXISTS (SELECT 1 FROM analysis_reservation_refusal f WHERE f.owner_key = a.owner_key
                 AND f.operation_id = a.operation_id AND f.analysis_id = a.analysis_id AND f.capture_id = a.capture_id)) OR
             (NEW.completion_kind NOT IN ('scored','partial') AND a.state = 'release_pending' AND a.release_outcome = 'low_confidence'))))
@@ -283,7 +295,7 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
         SELECT 1 FROM analysis_execution_attempts a WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.operation_id
           AND a.analysis_id = NEW.analysis_id AND a.capture_id = NEW.capture_id AND a.state = 'terminal'
           AND a.terminal_reason = 'reservation_rejected' AND a.permit_id IS NULL AND a.result_id IS NULL
-          AND a.technical_failure IS NULL)
+          AND (a.technical_failure IS NULL OR a.technical_failure = 'reservation_transport'))
     BEGIN SELECT RAISE(ABORT, 'Reservation refusal requires a settled permit-less run'); END`,
   `CREATE TRIGGER IF NOT EXISTS analysis_reservation_refusal_immutable
     BEFORE UPDATE ON analysis_reservation_refusal

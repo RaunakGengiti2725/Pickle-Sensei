@@ -87,11 +87,13 @@ import {
 import {
   OriginalAnalysisExecution,
   OriginalAnalysisHeldError,
+  isSettledRefusal,
   originalAnalysisOperations,
   type AnalysisTechnicalFailure,
   type OriginalAnalysisAttempt,
   type OriginalAnalysisOperation,
 } from './originalAnalysisOperations';
+import { ensureOriginalAnalysisSchema } from './originalAnalysisSchema';
 import {
   assertOriginalClip,
   captureExecutionDefinitionHash,
@@ -102,6 +104,7 @@ import {
 import {
   isReleaseNotAuthorized,
   isSettledRefusalRun,
+  isSettledRefusalTechnicalFailure,
   partialOutcomeMarker,
   readPartialCaptureAnalysisRecord,
   readPartialOutcome,
@@ -782,6 +785,22 @@ export async function reconcileOriginalCaptureAnalysis(
     { operationId: attempt.run.operationId, limit: 1 },
   );
   execution.assertCurrent();
+  // A settled, permit-less refusal is a fully determined outcome: nothing is
+  // held any more, so reconciliation finishes it by delivering the withheld
+  // mechanics on the SAME attempt. No reservation is made; the resume path
+  // refuses anything else and reports recovery as still pending.
+  const settled = await originalAnalysisOperations.readAttempt(
+    db,
+    operation,
+    attempt.run.operationId,
+  );
+  execution.assertCurrent();
+  if (
+    !isSettledRefusal(settled) ||
+    (await readReservationRefusal(db, settled.run)) === null
+  )
+    return;
+  await runOriginalCaptureAnalysis({ db, execution, operationId });
 }
 
 /** Same saved movie and immutable settings only. No camera, picker, present-day
@@ -795,6 +814,8 @@ export async function runOriginalCaptureAnalysis(
   let finish: (() => void) | undefined;
   let finishAdmission: (() => void) | undefined;
   try {
+    execution.assertCurrent();
+    await ensureOriginalAnalysisSchema(db);
     execution.assertCurrent();
     const completed = await originalCompletionOutcome(
       db,
@@ -827,10 +848,11 @@ export async function runOriginalCaptureAnalysis(
           .includes(previous.run.operationId)
       )
         return recoveryPendingOutcome();
-      const refusal =
-        previous.technicalFailure === null
-          ? await readReservationRefusal(db, previous.run)
-          : null;
+      const refusal = isSettledRefusalTechnicalFailure(
+        previous.technicalFailure,
+      )
+        ? await readReservationRefusal(db, previous.run)
+        : null;
       execution.assertCurrent();
       if (refusal) {
         if (

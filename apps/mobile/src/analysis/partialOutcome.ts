@@ -22,9 +22,17 @@ import type { RunJournalEntry, RunJournalIdentity } from './runJournal';
  */
 export const RELEASE_NOT_AUTHORIZED_CODE = 'access.release_not_authorized';
 
-/** The authority's contract statement, used only when its body carried none. */
+/** The app-owned statement of the settled refusal. It is the ONLY copy a
+ * partial ever stores, replays or renders: the authority's free-text body is
+ * never persisted or shown, so no score, confidence, range, percentage or
+ * forbidden term can reach the athlete through it. */
 export const RELEASE_NOT_AUTHORIZED_MESSAGE =
   'Validated ratings are not available right now. No rating was counted.';
+
+/** Allow-listed refusal codes and the statement Result shows for each. */
+const PARTIAL_OUTCOME_STATEMENTS: ReadonlyMap<string, string> = new Map([
+  [RELEASE_NOT_AUTHORIZED_CODE, RELEASE_NOT_AUTHORIZED_MESSAGE],
+]);
 
 const REASON_CODE_MAX_LENGTH = 128;
 const MESSAGE_MAX_LENGTH = 512;
@@ -37,7 +45,7 @@ export interface PartialOutcomeMarker {
   readonly withheld: PartialOutcomeWithheld;
   /** Typed refusal code the release authority answered the reservation with. */
   readonly reasonCode: string;
-  /** The server's own settled statement ("No rating was counted"). */
+  /** The app-owned statement for `reasonCode` ("No rating was counted"). */
   readonly message: string;
 }
 
@@ -64,14 +72,11 @@ export function isReleaseNotAuthorized(error: unknown): error is ApiError {
 }
 
 /** Normalizes the settled refusal once; storage, replay and Result all read
- * this same bounded marker. */
+ * this same bounded marker. Only the typed code is taken from the refusal. */
 export function partialOutcomeMarker(refusal: ApiError): PartialOutcomeMarker {
-  const raw: unknown = refusal.message;
-  const message =
-    typeof raw === 'string' && raw.length > 0
-      ? raw.slice(0, MESSAGE_MAX_LENGTH)
-      : RELEASE_NOT_AUTHORIZED_MESSAGE;
-  return marker(RELEASE_NOT_AUTHORIZED_CODE, message);
+  if (!isReleaseNotAuthorized(refusal))
+    throw new TypeError('Not a settled release refusal.');
+  return marker(RELEASE_NOT_AUTHORIZED_CODE, RELEASE_NOT_AUTHORIZED_MESSAGE);
 }
 
 function marker(reasonCode: string, message: string): PartialOutcomeMarker {
@@ -82,6 +87,33 @@ function marker(reasonCode: string, message: string): PartialOutcomeMarker {
     reasonCode,
     message,
   });
+}
+
+/** A stored code/message pair becomes a marker only when the code is
+ * allow-listed; the stored message is bounded text but never trusted — the
+ * app-owned statement for that code is what carries. */
+function storedMarker(
+  reasonCode: unknown,
+  message: unknown,
+): PartialOutcomeMarker | null {
+  if (
+    !text(reasonCode, REASON_CODE_MAX_LENGTH) ||
+    !text(message, MESSAGE_MAX_LENGTH)
+  )
+    return null;
+  const statement = PARTIAL_OUTCOME_STATEMENTS.get(reasonCode);
+  return statement === undefined ? null : marker(reasonCode, statement);
+}
+
+/** The attempt technical failure a settled refusal may carry: none, or the
+ * transport failure of the reservation try whose recovery re-reserve the
+ * authority then refused. Any other failure is a different, unsettled run. */
+export function isSettledRefusalTechnicalFailure(
+  technicalFailure: string | null,
+): technicalFailure is null | 'reservation_transport' {
+  return (
+    technicalFailure === null || technicalFailure === 'reservation_transport'
+  );
 }
 
 /** A run the authority refused before any permit existed: terminal
@@ -127,12 +159,10 @@ export function readPartialOutcome(
     !isRecord(stored) ||
     stored.status !== 'partial' ||
     stored.billingDisposition !== 'not_chargeable' ||
-    stored.withheld !== 'technique_benchmark' ||
-    !text(stored.reasonCode, REASON_CODE_MAX_LENGTH) ||
-    !text(stored.message, MESSAGE_MAX_LENGTH)
+    stored.withheld !== 'technique_benchmark'
   )
     return null;
-  return marker(stored.reasonCode, stored.message);
+  return storedMarker(stored.reasonCode, stored.message);
 }
 
 /**
@@ -177,14 +207,7 @@ export async function readReservationRefusal(
   );
   const row = rows[0];
   if (!row) return null;
-  const reasonCode = row['reason_code'];
-  const message = row['message'];
-  if (
-    !text(reasonCode, REASON_CODE_MAX_LENGTH) ||
-    !text(message, MESSAGE_MAX_LENGTH)
-  )
-    return null;
-  return marker(reasonCode, message);
+  return storedMarker(row['reason_code'], row['message']);
 }
 
 /**
@@ -212,9 +235,14 @@ export function readPartialCaptureAnalysisRecord(
     !text(value.engineVersion, 64) ||
     value.engineVersion !== row.engineVersion ||
     row.scoringModelVersion !== 'abstained' ||
-    !isStrokeIntentEnvelope(value.strokeIntent) ||
-    readPartialOutcome(value) === null
+    !isStrokeIntentEnvelope(value.strokeIntent)
   )
     return null;
-  return stored as PartialCaptureAnalysisRecord;
+  const partialOutcome = readPartialOutcome(value);
+  if (partialOutcome === null) return null;
+  return {
+    ...(stored as PartialCaptureAnalysisRecord),
+    result: null,
+    partialOutcome,
+  };
 }
