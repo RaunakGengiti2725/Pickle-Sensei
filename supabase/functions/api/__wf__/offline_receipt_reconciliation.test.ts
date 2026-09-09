@@ -1378,6 +1378,139 @@ Deno.test(
   },
 );
 
+/** The active authority FROZEN (deny_new_authorizations) but NOT withdrawn:
+ * the reversible operator control, distinct from withdrawal. */
+function frozenActiveRow(): Record<string, unknown> {
+  const base = releasePolicyRow.approval as Record<string, unknown>;
+  return {
+    ...releasePolicyRow,
+    denyNewAuthorizations: true,
+    approval: { ...base, withdrawnAt: null, denyNewAuthorizations: true },
+  };
+}
+
+Deno.test(
+  "a reversible deny-new freeze on the release is not a withdrawal: chargeable work under it is answered pending (nothing durable, no settle RPC), an abstention is still recorded, and the identical redelivery settles once the freeze is lifted",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = freeClaims(user.sub);
+    const grant = await sign(claims);
+    const abstention = output("70000041-0404-4000-8000-000000000041", {
+      resultKind: "low_confidence",
+      overallScore: null,
+    });
+    const notChargeable = await receipt({
+      receiptId: "receipt-abstain-frozen",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_A, claims),
+      lifecycleSequence: 1,
+      operationId: "operation-abstain-frozen",
+      resultId: "70000041-0404-4000-8000-000000000041",
+      fullOutputSha256: await digestCanonicalOfflineJson(abstention),
+      billingDisposition: "not_chargeable",
+    });
+    const scored = output("70000042-0404-4000-8000-000000000042");
+    const chargeable = await receipt({
+      receiptId: "receipt-scored-frozen",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_B, claims),
+      lifecycleSequence: 2,
+      operationId: "operation-scored-frozen",
+      resultId: "70000042-0404-4000-8000-000000000042",
+      fullOutputSha256: await digestCanonicalOfflineJson(scored),
+    });
+    const batch = {
+      receipts: [
+        { receipt: notChargeable, grant, output: abstention },
+        { receipt: chargeable, grant, output: scored },
+      ],
+    };
+    h.rpcs.read_analysis_release_policy = frozenActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: frozenActiveRow() });
+    const frozen = await post(batch, user.token);
+    const frozenBody = await readJson(frozen);
+    assertEquals(frozen.status, 200, JSON.stringify(frozenBody));
+    const out = frozenBody.results as RouteResult[];
+    assertEquals(out[0].delivery, "settled");
+    assertEquals(out[0].reconciliation?.status, "result_recorded");
+    assertEquals(out[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(out[1].delivery, "pending");
+    assertEquals(out[1].reconciliation, {
+      schemaVersion: "offline-reconciliation-v1",
+      receiptId: "receipt-scored-frozen",
+      ownerId: user.sub,
+      status: "pending",
+      financialDisposition: "reserved",
+    });
+    // Only the abstention reached the database; the frozen receipt decided
+    // nothing durable and its ticket is untouched.
+    assertEquals(settleCalls().length, 1);
+    assertEquals(settleCalls()[0].p_hold_reason, null);
+    assertEquals(durable.size, 1);
+    assertEquals(durable.has(`${user.sub}:receipt-scored-frozen`), false);
+
+    // Redelivered while still frozen: pending again, still nothing durable.
+    const again = await results(await post(batch, user.token));
+    assertEquals(again[1].delivery, "pending");
+    assertEquals(durable.size, 1);
+
+    // The operator lifts the freeze; the very same batch settles the work.
+    h.rpcs.read_analysis_release_policy = releasePolicyRow;
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: releasePolicyRow });
+    const lifted = await results(await post(batch, user.token));
+    assertEquals(lifted[0].delivery, "replayed");
+    assertEquals(lifted[1].delivery, "settled");
+    assertEquals(lifted[1].reconciliation?.status, "result_recorded");
+    assertEquals(lifted[1].reconciliation?.financialDisposition, "consumed");
+    assertEquals(durable.size, 2);
+  },
+);
+
+Deno.test(
+  "a reversible freeze on a Pro lease (no ticket) answers pending with not_applicable, and a withdrawal that follows the freeze is the durable grant_revoked HOLD",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = proClaims(user.sub);
+    const grant = await sign(claims);
+    const scored = output("70000043-0404-4000-8000-000000000043");
+    const lease = await receipt({
+      receiptId: "receipt-lease-frozen",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 1,
+      operationId: "operation-lease-frozen",
+      resultId: "70000043-0404-4000-8000-000000000043",
+      fullOutputSha256: await digestCanonicalOfflineJson(scored),
+    });
+    const batch = { receipts: [{ receipt: lease, grant, output: scored }] };
+    h.rpcs.read_analysis_release_policy = frozenActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: frozenActiveRow() });
+    const frozen = await results(await post(batch, user.token));
+    assertEquals(frozen[0].delivery, "pending");
+    assertEquals(frozen[0].reconciliation?.financialDisposition, "not_applicable");
+    assertEquals(settleCalls().length, 0);
+    assertEquals(durable.size, 0);
+
+    h.rpcs.read_analysis_release_policy = withdrawnActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: withdrawnActiveRow() });
+    const withdrawn = await results(await post(batch, user.token));
+    assertEquals(withdrawn[0].delivery, "held");
+    assertEquals(withdrawn[0].reconciliation?.reasonCode, "grant_revoked");
+    assertEquals(withdrawn[0].reconciliation?.financialDisposition, "not_applicable");
+    assertEquals(settleCalls().length, 1);
+    assertEquals(settleCalls()[0].p_hold_reason, "grant_revoked");
+    assertEquals(durable.size, 1);
+  },
+);
+
 Deno.test(
   "a lineage row that fails integrity verification is a server fault: 503, nothing settled, no durable hold — the identical receipt settles once the row is repaired",
   async () => {

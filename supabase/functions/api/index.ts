@@ -5203,8 +5203,16 @@ function offlineReceiptVerificationView(
 }
 
 type OfflineReceiptReleaseLineage =
-  | { readonly release: OfflineReleasedArtifacts; readonly hold: null | "grant_revoked" }
-  | { readonly release: null; readonly hold: "evidence_ambiguous" };
+  | {
+      readonly release: OfflineReleasedArtifacts;
+      readonly hold: null | "grant_revoked";
+      /** deny_new_authorizations is set on a release that is NOT withdrawn:
+       * a reversible operator freeze, under which chargeable work is
+       * answered pending (nothing durable) until it is lifted or the
+       * release is withdrawn. */
+      readonly frozen: boolean;
+    }
+  | { readonly release: null; readonly hold: "evidence_ambiguous"; readonly frozen: false };
 
 /** The release a delayed receipt's grant must verify against: the artifacts
  * of the policy the grant was issued under (`release.policy.sha256` in its
@@ -5213,7 +5221,10 @@ type OfflineReceiptReleaseLineage =
  * with the HOLD the lineage decides for chargeable work under it. A
  * withdrawn release still verifies the grants issued under it — its
  * abstentions are recorded, its chargeable work is a grant_revoked HOLD; an
- * unknown lineage is ambiguous evidence. Whether the release was admissible
+ * unknown lineage is ambiguous evidence. A release under a deny-new freeze
+ * that is not withdrawn is `frozen`: the freeze is reversible, so it decides
+ * nothing durable about chargeable work already done under the release —
+ * the receipt is answered pending and redelivered. Whether the release was admissible
  * when the grant was issued is what the grant's signature attests (the
  * issuer judged it then, on its own trusted clock), so it is not re-derived
  * here; only the lineage's standing NOW is. A read that fails
@@ -5231,7 +5242,7 @@ async function offlineReceiptReleaseLineage(
   const release = payload === null ? null : payload.release;
   const named = isRecord(release) && isRecord(release.policy) ? release.policy.sha256 : null;
   if (typeof named !== "string" || !/^[0-9a-f]{64}$/.test(named)) {
-    return { release: null, hold: "evidence_ambiguous" };
+    return { release: null, hold: "evidence_ambiguous", frozen: false };
   }
   let policy = policies.get(named);
   if (policy === undefined) {
@@ -5242,13 +5253,16 @@ async function offlineReceiptReleaseLineage(
     );
     policies.set(named, policy);
   }
-  if (!policy) return { release: null, hold: "evidence_ambiguous" };
+  if (!policy) return { release: null, hold: "evidence_ambiguous", frozen: false };
   const artifacts = offlineReleaseArtifacts(policy);
-  const revoked =
-    policy.approval.denyNewAuthorizations ||
-    (typeof policy.approval.withdrawnAt === "number" &&
-      policy.approval.withdrawnAt <= nowEpochSeconds);
-  return { release: artifacts, hold: revoked ? "grant_revoked" : null };
+  const withdrawn =
+    typeof policy.approval.withdrawnAt === "number" &&
+    policy.approval.withdrawnAt <= nowEpochSeconds;
+  return {
+    release: artifacts,
+    hold: withdrawn ? "grant_revoked" : null,
+    frozen: !withdrawn && policy.approval.denyNewAuthorizations,
+  };
 }
 
 /** Why this receipt must be HELD instead of settled, or null when its
@@ -5353,7 +5367,9 @@ function offlineReconciliationFromRow(
  *   replayed — this exact receipt was settled earlier; the same verdict again
  *   held     — recorded as reconciliation_required, ticket still reserved
  *   pending  — nothing recorded: the session the rating names has not synced
- *              yet; the ticket stays reserved and the same receipt is redelivered
+ *              yet, or the release the grant names is under a reversible
+ *              deny-new freeze; the ticket stays reserved and the same
+ *              receipt is redelivered
  *   rejected — malformed, or a DIFFERENT receipt already holds this id
  * The route is idempotent under redelivery and order-independent because
  * every entry is decided inside settle_offline_receipt() under the owner's
@@ -5409,18 +5425,42 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     }
     const { receipt, output } = parsed;
     let holdReason: OfflineReceiptHoldReason | null;
+    let frozen: boolean;
     let receiptSha256: string;
     try {
+      const lineage = await offlineReceiptReleaseLineage(parsed.grant, policies, nowEpochSeconds);
+      frozen = lineage.frozen;
       holdReason = await offlineReceiptHoldReason(
         authed,
         keyRing,
-        await offlineReceiptReleaseLineage(parsed.grant, policies, nowEpochSeconds),
+        lineage,
         nowEpochSeconds,
         parsed,
       );
       receiptSha256 = await digestCanonicalOfflineJson(receipt);
     } catch (error) {
       return serviceUnavailable("Offline receipt settlement", error);
+    }
+    if (holdReason === null && frozen && receipt.billingDisposition !== "not_chargeable") {
+      // Complete, bound evidence for chargeable work under a release the
+      // operator has frozen but not withdrawn: nothing durable is decided
+      // (the freeze may lift, or become a withdrawal) — the ticket stays
+      // reserved and the identical redelivery is judged then.
+      const reconciliation = offlineReconciliationFromRow(receipt, {
+        status: "pending",
+        financial_disposition: receipt.ticket === null ? "not_applicable" : "reserved",
+      });
+      if (!reconciliation) {
+        return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcRow" });
+      }
+      tally.pending += 1;
+      results.push({
+        receiptId: receipt.receiptId,
+        delivery: "pending",
+        reconciliation,
+        error: null,
+      });
+      continue;
     }
 
     const settled = await authed.db.rpc("settle_offline_receipt", {

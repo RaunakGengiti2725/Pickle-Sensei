@@ -16,9 +16,20 @@
 --   * chargeable + an output that is not this scored result
 --                                        → HOLD evidence_ambiguous
 --   * chargeable + this scored result     → result_recorded
--- financial_disposition stays not_applicable on every lease path. Nothing
--- else about the function changes. The applied migrations are not edited;
--- this later one replaces the function body.
+-- financial_disposition stays not_applicable on every lease path.
+--
+-- The ticket branch had the mirror gap for a not_chargeable receipt: it
+-- recorded the abstention without reading the ticket's ledger, so an
+-- abstention claimed under a ticket the ledger already CONSUMED (another
+-- rating paid with it) or RELEASED (the device returned it) became a durable
+-- result_recorded / reserved verdict — a settlement asserting a ticket state
+-- the ledger contradicts, never reconcilable because the exact redelivery
+-- replays it. The ledger is read under the ticket lock exactly as
+-- consume_offline_ticket() reads it: a terminal event on the ticket is a
+-- conflicting_receipt HOLD, ticket untouched.
+--
+-- Nothing else about the function changes. The applied migrations are not
+-- edited; this later one replaces the function body.
 
 create or replace function public.settle_offline_receipt(
   p_receipt jsonb,
@@ -225,7 +236,16 @@ begin
       v_status := 'reconciliation_required';
       v_reason := 'evidence_ambiguous';
     elsif v_billing = 'not_chargeable' then
-      if p_output is null
+      if exists (
+        select 1 from public.offline_allocation_ledger t
+        where t.ticket_id = v_ticket_id and t.event in ('consumed', 'released')
+      ) then
+        -- The ledger already closed this ticket (another rating consumed it,
+        -- or the device returned it): an abstention claimed under it tells
+        -- another story than the ledger. Held, ticket left as it is.
+        v_status := 'reconciliation_required';
+        v_reason := 'conflicting_receipt';
+      elsif p_output is null
          or (p_output ->> 'id' is not distinct from v_result_id
              and p_output ->> 'resultKind' is distinct from 'scored') then
         -- An abstention: the result is recorded, the ticket stays outstanding

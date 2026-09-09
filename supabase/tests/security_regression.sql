@@ -10261,6 +10261,24 @@ begin
     raise exception 'U3: the held ticket was never reclaimed and settles once with verified evidence (got %, %, %)',
       v.delivery, u_probe.events(uri), public.lifetime_scored_count();
   end if;
+  -- an abstention claimed under the ticket the ledger just CONSUMED is
+  -- contradictory evidence (the mirror of rcpt-2): a conflicting_receipt
+  -- HOLD, never a result_recorded verdict asserting a reserved ticket
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-11b', uri, 'uri-key-1', g, t2, 1, 'op-11b', '00000000-0000-4000-8000-00000000482a', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt'
+     or v.financial_disposition <> 'reserved' or v.result_id is not null
+     or u_probe.events(uri) <> 'allocated:2,consumed:2' then
+    raise exception 'U3: a not_chargeable receipt under a consumed ticket is held as conflicting_receipt (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, u_probe.events(uri);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-11b', uri, 'uri-key-1', g, t2, 1, 'op-11b', '00000000-0000-4000-8000-00000000482a', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt' then
+    raise exception 'U3: the conflicting abstention replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
   -- and a Pro (no-ticket) receipt records its result with no financial disposition
   select * into v from u_probe.settle(
     u_probe.receipt('rcpt-12', uri, 'uri-key-1', g, null, null, 'op-12', '00000000-0000-4000-8000-000000004819', 'joint_verification_required'),
@@ -10382,7 +10400,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   perform set_config('request.jwt.claims', claims, true);
-  if u_probe.recorded(uri) <> 22 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
+  if u_probe.recorded(uri) <> 23 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
     raise exception 'U4: refused calls persist nothing (got %)', u_probe.settlements(uri);
   end if;
 end $$;
@@ -10446,7 +10464,7 @@ begin
     raise exception 'U5: a hold can never be recorded as consumed';
   exception when check_violation then null;
   end;
-  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 22
+  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 23
      or (select status || '/' || financial_disposition from public.offline_receipt_settlements
          where user_id = uri and receipt_id = 'rcpt-3') <> 'reconciliation_required/reserved' then
     raise exception 'U5: the refused writes leave every settlement intact';
@@ -10798,6 +10816,32 @@ begin
   if u2_probe.recorded(uma) <> 3 or u2_probe.events(uma) <> 'allocated:2,consumed:1' or public.lifetime_scored_count() <> 1 then
     raise exception 'U8: three durable verdicts, one rating, the refused receipt persisted nothing (got %, %, %)',
       u2_probe.recorded(uma), u2_probe.events(uma), public.lifetime_scored_count();
+  end if;
+  -- the device returns t2; an abstention that then arrives claiming the
+  -- RELEASED ticket contradicts the ledger: a conflicting_receipt HOLD, not a
+  -- result_recorded verdict asserting the ticket is still reserved
+  if public.release_offline_ticket(t2, 'unused_ticket_returned') <> 'accepted'
+     or u2_probe.events(uma) <> 'allocated:2,consumed:1,released:1' then
+    raise exception 'U8 precondition: the outstanding ticket is released (got %)', u2_probe.events(uma);
+  end if;
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-released', uma, 'uma-key-1', g, t2, 1, 'op3-released', '00000000-0000-4000-8000-000000004925', 'not_chargeable'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004925', 'low_confidence'), null);
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.status <> 'reconciliation_required'
+     or v.reason_code <> 'conflicting_receipt' or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U8: a not_chargeable receipt under a released ticket is held as conflicting_receipt (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-released', uma, 'uma-key-1', g, t2, 1, 'op3-released', '00000000-0000-4000-8000-000000004925', 'not_chargeable'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004925', 'low_confidence'), null);
+  if v.delivery <> 'replayed' or v.reason_code <> 'conflicting_receipt' then
+    raise exception 'U8: the conflicting abstention replays its hold (got %, %)', v.delivery, v.reason_code;
+  end if;
+  if u2_probe.recorded(uma) <> 4 or u2_probe.events(uma) <> 'allocated:2,consumed:1,released:1'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004925') then
+    raise exception 'U8: the hold is durable, writes no rating and moves no ticket (got %, %)',
+      u2_probe.recorded(uma), u2_probe.events(uma);
   end if;
 end $$;
 reset role;
