@@ -109,7 +109,17 @@ import {
   redisConfigured,
   sha256Hex,
 } from "./cache.ts";
-import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import {
+  type AuthCredentialIdentity,
+  authCredentialIdentity,
+  type AuthRefusalKind,
+  authRefusalKind,
+  chargeAuthFailure,
+  enforceRateLimit,
+  noteMintedSession,
+  peekAuthFailureBudget,
+  rateLimitResponse,
+} from "./rateLimit.ts";
 import {
   accessLogEntry,
   clientIp,
@@ -757,8 +767,44 @@ function authUpstreamTimeoutMs(): number {
 
 type AuthVerdict<T> =
   | { kind: "ok"; value: T }
-  | { kind: "refused"; status: number; detail: ReturnType<typeof failureDetail> }
+  | {
+      kind: "refused";
+      status: number;
+      detail: ReturnType<typeof failureDetail>;
+      refusal: AuthRefusalKind;
+    }
   | { kind: "unavailable"; detail: ReturnType<typeof failureDetail>; retryAfterSeconds: number };
+
+/** Supabase Auth's verdict behind a 401, attached to the response so the
+ * dispatcher charges the credential's shard and — for a credential Auth does
+ * not recognise — the egress's stuffing signal. A 401 decided at this edge
+ * (no bearer, malformed, expired, fenced) carries none and charges nothing. */
+interface AuthRefusal {
+  identity: AuthCredentialIdentity;
+  kind: AuthRefusalKind;
+}
+
+const authRefusalOf = new WeakMap<Response, AuthRefusal>();
+
+function refusedByAuth(
+  response: Response,
+  identity: AuthCredentialIdentity,
+  kind: AuthRefusalKind,
+): Response {
+  authRefusalOf.set(response, { identity, kind });
+  return response;
+}
+
+/** The 429 for a credential held by its own shard or by its egress's
+ * stuffing signal, or null when Supabase Auth may be asked about it. Counts
+ * nothing: only a refusal Auth actually issues is charged. */
+async function heldByAuthFailureBudget(
+  request: Request,
+  identity: AuthCredentialIdentity,
+): Promise<Response | null> {
+  const budget = await peekAuthFailureBudget(clientIp(request), identity, AUTH_FAILURE_LIMIT);
+  return budget.allowed ? null : rateLimitResponse(budget);
+}
 
 interface AuthUserLike {
   id: string;
@@ -977,6 +1023,7 @@ async function authRequest<T>(
       kind: "refused",
       status: answer.status,
       detail: authResponseErrorDetail(answer.status, body),
+      refusal: authRefusalKind(body),
     };
   }
   if (answer.status >= 200 && answer.status < 300) {
@@ -1109,6 +1156,18 @@ function sessionView(session: SupabaseSessionLike) {
   };
 }
 
+/** `sessionView` for a session this edge just minted: both tokens are
+ * remembered so they pass the auth-failure gate while their egress is under
+ * a co-tenant's stuffing, and Auth answering "refresh token not found" for
+ * the refresh token later is a sign-out, not a guess. `rotatedFrom` is the
+ * refresh token this session was rotated from, which keeps only the reuse
+ * interval's grace. */
+async function mintedSessionView(session: SupabaseSessionLike, rotatedFrom?: string) {
+  const view = sessionView(session);
+  await noteMintedSession(view, rotatedFrom);
+  return view;
+}
+
 /** A Supabase user's sign-in provider, from app_metadata. `provider` is the
  * first identity; `providers` lists every linked one. */
 function providerOfUser(user: {
@@ -1149,6 +1208,9 @@ async function authenticateProviderToken(request: Request): Promise<
   if (typeof providerSubject !== "string" || !providerSubject) {
     return errorJson(401, "The identity token has no subject.");
   }
+  const identity = await authCredentialIdentity(token);
+  const held = await heldByAuthFailureBudget(request, identity);
+  if (held) return held;
   const signIn = await anonAuthClient(request)
     .auth.signInWithIdToken({ provider, token })
     .catch((error: unknown) => ({ data: { user: null, session: null }, error }));
@@ -1156,7 +1218,11 @@ async function authenticateProviderToken(request: Request): Promise<
     if (isRetryableAuthError(signIn.error)) {
       return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
     }
-    return errorJson(401, "The identity token could not be verified.");
+    return refusedByAuth(
+      errorJson(401, "The identity token could not be verified."),
+      identity,
+      authRefusalKind(signIn.error),
+    );
   }
   return {
     authed: {
@@ -1206,6 +1272,10 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   }
   if (cached.authed) return cached.authed;
 
+  const identity = await authCredentialIdentity(token);
+  const held = await heldByAuthFailureBudget(request, identity);
+  if (held) return held;
+
   if (provider) {
     const signIn = await anonAuthClient(request)
       .auth.signInWithIdToken({ provider, token })
@@ -1214,7 +1284,11 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
       if (isRetryableAuthError(signIn.error)) {
         return serviceUnavailable("Sign-in verification", authErrorDetail(signIn.error));
       }
-      return errorJson(401, "The identity token could not be verified.");
+      return refusedByAuth(
+        errorJson(401, "The identity token could not be verified."),
+        identity,
+        authRefusalKind(signIn.error),
+      );
     }
     await writeAuthCache(
       cacheKey,
@@ -1242,7 +1316,11 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     });
   }
   if (verified.kind === "refused") {
-    return errorJson(401, "The session is no longer valid. Sign in again.");
+    return refusedByAuth(
+      errorJson(401, "The session is no longer valid. Sign in again."),
+      identity,
+      verified.refusal,
+    );
   }
   const user = verified.value;
   const sessionProvider = providerOfUser(user);
@@ -1322,6 +1400,9 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   ) {
     return codedError(400, "validation.refresh", "refreshToken is required.");
   }
+  const identity = await authCredentialIdentity(refreshToken);
+  const held = await heldByAuthFailureBudget(request, identity);
+  if (held) return held;
   const rotated = await rotateRefreshToken(request, refreshToken.trim());
   if (rotated.kind === "unavailable") {
     return serviceUnavailable("Session refresh", rotated.detail, {
@@ -1329,9 +1410,13 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
     });
   }
   if (rotated.kind === "refused") {
-    return errorJson(401, "The session could not be refreshed. Sign in again.");
+    return refusedByAuth(
+      errorJson(401, "The session could not be refreshed. Sign in again."),
+      identity,
+      rotated.refusal,
+    );
   }
-  return json(200, { session: sessionView(rotated.value) });
+  return json(200, { session: await mintedSessionView(rotated.value, refreshToken.trim()) });
 }
 
 /** POST /v1/auth/logout — revoke the calling device's session (scope=local:
@@ -5168,7 +5253,7 @@ async function bootstrapAccount(
   return json(200, {
     user: { id: profile.id, email: profile.email },
     onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
-    session: sessionView(session),
+    session: await mintedSessionView(session),
   });
 }
 
@@ -5289,13 +5374,6 @@ async function handleRequest(request: Request): Promise<Response> {
   // probing) — those never even reach Supabase Auth once tripped.
   const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
-  const authFailures = await peekRateLimit(
-    "authfail",
-    ip,
-    AUTH_FAILURE_LIMIT.limit,
-    AUTH_FAILURE_LIMIT.windowSeconds,
-  );
-  if (!authFailures.allowed) return rateLimitResponse(authFailures);
 
   // The gateway may present the pathname as /functions/v1/api/v1/… or /api/v1/…
   // depending on where it strips the mount prefix — route on everything from
@@ -5307,11 +5385,13 @@ async function handleRequest(request: Request): Promise<Response> {
 
   // Atomic INCR on the aligned auth-failure window (peeked above) — never a
   // read-then-write, so concurrent bad bearers cannot under-count.
-  const recordAuthFailure = () =>
-    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+  const recordAuthFailure = async (refused: Response) => {
+    const refusal = authRefusalOf.get(refused);
+    if (!refusal) return;
+    await chargeAuthFailure(ip, refusal.identity, refusal.kind, AUTH_FAILURE_LIMIT);
+  };
 
   if (isAccountDeletionStatusCapability(bearerOf(request))) {
-    await recordAuthFailure();
     return errorJson(401, "A deletion status capability cannot authorize this route.");
   }
 
@@ -5330,7 +5410,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     const exchanged = await authenticateProviderToken(request);
     if (exchanged instanceof Response) {
-      if (exchanged.status === 401) await recordAuthFailure();
+      if (exchanged.status === 401) await recordAuthFailure(exchanged);
       return exchanged;
     }
     const userLimit = await enforceRateLimit(
@@ -5356,13 +5436,13 @@ async function handleRequest(request: Request): Promise<Response> {
     );
     if (!rl.allowed) return rateLimitResponse(rl);
     const refreshed = await refreshSessionRoute(request);
-    if (refreshed.status === 401) await recordAuthFailure();
+    if (refreshed.status === 401) await recordAuthFailure(refreshed);
     return refreshed;
   }
 
   const authed = await authenticate(request);
   if (authed instanceof Response) {
-    if (authed.status === 401) await recordAuthFailure();
+    if (authed.status === 401) await recordAuthFailure(authed);
     return authed;
   }
 
