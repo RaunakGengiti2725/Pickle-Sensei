@@ -1676,6 +1676,40 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
       }
     });
 
+    it('fallback (journal unavailable): a 409 account.deletion_blocked answering the confirmation is the same unresolved outcome — never a keepable account, never a fresh request', async () => {
+      mockDatabaseUnavailable = true;
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', blockedError(), 409),
+      });
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await press(renderer, sheetButton(renderer, 'Permanently delete'));
+        await act(async () => {});
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expectHeldAfterConfirmation(renderer);
+        expect(allText(renderer)).toContain('may have completed');
+        expect(allText(renderer)).not.toContain(
+          'This account cannot be deleted right now.',
+        );
+        expect(journalAbsent()).toBe(true);
+
+        // Asking again presents the SAME confirmation; the same answer stays
+        // unresolved and mints no request.
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expect(calls('delete-confirm')).toHaveLength(2);
+        expect(bodyOf(calls('delete-confirm')[1]!)).toEqual({
+          challenge: deletionId(11),
+          operationId: deletionId(10),
+        });
+        expect(calls('delete-request')).toHaveLength(1);
+        expectHeldAfterConfirmation(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
     it('a `blocked` operation is never reclaimed from a full journal: the unresolved record outlives the capacity squeeze', async () => {
       let requests = 0;
       route({
@@ -2812,6 +2846,75 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
           act(() => later.unmount());
         }
       });
+
+      it.each([
+        [
+          'a 401 (the bearer no longer authenticates)',
+          () => reply('delete-request', sessionInvalidError(), 401),
+        ],
+        [
+          'a network loss',
+          () => Promise.reject(new TypeError('Network request failed')),
+        ],
+      ])(
+        'a re-ask answered by %s keeps the server\'s last word: "Deletion in progress" with Close only — never "Nothing has been deleted", never "Keep my account", and re-entry agrees',
+        async (_answer, reAsk) => {
+          let requests = 0;
+          route({
+            'delete-request': () => {
+              requests += 1;
+              return requests === 1
+                ? reply('delete-request', deletionInProgressError(), 409)
+                : reAsk();
+            },
+          });
+          const jobId = await refusedAsInProgress();
+
+          await advance(8 * DAY_MS);
+          const later = renderScreen();
+          try {
+            await openDeleteSheet(later);
+            expect(calls('delete-request')).toHaveLength(2);
+            expect(headerOf(calls('delete-request')[1]!, 'Authorization')).toBe(
+              `Bearer ${BEARER_A}`,
+            );
+            expectAlreadyConfirmed(later);
+            expectNotDeleted(later);
+            expect(sheetButtons(later, 'Retry request')).toHaveLength(0);
+            expect(journalRows()).toMatchObject([
+              {
+                owner_id: OWNER_A,
+                operation_id: null,
+                phase: 'request_unknown',
+              },
+            ]);
+            expect(journalDocument(journalRows()[0]!)).toMatchObject({
+              jobId,
+              lastIssue: 'in_progress',
+            });
+          } finally {
+            act(() => later.unmount());
+          }
+
+          // Re-entry reads the same row: the refusal still stands (it is
+          // re-asked once more, under the same job) and nothing is re-armed.
+          await advance(8 * DAY_MS);
+          const again = renderScreen();
+          try {
+            await openDeleteSheet(again);
+            expect(calls('delete-request')).toHaveLength(3);
+            expectAlreadyConfirmed(again);
+            expectNotDeleted(again);
+            expect(journalRows()).toHaveLength(1);
+            expect(journalDocument(journalRows()[0]!)).toMatchObject({
+              jobId,
+              lastIssue: 'in_progress',
+            });
+          } finally {
+            act(() => again.unmount());
+          }
+        },
+      );
 
       it('a refusal that is still true when re-asked stays "Deletion in progress" — one call per re-check, one row, never "nothing was deleted"', async () => {
         route({
