@@ -179,7 +179,7 @@ Deno.test("cascade children and the permit sweep are indexed on their lookup col
   for (const index of REQUIRED_INDEXES) {
     const statements = statementsOf(chain, index.migration);
     const create = statements.find((s) =>
-      s.startsWith(`create index if not exists ${index.name} `)
+      s.startsWith(`create index if not exists ${index.name} `),
     );
     ok(create, `${index.migration} must create ${index.name}`);
     ok(
@@ -217,7 +217,7 @@ Deno.test("permit sweep: the pg_cron predicate and the partial index stay in ste
   );
 
   const sweepIndex = statementsOf(chain, PERMITS_SWEEP_INDEX).find((s) =>
-    s.startsWith("create index if not exists analysis_permits_reserved_created_idx ")
+    s.startsWith("create index if not exists analysis_permits_reserved_created_idx "),
   );
   ok(sweepIndex, "the partial sweep index must be created");
   ok(
@@ -242,7 +242,7 @@ Deno.test(
     // decision points redefined on top of lifetime_scored_count().
     ok(
       ledger.statements.some((s) =>
-        s.startsWith("create table if not exists public.free_rating_ledger ")
+        s.startsWith("create table if not exists public.free_rating_ledger "),
       ),
       "the ledger migration must create public.free_rating_ledger",
     );
@@ -256,7 +256,7 @@ Deno.test(
       ledger.statements.some((s) =>
         s.startsWith(
           "create trigger shots_record_free_rating_ledger after insert or update of result_kind on public.shots",
-        )
+        ),
       ),
       "the ledger must be written by a trigger on scored shot inserts",
     );
@@ -296,7 +296,7 @@ Deno.test(
             statement.startsWith("drop trigger") &&
             statement.includes("shots_record_free_rating_ledger") &&
             !migration.statements.some((s) =>
-              s.startsWith("create trigger shots_record_free_rating_ledger ")
+              s.startsWith("create trigger shots_record_free_rating_ledger "),
             )
           ),
           `${migration.file} drops the ledger trigger without recreating it`,
@@ -420,7 +420,7 @@ Deno.test("captured_at: shots and captures carry a finite, sane-range check", as
     const check = hygiene.find((s) =>
       new RegExp(
         `alter table public\\.${table} add constraint ${table}_captured_at_bounds check \\(`,
-      ).test(s)
+      ).test(s),
     );
     ok(check, `${ERROR_HYGIENE} must add ${table}_captured_at_bounds`);
     ok(
@@ -477,7 +477,7 @@ Deno.test(
       gate.some((s) =>
         s.startsWith(
           "create trigger shots_enforce_scored_permit before insert on public.shots for each row execute function public.enforce_scored_shot_permit()",
-        )
+        ),
       ),
       `${SCORED_WRITE_GATE} must install the BEFORE INSERT gate on public.shots`,
     );
@@ -488,10 +488,9 @@ Deno.test(
       "the gate function must not be client-executable",
     );
     ok(
-      /alter table public\.shots add constraint shots_low_confidence_unscored check \(\s*result_kind = 'scored' or overall_score is null\s*\) not valid/
-        .test(
-          gateRaw.toLowerCase(),
-        ),
+      /alter table public\.shots add constraint shots_low_confidence_unscored check \(\s*result_kind = 'scored' or overall_score is null\s*\) not valid/.test(
+        gateRaw.toLowerCase(),
+      ),
       `${SCORED_WRITE_GATE} must add shots_low_confidence_unscored (NOT VALID — no deploy-time rescan)`,
     );
     const [body] = functionBodies(gateRaw, "enforce_scored_shot_permit");
@@ -542,7 +541,7 @@ Deno.test(
       link.some((s) =>
         s.startsWith(
           "create trigger on_auth_identity_linked after insert on auth.identities for each row execute function public.inherit_free_rating_ledger()",
-        )
+        ),
       ),
       `${LATE_LINK_LEDGER} must install the AFTER INSERT trigger on auth.identities`,
     );
@@ -645,12 +644,10 @@ Deno.test(
           `${migration.file}: apply_synced_shot must keep accepting reserved | released+expired permits at any age`,
         );
       }
-      for (
-        const body of functionBodies(
-          stripSqlComments(migration.raw),
-          "enforce_scored_shot_permit",
-        )
-      ) {
+      for (const body of functionBodies(
+        stripSqlComments(migration.raw),
+        "enforce_scored_shot_permit",
+      )) {
         ok(
           /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(body),
           `${migration.file}: enforce_scored_shot_permit must keep the 24h live-permit rule for direct INSERTs`,
@@ -725,10 +722,9 @@ Deno.test(
         gate.includes(
           "errcode = case when v_vouched is not null then 'pkp02' else 'insufficient_privilege' end",
         ) &&
-        /errcode = 'insufficient_privilege',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/
-          .test(
-            gate,
-          ),
+        /errcode = 'insufficient_privilege',\s+message = [^\n]*\n\s+hint = 'access\.permit_not_reserved'/.test(
+          gate,
+        ),
       "vouched refusals must raise the verdict SQLSTATEs (PKP01 permit / PKP02 allowance); direct-INSERT refusals stay 42501",
     );
 
@@ -842,7 +838,7 @@ Deno.test(
       "the table-level INSERT grant must be replaced by a column grant without id/created_at/updated_at",
     );
     const reserveDefs = chain.flatMap((m) =>
-      functionBodies(stripSqlComments(m.raw), "reserve_analysis_permit")
+      functionBodies(stripSqlComments(m.raw), "reserve_analysis_permit"),
     );
     ok(reserveDefs.length > 0, "reserve_analysis_permit must be defined in the chain");
     for (const def of reserveDefs) {
@@ -893,10 +889,9 @@ Deno.test(
       rpc.includes("where s.analysis_permit_id = v_permit_id") &&
         rpc.includes("return 'access.permit_not_reserved'") &&
         /insert into public\.shots \([^)]*\banalysis_permit_id\b/.test(rpc) &&
-        /when unique_violation then[\s\S]*?analysis_permit_id = v_permit_id[\s\S]*?return 'access\.permit_not_reserved'/
-          .test(
-            rpc,
-          ),
+        /when unique_violation then[\s\S]*?analysis_permit_id = v_permit_id[\s\S]*?return 'access\.permit_not_reserved'/.test(
+          rpc,
+        ),
       "apply_synced_shot must refuse a permit id already recorded on a shot, write the link, and map the index race to access.permit_not_reserved",
     );
     const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
@@ -964,10 +959,9 @@ Deno.test(
     //    revoked, no policy, cascades away with the profile.
     ok(
       statements.some((s) =>
-        /^create table if not exists public\.analysis_permit_tombstones \( permit_id uuid primary key, user_id uuid not null references public\.profiles \(id\) on delete cascade,/
-          .test(
-            s,
-          )
+        /^create table if not exists public\.analysis_permit_tombstones \( permit_id uuid primary key, user_id uuid not null references public\.profiles \(id\) on delete cascade,/.test(
+          s,
+        ),
       ) &&
         statements.includes(
           "alter table public.analysis_permit_tombstones enable row level security",
@@ -976,7 +970,7 @@ Deno.test(
           "revoke all on public.analysis_permit_tombstones from public, anon, authenticated",
         ) &&
         !statements.some((s) =>
-          /^create policy .* on public\.analysis_permit_tombstones\b/.test(s)
+          /^create policy .* on public\.analysis_permit_tombstones\b/.test(s),
         ),
       "analysis_permit_tombstones must be keyed by permit id, cascade from profiles, have RLS on, no client grants and no policies",
     );
@@ -1059,10 +1053,9 @@ Deno.test(
     const [rpc] = functionBodies(raw, "apply_synced_shot");
     ok(rpc, `${PERMIT_SETTLED_NO_DELETE} must recreate public.apply_synced_shot`);
     ok(
-      /if not found then\s+if public\.permit_tombstoned\(v_permit_id\) then\s+return 'access\.permit_not_reserved';\s+end if;\s+return 'access\.permit_not_found';/
-        .test(
-          rpc,
-        ) &&
+      /if not found then\s+if public\.permit_tombstoned\(v_permit_id\) then\s+return 'access\.permit_not_reserved';\s+end if;\s+return 'access\.permit_not_found';/.test(
+        rpc,
+      ) &&
         rpc.includes("where s.analysis_permit_id = v_permit_id") &&
         rpc.includes("public.permit_backs_sync(") &&
         rpc.includes("public.lifetime_scored_count() >= 2"),
@@ -1099,13 +1092,11 @@ Deno.test(
           `${later.file} disables a trigger on public.analysis_permits: ${statement}`,
         );
       }
-      for (
-        const trigger of [
-          "analysis_permits_guard_delete",
-          "analysis_permits_guard_resurrection",
-          "analysis_permits_guard_lifecycle",
-        ]
-      ) {
+      for (const trigger of [
+        "analysis_permits_guard_delete",
+        "analysis_permits_guard_resurrection",
+        "analysis_permits_guard_lifecycle",
+      ]) {
         ok(
           !dropsTriggerWithoutRecreating(later, trigger),
           `${later.file} drops ${trigger} without recreating it`,
@@ -1613,7 +1604,7 @@ Deno.test(
     // allocation, so nothing can reclaim one by cascade.
     for (const table of ["offline_allocation_ledger", "offline_allocation_identity_links"]) {
       const create = statements.find((s) =>
-        s.startsWith(`create table if not exists public.${table} (`)
+        s.startsWith(`create table if not exists public.${table} (`),
       );
       ok(create, `public.${table} must be created`);
       ok(!/\breferences\b/.test(create), `public.${table} must not carry a foreign key: ${create}`);
@@ -1623,7 +1614,7 @@ Deno.test(
             (s) =>
               s.startsWith(`alter table public.${table}`) &&
               /\bforeign key\b|\breferences\b/.test(s),
-          )
+          ),
         ),
         `no migration may add a foreign key to public.${table}`,
       );
@@ -1644,7 +1635,9 @@ Deno.test(
       statements.some(
         (s) =>
           s.startsWith("revoke all on sequence public.offline_allocation_ledger_id_seq from") &&
-          s.includes("authenticated") && s.includes("service_role") && s.includes("anon"),
+          s.includes("authenticated") &&
+          s.includes("service_role") &&
+          s.includes("anon"),
       ),
       "the ledger sequence is not usable by any client role",
     );
@@ -1658,13 +1651,11 @@ Deno.test(
       "every ledger append and every grant write passes its guard trigger",
     );
     for (const later of after(chain, OFFLINE_DEVICE_GRANTS)) {
-      for (
-        const trigger of [
-          "offline_allocation_ledger_guard_event",
-          "offline_grants_guard",
-          "offline_holds_on_identity_link",
-        ]
-      ) {
+      for (const trigger of [
+        "offline_allocation_ledger_guard_event",
+        "offline_grants_guard",
+        "offline_holds_on_identity_link",
+      ]) {
         ok(
           !dropsTriggerWithoutRecreating(later, trigger),
           `${later.file} drops ${trigger} without recreating it`,
@@ -1677,7 +1668,8 @@ Deno.test(
       for (const s of m.statements) {
         ok(
           !/\b(update|delete from|truncate)\s+public\.offline_allocation_ledger\b/.test(s) ||
-            s.startsWith("revoke ") || s.startsWith("create trigger") ||
+            s.startsWith("revoke ") ||
+            s.startsWith("create trigger") ||
             s.startsWith("drop trigger"),
           `${m.file}: nothing updates, deletes or truncates the allocation ledger: ${s}`,
         );
@@ -1688,7 +1680,7 @@ Deno.test(
     // lease ≤ the verified entitlement expiry it records, a free grant
     // carries none.
     const grants = statements.find((s) =>
-      s.startsWith("create table if not exists public.offline_grants (")
+      s.startsWith("create table if not exists public.offline_grants ("),
     );
     ok(grants, "public.offline_grants must be created");
     ok(
@@ -1750,7 +1742,8 @@ Deno.test(
     const [holds] = functionBodies(raw, "offline_hold_count");
     ok(holds, "public.offline_hold_count must be defined");
     ok(
-      holds.includes("where not exists (") && holds.includes("c.event = 'consumed'") &&
+      holds.includes("where not exists (") &&
+        holds.includes("c.event = 'consumed'") &&
         !holds.includes("'released'"),
       "a hold is outstanding until CONSUMED — returning a ticket is not a re-credit",
     );
@@ -1774,14 +1767,12 @@ Deno.test(
       reserve.includes("p.status = 'reserved'") && !reserve.includes("p.created_at >"),
       "the online reservation path counts a still-reserved permit at ANY age (a stale permit is a reservation until settled)",
     );
-    for (
-      const name of [
-        "lifetime_scored_count",
-        "identity_scored_count",
-        "record_scored_shot_in_ledger",
-        "permit_backs_sync",
-      ]
-    ) {
+    for (const name of [
+      "lifetime_scored_count",
+      "identity_scored_count",
+      "record_scored_shot_in_ledger",
+      "permit_backs_sync",
+    ]) {
       ok(
         functionBodies(raw, name).length === 0,
         `${OFFLINE_DEVICE_GRANTS} must not redefine public.${name}`,
@@ -1831,7 +1822,8 @@ Deno.test(
     ok(
       gate.includes("current_setting('pickle.offline_ticket_id', true)") &&
         gate.includes("v_vouched is not null and v_offline_ticket is not null") &&
-        gate.includes("c.event = 'consumed'") && gate.includes("c.shot_id = new.id") &&
+        gate.includes("c.event = 'consumed'") &&
+        gate.includes("c.shot_id = new.id") &&
         gate.includes("public.lifetime_scored_count() + public.offline_hold_count() >= 2"),
       "the shots gate binds an offline-vouched row to its consumed event (never both vouches) and refuses a scored row once scored + holds fill the budget",
     );
@@ -1857,21 +1849,18 @@ Deno.test(
       ok(
         statements.includes(
           `revoke all on function public.${signature} from public, anon, service_role`,
-        ) &&
-          statements.includes(`grant execute on function public.${signature} to authenticated`),
+        ) && statements.includes(`grant execute on function public.${signature} to authenticated`),
         `public.${signature} is executable by authenticated only`,
       );
     }
-    for (
-      const [name, header] of Object.entries({
-        guard_offline_grant: "()",
-        guard_offline_ledger_append_only: "()",
-        guard_offline_ledger_event: "()",
-        guard_offline_identity_link: "()",
-        inherit_offline_allocation_holds: "()",
-        online_reservation_count: "()",
-      })
-    ) {
+    for (const [name, header] of Object.entries({
+      guard_offline_grant: "()",
+      guard_offline_ledger_append_only: "()",
+      guard_offline_ledger_event: "()",
+      guard_offline_identity_link: "()",
+      inherit_offline_allocation_holds: "()",
+      online_reservation_count: "()",
+    })) {
       ok(
         statements.includes(
           `revoke all on function public.${name}${header} from public, anon, authenticated, service_role`,
@@ -1879,13 +1868,11 @@ Deno.test(
         `public.${name} is an internal helper: not executable by any client role`,
       );
     }
-    for (
-      const [name, args] of Object.entries({
-        offline_identity_hashes: "(uuid)",
-        offline_ticket_owned_by: "(uuid, text[], uuid, uuid)",
-        offline_owned_allocations: "(uuid)",
-      })
-    ) {
+    for (const [name, args] of Object.entries({
+      offline_identity_hashes: "(uuid)",
+      offline_ticket_owned_by: "(uuid, text[], uuid, uuid)",
+      offline_owned_allocations: "(uuid)",
+    })) {
       ok(
         statements.includes(
           `revoke all on function api_private.${name}${args} from public, anon, authenticated, service_role`,
@@ -1893,11 +1880,9 @@ Deno.test(
         `api_private.${name} is not executable by any client role`,
       );
     }
-    for (
-      const body of raw.matchAll(
-        /create(?: or replace)? function (public|api_private)\.[a-z_]+\s*\([\s\S]*?\$\$;/gi,
-      )
-    ) {
+    for (const body of raw.matchAll(
+      /create(?: or replace)? function (public|api_private)\.[a-z_]+\s*\([\s\S]*?\$\$;/gi,
+    )) {
       const header = body[0].toLowerCase().slice(0, body[0].indexOf("$$"));
       ok(
         header.includes("set search_path = ''"),
