@@ -58,6 +58,7 @@ import {
 } from "../canonicalDigest.ts";
 import {
   importOfflineGrantVerificationKey,
+  OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS,
   offlineGrantClaimsFromIssuance,
   type OfflineGrantKey,
   signOfflineExecutionGrant,
@@ -83,6 +84,7 @@ const RELEASE_RPC = "/rest/v1/rpc/release_offline_ticket";
 const ISSUER = `${SUPABASE_URL}/functions/v1/api`;
 const KID = "w04-04-test-key";
 const FOREIGN_KID = "w04-04-foreign-key";
+const OLD_KID = "w04-04-retired-key";
 const SIGNING_ENV = "OFFLINE_GRANT_SIGNING_JWK";
 const INSTALLATION_KEY = "ios-installation-w04-04";
 const GRANT_ID = "64444444-4444-4444-8444-444444444444";
@@ -93,7 +95,17 @@ const DAY = 86_400;
 
 const keyPair = await generateKeyPair("ES256", { extractable: true });
 const foreignKeyPair = await generateKeyPair("ES256", { extractable: true });
+const oldKeyPair = await generateKeyPair("ES256", { extractable: true });
 const privateJwk = { ...(await exportJWK(keyPair.privateKey)), kid: KID };
+const oldPrivateJwk = { ...(await exportJWK(oldKeyPair.privateKey)), kid: OLD_KID };
+const oldPublicJwk = { ...(await exportJWK(oldKeyPair.publicKey)), kid: OLD_KID };
+/** The key that signed grants BEFORE a routine rotation; the ring keeps its
+ * public half with an explicit retirement window. */
+const oldSigningKey: OfflineGrantKey = {
+  purpose: "offline_execution_grant",
+  kid: OLD_KID,
+  key: oldKeyPair.privateKey,
+};
 const signingKey: OfflineGrantKey = {
   purpose: "offline_execution_grant",
   kid: KID,
@@ -212,9 +224,14 @@ function freshUser(): { sub: string; token: string } {
 
 function freeClaims(
   ownerId: string,
-  options: { grantId?: string; tickets?: string[]; installationKeyId?: string } = {},
+  options: {
+    grantId?: string;
+    tickets?: string[];
+    installationKeyId?: string;
+    issuedAt?: number;
+  } = {},
 ): OfflineExecutionGrantClaims {
-  const issuedAt = nowSeconds() - 60;
+  const issuedAt = options.issuedAt ?? nowSeconds() - 60;
   return offlineGrantClaimsFromIssuance(
     {
       result: "accepted",
@@ -442,12 +459,20 @@ function durableRespond(call: RecordedCall): Response | null {
             financial_disposition: null,
             result_id: null,
           };
-  } else if (params.p_hold_reason !== null) {
+  } else if (
+    params.p_hold_reason !== null ||
+    (params.p_receipt.ticket !== null &&
+      params.p_receipt.billingDisposition === "not_chargeable" &&
+      params.p_output !== null &&
+      params.p_output.resultKind === "scored")
+  ) {
+    // A receipt that says "nothing to charge" beside an output that claims a
+    // scored rating is contradictory evidence: the migration HOLDs it.
     row = {
       result: "accepted",
       delivery: "held",
       status: "reconciliation_required",
-      reason_code: params.p_hold_reason,
+      reason_code: params.p_hold_reason ?? "evidence_ambiguous",
       financial_disposition: params.p_receipt.ticket === null ? "not_applicable" : "reserved",
       result_id: null,
     };
@@ -1200,6 +1225,364 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
+// Round 3 — the release authority is judged PER RECEIPT, never for the batch.
+// A delayed receipt is evidence about work already done under the grant it
+// names; whether the CURRENTLY active release is chargeable right now decides
+// nothing about it. Withdrawing the active release must therefore not turn
+// the batch away: an already-settled receipt replays its verdict, a grant
+// issued under another (still approved) lineage is judged against THAT
+// lineage, a grant under the withdrawn lineage is a grant_revoked HOLD for
+// chargeable work, and an abstention (nothing to charge) is still recorded.
+// ---------------------------------------------------------------------------
+
+/** The active authority WITHDRAWN with no successor: what
+ * read_analysis_release_policy() answers once the operator pulls the release. */
+function withdrawnActiveRow(): Record<string, unknown> {
+  const base = releasePolicyRow.approval as Record<string, unknown>;
+  return {
+    ...releasePolicyRow,
+    denyNewAuthorizations: true,
+    approval: { ...base, withdrawnAt: nowSeconds() - 30, denyNewAuthorizations: true },
+  };
+}
+
+Deno.test(
+  "withdrawing the ACTIVE release does not refuse the batch: an already-consumed receipt still replays its durable verdict",
+  async () => {
+    reset();
+    const user = freshUser();
+    const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
+    const first = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(first[0].delivery, "settled");
+    assertEquals(first[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(durable.size, 1);
+
+    // The operator withdraws the active release; the device redelivers the
+    // very same batch (its outbox never got the first answer).
+    h.rpcs.read_analysis_release_policy = withdrawnActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: withdrawnActiveRow() });
+    const redelivered = await post({ receipts: [entry] }, user.token);
+    const body = await readJson(redelivered);
+    assertEquals(
+      redelivered.status,
+      200,
+      `a consumed receipt must replay its verdict, got ${redelivered.status} ${JSON.stringify(body)}`,
+    );
+    const out = body.results as RouteResult[];
+    assertEquals(out[0].delivery, "replayed");
+    assertEquals(out[0].reconciliation?.status, "result_recorded");
+    assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(durable.size, 1);
+  },
+);
+
+Deno.test(
+  "withdrawing the ACTIVE release does not block a receipt whose grant names a different, still-approved lineage: it settles against that lineage",
+  async () => {
+    reset();
+    const user = freshUser();
+    // Grant issued under the FIRST policy (RELEASE); by the time the receipt
+    // arrives a second policy was active and then withdrawn. The first
+    // lineage is still installed and approved.
+    const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const rotated = await rotatedReleasePolicyRow();
+    const rotatedApproval = rotated.approval as Record<string, unknown>;
+    h.rpcs.read_analysis_release_policy = {
+      ...rotated,
+      denyNewAuthorizations: true,
+      approval: { ...rotatedApproval, withdrawnAt: nowSeconds() - 30, denyNewAuthorizations: true },
+    };
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: releasePolicyRow });
+    const response = await post(
+      { receipts: [{ receipt: fixture.receipt, grant: fixture.grant, output: fixture.output }] },
+      user.token,
+    );
+    const body = await readJson(response);
+    assertEquals(
+      response.status,
+      200,
+      `expected a per-receipt verdict from the named lineage, got ${response.status} ${JSON.stringify(body)}`,
+    );
+    const out = body.results as RouteResult[];
+    assertEquals(out[0].delivery, "settled");
+    assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(h.callsTo(LINEAGE_RPC).length, 1);
+    assertEquals(lineageParams(h.callsTo(LINEAGE_RPC)[0]).p_policy_sha256, RELEASE.policy.sha256);
+  },
+);
+
+Deno.test(
+  "with the ACTIVE release withdrawn, a not_chargeable abstention under it is recorded (nothing to charge) and a chargeable receipt under it is a grant_revoked HOLD — neither is a 409",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = freeClaims(user.sub);
+    const grant = await sign(claims);
+    const abstention = output("70000031-0404-4000-8000-000000000031", {
+      resultKind: "low_confidence",
+      overallScore: null,
+    });
+    const notChargeable = await receipt({
+      receiptId: "receipt-abstain-withdrawn",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_A, claims),
+      lifecycleSequence: 1,
+      operationId: "operation-abstain-withdrawn",
+      resultId: "70000031-0404-4000-8000-000000000031",
+      fullOutputSha256: await digestCanonicalOfflineJson(abstention),
+      billingDisposition: "not_chargeable",
+    });
+    const scored = output("70000032-0404-4000-8000-000000000032");
+    const chargeable = await receipt({
+      receiptId: "receipt-scored-withdrawn",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_B, claims),
+      lifecycleSequence: 2,
+      operationId: "operation-scored-withdrawn",
+      resultId: "70000032-0404-4000-8000-000000000032",
+      fullOutputSha256: await digestCanonicalOfflineJson(scored),
+    });
+    h.rpcs.read_analysis_release_policy = withdrawnActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: withdrawnActiveRow() });
+    const response = await post(
+      {
+        receipts: [
+          { receipt: notChargeable, grant, output: abstention },
+          { receipt: chargeable, grant, output: scored },
+        ],
+      },
+      user.token,
+    );
+    const body = await readJson(response);
+    assertEquals(
+      response.status,
+      200,
+      `an abstention has nothing to charge and must be recorded, got ${response.status} ${JSON.stringify(body)}`,
+    );
+    const out = body.results as RouteResult[];
+    assertEquals(out[0].delivery, "settled");
+    assertEquals(out[0].reconciliation?.status, "result_recorded");
+    assertEquals(out[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(out[1].delivery, "held");
+    assertEquals(out[1].reconciliation?.reasonCode, "grant_revoked");
+    assertEquals(out[1].reconciliation?.financialDisposition, "reserved");
+    const params = settleCalls();
+    assertEquals(params.length, 2);
+    assertEquals(params[0].p_hold_reason, null);
+    assertEquals(params[1].p_hold_reason, "grant_revoked");
+  },
+);
+
+Deno.test(
+  "a lineage row that fails integrity verification is a server fault: 503, nothing settled, no durable hold — the identical receipt settles once the row is repaired",
+  async () => {
+    reset();
+    const user = freshUser();
+    const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
+    h.rpcs.read_analysis_release_policy = await rotatedReleasePolicyRow();
+    const corrupt = {
+      ...releasePolicyRow,
+      canonicalDocument: `${String(releasePolicyRow.canonicalDocument)} `,
+    };
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: corrupt });
+    const { result: failed } = await captureConsole(() => post({ receipts: [entry] }, user.token));
+    const failedBody = await readJson(failed);
+    assertEquals(failed.status, 503, JSON.stringify(failedBody));
+    assertEquals(settleCalls().length, 0);
+    assertEquals(durable.size, 0);
+
+    // Operator repairs the row; the identical redelivery settles.
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: releasePolicyRow });
+    const repaired = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(repaired[0].delivery, "settled");
+    assertEquals(repaired[0].reconciliation?.financialDisposition, "consumed");
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Round 3 — signing-key rotation. A delayed receipt's grant is verified as of
+// an instant the grant was live; the ring's previous key is judged at the
+// TRUSTED now (its retirement no further ahead than the propagation grace)
+// and by the grant's issuance (no later than retirement plus the grace, and
+// before the overlap closed). A routine rotation must never strand the
+// receipt of a grant that expired before the rotation; a key the ring no
+// longer holds, or a grant the previous key signed after it stopped being an
+// issuer, stays ambiguous.
+// ---------------------------------------------------------------------------
+
+function ring(previous: { retiredAt: number; overlapEndsAt: number } | null): unknown {
+  return {
+    schemaVersion: 1,
+    active: privateJwk,
+    previous:
+      previous === null
+        ? null
+        : {
+            jwk: oldPublicJwk,
+            retiredAtEpochSeconds: previous.retiredAt,
+            overlapEndsAtEpochSeconds: previous.overlapEndsAt,
+          },
+  };
+}
+
+Deno.test(
+  "a routine key rotation (previous key kept for the full overlap) settles the delayed receipt of an old-key grant that expired before the rotation",
+  async () => {
+    const now = nowSeconds();
+    // Grant signed by the OLD key 10 days ago, expired 3 days ago; the device
+    // consumed offline and only now comes online.
+    const user = freshUser();
+    const owned = freeClaims(user.sub, { issuedAt: now - 10 * DAY });
+    assert(
+      owned.exp < now - OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS - DAY,
+      "fixture: the grant expired well before the rotation",
+    );
+    const fixture = await settledFixture(user.sub, TICKET_A, 1, {
+      key: oldSigningKey,
+      claims: owned,
+    });
+    const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
+
+    // Control: before the rotation (old key active) the receipt settles.
+    reset();
+    Deno.env.set(SIGNING_ENV, JSON.stringify(oldPrivateJwk));
+    const before = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(before[0].delivery, "settled", "control: the grant itself is valid");
+
+    // Rotation 1 day ago, previous key retained for the maximal 7-day overlap.
+    reset();
+    Deno.env.set(
+      SIGNING_ENV,
+      JSON.stringify(ring({ retiredAt: now - DAY, overlapEndsAt: now - DAY + 7 * DAY })),
+    );
+    const after = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(
+      after[0].delivery,
+      "settled",
+      `old-key grant inside the overlap window was ${after[0].delivery}: ${JSON.stringify(after[0].reconciliation)}`,
+    );
+    assertEquals(after[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(settleCalls()[0].p_hold_reason, null);
+
+    // An old-key grant still inside its lease settles during the overlap too.
+    reset();
+    Deno.env.set(
+      SIGNING_ENV,
+      JSON.stringify(ring({ retiredAt: now - DAY, overlapEndsAt: now - DAY + 7 * DAY })),
+    );
+    const live = await settledFixture(user.sub, TICKET_B, 2, {
+      key: oldSigningKey,
+      claims: freeClaims(user.sub, { issuedAt: now - 2 * DAY }),
+    });
+    const liveOut = await results(
+      await post(
+        { receipts: [{ receipt: live.receipt, grant: live.grant, output: live.output }] },
+        user.token,
+      ),
+    );
+    assertEquals(liveOut[0].delivery, "settled");
+  },
+);
+
+Deno.test(
+  "a grant signed inside the propagation grace after retirement settles once its receipt is delayed past overlapEndsAt; a grant the previous key signed after the grace, or a key the ring dropped, stays HELD",
+  async () => {
+    const now = nowSeconds();
+    const user = freshUser();
+    const retiredAt = now - 8 * DAY;
+    const overlapEndsAt = retiredAt + 7 * DAY; // the maximal window
+    // Signed 5 minutes AFTER retirement (inside the grace the ring honours),
+    // expired a day ago, delivered today — after the overlap closed.
+    const grace = freeClaims(user.sub, {
+      issuedAt: retiredAt + 5 * 60,
+      grantId: "64444444-4444-4444-8444-444444444461",
+    });
+    assert(grace.exp - 1 >= overlapEndsAt, "fixture: the lease outlives the overlap");
+    assert(grace.exp < now, "fixture: the lease has expired");
+    const graceFixture = await settledFixture(user.sub, TICKET_A, 1, {
+      key: oldSigningKey,
+      claims: grace,
+    });
+    reset();
+    Deno.env.set(SIGNING_ENV, JSON.stringify(ring({ retiredAt, overlapEndsAt })));
+    const graceOut = await results(
+      await post(
+        {
+          receipts: [
+            {
+              receipt: graceFixture.receipt,
+              grant: graceFixture.grant,
+              output: graceFixture.output,
+            },
+          ],
+        },
+        user.token,
+      ),
+    );
+    assertEquals(
+      graceOut[0].delivery,
+      "settled",
+      `grace-window grant was ${graceOut[0].delivery}: ${JSON.stringify(graceOut[0].reconciliation)}`,
+    );
+
+    // Signed by the previous key one second AFTER the grace: not an issuer any
+    // more when it signed — ambiguous, HELD with the ticket reserved.
+    const late = freeClaims(user.sub, {
+      issuedAt: retiredAt + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS + 1,
+      grantId: "64444444-4444-4444-8444-444444444462",
+    });
+    const lateFixture = await settledFixture(user.sub, TICKET_B, 2, {
+      key: oldSigningKey,
+      claims: late,
+    });
+    const lateOut = await results(
+      await post(
+        {
+          receipts: [
+            { receipt: lateFixture.receipt, grant: lateFixture.grant, output: lateFixture.output },
+          ],
+        },
+        user.token,
+      ),
+    );
+    assertEquals(lateOut[0].delivery, "held");
+    assertEquals(lateOut[0].reconciliation?.reasonCode, "evidence_ambiguous");
+    assertEquals(lateOut[0].reconciliation?.financialDisposition, "reserved");
+
+    // Once the ring drops the previous key, an old-key receipt is ambiguous.
+    reset();
+    Deno.env.set(SIGNING_ENV, JSON.stringify(ring(null)));
+    const dropped = await results(
+      await post(
+        {
+          receipts: [
+            {
+              receipt: graceFixture.receipt,
+              grant: graceFixture.grant,
+              output: graceFixture.output,
+            },
+          ],
+        },
+        user.token,
+      ),
+    );
+    assertEquals(dropped[0].delivery, "held");
+    assertEquals(dropped[0].reconciliation?.reasonCode, "evidence_ambiguous");
+    assertEquals(dropped[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(
+      [...durable.values()].filter((v) => v.row.financial_disposition === "consumed").length,
+      0,
+    );
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Live postgres half — the REAL settle_offline_receipt() on a disposable
 // postgres:16 with every migration applied.
 // ---------------------------------------------------------------------------
@@ -1856,6 +2239,107 @@ Deno.test({
       assertEquals(refused.delivery, null);
       assertEquals((await settled()).length, 3);
       assertEquals(await counters(sql, 5), { held: 0, scored: 2 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Round 3, live DB — the receipt's billing disposition and the delivered
+// output must agree. A chargeable receipt beside an abstention output is
+// HELD (already pinned); the mirror — a not_chargeable receipt beside an
+// output that claims a scored rating — is the same contradictory evidence
+// and must HOLD too, never become a durable result_recorded verdict. A
+// not_chargeable receipt beside a genuine abstention is recorded and leaves
+// the ticket outstanding.
+// ---------------------------------------------------------------------------
+
+Deno.test({
+  name: "live DB: settle_offline_receipt() HOLDs a not_chargeable receipt whose delivered output claims resultKind=scored (contradictory evidence), records a genuine abstention, and consumes nothing either way",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 6);
+      const issued = await issueFreeGrant(sql, 6, KEY("billing"));
+      assert(issued.claims.allocation);
+      const [ticketA, ticketB] = issued.claims.allocation.ticketIds;
+
+      // Control: chargeable receipt + abstention output → HOLD evidence_ambiguous.
+      const mirror = await liveReceipt(
+        U(6),
+        issued,
+        ticketA,
+        "billing-mirror",
+        {},
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const mirrorVerdict = await inTx(sql, 6, (tx) =>
+        settle(tx, mirror.receipt, mirror.output, null),
+      );
+      assertEquals(
+        [mirrorVerdict.delivery, mirrorVerdict.status, mirrorVerdict.reason_code],
+        ["held", "reconciliation_required", "evidence_ambiguous"],
+      );
+
+      // not_chargeable receipt + scored output: contradictory → HOLD, durable.
+      const contradiction = await liveReceipt(U(6), issued, ticketB, "billing-scored", {
+        billingDisposition: "not_chargeable",
+      });
+      const verdict = await inTx(sql, 6, (tx) =>
+        settle(tx, contradiction.receipt, contradiction.output, null),
+      );
+      assertEquals(
+        verdict,
+        {
+          result: "accepted",
+          delivery: "held",
+          status: "reconciliation_required",
+          reason_code: "evidence_ambiguous",
+          financial_disposition: "reserved",
+          result_id: null,
+        },
+        `not_chargeable receipt with a scored output was ${JSON.stringify(verdict)}`,
+      );
+      const replay = await inTx(sql, 6, (tx) =>
+        settle(tx, contradiction.receipt, contradiction.output, null),
+      );
+      assertEquals(replay, { ...verdict, delivery: "replayed" });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+      assertEquals(await shotCount(sql, ticketB), 0);
+      assertEquals(
+        (
+          await sql.unsafe(
+            `select 1 from public.shots where id = '${contradiction.receipt.resultId}'`,
+          )
+        ).length,
+        0,
+      );
+
+      // A genuine abstention under the same ticket is recorded; the ticket
+      // stays outstanding (nothing consumed, nothing released).
+      const abstention = await liveReceipt(
+        U(6),
+        issued,
+        ticketB,
+        "billing-abstain",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 2 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const recorded = await inTx(sql, 6, (tx) =>
+        settle(tx, abstention.receipt, abstention.output, null),
+      );
+      assertEquals(recorded, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: abstention.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+      assertEquals(await counters(sql, 6), { held: 2, scored: 0 });
     } finally {
       await sql.end();
     }

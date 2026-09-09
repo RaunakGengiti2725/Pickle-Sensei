@@ -10234,6 +10234,24 @@ begin
     raise exception 'U3: a not_chargeable receipt records its result and leaves the ticket outstanding (got %, %, %, %)',
       v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
   end if;
+  -- a not_chargeable receipt beside an output that claims a scored rating is
+  -- contradictory evidence (the mirror of rcpt-4b): held, durable, nothing moves
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-10b', uri, 'uri-key-1', g, t2, 1, 'op-10b', '00000000-0000-4000-8000-000000004822', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004822', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'reserved' or v.result_id is not null
+     or u_probe.events(uri) <> 'allocated:2,consumed:1'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004822') then
+    raise exception 'U3: a not_chargeable receipt with a scored output is held as evidence_ambiguous (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, u_probe.events(uri);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-10b', uri, 'uri-key-1', g, t2, 1, 'op-10b', '00000000-0000-4000-8000-000000004822', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004822', null, 'scored'), null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: the contradictory receipt replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
   -- the held ticket is still the device's to settle with verified evidence
   select * into v from u_probe.settle(
     u_probe.receipt('rcpt-11', uri, 'uri-key-1', g, t2, 1, 'op-11', '00000000-0000-4000-8000-000000004818', 'joint_verification_required'),
@@ -10304,7 +10322,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   perform set_config('request.jwt.claims', claims, true);
-  if u_probe.recorded(uri) <> 15 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
+  if u_probe.recorded(uri) <> 16 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
     raise exception 'U4: refused calls persist nothing (got %)', u_probe.settlements(uri);
   end if;
 end $$;
@@ -10368,7 +10386,7 @@ begin
     raise exception 'U5: a hold can never be recorded as consumed';
   exception when check_violation then null;
   end;
-  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 15
+  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 16
      or (select status || '/' || financial_disposition from public.offline_receipt_settlements
          where user_id = uri and receipt_id = 'rcpt-3') <> 'reconciliation_required/reserved' then
     raise exception 'U5: the refused writes leave every settlement intact';
