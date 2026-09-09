@@ -780,14 +780,25 @@ async function certifyVerifiedSweep(
       // only once every namespace has been paged to empty.
       // A certification whose response was lost is found by the next receipt
       // read, never repeated.
-      const result =
-        completionResult(operationId, receipt) ??
-        completionResult(
-          operationId,
-          await rpcData(rpc, "certify_account_deletion_completion", binding),
-        );
-      if (!result) throw new Error("Account deletion completion is unverified.");
-      return result;
+      const recorded = completionResult(operationId, receipt);
+      if (recorded) return recorded;
+      const certified = await rpcData(rpc, "certify_account_deletion_completion", binding);
+      const result = completionResult(operationId, certified);
+      if (result) return result;
+      const durable = databaseResidue(certified);
+      if (durable) throw durable;
+      // The database spends a lease exactly once: a lease it no longer honours
+      // may have been superseded by the service sweep, whose receipt for this
+      // operation is read back rather than reported as a failure.
+      const late = completionResult(
+        operationId,
+        await rpcData(rpc, "read_account_deletion_receipt", {
+          p_owner_id: ownerId,
+          p_operation_id: operationId,
+        }),
+      );
+      if (late) return late;
+      throw new Error("Account deletion completion is unverified.");
     } catch (error) {
       if (!(error instanceof DeletionStorageUnavailable) || attempt >= POST_AUTH_VERIFY_ATTEMPTS)
         throw error;
@@ -824,6 +835,32 @@ function ownerNamespaceResidue(
     stage,
     namespaces,
   });
+}
+
+/** Certification refused by the database because rows of the owner remain:
+ * `{ outcome: "residue", namespaces: [{ table, rows }, …] }`, counted as the
+ * definer across every account-keyed table. Never a receipt. */
+function databaseResidue(value: unknown): OwnerNamespaceResidue | null {
+  if (!isRecord(value) || value.outcome !== "residue" || !Array.isArray(value.namespaces)) {
+    return null;
+  }
+  const namespaces = value.namespaces.map((entry): OwnerNamespaceVerdict => {
+    const table = isRecord(entry) && typeof entry.table === "string" ? entry.table : "unknown";
+    const rows =
+      isRecord(entry) &&
+      typeof entry.rows === "number" &&
+      Number.isInteger(entry.rows) &&
+      entry.rows > 0
+        ? entry.rows
+        : 1;
+    return { table, outcome: "residue", rows, pages: 0 };
+  });
+  return ownerNamespaceResidue(
+    "completion",
+    namespaces.length > 0
+      ? namespaces
+      : [{ table: "unknown", outcome: "residue", rows: 1, pages: 0 }],
+  );
 }
 
 function ownerNamespaceReader(
