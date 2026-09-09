@@ -29,6 +29,7 @@ import {
   readOfflineWalletStatus,
   type OfflineWalletStatus,
 } from '../data/offlineWallet';
+import { SYNC_RETRY_BASE_MS, triggerOutboxSync } from '../data/syncRuntime';
 import { withTransaction } from '../data/transactions';
 import { trustedTime, type TrustedTimeLeaseVerdict } from '../data/trustedTime';
 
@@ -38,7 +39,10 @@ import { trustedTime, type TrustedTimeLeaseVerdict } from '../data/trustedTime';
  * HOLD for a presentation the server never answered. The card only reads the
  * ledger (`readOfflineAllocation`, `readOfflineWalletStatus`): it never
  * spends, releases, refunds or re-presents anything, and an unreadable wallet
- * is shown as unreadable rather than as empty.
+ * is shown as unreadable rather than as empty. While it stays on screen it
+ * keeps following the ledger by reading again: after the sync runtime's own
+ * foreground drain has settled, on the sync cadence while a receipt is
+ * waiting or on hold, and once a live pass's trusted remaining time elapses.
  */
 
 export const OFFLINE_ALLOCATION_CARD_TEST_ID = 'offline-allocation-card';
@@ -302,12 +306,20 @@ export function presentOfflineJourney(
     };
   }
 
+  // The allocation note names what this phone still holds. With nothing
+  // held there is nothing to keep, and the allocation row already states the
+  // count: no sentence announces a zero.
   const heldCopy = proLease
     ? 'Your Pro pass results'
-    : `Your ${plural(held, 'held analysis', 'held analyses')}`;
+    : held > 0
+      ? `Your ${plural(held, 'held analysis', 'held analyses')}`
+      : null;
+  const allocationNote =
+    heldCopy === null ? null : `${heldCopy} ${ALLOCATION_STAYS}`;
 
   if (lease.kind === 'expired') {
-    notes.push(`${heldCopy} ${ALLOCATION_STAYS}`, NOT_PHONE_CLOCK);
+    if (allocationNote !== null) notes.push(allocationNote);
+    notes.push(NOT_PHONE_CLOCK);
     return {
       badge: hold ? 'ON HOLD' : 'EXPIRED',
       badgeTone: hold ? 'warn' : 'neutral',
@@ -318,10 +330,8 @@ export function presentOfflineJourney(
   }
 
   if (lease.kind === 'reconcile_required') {
-    notes.push(
-      RECONCILE_REASON_COPY[lease.reason],
-      `${heldCopy} ${ALLOCATION_STAYS}`,
-    );
+    notes.push(RECONCILE_REASON_COPY[lease.reason]);
+    if (allocationNote !== null) notes.push(allocationNote);
     return {
       badge: hold ? 'ON HOLD' : 'CONFIRM ONLINE',
       badgeTone: 'warn',
@@ -399,6 +409,94 @@ function publish(
   if (read !== latestRead || !isDataOwnerContextCurrent(owner)) return;
   publication = { owner, state };
   for (const listener of publicationListeners) listener();
+  scheduleFollowUpRead(owner, state);
+}
+
+/**
+ * A card that stays on screen keeps following the ledger. Two things change
+ * the ledger with no action on this screen: the sync drain answering a
+ * receipt (the HOLD or the queue resolves) and trusted time passing the
+ * lease end. Both are followed by READING again — the card never drains,
+ * re-presents or expires anything itself: while a receipt is waiting or on
+ * hold it re-reads on the sync cadence, and a live pass is re-read once its
+ * remaining time has elapsed (the trusted reading decides whether it has
+ * really ended). Timers run only while a surface is mounted for the owner
+ * the state was read for, and the phone's own timers never end a pass.
+ */
+let mountedFollowers = 0;
+let followUpTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** A read at the lease end is retried after this floor, never faster, and a
+ * long lease is re-read at least daily rather than through one timer that
+ * outlives what a timer can hold. */
+const LEASE_END_READ_FLOOR_MS = 1000;
+const FOLLOW_UP_READ_MAX_MS = DAY_MS;
+
+function clearFollowUpRead(): void {
+  if (followUpTimer !== null) clearTimeout(followUpTimer);
+  followUpTimer = null;
+}
+
+/** How long until the published state can change on its own, or null when
+ * only a user action or a foreground event can change it. */
+function nextFollowUpDelayMs(state: OfflineJourneyState): number | null {
+  if (state.kind !== 'read') return null;
+  let delay: number | null = null;
+  const lease = summarizeLease(state.allocation.grants);
+  if (lease.kind === 'active') {
+    delay = Math.min(
+      Math.max(lease.remainingMs, LEASE_END_READ_FLOOR_MS),
+      FOLLOW_UP_READ_MAX_MS,
+    );
+  }
+  if (state.wallet.hold || state.wallet.pending.length > 0) {
+    delay =
+      delay === null ? SYNC_RETRY_BASE_MS : Math.min(delay, SYNC_RETRY_BASE_MS);
+  }
+  return delay;
+}
+
+function scheduleFollowUpRead(
+  owner: DataOwnerContext,
+  state: OfflineJourneyState,
+): void {
+  clearFollowUpRead();
+  if (mountedFollowers === 0) return;
+  const delay = nextFollowUpDelayMs(state);
+  if (delay === null) return;
+  followUpTimer = setTimeout(() => {
+    followUpTimer = null;
+    if (mountedFollowers === 0 || !isDataOwnerContextCurrent(owner)) return;
+    void refreshOfflineJourney(owner, 'quiet');
+  }, delay);
+}
+
+/** Registers a mounted surface; the returned function unregisters it. The
+ * follow-up timer stops with the last surface. */
+function followLedger(): () => void {
+  mountedFollowers += 1;
+  return () => {
+    mountedFollowers -= 1;
+    if (mountedFollowers === 0) clearFollowUpRead();
+  };
+}
+
+/**
+ * Return to the foreground: the ledger is read at once (honest about what is
+ * recorded now), and read again once the sync the same transition started has
+ * finished — the sync runtime drains on the same event, so the card waits
+ * for that drain to record its outcome rather than racing it. The card asks
+ * for nothing the runtime is not already doing on this event:
+ * `triggerOutboxSync` joins the drain running for the configured generation
+ * (or is the call that starts it, when this listener fires first) and
+ * resolves when it settles; with no runtime configured it resolves at once.
+ */
+function refreshOnForeground(owner: DataOwnerContext): void {
+  void refreshOfflineJourney(owner);
+  void triggerOutboxSync().then(() => {
+    if (mountedFollowers === 0 || !isDataOwnerContextCurrent(owner)) return;
+    void refreshOfflineJourney(owner, 'quiet');
+  });
 }
 
 function holdsServerIssuedAllocation(owner: DataOwnerContext): boolean {
@@ -428,11 +526,16 @@ function publishedStateFor(
  * tear. A read that finishes after a newer read started, or after the owner
  * changed, is dropped — never published over the newer state or under the
  * new account. An unreadable wallet is published as unreadable, not as empty.
+ * A `quiet` follow-up read keeps the last published state on screen until
+ * the new one lands instead of announcing a check; it is fenced the same way.
  */
-async function refreshOfflineJourney(owner: DataOwnerContext): Promise<void> {
+async function refreshOfflineJourney(
+  owner: DataOwnerContext,
+  mode: 'announce' | 'quiet' = 'announce',
+): Promise<void> {
   latestRead += 1;
   const read = latestRead;
-  publish(owner, read, { kind: 'loading' });
+  if (mode === 'announce') publish(owner, read, { kind: 'loading' });
   let next: OfflineJourneyState;
   try {
     const reading = await trustedTime.read();
@@ -488,9 +591,11 @@ function useCurrentPublication(
 
 /**
  * Reads the offline journey for the active signed-in owner on every focus
- * of the hosting screen and on every owner switch, and publishes it for
- * observing surfaces. Local-only and signed-out owners hold no server-issued
- * allocation, so they read as `null` and the card is omitted.
+ * of the hosting screen, on every return to the foreground while focused and
+ * on every owner switch, follows the ledger while the screen stays focused,
+ * and publishes it for observing surfaces. Local-only and signed-out owners
+ * hold no server-issued allocation, so they read as `null` and the card is
+ * omitted.
  */
 export function useOfflineJourney(): OfflineJourneyState | null {
   const owner = useActiveOwner();
@@ -498,8 +603,16 @@ export function useOfflineJourney(): OfflineJourneyState | null {
 
   useFocusEffect(
     useCallback(() => {
-      if (!applicable) return;
+      if (!applicable) return undefined;
+      const unfollow = followLedger();
       void refreshOfflineJourney(owner);
+      const foreground = AppState.addEventListener('change', status => {
+        if (status === 'active') refreshOnForeground(owner);
+      });
+      return () => {
+        foreground.remove();
+        unfollow();
+      };
     }, [applicable, owner]),
   );
 
@@ -516,8 +629,9 @@ export interface OfflineJourneyFocusSource {
 /**
  * The same read, driven by the hosting screen's own navigation object rather
  * than `useFocusEffect`: on mount, on every focus, on every return to the
- * foreground while focused, and on every owner or session switch. Nothing is
- * read for local-only or signed-out owners, and the read never writes.
+ * foreground while focused, and on every owner or session switch, following
+ * the ledger for as long as the screen is mounted. Nothing is read for
+ * local-only or signed-out owners, and the read never writes.
  */
 export function useOfflineJourneyOnFocus(
   navigation: OfflineJourneyFocusSource,
@@ -527,17 +641,20 @@ export function useOfflineJourneyOnFocus(
 
   useEffect(() => {
     if (!applicable) return undefined;
+    const unfollow = followLedger();
     const refresh = () => {
       void refreshOfflineJourney(owner);
     };
     refresh();
     const unsubscribeFocus = navigation.addListener?.('focus', refresh);
     const foreground = AppState.addEventListener('change', status => {
-      if (status === 'active' && navigation.isFocused?.() !== false) refresh();
+      if (status === 'active' && navigation.isFocused?.() !== false)
+        refreshOnForeground(owner);
     });
     return () => {
       unsubscribeFocus?.();
       foreground.remove();
+      unfollow();
     };
   }, [applicable, owner, navigation]);
 
