@@ -10,6 +10,15 @@
  * said any of it. These tests pin the shipping screens — not a detached
  * component — to honest copy for every one of those states, and pin the copy
  * to the App Store dossier's vocabulary rules.
+ *
+ * Round 2 pins what the first candidate got wrong: the Analyze ready surface
+ * must state the ledger as it is NOW (after a spend, a HOLD, a resolved HOLD,
+ * a relaunch) rather than replay the last Settings read; a slow read that
+ * finishes after a newer one must never overwrite it; a lapsed Pro lease
+ * beside a live free allocation must not be called an active Pro pass; a
+ * fully spent pass is not READY; a server-answered HOLD is not described as
+ * an unanswered one; corrupt journal state never yields a zero count; and an
+ * inconsistent remaining time is never presented as a live pass.
  */
 import React from 'react';
 import { Text } from 'react-native';
@@ -102,6 +111,10 @@ jest.mock('../src/analysis/runCaptureAnalysis', () => ({
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import {
+  presentOfflineJourney,
+  type OfflineJourneyState,
+} from '../src/components/OfflineAllocationCard';
+import {
   clearApiSession,
   establishApiSession,
 } from '../src/account/apiSession';
@@ -128,8 +141,15 @@ import {
 import {
   consumeOfflineAllocation,
   holdOfflineGrant,
+  pendingOfflineReceipts,
+  readOfflineAllocation,
+  type HeldOfflineGrantView,
 } from '../src/data/offlineCapabilities';
-import { reconcileOfflineWallet } from '../src/data/offlineWallet';
+import {
+  readOfflineWalletStatus,
+  reconcileOfflineWallet,
+  type OfflineWalletStatus,
+} from '../src/data/offlineWallet';
 import {
   closeSqliteTestDatabases,
   createSqliteTestDb,
@@ -139,16 +159,19 @@ const OWNER = '11111111-1111-4111-8111-111111111111';
 const OTHER_OWNER = '22222222-2222-4222-8222-222222222222';
 const INSTALLATION_KEY = 'ios-install-key-1';
 const ISSUER = 'https://api.example.test/functions/v1/api';
+const RECEIPTS_ROUTE = `${ISSUER}/v1/offline/receipts`;
 const KEY_ID = 'offline-grant-key-1';
 const ARTIFACT = { version: 'v1', sha256: 'a'.repeat(64) };
 const ISSUED_AT = 1_800_000_000;
-const SIX_DAYS_S = 6 * 24 * 60 * 60;
+const DAY_S = 24 * 60 * 60;
+const SIX_DAYS_S = 6 * DAY_S;
 const EXPIRES_AT = ISSUED_AT + SIX_DAYS_S;
 const TICKETS = [
   'aaaaaaaa-0000-4000-8000-000000000001',
   'aaaaaaaa-0000-4000-8000-000000000002',
 ] as const;
 const GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
+const LAPSED_PRO_GRANT_ID = 'bbbbbbbb-0000-4000-8000-000000000002';
 const RESULT_SHA = 'c'.repeat(64);
 const BINDING = { installationKeyId: INSTALLATION_KEY, issuer: ISSUER };
 const CARD_TEST_ID = 'offline-allocation-card';
@@ -174,32 +197,65 @@ function base64Url(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64url');
 }
 
-function grantResponse(
-  entitlementSource: 'identity_lifetime_free' | 'verified_store',
-): Record<string, unknown> {
-  const free = entitlementSource === 'identity_lifetime_free';
+interface GrantShape {
+  readonly entitlementSource: 'identity_lifetime_free' | 'verified_store';
+  readonly grantId: string;
+  readonly issuedAt: number;
+  readonly expiresAt: number;
+  readonly entitlementExpiresAt: number | null;
+}
+
+const FREE_GRANT: GrantShape = {
+  entitlementSource: 'identity_lifetime_free',
+  grantId: GRANT_ID,
+  issuedAt: ISSUED_AT,
+  expiresAt: EXPIRES_AT,
+  entitlementExpiresAt: null,
+};
+
+const PRO_GRANT: GrantShape = {
+  entitlementSource: 'verified_store',
+  grantId: GRANT_ID,
+  issuedAt: ISSUED_AT,
+  expiresAt: EXPIRES_AT,
+  entitlementExpiresAt: EXPIRES_AT + SIX_DAYS_S,
+};
+
+/** A Pro lease issued two weeks before the free allocation and lapsed a week
+ * before it; the phone still holds the row (an unused pass is never taken
+ * back automatically). */
+const LAPSED_PRO_GRANT: GrantShape = {
+  entitlementSource: 'verified_store',
+  grantId: LAPSED_PRO_GRANT_ID,
+  issuedAt: ISSUED_AT - 14 * DAY_S,
+  expiresAt: ISSUED_AT - 7 * DAY_S,
+  entitlementExpiresAt: ISSUED_AT - 7 * DAY_S,
+};
+
+function grantResponse(shape: GrantShape): Record<string, unknown> {
+  const free = shape.entitlementSource === 'identity_lifetime_free';
   const claims = {
     schemaVersion: OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
     protocolVersion: OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
     iss: ISSUER,
     aud: OFFLINE_GRANT_AUDIENCE,
     sub: OWNER,
-    jti: GRANT_ID,
+    jti: shape.grantId,
     installationKeyId: INSTALLATION_KEY,
-    iat: ISSUED_AT,
-    exp: EXPIRES_AT,
+    iat: shape.issuedAt,
+    exp: shape.expiresAt,
     capabilities: ['analyze_joint_output'],
     release: {
       policy: ARTIFACT,
       mechanicsModel: ARTIFACT,
       benchmarkModel: ARTIFACT,
     },
-    entitlementSource,
+    entitlementSource: shape.entitlementSource,
     ...(free
       ? {
           allocation: {
             schemaVersion: OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
-            allocationId: GRANT_ID,
+            allocationId: shape.grantId,
             generation: 1,
             ticketIds: TICKETS,
             budgetPolicy: OFFLINE_FREE_ALLOCATION_POLICY.id,
@@ -210,7 +266,7 @@ function grantResponse(
           lease: {
             schemaVersion: OFFLINE_PRO_LEASE_SCHEMA_VERSION,
             kind: 'subscription',
-            verifiedEntitlementExpiresAt: EXPIRES_AT + SIX_DAYS_S,
+            verifiedEntitlementExpiresAt: shape.entitlementExpiresAt,
           },
         }),
   };
@@ -219,23 +275,20 @@ function grantResponse(
     JSON.stringify(claims),
   )}.${'A'.repeat(86)}`;
   return {
-    grantId: GRANT_ID,
+    grantId: shape.grantId,
     generation: 1,
-    entitlementSource,
-    issuedAt: ISSUED_AT,
-    expiresAt: EXPIRES_AT,
-    entitlementExpiresAt: free ? null : EXPIRES_AT + SIX_DAYS_S,
+    entitlementSource: shape.entitlementSource,
+    issuedAt: shape.issuedAt,
+    expiresAt: shape.expiresAt,
+    entitlementExpiresAt: shape.entitlementExpiresAt,
     ticketIds: free ? TICKETS : [],
     keyId: KEY_ID,
     grant: { schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION, compactJws },
   };
 }
 
-function issuedGrant(
-  entitlementSource:
-    'identity_lifetime_free' | 'verified_store' = 'identity_lifetime_free',
-): IssuedOfflineGrant {
-  const parsed = parseIssuedOfflineGrant(grantResponse(entitlementSource));
+function issuedGrant(shape: GrantShape = FREE_GRANT): IssuedOfflineGrant {
+  const parsed = parseIssuedOfflineGrant(grantResponse(shape));
   if (!parsed) throw new Error('fixture grant response must parse');
   return parsed;
 }
@@ -375,31 +428,113 @@ function expectDossierCompliant(copy: string) {
   }
 }
 
-async function holdGrant(
-  entitlementSource:
-    'identity_lifetime_free' | 'verified_store' = 'identity_lifetime_free',
-) {
-  await holdOfflineGrant(db, issuedGrant(entitlementSource), BINDING);
+async function holdGrant(shape: GrantShape = FREE_GRANT) {
+  await holdOfflineGrant(db, issuedGrant(shape), BINDING);
 }
 
 async function spend(operationId: string) {
   return consumeOfflineAllocation(db, consumption(operationId), AT_ISSUE);
 }
 
+function grantClient() {
+  return createOfflineGrantClient({ baseUrl: ISSUER, token: 'access-token' });
+}
+
 /** Presents the queued receipts and loses the connection before any answer
  * arrives: the journal entry stays `in_flight`, which the wallet reports as a
  * HOLD. Exactly the shipping drain path (`reconcileOfflineWallet`). */
 async function presentAndLoseConnection() {
+  fetchSpy?.mockRestore();
   fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation(async () => {
     throw new TypeError('Network request failed');
   });
   await expect(
-    reconcileOfflineWallet(
-      db,
-      createOfflineGrantClient({ baseUrl: ISSUER, token: 'access-token' }),
-      AT_ISSUE,
-    ),
+    reconcileOfflineWallet(db, grantClient(), AT_ISSUE),
   ).rejects.toThrow('Network request failed');
+}
+
+/** Presents the queued receipts and receives `status` for each of them: the
+ * server ANSWERED, so no presentation is left unanswered. Same drain path. */
+async function presentAndReceive(status: string) {
+  fetchSpy?.mockRestore();
+  fetchSpy = jest
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async (input, init) => {
+      if (String(input) !== RECEIPTS_ROUTE) {
+        return new Response(JSON.stringify({ error: 'not_found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        receipts?: Array<{ receiptId: string }>;
+      };
+      return new Response(
+        JSON.stringify({
+          receipts: (body.receipts ?? []).map(receipt => ({
+            receiptId: receipt.receiptId,
+            status,
+          })),
+          rejected: [],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+  return reconcileOfflineWallet(db, grantClient(), AT_ISSUE);
+}
+
+/** The ledger's own answer, read directly — the fact the card must state. */
+async function ledgerTruth() {
+  return {
+    allocation: await readOfflineAllocation(db, AT_ISSUE),
+    wallet: await readOfflineWalletStatus(db),
+    pending: await pendingOfflineReceipts(db),
+  };
+}
+
+/** Wraps the test database so its FIRST transaction stalls until `release()`
+ * is called; every later transaction runs at once. */
+function gateFirstTransaction(): { db: LocalDb; release(): void } {
+  const inner = db;
+  let release: () => void = () => undefined;
+  let gate: Promise<void> | null = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const innerTransaction = inner.transaction;
+  if (!innerTransaction) throw new Error('test db has no transaction');
+  return {
+    db: {
+      execute: (sql, params) => inner.execute(sql, params),
+      transaction: async <T,>(
+        operation: (transaction: LocalDb) => Promise<T>,
+      ): Promise<T> => {
+        if (gate) {
+          const waiting = gate;
+          gate = null;
+          await waiting;
+        }
+        return innerTransaction.call(inner, operation) as Promise<T>;
+      },
+      close: () => inner.close(),
+    },
+    release: () => release(),
+  };
+}
+
+const WRITE_STATEMENT =
+  /^\s*(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER)\b/i;
+
+function signInAs(owner: string, bearerToken: string) {
+  setActiveDataOwner(owner);
+  establishApiSession({
+    apiBaseUrl: 'https://api.test',
+    bearerToken,
+    canonicalAppUserId: owner,
+    provider: 'apple',
+  });
+  useAuthStore.setState({
+    session: { ...syncedSession, subject: owner, canonicalAppUserId: owner },
+  });
 }
 
 beforeEach(() => {
@@ -558,7 +693,7 @@ describe('W05-04 Settings surfaces the offline journey', () => {
   });
 
   it('describes a Pro lease without inventing a ticket count', async () => {
-    await holdGrant('verified_store');
+    await holdGrant(PRO_GRANT);
     const renderer = await render(<SettingsScreen />);
     await settle();
     const copy = textOf(card(renderer));
@@ -600,11 +735,173 @@ describe('W05-04 Settings surfaces the offline journey', () => {
     await settle();
     expect(cards(renderer)).toHaveLength(0);
   });
+
+  it('describes a server-answered HOLD as still being confirmed, not as an answer that never arrived', async () => {
+    await holdGrant();
+    await spend('op-1');
+    const outcome = await presentAndReceive('pending');
+    expect(outcome.held).toBe(1);
+    const truth = await ledgerTruth();
+    expect(truth.wallet.hold).toBe(false);
+    expect(truth.wallet.unansweredPresentations).toBe(0);
+    expect(truth.wallet.pending.map(receipt => receipt.phase)).toEqual([
+      'held',
+    ]);
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(copy).toContain('1 result awaiting confirmation');
+    expect(copy).toContain('1 on hold');
+    expect(copy).toContain('still confirming');
+    expect(copy).toContain('nothing is charged twice');
+    expect(copy).not.toContain('never arrived');
+    expect(copy).not.toContain('connection dropped');
+    expectDossierCompliant(copy);
+  });
+
+  it('does not badge a fully spent pass READY', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await spend('op-2');
+    const truth = await ledgerTruth();
+    expect(truth.allocation.spendableTickets).toBe(0);
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('SPENT');
+    expect(copy).toContain('Offline pass fully spent');
+    expect(copy).toContain('0 of 2');
+    expect(copy).toContain('2 results waiting');
+    expect(copy).not.toContain('READY');
+    expect(copy).not.toContain('ready');
+    expectDossierCompliant(copy);
+  });
+
+  it('describes the live free allocation beside a lapsed Pro lease, never an active Pro pass', async () => {
+    await holdGrant(LAPSED_PRO_GRANT);
+    await holdGrant(FREE_GRANT);
+    const truth = await ledgerTruth();
+    expect(truth.allocation.spendableTickets).toBe(2);
+    expect(
+      truth.allocation.grants.map(grant => [
+        grant.entitlementSource,
+        grant.execution.kind,
+      ]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['verified_store', 'expired'],
+        ['identity_lifetime_free', 'active'],
+      ]),
+    );
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('2 offline analyses ready');
+    expect(copy).toContain('2 of 2');
+    expect(copy).toContain('In 6 days');
+    expect(copy).not.toContain('Pro offline pass active');
+    expect(copy).not.toContain('Pro pass');
+    expectDossierCompliant(copy);
+  });
+
+  it('describes a lapsed Pro lease alone as expired, not active', async () => {
+    await holdGrant(LAPSED_PRO_GRANT);
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('EXPIRED');
+    expect(copy).toContain('Offline pass expired');
+    expect(copy).not.toContain('Pro offline pass active');
+    expect(copy).not.toMatch(/\d of \d/);
+    expectDossierCompliant(copy);
+  });
+
+  it('never announces a zero count for a HOLD whose journal entry names no receipt on file', async () => {
+    await holdGrant();
+    // Corruption written straight to storage: an in-flight submission that
+    // names a receipt the wallet no longer has on file.
+    await db.execute(
+      `INSERT INTO offline_wallet_journal
+         (owner_key, journal_id, kind, receipt_ids, state, opened_at, closed_at, verdicts)
+       VALUES (?, ?, 'receipt_submission', ?, 'in_flight', ?, NULL, NULL)`,
+      [
+        OWNER,
+        'dddddddd-0000-4000-8000-000000000001',
+        JSON.stringify(['receipt-that-no-longer-exists']),
+        new Date(ISSUED_AT * 1000).toISOString(),
+      ],
+    );
+    const truth = await ledgerTruth();
+    expect(truth.wallet.hold).toBe(true);
+    expect(truth.wallet.pending).toHaveLength(0);
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(copy).not.toContain('0 result');
+    expect(copy).not.toContain('never arrived');
+    expect(copy).toContain('never recorded');
+    expect(copy).not.toMatch(/\bNothing\b/);
+    expectDossierCompliant(copy);
+  });
+
+  it('drops a slow read that finishes after a newer one instead of publishing a torn snapshot', async () => {
+    await holdGrant();
+    const gated = gateFirstTransaction();
+    mockDb = () => gated.db;
+    // Read #1: Settings opens; its single transaction stalls at the gate.
+    const first = await render(<SettingsScreen />);
+    await settle();
+    expect(badgeOf(first)).toBe('CHECKING');
+    await act(async () => first.unmount());
+    mounted = null;
+    // The player spends a ticket while read #1 is still stalled.
+    mockDb = () => db;
+    await spend('op-1');
+    // Read #2: Settings reopens and publishes the newer ledger.
+    const second = await render(<SettingsScreen />);
+    await settle();
+    expect(textOf(card(second))).toContain('1 of 2');
+    // Read #1 resumes and finishes last. It must be discarded.
+    gated.release();
+    await settle();
+    const copy = textOf(card(second));
+    expect(copy).toContain('1 of 2');
+    expect(copy).toContain('1 result waiting');
+    expect(copy).not.toContain('2 of 2');
+  });
+
+  it('reads the allocation and the receipt journal in ONE transaction so the pair can never tear', async () => {
+    await holdGrant();
+    await spend('op-1');
+    handle.calls.length = 0;
+    const renderer = await render(<SettingsScreen />);
+    await settle();
+    card(renderer);
+    const isLedgerRead = (sql: string) =>
+      /FROM offline_(grant|ticket|receipt|wallet_journal)\b/.test(sql);
+    const indices = handle.calls.flatMap((call, index) =>
+      isLedgerRead(call.sql) ? [index] : [],
+    );
+    expect(indices.length).toBeGreaterThan(1);
+    const first = indices[0]!;
+    const last = indices[indices.length - 1]!;
+    const enclosing = handle.calls.slice(first, last + 1);
+    // Every ledger read sits inside one open transaction: no BEGIN or
+    // COMMIT between the first and the last of them, and one id throughout.
+    expect(
+      enclosing.filter(call => /^(BEGIN|COMMIT|ROLLBACK)/.test(call.sql)),
+    ).toEqual([]);
+    expect(new Set(enclosing.map(call => call.transaction)).size).toBe(1);
+    expect(handle.calls[first - 1]?.sql).toBe('BEGIN IMMEDIATE');
+  });
 });
 
 describe('W05-04 Analyze surfaces the offline journey', () => {
-  /** The wallet is read where the player reviews it (Settings); the Analyze
-   * ready surface shows that read without opening the wallet itself. */
+  /** A Settings visit that reads the wallet and publishes it. Used to prove
+   * the Analyze surface does NOT replay that read once the ledger moves on. */
   async function visitSettings() {
     const settings = await render(<SettingsScreen />);
     await settle();
@@ -640,30 +937,27 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     expectDossierCompliant(copy);
   });
 
-  it('keeps the ready surface free of wallet reads — it persists nothing before an attempt', async () => {
+  it('reads the ledger for the ready surface without writing anything before an attempt', async () => {
     await holdGrant();
-    await visitSettings();
     handle.calls.length = 0;
     const renderer = await render(<AnalyzeScreen />);
     await settle();
     expect(badgeOf(renderer)).toBe('READY');
-    expect(handle.calls).toHaveLength(0);
+    expect(handle.calls.length).toBeGreaterThan(0);
+    expect(handle.calls.filter(call => WRITE_STATEMENT.test(call.sql))).toEqual(
+      [],
+    );
   });
 
   it('never shows another account’s allocation', async () => {
     await holdGrant();
     await spend('op-1');
     await visitSettings();
-    setActiveDataOwner(OTHER_OWNER);
-    establishApiSession({
-      apiBaseUrl: 'https://api.test',
-      bearerToken: 'token-2',
-      canonicalAppUserId: OTHER_OWNER,
-      provider: 'apple',
-    });
+    signInAs(OTHER_OWNER, 'token-2');
     const renderer = await render(<AnalyzeScreen />);
     await settle();
-    expect(cards(renderer)).toHaveLength(0);
+    // The other account holds nothing; its own (empty) ledger is what shows.
+    expect(badgeOf(renderer)).toBe('NONE HELD');
     expect(textOf(renderer.root)).not.toContain('1 of 2');
     expect(textOf(renderer.root)).not.toContain('waiting');
   });
@@ -672,25 +966,170 @@ describe('W05-04 Analyze surfaces the offline journey', () => {
     await holdGrant();
     await spend('op-1');
     const settings = await render(<SettingsScreen />);
-    setActiveDataOwner(OTHER_OWNER);
-    establishApiSession({
-      apiBaseUrl: 'https://api.test',
-      bearerToken: 'token-2',
-      canonicalAppUserId: OTHER_OWNER,
-      provider: 'apple',
-    });
+    await settle();
+    expect(textOf(card(settings))).toContain('1 of 2');
+    signInAs(OTHER_OWNER, 'token-2');
     await settle();
     await act(async () => settings.unmount());
     mounted = null;
+    // The ledger moves on while the account is signed out of this phone.
     setActiveDataOwner(OWNER);
-    establishApiSession({
-      apiBaseUrl: 'https://api.test',
-      bearerToken: 'token-3',
-      canonicalAppUserId: OWNER,
-      provider: 'apple',
-    });
+    await spend('op-2');
+    signInAs(OWNER, 'token-3');
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(copy).toContain('0 of 2');
+    expect(copy).not.toContain('1 of 2');
+  });
+
+  it('states the allocation after a spend made since the last Settings visit', async () => {
+    await holdGrant();
+    await visitSettings();
+    await spend('op-1');
+    const truth = await ledgerTruth();
+    expect(truth.allocation.spendableTickets).toBe(1);
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('1 of 2');
+    expect(copy).toContain('1 result waiting');
+    expect(copy).not.toContain('2 of 2');
+  });
+
+  it('shows a HOLD created since the last Settings visit', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await visitSettings();
+    await presentAndLoseConnection();
+    expect((await ledgerTruth()).wallet.hold).toBe(true);
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(textOf(card(renderer))).toContain('1 on hold');
+  });
+
+  it('clears a HOLD the server resolved since the last Settings visit', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await presentAndLoseConnection();
+    await visitSettings();
+    const outcome = await presentAndReceive('accepted');
+    expect(outcome.accepted).toBe(1);
+    const truth = await ledgerTruth();
+    expect(truth.wallet.hold).toBe(false);
+    expect(truth.pending).toHaveLength(0);
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('READY');
+    expect(copy).toContain('1 of 2');
+    expect(copy).toContain('Nothing');
+    expect(copy).not.toContain('on hold');
+  });
+
+  it('surfaces a persisted HOLD on launch, before Settings was ever opened', async () => {
+    await holdGrant();
+    await spend('op-1');
+    await presentAndLoseConnection();
+    expect((await ledgerTruth()).wallet.hold).toBe(true);
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    const copy = textOf(card(renderer));
+    expect(badgeOf(renderer)).toBe('ON HOLD');
+    expect(copy).toContain('1 on hold');
+    expect(copy).toContain('1 of 2');
+    expectDossierCompliant(copy);
+  });
+
+  it('never turns an unreadable wallet into a missing card on the ready surface', async () => {
+    mockDb = () => {
+      throw new Error('storage unavailable');
+    };
+    const renderer = await render(<AnalyzeScreen />);
+    await settle();
+    expect(badgeOf(renderer)).toBe('UNAVAILABLE');
+    expect(textOf(card(renderer))).toContain('could not be read');
+  });
+
+  it('shows nothing for a local-only guest', async () => {
+    useAuthStore.setState({ session: guestSession });
+    setActiveDataOwner('device-guest');
     const renderer = await render(<AnalyzeScreen />);
     await settle();
     expect(cards(renderer)).toHaveLength(0);
+  });
+});
+
+describe('W05-04 presenter boundaries', () => {
+  function activeGrant(remainingMs: number): HeldOfflineGrantView {
+    return {
+      grantId: GRANT_ID,
+      generation: 1,
+      entitlementSource: 'identity_lifetime_free',
+      installationKeyId: INSTALLATION_KEY,
+      keyId: KEY_ID,
+      issuedAt: ISSUED_AT,
+      expiresAt: EXPIRES_AT,
+      entitlementExpiresAt: null,
+      grantJwsSha256: 'e'.repeat(64),
+      allocated: 2,
+      remaining: 2,
+      consumed: 0,
+      lifecycleSequence: 0,
+      execution: { kind: 'active', remainingMs },
+    };
+  }
+
+  const quietWallet: OfflineWalletStatus = {
+    pending: [],
+    unansweredPresentations: 0,
+    hold: false,
+  };
+
+  function copyOf(state: OfflineJourneyState): string {
+    const presented = presentOfflineJourney(state);
+    return [
+      presented.badge,
+      presented.title,
+      ...presented.rows.flatMap(row => [row.label, row.value]),
+      ...presented.notes,
+    ].join(' | ');
+  }
+
+  it.each([Number.NaN, -1, Number.NEGATIVE_INFINITY, 0])(
+    'never presents an active verdict with remainingMs=%p as a live pass',
+    remainingMs => {
+      const copy = copyOf({
+        kind: 'read',
+        allocation: {
+          grants: [activeGrant(remainingMs)],
+          spendableTickets: 2,
+          consumedTickets: 0,
+          pendingReceipts: 0,
+        },
+        wallet: quietWallet,
+      });
+      expect(copy).not.toContain('READY');
+      expect(copy).not.toContain('In under an hour');
+      expect(copy).not.toContain('ready');
+      expectDossierCompliant(copy);
+    },
+  );
+
+  it('presents a finite positive remaining time as a live pass', () => {
+    const copy = copyOf({
+      kind: 'read',
+      allocation: {
+        grants: [activeGrant(30 * 60 * 1000)],
+        spendableTickets: 2,
+        consumedTickets: 0,
+        pendingReceipts: 0,
+      },
+      wallet: quietWallet,
+    });
+    expect(copy).toContain('READY');
+    expect(copy).toContain('In under an hour');
   });
 });
