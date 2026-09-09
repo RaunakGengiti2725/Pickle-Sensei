@@ -274,7 +274,14 @@ public final class OfflineWallet {
         detail: "stored revision \(currentRevision) != expected \(expectedRevision)"
       )
     }
-    guard let walletBytes = state.walletBytes else { return }
+    guard let walletBytes = state.walletBytes, let wallet = state.wallet, let key = state.key else { return }
+    // A wallet ahead of its fence (crash between a replace's wallet write and
+    // its fence commit) is committed to the fence before the wallet goes, so
+    // the revision it carried is never handed out again and the deleted
+    // envelope reads as a rollback if it ever reappears.
+    if (state.fence ?? 0) < wallet.revision {
+      try commitFence(ownerId: ownerId, revision: wallet.revision, previous: state.fenceBytes, key: key)
+    }
     guard try storeDelete(account: OfflineWallet.walletAccount(ownerId: ownerId), previous: walletBytes) else {
       throw OfflineWalletError(failure: .revisionConflict, detail: "wallet changed while this clear was prepared")
     }
@@ -364,14 +371,58 @@ public final class OfflineWallet {
     let fault: OfflineWalletError?
   }
 
+  /// Raw bytes of an owner's three items from one pass over the store.
+  private struct RawOwnerItems: Equatable {
+    let keyBytes: Data?
+    let fenceBytes: Data?
+    let walletBytes: Data?
+  }
+
+  /// Upper bound on passes `readState` spends waiting for another writer's
+  /// in-flight first write (key, fence, wallet) to become visible as a whole.
+  ///
+  /// The three reads are not one transaction: an owner's FIRST write (key,
+  /// fence, wallet by another instance or process) can land between them and
+  /// look like a wallet without its key. Corruption is therefore only reported
+  /// once two consecutive passes observe identical bytes — a genuinely corrupt
+  /// item is stable, a write in flight is not. State that keeps changing is a
+  /// `revision_conflict` for the caller to retry, never something to discard.
+  private static let maxReadPasses = 4
+
   /// Reads key, fence, then wallet — the reverse of the write order (wallet,
   /// then fence) — so a concurrent legitimate replace can only ever be seen as
   /// "wallet ahead of fence" (harmless), never as a spurious rollback.
   private func readState(ownerId: String) throws -> OwnerState {
-    let walletAccount = OfflineWallet.walletAccount(ownerId: ownerId)
+    var raw = try readRawItems(ownerId: ownerId)
+    var state = try OfflineWallet.classify(raw, ownerId: ownerId)
+    var passes = 1
+    while state.fault != nil, passes < OfflineWallet.maxReadPasses {
+      let again = try readRawItems(ownerId: ownerId)
+      if again == raw { return state }
+      raw = again
+      state = try OfflineWallet.classify(raw, ownerId: ownerId)
+      passes += 1
+    }
+    if state.fault != nil, passes >= OfflineWallet.maxReadPasses {
+      throw OfflineWalletError(failure: .revisionConflict, detail: "owner state kept changing while it was read")
+    }
+    return state
+  }
+
+  private func readRawItems(ownerId: String) throws -> RawOwnerItems {
     let keyBytes = try storeRead(account: OfflineWallet.integrityKeyAccount(ownerId: ownerId))
     let fenceBytes = try storeRead(account: OfflineWallet.fenceAccount(ownerId: ownerId))
-    let walletBytes = try storeRead(account: walletAccount)
+    let walletBytes = try storeRead(account: OfflineWallet.walletAccount(ownerId: ownerId))
+    return RawOwnerItems(keyBytes: keyBytes, fenceBytes: fenceBytes, walletBytes: walletBytes)
+  }
+
+  /// Verifies one pass of raw items; pure, so re-reading is the only way a
+  /// verdict can change.
+  private static func classify(_ raw: RawOwnerItems, ownerId: String) throws -> OwnerState {
+    let walletAccount = OfflineWallet.walletAccount(ownerId: ownerId)
+    let keyBytes = raw.keyBytes
+    let fenceBytes = raw.fenceBytes
+    let walletBytes = raw.walletBytes
 
     var key: Data?
     var keyFault: OfflineWalletError?
@@ -724,11 +775,207 @@ enum OfflineWalletShape {
       && segments[2].unicodeScalars.count == 86
   }
 
+  /// Strict RFC 8259 check — exactly what `JSON.parse` accepts — so a payload
+  /// the native side commits is always readable through the JS bridge.
+  /// Foundation's `JSONSerialization` is deliberately not used here: it
+  /// tolerates a byte-order mark and (on some platforms) other extensions
+  /// that `JSON.parse` rejects.
   static func isJsonObject(_ value: String, maxBytes: Int) -> Bool {
-    let bytes = Data(value.utf8)
+    let bytes = Array(value.utf8)
     guard !bytes.isEmpty, bytes.count <= maxBytes else { return false }
-    guard let parsed = try? JSONSerialization.jsonObject(with: bytes, options: []) else { return false }
-    return parsed is [String: Any]
+    var scanner = StrictJsonScanner(bytes)
+    return scanner.isObjectDocument()
+  }
+
+  /// Non-recursive validator for the JSON text grammar. Only the four JSON
+  /// whitespace bytes are skipped, strings must not contain raw control
+  /// characters and only carry the nine JSON escapes (`\uXXXX` with exactly
+  /// four hex digits), numbers follow the JSON number production exactly, and
+  /// nothing may follow the closing brace but whitespace.
+  private struct StrictJsonScanner {
+    private let bytes: [UInt8]
+    private var index = 0
+
+    init(_ bytes: [UInt8]) {
+      self.bytes = bytes
+    }
+
+    mutating func isObjectDocument() -> Bool {
+      skipWhitespace()
+      guard peek() == UInt8(ascii: "{") else { return false }
+      guard scanValue() else { return false }
+      skipWhitespace()
+      return index == bytes.count
+    }
+
+    private enum Container {
+      case object
+      case array
+    }
+
+    /// Scans one value starting at `index`; containers are walked with an
+    /// explicit stack so payload nesting can never exhaust the call stack.
+    private mutating func scanValue() -> Bool {
+      var stack: [Container] = []
+      var expectValue = true
+      while true {
+        skipWhitespace()
+        guard let byte = peek() else { return false }
+        if expectValue {
+          switch byte {
+          case UInt8(ascii: "{"):
+            index += 1
+            stack.append(.object)
+            skipWhitespace()
+            if peek() == UInt8(ascii: "}") {
+              index += 1
+              stack.removeLast()
+              expectValue = false
+            } else {
+              guard scanMemberName() else { return false }
+            }
+          case UInt8(ascii: "["):
+            index += 1
+            stack.append(.array)
+            skipWhitespace()
+            if peek() == UInt8(ascii: "]") {
+              index += 1
+              stack.removeLast()
+              expectValue = false
+            }
+          case UInt8(ascii: "\""):
+            guard scanString() else { return false }
+            expectValue = false
+          case UInt8(ascii: "-"), UInt8(ascii: "0")...UInt8(ascii: "9"):
+            guard scanNumber() else { return false }
+            expectValue = false
+          case UInt8(ascii: "t"):
+            guard scanLiteral("true") else { return false }
+            expectValue = false
+          case UInt8(ascii: "f"):
+            guard scanLiteral("false") else { return false }
+            expectValue = false
+          case UInt8(ascii: "n"):
+            guard scanLiteral("null") else { return false }
+            expectValue = false
+          default:
+            return false
+          }
+        } else {
+          guard let container = stack.last else { return false }
+          switch (container, byte) {
+          case (.object, UInt8(ascii: ",")):
+            index += 1
+            guard scanMemberName() else { return false }
+            expectValue = true
+          case (.object, UInt8(ascii: "}")), (.array, UInt8(ascii: "]")):
+            index += 1
+            stack.removeLast()
+          case (.array, UInt8(ascii: ",")):
+            index += 1
+            expectValue = true
+          default:
+            return false
+          }
+        }
+        if !expectValue, stack.isEmpty { return true }
+      }
+    }
+
+    /// `ws string ws ':'` — leaves `index` on the member's value.
+    private mutating func scanMemberName() -> Bool {
+      skipWhitespace()
+      guard peek() == UInt8(ascii: "\"") else { return false }
+      guard scanString() else { return false }
+      skipWhitespace()
+      guard peek() == UInt8(ascii: ":") else { return false }
+      index += 1
+      return true
+    }
+
+    private mutating func scanString() -> Bool {
+      index += 1
+      while index < bytes.count {
+        let byte = bytes[index]
+        switch byte {
+        case UInt8(ascii: "\""):
+          index += 1
+          return true
+        case UInt8(ascii: "\\"):
+          index += 1
+          guard index < bytes.count else { return false }
+          switch bytes[index] {
+          case UInt8(ascii: "\""), UInt8(ascii: "\\"), UInt8(ascii: "/"), UInt8(ascii: "b"),
+            UInt8(ascii: "f"), UInt8(ascii: "n"), UInt8(ascii: "r"), UInt8(ascii: "t"):
+            index += 1
+          case UInt8(ascii: "u"):
+            index += 1
+            guard index + 4 <= bytes.count, bytes[index..<index + 4].allSatisfy(StrictJsonScanner.isHexDigit) else {
+              return false
+            }
+            index += 4
+          default:
+            return false
+          }
+        case 0x00...0x1F:
+          return false
+        default:
+          index += 1
+        }
+      }
+      return false
+    }
+
+    private mutating func scanNumber() -> Bool {
+      if peek() == UInt8(ascii: "-") { index += 1 }
+      guard let first = peek(), StrictJsonScanner.isDigit(first) else { return false }
+      if first == UInt8(ascii: "0") {
+        index += 1
+      } else {
+        skipDigits()
+      }
+      if peek() == UInt8(ascii: ".") {
+        index += 1
+        guard let fraction = peek(), StrictJsonScanner.isDigit(fraction) else { return false }
+        skipDigits()
+      }
+      if let exponent = peek(), exponent == UInt8(ascii: "e") || exponent == UInt8(ascii: "E") {
+        index += 1
+        if let sign = peek(), sign == UInt8(ascii: "+") || sign == UInt8(ascii: "-") { index += 1 }
+        guard let digit = peek(), StrictJsonScanner.isDigit(digit) else { return false }
+        skipDigits()
+      }
+      return true
+    }
+
+    private mutating func scanLiteral(_ literal: String) -> Bool {
+      let expected = Array(literal.utf8)
+      guard index + expected.count <= bytes.count, Array(bytes[index..<index + expected.count]) == expected else {
+        return false
+      }
+      index += expected.count
+      return true
+    }
+
+    private mutating func skipDigits() {
+      while let byte = peek(), StrictJsonScanner.isDigit(byte) { index += 1 }
+    }
+
+    private mutating func skipWhitespace() {
+      while let byte = peek(), byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D { index += 1 }
+    }
+
+    private func peek() -> UInt8? {
+      index < bytes.count ? bytes[index] : nil
+    }
+
+    private static func isDigit(_ byte: UInt8) -> Bool {
+      (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+    }
+
+    private static func isHexDigit(_ byte: UInt8) -> Bool {
+      isDigit(byte) || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(byte) || (UInt8(ascii: "A")...UInt8(ascii: "F")).contains(byte)
+    }
   }
 
   private static func isLowerHex(_ scalar: Unicode.Scalar) -> Bool {
