@@ -1764,8 +1764,10 @@ Deno.test(
     const [reserve] = functionBodies(raw, "reserve_analysis_permit");
     ok(reserve, "public.reserve_analysis_permit must be defined");
     ok(
-      reserve.includes("p.status = 'reserved'") && !reserve.includes("p.created_at >"),
-      "the online reservation path counts a still-reserved permit at ANY age (a stale permit is a reservation until settled)",
+      reserve.includes("public.online_reservation_count()") &&
+        !reserve.includes("p.status = 'reserved'") &&
+        !reserve.includes("p.created_at >"),
+      "the online reservation path counts the SAME reservations as the allocator (reserved at any age, or swept but syncable) — never a 24h window or a status filter of its own",
     );
     for (const name of [
       "lifetime_scored_count",

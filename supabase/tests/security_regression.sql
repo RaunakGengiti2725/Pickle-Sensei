@@ -5806,9 +5806,9 @@ end $$;
 --       (ticket, shot id); consumed and released are terminal; a released
 --       ticket is not a re-credit
 --   W6  ADVERSARY c2-A01/A09: a stale (>24h) reserved permit and a swept
---       released/expired permit are reservations to the allocator; the
---       reserve path counts a stale reserved permit; no sequence yields
---       scored + outstanding > 2
+--       released/expired permit are reservations to the allocator AND to
+--       the online reserve path (one rule: permit_backs_sync + unsettled);
+--       no sequence yields scored + outstanding > 2
 --   W7  Pro lease bounds: ≤ 7 days, ≤ verified entitlement expiry, effective
 --       entitlement only (an expired Pro row is a free identity), and the
 --       table refuses every out-of-bounds lease for every role
@@ -6417,21 +6417,25 @@ begin
   if g.result <> 'accepted' or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
     raise exception 'W6e: a swept-but-syncable permit is a reservation to the allocator — one ticket (got %)', g;
   end if;
-  -- The online path keeps its contract (Q3): a swept permit does not block a
-  -- new reservation...
+  -- The online path applies the same rule as the allocator: a swept permit
+  -- that still backs a sync holds its slot, so beside the hold nothing is
+  -- left to reserve — the device gets an honest paywall instead of a permit
+  -- whose sync would be refused later.
   select * into r from public.reserve_analysis_permit('rex-online-2');
-  if r.result <> 'accepted' then
-    raise exception 'W6f precondition: a swept permit does not block the reservation (got %)', r.result;
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W6f: swept-but-syncable permit + hold fill the budget — no second live permit (got %)', r.result;
   end if;
-  -- ...but the spend rule does: the swept permit's late sync lands, the fresh
-  -- permit's sync is the third unit and is refused.
+  if exists (select 1 from public.analysis_permits where user_id = (select auth.uid()) and idempotency_key = 'rex-online-2') then
+    raise exception 'W6f: a refused reservation writes no permit';
+  end if;
+  -- The swept permit's late sync lands (N2 unchanged) and is the second unit.
   v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000782', '00000000-0000-4000-8000-000000000781', 'scored'));
   if v <> 'accepted' then
     raise exception 'W6g: the swept permit''s late sync is honoured (got %)', v;
   end if;
-  v := public.apply_synced_shot(pg_temp.w_shot('00000000-0000-4000-8000-000000000783', r.permit_id, 'scored'));
-  if v <> 'access.paywall_required' then
-    raise exception 'W6h: scored 1 + hold 1 — the second sync is refused (got %)', v;
+  select * into r from public.reserve_analysis_permit('rex-online-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'W6h: scored 1 + hold 1 — still nothing to reserve (got %)', r.result;
   end if;
   if public.lifetime_scored_count() <> 1 or public.offline_hold_count() <> 1 then
     raise exception 'W6h: scored + outstanding ≤ 2 (scored %, holds %)', public.lifetime_scored_count(), public.offline_hold_count();
