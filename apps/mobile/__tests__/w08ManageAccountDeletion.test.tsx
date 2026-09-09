@@ -65,7 +65,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { ManageAccountScreen } from '../src/screens/ManageAccountScreen';
-import { Button } from '../src/design/components';
+import { BrandSpinner, Button } from '../src/design/components';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
 import {
   clearApiSession,
@@ -1543,6 +1543,325 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
         expect(notice).not.toMatch(/Google Play|Android/);
       } finally {
         act(() => renderer.unmount());
+      }
+    });
+  });
+
+  /**
+   * Round-4 adversary breaks. After a confirmation has been SENT the server
+   * may already have acted on it, so every later signal that is not a
+   * verified receipt — `blocked`, a closed status window, an unreadable
+   * journal row — is an UNRESOLVED outcome: no "nothing was deleted", no
+   * survey, no second request, no spinner or retry that cannot do anything.
+   */
+  describe('after a sent confirmation, every non-receipt signal stays unresolved', () => {
+    const WINDOW_CLOSED = 'The window for checking this deletion has closed';
+
+    /** Close is the only way out; the review copy that mints a request is gone. */
+    function expectHeldAfterConfirmation(
+      renderer: TestRenderer.ReactTestRenderer,
+    ) {
+      const text = allText(renderer);
+      expect(text).toContain('Deletion status unknown');
+      expect(text).not.toContain('Delete your account?');
+      expect(text).not.toContain('Keep my account');
+      expect(text).not.toContain("What's making you leave?");
+      expect(text).not.toContain('Nothing was deleted');
+      expect(text).not.toContain('Nothing has been deleted');
+      expect(text).not.toContain('Deletion in progress');
+      expect(sheetButtons(renderer, 'Continue to delete')).toHaveLength(0);
+      expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(0);
+      expect(sheetButtons(renderer, 'Requesting')).toHaveLength(0);
+      expect(sheetButtons(renderer, 'Checking')).toHaveLength(0);
+      expect(sheetButton(renderer, 'Close').props.disabled).toBe(false);
+      expectNotDeleted(renderer);
+    }
+
+    function blockedError() {
+      return {
+        error: {
+          code: 'account.deletion_blocked',
+          message: 'This account cannot be deleted right now.',
+        },
+      };
+    }
+
+    /** Mints a request whose confirmation is lost to the network. */
+    async function loseConfirmation(renderer: TestRenderer.ReactTestRenderer) {
+      await armDeletion(renderer);
+      await press(renderer, sheetButton(renderer, 'Permanently delete'));
+      expectUnknownOutcome(renderer);
+      expect(journalRows()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ phase: 'confirm_pending' }),
+        ]),
+      );
+    }
+
+    it('a status of `blocked` after a lost confirmation stays unresolved and never re-arms a request — in this dialog and on re-entry', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const first = renderScreen();
+      try {
+        await loseConfirmation(first);
+        await pressWhenArmed(first, 'Retry deletion');
+        expect(calls('delete-status')).toHaveLength(1);
+        expectHeldAfterConfirmation(first);
+        expect(allText(first)).toContain('may have completed');
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'observing' },
+        ]);
+
+        // Checking again is allowed; it asks the server, nothing else.
+        await pressWhenArmed(first, 'Retry deletion');
+        expect(calls('delete-status')).toHaveLength(2);
+        expectHeldAfterConfirmation(first);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldAfterConfirmation(second);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(journalRows()).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a 409 account.deletion_blocked answering the confirmation itself stays unresolved through the status check and never re-arms a request', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => reply('delete-confirm', blockedError(), 409),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expectHeldAfterConfirmation(first);
+        expect(allText(first)).toContain('may have completed');
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'confirm_pending' },
+        ]);
+
+        await pressWhenArmed(first, 'Retry deletion');
+        expect(calls('delete-status')).toHaveLength(1);
+        expectHeldAfterConfirmation(first);
+        expect(journalRows()).toMatchObject([
+          { operation_id: deletionId(10), phase: 'observing' },
+        ]);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldAfterConfirmation(second);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(journalRows()).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a `blocked` operation is never reclaimed from a full journal: the unresolved record outlives the capacity squeeze', async () => {
+      let requests = 0;
+      route({
+        'delete-request': () => {
+          requests += 1;
+          return reply('delete-request', requestPayload(requests * 10));
+        },
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const renderer = renderScreen();
+      try {
+        for (let index = 0; index < JOURNAL_CAPACITY - 1; index += 1) {
+          await act(async () => {
+            signIn(ownerId(index), `session.bearer.${index}`, 'google');
+          });
+          await openReview(renderer);
+          await press(renderer, sheetButton(renderer, 'Continue to delete'));
+          expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+          await press(renderer, sheetButton(renderer, 'Keep my account'));
+          await advance(DAY_MS + 60_000);
+        }
+        await act(async () => {
+          signIn(OWNER_A, BEARER_A, 'google');
+        });
+        await loseConfirmation(renderer);
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expectHeldAfterConfirmation(renderer);
+        await press(renderer, sheetButton(renderer, 'Close'));
+        expect(journalRows()).toHaveLength(JOURNAL_CAPACITY);
+
+        // Another account squeezes the journal: the lapsed challenges may
+        // go, owner A's blocked-after-confirmation row may not.
+        await act(async () => {
+          signIn(OWNER_B, BEARER_B, 'google');
+        });
+        await openReview(renderer);
+        await press(renderer, sheetButton(renderer, 'Continue to delete'));
+        expect(journalRows()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              owner_id: OWNER_A,
+              operation_id: deletionId(JOURNAL_CAPACITY * 10),
+              phase: 'observing',
+            }),
+          ]),
+        );
+        expectNotDeleted(renderer);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('a closed status window while observing stops polling and says the window closed — no 0 ms loop, no spinner, no status calls', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () =>
+          reply(
+            'delete-confirm',
+            { operationId: deletionId(10), state: 'in_progress' },
+            202,
+            { headers: { 'retry-after': '3600' } },
+          ),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const first = renderScreen();
+      try {
+        await armDeletion(first);
+        await press(first, sheetButton(first, 'Permanently delete'));
+        expect(allText(first)).toContain('Deletion in progress');
+        expect(journalRows()).toMatchObject([{ phase: 'observing' }]);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      // Process death; the owner comes back after the 24h status window.
+      await advance(25 * 60 * 60 * 1000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldAfterConfirmation(second);
+        expect(allText(second)).toContain(WINDOW_CLOSED);
+        expect(buttonLabels(second)).toEqual(['Close']);
+        expect(second.root.findAllByType(BrandSpinner)).toHaveLength(0);
+
+        for (let round = 0; round < 25; round += 1) await advance(0);
+        await advance(60_000);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(calls('delete-request')).toHaveLength(1);
+        expectHeldAfterConfirmation(second);
+        expect(allText(second)).toContain(WINDOW_CLOSED);
+        expect(buttonLabels(second)).toEqual(['Close']);
+        expect(journalRows()).toMatchObject([{ phase: 'observing' }]);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a closed status window after a lost confirmation shows the window-closed copy instead of a retry that does nothing', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const first = renderScreen();
+      try {
+        await loseConfirmation(first);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      await advance(25 * 60 * 60 * 1000);
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldAfterConfirmation(second);
+        expect(allText(second)).toContain(WINDOW_CLOSED);
+        expect(allText(second)).not.toContain(
+          'Check your connection and retry',
+        );
+        expect(buttonLabels(second)).toEqual(['Close']);
+        expect(sheetButtons(second, 'Retry deletion')).toHaveLength(0);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-request')).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
+      }
+    });
+
+    it('a status window that closes while the dialog is open turns the next check into the window-closed state, not a loop', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+        'delete-status': () => reply('delete-status', statusPayload('blocked')),
+      });
+      const renderer = renderScreen();
+      try {
+        await loseConfirmation(renderer);
+        await advance(25 * 60 * 60 * 1000);
+        await pressWhenArmed(renderer, 'Retry deletion');
+        expectHeldAfterConfirmation(renderer);
+        expect(allText(renderer)).toContain(WINDOW_CLOSED);
+        expect(buttonLabels(renderer)).toEqual(['Close']);
+        expect(calls('delete-status')).toHaveLength(0);
+        expect(calls('delete-request')).toHaveLength(1);
+      } finally {
+        act(() => renderer.unmount());
+      }
+    });
+
+    it('a semantically corrupt journal document over a sent confirmation re-enters as an unresolved record, never as the survey or a second request', async () => {
+      route({
+        'delete-request': () => reply('delete-request', requestPayload()),
+        'delete-confirm': () => Promise.reject(new TypeError('Network lost')),
+      });
+      const first = renderScreen();
+      try {
+        await loseConfirmation(first);
+      } finally {
+        act(() => first.unmount());
+      }
+
+      // The phase column still reads confirm_pending; the document — still
+      // valid JSON — no longer agrees with it.
+      const [row] = journalRows() as Array<{ document: string }>;
+      const corrupt = row!.document.replace(
+        '"phase":"confirm_pending"',
+        '"phase":"confirm_pendin"',
+      );
+      expect(corrupt).not.toBe(row!.document);
+      mockDatabase.native
+        .prepare(
+          'UPDATE device_account_deletion_journal SET document = ? WHERE operation_id = ?',
+        )
+        .run(corrupt, deletionId(10));
+
+      const second = renderScreen();
+      try {
+        await openDeleteSheet(second);
+        expectHeldAfterConfirmation(second);
+        expect(allText(second)).toContain('could not be read');
+        expect(buttonLabels(second)).toEqual(['Close']);
+        expect(calls('delete-request')).toHaveLength(1);
+        expect(calls('delete-confirm')).toHaveLength(1);
+        expect(journalRows()).toHaveLength(1);
+      } finally {
+        act(() => second.unmount());
       }
     });
   });
