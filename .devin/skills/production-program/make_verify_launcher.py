@@ -7,7 +7,11 @@
 
 The prior record's implementer result for --round is reused as the candidate claim;
 its `head_sha` is replaced by --head-sha when the coordinator added a fix commit on the
-same candidate branch. Every manual criterion named in --evidence is filled from the
+same candidate branch. Alternatively `--impl-json <file>` supplies a coordinator-authored
+claim (IMPLEMENT_SCHEMA shape, acceptance_results from the coordinator's OWN runs on
+--head-sha) for a follow-up fix to an ACCEPTED package; `--evidence` is then only required
+for the package's manual (Mac-plane) criteria, so a Linux-plane fix needs none.
+Every manual criterion named in --evidence is filled from the
 coordinator's own exact-SHA `scripts/mac-full-verify.sh --remote` artifact (run.json
 must say conclusion=success on that sha and the sibling summary.json ok=true), and the
 same evidence is handed to the independent reviewer and adversary. Writes
@@ -107,7 +111,8 @@ def main() -> None:
     ap.add_argument("--record", required=True)
     ap.add_argument("--round", type=int, required=True)
     ap.add_argument("--head-sha", required=True)
-    ap.add_argument("--evidence", action="append", default=[], metavar="CRITERION=RUN_JSON", required=True)
+    ap.add_argument("--impl-json", default=None, help="coordinator-authored implementer claim for --head-sha (replaces the prior round's claim)")
+    ap.add_argument("--evidence", action="append", default=[], metavar="CRITERION=RUN_JSON")
     ap.add_argument("--branch", default=INTEGRATION_BRANCH)
     ap.add_argument("--mode", default=None)
     a = ap.parse_args()
@@ -118,10 +123,23 @@ def main() -> None:
         record = json.load(fh)
     if record.get("package_id") != a.package_id:
         raise SystemExit(f"{a.record} is for {record.get('package_id')}, not {a.package_id}")
-    rnd = next((r for r in record.get("rounds", []) if r.get("round") == a.round), None)
-    if rnd is None or not rnd.get("implement"):
-        raise SystemExit(f"round {a.round} has no implementer result in {a.record}")
-    impl = dict(rnd["implement"])
+    if a.impl_json:
+        with open(a.impl_json, encoding="utf8") as fh:
+            impl = dict(json.load(fh))
+        missing_keys = [k for k in program_lib.IMPLEMENT_SCHEMA["required"] if k not in impl]
+        if missing_keys:
+            raise SystemExit(f"{a.impl_json} lacks required implementer fields {missing_keys}")
+        if impl.get("package_id") != a.package_id:
+            raise SystemExit(f"{a.impl_json} is for {impl.get('package_id')}, not {a.package_id}")
+        if str(impl.get("head_sha", "")).lower() != head:
+            raise SystemExit(f"{a.impl_json} head_sha {impl.get('head_sha')} != --head-sha {head}")
+        if impl.get("base_sha") != record["base_sha"]:
+            raise SystemExit(f"{a.impl_json} base_sha {impl.get('base_sha')} != record base {record['base_sha']}")
+    else:
+        rnd = next((r for r in record.get("rounds", []) if r.get("round") == a.round), None)
+        if rnd is None or not rnd.get("implement"):
+            raise SystemExit(f"round {a.round} has no implementer result in {a.record}")
+        impl = dict(rnd["implement"])
     impl["round"] = a.round
     impl["head_sha"] = head
     if impl.get("blocked"):

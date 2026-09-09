@@ -639,6 +639,59 @@ class WaveTests(unittest.TestCase):
         self.assertEqual(rt.calls[0], f"implement-{p['id']}-r3")
 
 
+class CandidateVerificationTests(unittest.TestCase):
+    def setUp(self):
+        self.m = pl.load_manifest(MANIFEST)
+
+    def _verify(self, rt: FakeRuntime, pkg: dict, impl: dict, evidence: list[dict], tmp: str) -> dict:
+        return asyncio.run(
+            pl.run_candidate_verification(
+                package_id=pkg["id"],
+                base_sha=BASE,
+                integration_branch="codex/x",
+                manifest_path=MANIFEST,
+                out_root=tmp,
+                runtime=rt.runtime(),
+                wave_id="verify-t",
+                impl=impl,
+                coordinator_evidence=evidence,
+            )
+        )
+
+    def test_linux_plane_fix_needs_no_mac_evidence_and_still_runs_reviewer_and_adversary(self):
+        pkg = pl.find_package(self.m, "W04-04")
+        impl = dict(good_impl(pkg), round=4, branch="devin/pp/w04-04/impl-r4")
+        rt = FakeRuntime({f"review-{pkg['id']}-v{HEAD[:8]}": good_review(pkg), f"adversary-{pkg['id']}-v{HEAD[:8]}": good_adv(pkg)})
+        with tempfile.TemporaryDirectory() as tmp:
+            rec = self._verify(rt, pkg, impl, [], tmp)
+            with open(os.path.join(tmp, pkg["id"], "verify-t", "record.json"), encoding="utf8") as fh:
+                self.assertEqual(json.load(fh)["kind"], "candidate_verification")
+        self.assertEqual(rec["status"], "ACCEPTED")
+        self.assertEqual(rec["candidate"], {"branch": "devin/pp/w04-04/impl-r4", "head_sha": HEAD, "round": 4, "lane": 1})
+        self.assertEqual(sorted(rt.calls), sorted([f"review-{pkg['id']}-v{HEAD[:8]}", f"adversary-{pkg['id']}-v{HEAD[:8]}"]))
+        self.assertIn("coordinator-run Linux acceptance", rt.registered["description"])
+
+    def test_mac_plane_candidate_still_requires_exact_sha_evidence(self):
+        pkg = pl.find_package(self.m, "W05-01")
+        impl = good_impl(pkg)
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                self._verify(FakeRuntime({}), pkg, impl, [], tmp)
+            with self.assertRaises(ValueError):
+                self._verify(FakeRuntime({}), pkg, impl, [{"criterion_id": "W05-01-AC1", "head_sha": BASE}], tmp)
+            with self.assertRaises(ValueError):
+                self._verify(FakeRuntime({}), pkg, impl, [{"criterion_id": "W05-01-AC2", "head_sha": HEAD}], tmp)
+
+    def test_incomplete_claim_is_refused_before_any_agent_launches(self):
+        pkg = pl.find_package(self.m, "W04-04")
+        impl = dict(good_impl(pkg), acceptance_results=ok_records(pkg)[:-1])
+        rt = FakeRuntime({})
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                self._verify(rt, pkg, impl, [], tmp)
+        self.assertEqual(rt.calls, [])
+
+
 class AdversaryFanoutTests(unittest.TestCase):
     def _run(self, rt: FakeRuntime, areas, tmp):
         return asyncio.run(pl.run_adversary_fanout(fanout_id="adv-1", head_sha=BASE, integration_branch="codex/x", out_root=tmp, runtime=rt.runtime(), areas=areas))

@@ -36,7 +36,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
-LIB_VERSION = "2026-09-08.9"
+LIB_VERSION = "2026-09-08.10"
 REPO = "RaunakGengiti2725/Pickle-Sensei"
 REPO_TOKEN = f"@{REPO}"
 # Child sessions boot this repository's configured environment (separate VM).
@@ -727,19 +727,27 @@ async def run_candidate_verification(
     graded on Linux: the coordinator runs the Mac slot itself, fills the manual criterion in
     `impl['acceptance_results']` with that exact-SHA artifact, and passes the same artifact as
     `coordinator_evidence` so reviewer and adversary grade the artifact instead of the command.
+    Also used for a coordinator-authored follow-up fix to an ACCEPTED Linux-plane package (a
+    retained P2/P3 finding closed after acceptance): the coordinator runs every acceptance
+    command on the fix sha itself and hands the claim over; a package with no manual criterion
+    needs no Mac artifact, one with a manual criterion still needs one for exactly that sha.
     No implementer is launched; nothing here mutates the integration branch."""
     if not SHA_RE.match(base_sha):
         raise ValueError(f"base_sha must be a full 40-hex sha, got {base_sha!r}")
     head = str(impl.get("head_sha", "")).lower()
     if not SHA_RE.match(head):
         raise ValueError(f"impl.head_sha must be a full 40-hex sha, got {impl.get('head_sha')!r}")
-    if not coordinator_evidence:
-        raise ValueError("coordinator_evidence must name at least one exact-SHA artifact")
+    manifest = load_manifest(manifest_path)
+    pkg = find_package(manifest, package_id)
+    manual_ids = {c["id"] for c in pkg["acceptance"] if c["kind"] == "manual"}
+    if manual_ids and not coordinator_evidence:
+        raise ValueError(f"coordinator_evidence must name an exact-SHA artifact for manual criteria {sorted(manual_ids)}")
     for ev in coordinator_evidence:
         if str(ev.get("head_sha", "")).lower() != head:
             raise ValueError(f"coordinator evidence {ev.get('criterion_id')} is for {ev.get('head_sha')}, not candidate {head}")
-    manifest = load_manifest(manifest_path)
-    pkg = find_package(manifest, package_id)
+    covered = {str(ev.get("criterion_id")) for ev in coordinator_evidence}
+    if manual_ids - covered:
+        raise ValueError(f"manual criteria without coordinator evidence: {sorted(manual_ids - covered)}")
     pre = grade_acceptance(pkg, impl.get("acceptance_results"))
     if pre:
         raise ValueError(f"candidate acceptance_results incomplete before verification: {pre}")
@@ -766,7 +774,9 @@ async def run_candidate_verification(
         await runtime.register_workflow(
             {
                 "name": f"pickle-sensei-program-{package_id.lower()}-verify",
-                "description": f"{package_id}: independent review ‖ adversary ‖ judge of existing candidate {head[:12]} with coordinator Mac evidence (base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
+                "description": f"{package_id}: independent review ‖ adversary ‖ judge of existing candidate {head[:12]} "
+                + ("with coordinator Mac evidence " if coordinator_evidence else "(coordinator-run Linux acceptance) ")
+                + f"(base {base_sha[:12]}, manifest {manifest['manifest_sha256'][:12]})",
                 "product": "Pickle Sensei (RaunakGengiti2725/Pickle-Sensei) — apps/mobile + supabase/functions/api",
                 "soft_time_limit_minutes": minutes,
                 "phases": wave_phases(1)[1:],
