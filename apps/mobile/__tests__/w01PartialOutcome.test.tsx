@@ -28,7 +28,11 @@
  */
 import React from 'react';
 import { Text } from 'react-native';
-import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import TestRenderer, {
+  act,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+} from 'react-test-renderer';
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { CanonicalAccessState } from '../src/billing/types';
@@ -231,7 +235,7 @@ function reservationServer(answer: () => Response | Promise<Response>) {
 function permitServer() {
   const urls: string[] = [];
   let reservations = 0;
-  const fetchMock = jest.fn(async (url: string) => {
+  const fetchMock = jest.fn(async (url: string, init?: RequestInit) => {
     urls.push(url);
     if (url.endsWith('/v1/analysis-permits')) {
       reservations += 1;
@@ -247,7 +251,24 @@ function permitServer() {
         200,
       );
     }
-    if (url.includes('/finalize')) return jsonResponse({ ok: true }, 200);
+    if (url.includes('/finalize')) {
+      // The real route acknowledges a release by naming the settled permit.
+      const id = decodeURIComponent(
+        url.slice(
+          url.indexOf('/analysis-permits/') + 18,
+          url.indexOf('/finalize'),
+        ),
+      );
+      const body: unknown = JSON.parse(String(init?.body ?? '{}'));
+      const outcome =
+        typeof body === 'object' && body !== null && 'outcome' in body
+          ? (body as { outcome: unknown }).outcome
+          : null;
+      return jsonResponse(
+        { permit: { id, status: 'released', outcome }, access: freeAccess },
+        200,
+      );
+    }
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, urls };
@@ -432,8 +453,8 @@ async function renderResult(analysisId: string) {
   return renderer;
 }
 
-function allText(renderer: ReactTestRenderer): string {
-  return renderer.root
+function allTextOf(root: ReactTestInstance): string {
+  return root
     .findAllByType(Text)
     .map(node => node.props.children)
     .flat(3)
@@ -442,6 +463,10 @@ function allText(renderer: ReactTestRenderer): string {
     )
     .join(' ')
     .replace(/\s+/g, ' ');
+}
+
+function allText(renderer: ReactTestRenderer): string {
+  return allTextOf(renderer.root);
 }
 
 function hostByTestId(renderer: ReactTestRenderer, testID: string) {
@@ -494,7 +519,15 @@ async function expectPartialResult(analysisId: string, message: string) {
   expect(copy).not.toContain('TECHNIQUE SCORE');
   expect(copy).not.toMatch(/\d(\.\d)?\s*[–-]\s*\d(\.\d)?/);
   expect(copy).not.toMatch(/\d+\s*%/);
-  expect(copy).not.toMatch(/confidence/i);
+  // No confidence VALUE or LEVEL anywhere (a classifier limiting factor such
+  // as "confidence capped" names a withheld measurement, not a number), and
+  // the benchmark block itself never speaks of confidence at all.
+  expect(copy).not.toMatch(
+    /confidence\s*[:=]?\s*\d|\d+(?:\.\d+)?\s*%?\s*confidence|(?:high|medium|low)[\s-]confidence/i,
+  );
+  expect(
+    allTextOf(hostByTestId(renderer, 'result-partial-benchmark')[0]!),
+  ).not.toMatch(/confidence|\d/i);
   expect(copy).not.toMatch(/DUPR|≈/);
   expect(mockListCatalogDrills).not.toHaveBeenCalled();
   expect(mockTriggerOutboxSync).not.toHaveBeenCalled();
