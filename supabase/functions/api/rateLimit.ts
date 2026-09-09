@@ -6,7 +6,7 @@
 // means at most 60 requests inside each clock minute per key. Limits fail
 // OPEN on backend errors: a Redis outage must never lock users out.
 
-import { redisConfigured, redisWindowGet, redisWindowIncr } from "./cache.ts";
+import { redisConfigured, redisWindowGet, redisWindowIncr, sha256Hex } from "./cache.ts";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -21,46 +21,67 @@ interface MemoryWindow {
 }
 
 const MEMORY_WINDOW_MAX = 20_000;
-const windows = new Map<string, MemoryWindow>();
-let nextMemoryExpiryAtMs = Infinity;
 
-function memoryHasCapacity(now: number): boolean {
-  if (windows.size < MEMORY_WINDOW_MAX) return true;
-  if (now >= nextMemoryExpiryAtMs) {
-    nextMemoryExpiryAtMs = Infinity;
-    for (const [key, window] of windows) {
-      if (window.resetAtMs <= now) {
-        windows.delete(key);
-      } else {
-        nextMemoryExpiryAtMs = Math.min(nextMemoryExpiryAtMs, window.resetAtMs);
+/** One per-isolate window store. `whenFull` is what a key that cannot be
+ * admitted counts as: `Infinity` fails CLOSED (a runaway client can never
+ * evict its own limit by flooding keys), `0` fails OPEN (a store whose
+ * cardinality an attacker controls must not fence bystanders). */
+class MemoryWindows {
+  private readonly windows = new Map<string, MemoryWindow>();
+  private nextExpiryAtMs = Infinity;
+
+  constructor(private readonly whenFull: number) {}
+
+  private hasCapacity(now: number): boolean {
+    if (this.windows.size < MEMORY_WINDOW_MAX) return true;
+    if (now >= this.nextExpiryAtMs) {
+      this.nextExpiryAtMs = Infinity;
+      for (const [key, window] of this.windows) {
+        if (window.resetAtMs <= now) {
+          this.windows.delete(key);
+        } else {
+          this.nextExpiryAtMs = Math.min(this.nextExpiryAtMs, window.resetAtMs);
+        }
       }
     }
+    return this.windows.size < MEMORY_WINDOW_MAX;
   }
-  return windows.size < MEMORY_WINDOW_MAX;
+
+  incr(key: string, resetAtMs: number, now = Date.now()): number {
+    const existing = this.windows.get(key);
+    if (existing && existing.resetAtMs > now) {
+      existing.count += 1;
+      return existing.count;
+    }
+    if (!this.hasCapacity(now)) return this.whenFull;
+    this.windows.set(key, { count: 1, resetAtMs });
+    this.nextExpiryAtMs = Math.min(this.nextExpiryAtMs, resetAtMs);
+    return 1;
+  }
+
+  get(key: string, now = Date.now()): number {
+    return this.peek(key, now) ?? (this.hasCapacity(now) ? 0 : this.whenFull);
+  }
+
+  /** The live count of a key this isolate has written, else null. */
+  peek(key: string, now = Date.now()): number | null {
+    const existing = this.windows.get(key);
+    return existing && existing.resetAtMs > now ? existing.count : null;
+  }
 }
 
+const windows = new MemoryWindows(Infinity);
+
 function memoryIncr(key: string, resetAtMs: number): number {
-  const now = Date.now();
-  const existing = windows.get(key);
-  if (existing && existing.resetAtMs > now) {
-    existing.count += 1;
-    return existing.count;
-  }
-  if (!memoryHasCapacity(now)) return Infinity;
-  windows.set(key, { count: 1, resetAtMs });
-  nextMemoryExpiryAtMs = Math.min(nextMemoryExpiryAtMs, resetAtMs);
-  return 1;
+  return windows.incr(key, resetAtMs);
 }
 
 function memoryGet(key: string): number {
-  const now = Date.now();
-  const existing = windows.get(key);
-  if (existing && existing.resetAtMs > now) return existing.count;
-  return memoryHasCapacity(now) ? 0 : Infinity;
+  return windows.get(key);
 }
 
-function windowKey(scope: string, id: string, windowSeconds: number) {
-  const bucket = Math.floor(Date.now() / (windowSeconds * 1_000));
+function windowKey(scope: string, id: string, windowSeconds: number, nowMs = Date.now()) {
+  const bucket = Math.floor(nowMs / (windowSeconds * 1_000));
   return { bucket, key: `rl:${scope}:${bucket}:${id}` };
 }
 
@@ -123,6 +144,228 @@ export async function peekRateLimit(
     count = memoryGet(key);
   }
   return toResult(count, limit, bucket, windowSeconds, count < limit);
+}
+
+// ── Auth-failure budgets behind a shared egress ─────────────────────────────
+//
+// A venue (office, club, carrier NAT) is ONE client IP. A flat per-IP
+// auth-failure counter charged by every 401 lets a single handset — junk
+// bearers, an expired token retried, thirty guesses — lock every valid peer
+// behind that IP out of reads, refresh and sign-in for a whole window. The
+// budget is therefore kept per CREDENTIAL (ip + sha256(credential), the
+// "shard") and refusals are classified:
+//
+//   local      — the request never reached Supabase Auth (no bearer, junk,
+//                expired, wrong issuer, a capability on a session route).
+//                Nothing was guessed. Charges nothing.
+//   liveness   — Auth judged a REAL credential that is merely dead (signed
+//                out elsewhere, session expired server-side, account gone,
+//                refresh token already rotated). Charges its shard only.
+//   credential — Auth judged a guess (bad signature, unknown refresh token,
+//                bad ID token). Charges its shard and, the first time a
+//                distinct credential is refused in the window, the egress's
+//                stuffing signal (`authfail`, one hit per distinct guess).
+//
+// A credential whose shard reached the budget is 429 before Auth — that
+// credential alone (`peekAuthFailureBudget`). Once the egress's stuffing
+// signal reaches the budget the egress is "under stuffing"
+// (`peekAuthStuffing`): a bearer that NOTHING verified vouches for yet (an
+// auth-cache miss on a session route) is 429 before Auth, because a novel
+// guess cannot be told from a valid peer's first request until Auth
+// answers. Everything verified keeps working — cached sessions, live
+// refresh tokens and sign-ins are never gated by a co-tenant's guesses;
+// refresh and bootstrap carry their own tight per-IP route budgets.
+//
+// Shards are keyed by the presenting client, so their cardinality is
+// attacker-controlled: they live in their own per-isolate store that fails
+// OPEN when full (a flood of distinct guesses can never fence bystanders),
+// separate from the store whose keys the server chooses.
+
+export type AuthRefusalKind = "local" | "liveness" | "credential";
+
+export interface AuthRefusal {
+  kind: AuthRefusalKind;
+  /** Shard the refusal belongs to when it is not the presented bearer's
+   * (a refresh judges the token in the body); `null` = no shard. */
+  identity?: string | null;
+}
+
+export interface AuthFailureBudget {
+  limit: number;
+  windowSeconds: number;
+}
+
+const AUTH_SHARD_SCOPE = "authfail_id";
+const AUTH_EGRESS_SCOPE = "authfail";
+const shardWindows = new MemoryWindows(0);
+
+/** GoTrue `error_code`s meaning "this real credential is no longer live". */
+const LIVENESS_ERROR_CODES = new Set([
+  "session_not_found",
+  "session_expired",
+  "user_not_found",
+  "user_banned",
+  "refresh_token_already_used",
+]);
+/** The same conditions as older GoTrue bodies phrase them (`{code, msg}`
+ * or `{error, error_description}` without `error_code`). */
+const LIVENESS_MESSAGES = [
+  /session from session_id claim in jwt does not exist/i,
+  /user from sub claim in jwt does not exist/i,
+  /refresh token:? already used/i,
+  /user is banned/i,
+  /session (?:has )?expired/i,
+];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/** Classify an Auth refusal body. Anything unrecognised is a guess. */
+export function authRefusalKind(body: unknown): AuthRefusalKind {
+  if (!isRecord(body)) return "credential";
+  if (typeof body.error_code === "string") {
+    return LIVENESS_ERROR_CODES.has(body.error_code) ? "liveness" : "credential";
+  }
+  for (const field of ["msg", "error_description", "message"]) {
+    const text = body[field];
+    if (typeof text === "string" && LIVENESS_MESSAGES.some((pattern) => pattern.test(text))) {
+      return "liveness";
+    }
+  }
+  return "credential";
+}
+
+/** Opaque shard id of a presented credential; `null` when there is none. */
+export async function authFailureIdentity(
+  credential: string | null | undefined,
+): Promise<string | null> {
+  if (typeof credential !== "string" || credential.trim() === "") return null;
+  return await sha256Hex(credential);
+}
+
+const refusals = new WeakMap<Response, AuthRefusal>();
+
+/** Tag a refusal response with how it should be charged. The tag rides
+ * the Response object in-process only — nothing is added to the wire. */
+export function authRefusal<R extends Response>(response: R, refusal: AuthRefusal): R {
+  refusals.set(response, refusal);
+  return response;
+}
+
+/** The tag of a refusal response; an untagged refusal is a guess. */
+export function authRefusalOf(response: Response): AuthRefusal {
+  return refusals.get(response) ?? { kind: "credential" };
+}
+
+type WindowStore = "redis" | "memory";
+
+async function incrWindow(
+  scope: string,
+  id: string,
+  windowSeconds: number,
+  nowMs: number,
+  memory: MemoryWindows,
+  store: WindowStore,
+): Promise<{ count: number; store: WindowStore }> {
+  const { bucket, key } = windowKey(scope, id, windowSeconds, nowMs);
+  if (store === "redis") {
+    const count = await redisWindowIncr(key, windowSeconds);
+    if (count !== null) return { count, store: "redis" };
+  }
+  return {
+    count: memory.incr(key, (bucket + 1) * windowSeconds * 1_000, nowMs),
+    store: "memory",
+  };
+}
+
+async function getWindow(
+  scope: string,
+  id: string,
+  windowSeconds: number,
+  nowMs: number,
+  memory: MemoryWindows,
+): Promise<number> {
+  const { key } = windowKey(scope, id, windowSeconds, nowMs);
+  if (redisConfigured()) {
+    const count = await redisWindowGet(key);
+    // Charges that fell back to memory while Redis refused them still count
+    // here: the higher of the two views is the one this isolate has seen.
+    if (count !== null) return Math.max(count, memory.peek(key, nowMs) ?? 0);
+  }
+  return memory.get(key, nowMs);
+}
+
+/**
+ * Gate a request up front: is the credential `identity` (from
+ * `authFailureIdentity`) still tolerated from `ip`? Only that credential's
+ * own refusals count. Charged later by `chargeAuthFailure` with the outcome.
+ * A request without a credential has nothing to shard and is allowed (its
+ * refusal will be local).
+ */
+export async function peekAuthFailureBudget(
+  ip: string,
+  identity: string | null,
+  budget: AuthFailureBudget,
+): Promise<RateLimitResult> {
+  const nowMs = Date.now();
+  const bucket = Math.floor(nowMs / (budget.windowSeconds * 1_000));
+  if (identity === null) return toResult(0, budget.limit, bucket, budget.windowSeconds, true);
+  const shard = await getWindow(
+    AUTH_SHARD_SCOPE,
+    `${ip}:${identity}`,
+    budget.windowSeconds,
+    nowMs,
+    shardWindows,
+  );
+  return toResult(shard, budget.limit, bucket, budget.windowSeconds, shard < budget.limit);
+}
+
+/**
+ * Is `ip` under credential stuffing — have `budget.limit` DISTINCT
+ * credentials been refused from it this window? Gates only bearers that
+ * nothing verified vouches for (an auth-cache miss); a verified session, a
+ * refresh or a sign-in is never held to it.
+ */
+export async function peekAuthStuffing(
+  ip: string,
+  budget: AuthFailureBudget,
+): Promise<RateLimitResult> {
+  const nowMs = Date.now();
+  const bucket = Math.floor(nowMs / (budget.windowSeconds * 1_000));
+  const stuffing = await getWindow(AUTH_EGRESS_SCOPE, ip, budget.windowSeconds, nowMs, windows);
+  return toResult(stuffing, budget.limit, bucket, budget.windowSeconds, stuffing < budget.limit);
+}
+
+/**
+ * Charge a refusal. `identity` is the presented bearer's shard; the refusal
+ * may name another (`refusal.identity`) or none. Both counters are keyed to
+ * one instant so a charge can never straddle a window boundary, and the
+ * stuffing signal is written to the store the shard landed in so a Redis
+ * hiccup on the shard cannot turn one replayed credential into a shared
+ * signal per isolate.
+ */
+export async function chargeAuthFailure(
+  ip: string,
+  identity: string | null,
+  refusal: AuthRefusal,
+  budget: AuthFailureBudget,
+): Promise<void> {
+  if (refusal.kind === "local") return;
+  const target = refusal.identity === undefined ? identity : refusal.identity;
+  if (target === null) return;
+  const nowMs = Date.now();
+  const store: WindowStore = redisConfigured() ? "redis" : "memory";
+  const shard = await incrWindow(
+    AUTH_SHARD_SCOPE,
+    `${ip}:${target}`,
+    budget.windowSeconds,
+    nowMs,
+    shardWindows,
+    store,
+  );
+  if (refusal.kind === "credential" && shard.count === 1) {
+    await incrWindow(AUTH_EGRESS_SCOPE, ip, budget.windowSeconds, nowMs, windows, shard.store);
+  }
 }
 
 /** 429 body + headers shared by every limited route. */
