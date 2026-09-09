@@ -736,6 +736,46 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
     }
   });
 
+  it('tearing the screen down while a status poll is in flight leaves no detached poll loop: the reply is dropped and nothing else is sent', async () => {
+    const poll = deferred<Response>();
+    route({
+      'delete-request': () => reply('delete-request', requestPayload()),
+      'delete-confirm': () =>
+        reply(
+          'delete-confirm',
+          { operationId: deletionId(10), state: 'in_progress' },
+          202,
+          { headers: { 'retry-after': '3' } },
+        ),
+      'delete-status': () =>
+        calls('delete-status').length === 1
+          ? poll.promise
+          : reply('delete-status', statusPayload('in_progress')),
+    });
+    const renderer = renderScreen();
+    await armDeletion(renderer);
+    await press(renderer, sheetButton(renderer, 'Permanently delete'));
+    expect(allText(renderer)).toContain('Deletion in progress');
+    await advance(3_000);
+    expect(calls('delete-status')).toHaveLength(1);
+
+    act(() => renderer.unmount());
+    await act(async () => {
+      poll.resolve(reply('delete-status', statusPayload('in_progress')));
+    });
+    await advance(3_000);
+    await advance(3_000);
+    await advance(60_000);
+    expect(calls('delete-status')).toHaveLength(1);
+    expect(calls('delete-confirm')).toHaveLength(1);
+    expect(
+      useAuthStore.getState().completeAccountDeletion,
+    ).not.toHaveBeenCalled();
+    expect(journalRows()).toMatchObject([
+      { operation_id: deletionId(10), phase: 'observing' },
+    ]);
+  });
+
   it('keeps an expired operation honest: no deletion claim until the server says so, then a fresh request', async () => {
     let requests = 0;
     route({
