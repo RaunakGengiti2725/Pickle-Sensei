@@ -1,6 +1,7 @@
-import React, { useCallback, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  AppState,
   StyleSheet,
   Text,
   View,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { Card, Pill } from '../design/components';
 import { color, space, type } from '../design/tokens';
+import { useAuthStore } from '../auth/authStore';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -27,6 +29,7 @@ import {
   readOfflineWalletStatus,
   type OfflineWalletStatus,
 } from '../data/offlineWallet';
+import { withTransaction } from '../data/transactions';
 import { trustedTime, type TrustedTimeLeaseVerdict } from '../data/trustedTime';
 
 /**
@@ -91,37 +94,86 @@ const HOLD_RULE =
   'arrived. The same receipt is presented again on the next sync, so ' +
   'nothing is charged twice.';
 
+const SERVER_HOLD_RULE =
+  'The server received a result and is still confirming it. The same ' +
+  'receipt is presented again on the next sync, so nothing is charged ' +
+  'twice.';
+
+const UNIDENTIFIED_HOLD_RULE =
+  'A result submission is on record, but the receipt it names was never ' +
+  'recorded on this phone, so its outcome cannot be read here. It needs an ' +
+  'online check; this phone charges nothing for it.';
+
 const ALLOCATION_STAYS =
   'stay allocated to this phone until they sync with the server — an ' +
   'unused pass is never taken back automatically.';
 
 type LeaseSummary =
   | { readonly kind: 'none' }
-  | { readonly kind: 'active'; readonly remainingMs: number }
-  | { readonly kind: 'expired' }
-  | { readonly kind: 'reconcile_required'; readonly reason: ReconcileReason };
+  | {
+      readonly kind: 'active';
+      readonly remainingMs: number;
+      readonly pro: boolean;
+    }
+  | { readonly kind: 'expired'; readonly pro: boolean }
+  | {
+      readonly kind: 'reconcile_required';
+      readonly reason: ReconcileReason;
+      readonly pro: boolean;
+    };
 
-/** One verdict for the wallet: any live grant makes the pass usable; without
- * one, an unconfirmed reading is named before an expiry (a floor reading can
- * prove an expiry, but never that time has run out on an unconfirmed pass). */
+function isProGrant(grant: HeldOfflineGrantView): boolean {
+  return grant.entitlementSource === 'verified_store';
+}
+
+/** A live verdict carries a measurable, positive remaining time; anything
+ * else the ledger labelled active is inconsistent and is treated as a pass
+ * that needs an online check, never as a live one. */
+function liveRemainingMs(verdict: TrustedTimeLeaseVerdict): number | null {
+  if (verdict.kind !== 'active') return null;
+  const remaining = verdict.remainingMs;
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : null;
+}
+
+/** One verdict for the wallet, named after the grant that governs it: a live
+ * Pro lease first (it covers every analysis), then the live grant with the
+ * most time left; without a live grant, an unconfirmed reading is named
+ * before an expiry (a floor reading can prove an expiry, but never that time
+ * has run out on an unconfirmed pass). A lapsed grant never lends its
+ * entitlement to the copy while another grant is live. */
 function summarizeLease(grants: readonly HeldOfflineGrantView[]): LeaseSummary {
   if (grants.length === 0) return { kind: 'none' };
-  let active: { readonly kind: 'active'; readonly remainingMs: number } | null =
-    null;
-  let reconcile: ReconcileReason | null = null;
+  let active: {
+    readonly remainingMs: number;
+    readonly pro: boolean;
+  } | null = null;
+  let reconcile: {
+    readonly reason: ReconcileReason;
+    readonly pro: boolean;
+  } | null = null;
+  let expired: { readonly pro: boolean } | null = null;
   for (const grant of grants) {
     const verdict = grant.execution;
-    if (verdict.kind === 'active') {
-      if (active === null || verdict.remainingMs > active.remainingMs)
-        active = { kind: 'active', remainingMs: verdict.remainingMs };
-    } else if (verdict.kind === 'reconcile_required' && reconcile === null) {
-      reconcile = verdict.reason;
+    const pro = isProGrant(grant);
+    const remainingMs = liveRemainingMs(verdict);
+    if (remainingMs !== null) {
+      if (
+        active === null ||
+        (pro && !active.pro) ||
+        (pro === active.pro && remainingMs > active.remainingMs)
+      )
+        active = { remainingMs, pro };
+    } else if (verdict.kind === 'active') {
+      if (reconcile === null) reconcile = { reason: 'invalid_lease', pro };
+    } else if (verdict.kind === 'reconcile_required') {
+      if (reconcile === null) reconcile = { reason: verdict.reason, pro };
+    } else if (expired === null || (pro && !expired.pro)) {
+      expired = { pro };
     }
   }
-  if (active) return active;
-  if (reconcile !== null)
-    return { kind: 'reconcile_required', reason: reconcile };
-  return { kind: 'expired' };
+  if (active) return { kind: 'active', ...active };
+  if (reconcile !== null) return { kind: 'reconcile_required', ...reconcile };
+  return { kind: 'expired', pro: expired?.pro ?? false };
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -178,18 +230,27 @@ export function presentOfflineJourney(
 
   const { allocation, wallet } = state;
   const grants = allocation.grants;
-  const proLease = grants.some(
-    grant => grant.entitlementSource === 'verified_store',
-  );
+  const lease = summarizeLease(grants);
+  const proLease = lease.kind !== 'none' && lease.pro;
   const held = allocation.spendableTickets;
   const spent = allocation.consumedTickets;
   const total = held + spent;
-  const onHold = wallet.pending.filter(
-    receipt => receipt.phase !== 'queued',
-  ).length;
-  const waiting = wallet.pending.length - onHold;
+  // Three receipt phases, described apart: queued (never presented),
+  // presented with no answer (a HOLD the connection caused) and answered but
+  // withheld by the server (a HOLD the server asked for).
+  let waiting = 0;
+  let unanswered = 0;
+  let serverHeld = 0;
+  for (const receipt of wallet.pending) {
+    if (receipt.phase === 'queued') waiting += 1;
+    else if (receipt.phase === 'presented_unanswered') unanswered += 1;
+    else serverHeld += 1;
+  }
+  const onHold = unanswered + serverHeld;
+  // The journal can hold an in-flight submission that names no receipt on
+  // file: still a HOLD, but one with no count to state.
+  const unidentifiedHold = wallet.hold && onHold === 0;
   const hold = wallet.hold || onHold > 0;
-  const lease = summarizeLease(grants);
 
   const rows: { label: string; value: string }[] = [];
   if (lease.kind !== 'none') {
@@ -211,13 +272,19 @@ export function presentOfflineJourney(
   if (waiting > 0)
     syncParts.push(`${plural(waiting, 'result', 'results')} waiting`);
   if (onHold > 0) syncParts.push(`${onHold} on hold`);
+  if (unidentifiedHold) syncParts.push('Unreadable');
   rows.push({
     label: 'Waiting to sync',
     value: syncParts.length === 0 ? 'Nothing' : syncParts.join(' · '),
   });
 
   const notes: string[] = [];
-  if (hold) notes.push(HOLD_RULE);
+  if (unanswered > 0) notes.push(HOLD_RULE);
+  if (serverHeld > 0) notes.push(SERVER_HOLD_RULE);
+  if (unidentifiedHold) notes.push(UNIDENTIFIED_HOLD_RULE);
+  const holdTitle = unidentifiedHold
+    ? 'An offline result needs an online check'
+    : `${plural(onHold, 'result', 'results')} awaiting confirmation`;
 
   if (lease.kind === 'none') {
     notes.push(
@@ -229,9 +296,7 @@ export function presentOfflineJourney(
     return {
       badge: hold ? 'ON HOLD' : 'NONE HELD',
       badgeTone: hold ? 'warn' : 'neutral',
-      title: hold
-        ? `${plural(onHold, 'result', 'results')} awaiting confirmation`
-        : 'No offline pass on this phone',
+      title: hold ? holdTitle : 'No offline pass on this phone',
       rows,
       notes,
     };
@@ -246,9 +311,7 @@ export function presentOfflineJourney(
     return {
       badge: hold ? 'ON HOLD' : 'EXPIRED',
       badgeTone: hold ? 'warn' : 'neutral',
-      title: hold
-        ? `${plural(onHold, 'result', 'results')} awaiting confirmation`
-        : 'Offline pass expired',
+      title: hold ? holdTitle : 'Offline pass expired',
       rows,
       notes,
     };
@@ -262,9 +325,7 @@ export function presentOfflineJourney(
     return {
       badge: hold ? 'ON HOLD' : 'CONFIRM ONLINE',
       badgeTone: 'warn',
-      title: hold
-        ? `${plural(onHold, 'result', 'results')} awaiting confirmation`
-        : 'Offline pass needs an online check',
+      title: hold ? holdTitle : 'Offline pass needs an online check',
       rows,
       notes,
     };
@@ -272,28 +333,42 @@ export function presentOfflineJourney(
 
   notes.push(NOT_PHONE_CLOCK);
   if (!proLease) notes.push(SPEND_RULE);
-  const title = hold
-    ? `${plural(onHold, 'result', 'results')} awaiting confirmation`
-    : proLease
-      ? 'Pro offline pass active'
-      : held === 0
-        ? 'Offline pass fully spent'
-        : `${plural(held, 'offline analysis', 'offline analyses')} ready`;
+  if (hold) {
+    return {
+      badge: 'ON HOLD',
+      badgeTone: 'warn',
+      title: holdTitle,
+      rows,
+      notes,
+    };
+  }
+  if (!proLease && held === 0) {
+    return {
+      badge: 'SPENT',
+      badgeTone: 'neutral',
+      title: 'Offline pass fully spent',
+      rows,
+      notes,
+    };
+  }
   return {
-    badge: hold ? 'ON HOLD' : 'READY',
-    badgeTone: hold ? 'warn' : 'good',
-    title,
+    badge: 'READY',
+    badgeTone: 'good',
+    title: proLease
+      ? 'Pro offline pass active'
+      : `${plural(held, 'offline analysis', 'offline analyses')} ready`,
     rows,
     notes,
   };
 }
 
 /**
- * The last ledger read, bound to the owner context it was read under. The
- * ready surface of the Analyze screen renders from this publication and never
- * opens the wallet itself: that surface persists nothing and touches no local
- * storage until an attempt starts (pinned by the Analyze end-to-end suites).
- * A publication is only ever shown to the owner context it was read for.
+ * The last ledger read, bound to the owner context it was read under and to
+ * the sequence number of the read that produced it. Every surface that shows
+ * the offline journey (Analyze, Settings) reads the ledger itself on mount,
+ * focus, foreground and owner switch; the shared publication only lets a
+ * newer read replace an older one, never the reverse. A publication is only
+ * ever shown to the owner context it was read for.
  */
 interface OfflineJourneyPublication {
   readonly owner: DataOwnerContext;
@@ -302,6 +377,8 @@ interface OfflineJourneyPublication {
 
 let publication: OfflineJourneyPublication | null = null;
 const publicationListeners = new Set<() => void>();
+/** Monotonic read counter: a read may publish only while it is the newest. */
+let latestRead = 0;
 
 function subscribeToOfflineJourney(listener: () => void): () => void {
   publicationListeners.add(listener);
@@ -314,8 +391,12 @@ function readPublication(): OfflineJourneyPublication | null {
   return publication;
 }
 
-function publish(owner: DataOwnerContext, state: OfflineJourneyState): void {
-  if (!isDataOwnerContextCurrent(owner)) return;
+function publish(
+  owner: DataOwnerContext,
+  read: number,
+  state: OfflineJourneyState,
+): void {
+  if (read !== latestRead || !isDataOwnerContextCurrent(owner)) return;
   publication = { owner, state };
   for (const listener of publicationListeners) listener();
 }
@@ -342,23 +423,29 @@ function publishedStateFor(
 }
 
 /**
- * Reads the wallet for `owner` and publishes the result. A read that
- * finishes after the owner changed is dropped, never published under the new
- * account. An unreadable wallet is published as unreadable, not as empty.
+ * Reads the wallet for `owner` and publishes the result. The allocation and
+ * the receipt journal are read inside ONE transaction so the pair can never
+ * tear. A read that finishes after a newer read started, or after the owner
+ * changed, is dropped — never published over the newer state or under the
+ * new account. An unreadable wallet is published as unreadable, not as empty.
  */
 async function refreshOfflineJourney(owner: DataOwnerContext): Promise<void> {
-  publish(owner, { kind: 'loading' });
+  latestRead += 1;
+  const read = latestRead;
+  publish(owner, read, { kind: 'loading' });
   let next: OfflineJourneyState;
   try {
     const reading = await trustedTime.read();
     const db = getDb();
-    const allocation = await readOfflineAllocation(db, reading);
-    const wallet = await readOfflineWalletStatus(db);
-    next = { kind: 'read', allocation, wallet };
+    next = await withTransaction(db, async transaction => ({
+      kind: 'read',
+      allocation: await readOfflineAllocation(transaction, reading),
+      wallet: await readOfflineWalletStatus(transaction),
+    }));
   } catch {
     next = { kind: 'unavailable' };
   }
-  publish(owner, next);
+  publish(owner, read, next);
 }
 
 function useActiveOwner(): DataOwnerContext {
@@ -370,6 +457,36 @@ function useActiveOwner(): DataOwnerContext {
 }
 
 /**
+ * A server-issued allocation belongs to the signed-in synced account: the
+ * active owner must be a canonical account owner AND the live auth session
+ * must be that account's synced sign-in. Local-only and signed-out owners
+ * hold no such allocation, and nothing is read for them.
+ */
+function useOfflineJourneyApplicable(owner: DataOwnerContext): boolean {
+  const session = useAuthStore(s => s.session);
+  return (
+    holdsServerIssuedAllocation(owner) &&
+    session !== null &&
+    !session.localOnly &&
+    session.canonicalAppUserId !== null &&
+    session.canonicalAppUserId.trim().toLowerCase() === owner.ownerKey
+  );
+}
+
+function useCurrentPublication(
+  owner: DataOwnerContext,
+  applicable: boolean,
+): OfflineJourneyState | null {
+  const current = useSyncExternalStore(
+    subscribeToOfflineJourney,
+    readPublication,
+    readPublication,
+  );
+  if (!applicable) return null;
+  return publishedStateFor(owner, current) ?? { kind: 'loading' };
+}
+
+/**
  * Reads the offline journey for the active signed-in owner on every focus
  * of the hosting screen and on every owner switch, and publishes it for
  * observing surfaces. Local-only and signed-out owners hold no server-issued
@@ -377,12 +494,7 @@ function useActiveOwner(): DataOwnerContext {
  */
 export function useOfflineJourney(): OfflineJourneyState | null {
   const owner = useActiveOwner();
-  const applicable = holdsServerIssuedAllocation(owner);
-  const current = useSyncExternalStore(
-    subscribeToOfflineJourney,
-    readPublication,
-    readPublication,
-  );
+  const applicable = useOfflineJourneyApplicable(owner);
 
   useFocusEffect(
     useCallback(() => {
@@ -391,24 +503,45 @@ export function useOfflineJourney(): OfflineJourneyState | null {
     }, [applicable, owner]),
   );
 
-  if (!applicable) return null;
-  return publishedStateFor(owner, current) ?? { kind: 'loading' };
+  return useCurrentPublication(owner, applicable);
+}
+
+/** The navigation events a hosting screen exposes; both are optional so the
+ * hook also works where the screen is rendered outside a navigator. */
+export interface OfflineJourneyFocusSource {
+  addListener?(event: 'focus', listener: () => void): () => void;
+  isFocused?(): boolean;
 }
 
 /**
- * Observes the published offline journey for the active owner without
- * reading the wallet. `null` until a read has been published for exactly
- * this owner context, so another account's allocation is never shown.
+ * The same read, driven by the hosting screen's own navigation object rather
+ * than `useFocusEffect`: on mount, on every focus, on every return to the
+ * foreground while focused, and on every owner or session switch. Nothing is
+ * read for local-only or signed-out owners, and the read never writes.
  */
-export function usePublishedOfflineJourney(): OfflineJourneyState | null {
+export function useOfflineJourneyOnFocus(
+  navigation: OfflineJourneyFocusSource,
+): OfflineJourneyState | null {
   const owner = useActiveOwner();
-  const current = useSyncExternalStore(
-    subscribeToOfflineJourney,
-    readPublication,
-    readPublication,
-  );
-  if (!holdsServerIssuedAllocation(owner)) return null;
-  return publishedStateFor(owner, current);
+  const applicable = useOfflineJourneyApplicable(owner);
+
+  useEffect(() => {
+    if (!applicable) return undefined;
+    const refresh = () => {
+      void refreshOfflineJourney(owner);
+    };
+    refresh();
+    const unsubscribeFocus = navigation.addListener?.('focus', refresh);
+    const foreground = AppState.addEventListener('change', status => {
+      if (status === 'active' && navigation.isFocused?.() !== false) refresh();
+    });
+    return () => {
+      unsubscribeFocus?.();
+      foreground.remove();
+    };
+  }, [applicable, owner, navigation]);
+
+  return useCurrentPublication(owner, applicable);
 }
 
 export function OfflineAllocationCard(props: {

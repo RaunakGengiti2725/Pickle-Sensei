@@ -113,7 +113,7 @@ import {
 } from '../components/AnalysisProgress';
 import {
   OfflineAllocationCard,
-  usePublishedOfflineJourney,
+  useOfflineJourneyOnFocus,
 } from '../components/OfflineAllocationCard';
 import {
   clearTryAgainHandoff,
@@ -753,7 +753,7 @@ export function AnalyzeScreen({
     getDataOwnerSnapshot,
   );
   const mountOwner = useRef(ownerEpoch);
-  const offlineJourney = usePublishedOfflineJourney();
+  const offlineJourney = useOfflineJourneyOnFocus(navigation);
   const [mountService] = useState(currentAnalysisService);
   const [routeController] = useState(() => new AbortController());
   const routeExecution = useRef<OriginalAnalysisExecution | null>(null);
