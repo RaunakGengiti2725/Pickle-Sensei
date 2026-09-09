@@ -21,7 +21,12 @@ import type {
 } from '@pickle/shared-types';
 import type { CapturedClip } from '../src/camera/capture';
 import type { LocalDb } from '../src/data/db';
-import { getKv, setKv } from '../src/data/repository';
+import {
+  OWNER_SCOPED_KV_NAMESPACES,
+  getKv,
+  purgeOwnerData,
+  setKv,
+} from '../src/data/repository';
 import {
   ANALYSIS_RELEASE_POLICY_PATH,
   ApiError,
@@ -34,7 +39,7 @@ import {
 } from '../src/analysis/partialOutcome';
 import {
   RELEASE_AUTHORITY_SCHEMA_VERSION,
-  RELEASE_POLICY_CACHE_KV_KEY,
+  RELEASE_POLICY_CACHE_KV_NAMESPACE,
   RELEASE_POLICY_CACHE_MAX_AGE_MS,
   RELEASE_POLICY_CACHE_MAX_BYTES,
   RELEASE_POLICY_MAX_CANONICAL_BYTES,
@@ -42,6 +47,7 @@ import {
   admitReleasePolicy,
   canonicalizeReleasePolicyJson,
   clearCachedReleasePolicy,
+  releasePolicyCacheKeyForOwner,
   digestReleasePolicyJson,
   readCachedReleasePolicy,
   resolveReleaseAuthority,
@@ -168,6 +174,9 @@ const CANONICAL_VECTOR_DIGEST =
   '353f0ee7d2ca83cb3f1b48e79e838414eeadae525aa688b13557608a4fd6be57';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
+/** The transport-class outcome: retryable, never a verdict on the capture. */
+const RETRY_LATER =
+  'The rating service could not be reached. Your capture is saved and can be scored later.';
 
 function approvalFor(
   document: AnalysisReleasePolicyDocument,
@@ -364,11 +373,14 @@ function setFetch(fetchMock: unknown) {
 
 // ─── capture fixture (real pipeline over the canonical synthetic swing) ─────
 
-function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
+function swingClipWithSidecar(label: string): {
+  clip: CapturedClip;
+  sidecarJson: string;
+} {
   const { sequence, window } = generateSwingSequence({});
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
-    uri: 'file:///captures/release-policy.mov',
+    uri: `file:///captures/${label}.mov`,
     durationMs: window.endMs,
     fps: sequence.video.fps,
     width: sequence.video.width,
@@ -420,7 +432,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
     poseSequence: {
       schemaVersion: 1,
       format: 'pickle.pose-sequence.v1',
-      uri: 'file:///captures/release-policy.pose.json',
+      uri: `file:///captures/${label}.pose.json`,
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
@@ -431,11 +443,10 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
 }
 
 let captureSerial = 0;
-function captureRequest(db: LocalDb, clip: CapturedClip) {
-  captureSerial += 1;
+function captureRequest(db: LocalDb, clip: CapturedClip, label: string) {
   return {
     db,
-    ...seedCaptureRequest(db, clip, `release-policy-${captureSerial}`),
+    ...seedCaptureRequest(db, clip, label),
     clip,
     declaredStroke: 'forehand_drive' as const,
     declaredCanonical: 'FOREHAND_DRIVE' as const,
@@ -450,10 +461,12 @@ async function runOnce(
   db: ReturnType<typeof createCaptureAnalysisDb>,
   server: ScriptedServer,
 ) {
-  const { clip, sidecarJson } = swingClipWithSidecar();
+  captureSerial += 1;
+  const label = `release-policy-${captureSerial}`;
+  const { clip, sidecarJson } = swingClipWithSidecar(label);
   mockReadArtifact = async () => sidecarJson;
   setFetch(server.fetchMock);
-  return runCaptureAnalysis(captureRequest(db.db, clip));
+  return runCaptureAnalysis(captureRequest(db.db, clip, label));
 }
 
 function expectMechanicsOnlyPartial(
@@ -483,7 +496,7 @@ function expectNothingChargeable(
 }
 
 async function cachedSlot(db: LocalDb) {
-  const raw = await getKv(db, RELEASE_POLICY_CACHE_KV_KEY);
+  const raw = await getKv(db, releasePolicyCacheKeyForOwner(SCOPE.ownerKey));
   return raw === null ? null : (JSON.parse(raw) as Record<string, unknown>);
 }
 
@@ -844,7 +857,7 @@ describe('release-policy cache', () => {
       policy: verifiedPolicy(),
       serverTime: nowSeconds(),
     });
-    const raw = await getKv(db, RELEASE_POLICY_CACHE_KV_KEY);
+    const raw = await getKv(db, releasePolicyCacheKeyForOwner(SCOPE.ownerKey));
     expect(raw).not.toBeNull();
     const reading = anchoredReading(Date.now());
     for (const corrupt of [
@@ -856,7 +869,7 @@ describe('release-policy cache', () => {
       JSON.stringify({ ...JSON.parse(raw!), fetchedAt: 'yesterday' }),
       raw!.padEnd(RELEASE_POLICY_CACHE_MAX_BYTES + 1, ' '),
     ]) {
-      await setKv(db, RELEASE_POLICY_CACHE_KV_KEY, corrupt);
+      await setKv(db, releasePolicyCacheKeyForOwner(SCOPE.ownerKey), corrupt);
       expect(await readCachedReleasePolicy(db, SCOPE, reading)).toEqual({
         status: 'unavailable',
         reason: 'invalid',
@@ -926,11 +939,36 @@ describe('release-policy cache', () => {
 
     await writeCachedReleasePolicy(db, SCOPE, { policy, serverTime: now });
     expect(await cachedSlot(db)).not.toBeNull();
-    await clearCachedReleasePolicy(db);
+    await clearCachedReleasePolicy(db, SCOPE);
     expect(await cachedSlot(db)).toBeNull();
     expect(
       await readCachedReleasePolicy(db, SCOPE, anchoredReading(Date.now())),
     ).toEqual({ status: 'unavailable', reason: 'missing' });
+  });
+
+  it('lives in an owner-scoped kv namespace that account deletion purges', async () => {
+    expect(OWNER_SCOPED_KV_NAMESPACES).toContain(
+      RELEASE_POLICY_CACHE_KV_NAMESPACE,
+    );
+    expect(releasePolicyCacheKeyForOwner(OWNER)).toBe(
+      `${RELEASE_POLICY_CACHE_KV_NAMESPACE}:${OWNER}`,
+    );
+    const { db } = createCaptureAnalysisDb();
+    const now = nowSeconds();
+    const other = { ownerKey: OTHER_OWNER, apiOrigin: API_ORIGIN };
+    await writeCachedReleasePolicy(db, SCOPE, {
+      policy: verifiedPolicy(),
+      serverTime: now,
+    });
+    await writeCachedReleasePolicy(db, other, {
+      policy: verifiedPolicy(),
+      serverTime: now,
+    });
+    await purgeOwnerData(db, OWNER);
+    expect(await cachedSlot(db)).toBeNull();
+    expect(
+      await getKv(db, releasePolicyCacheKeyForOwner(OTHER_OWNER)),
+    ).not.toBeNull();
   });
 });
 
@@ -989,8 +1027,14 @@ describe('resolveReleaseAuthority', () => {
     ).toEqual({ status: 'ineligible', reasonCode: 'expired' });
   });
 
-  it('a tampered answer is ineligible and leaves a valid cache untouched', async () => {
+  it('a tampered answer is no verdict: never authorization, never cached, cache untouched', async () => {
     const { db } = createCaptureAnalysisDb();
+    for (const body of [tamperedBytesAuthority(), tamperedDigestAuthority()]) {
+      expect(
+        await gate(db, scriptedServer({ kind: 'body', body })),
+      ).toMatchObject({ status: 'unavailable', reason: 'rejected_response' });
+      expect(await cachedSlot(db)).toBeNull();
+    }
     await writeCachedReleasePolicy(db, SCOPE, {
       policy: verifiedPolicy(),
       serverTime: nowSeconds(),
@@ -1001,13 +1045,7 @@ describe('resolveReleaseAuthority', () => {
         db,
         scriptedServer({ kind: 'body', body: tamperedBytesAuthority() }),
       ),
-    ).toEqual({ status: 'ineligible', reasonCode: 'unverified' });
-    expect(
-      await gate(
-        db,
-        scriptedServer({ kind: 'body', body: tamperedDigestAuthority() }),
-      ),
-    ).toEqual({ status: 'ineligible', reasonCode: 'unverified' });
+    ).toMatchObject({ status: 'active', source: 'cache' });
     expect(await cachedSlot(db)).toEqual(before);
   });
 
@@ -1054,6 +1092,35 @@ describe('resolveReleaseAuthority', () => {
       source: 'cache',
     });
   });
+
+  it('an authentication refusal is rethrown: no verdict, no cache fallback', async () => {
+    const { db } = createCaptureAnalysisDb();
+    await writeCachedReleasePolicy(db, SCOPE, {
+      policy: verifiedPolicy(),
+      serverTime: nowSeconds(),
+    });
+    for (const status of [401, 403]) {
+      const server = scriptedServer({
+        kind: 'body',
+        body: { error: { code: 'auth.invalid', message: 'refused' } },
+        status,
+      });
+      await expect(gate(db, server)).rejects.toMatchObject({
+        status,
+        code: 'auth.invalid',
+      });
+    }
+    const offline = scriptedServer({ kind: 'offline' });
+    setFetch(offline.fetchMock);
+    await expect(
+      resolveReleaseAuthority({
+        db,
+        scope: SCOPE,
+        client: createReleasePolicyClient({ baseUrl: API_ORIGIN, token: null }),
+      }),
+    ).rejects.toMatchObject({ status: 401, code: 'auth.required' });
+    expect(offline.fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 // ─── the shipping path: runCaptureAnalysis ──────────────────────────────────
@@ -1078,12 +1145,6 @@ describe('runCaptureAnalysis gates numerical publication on an active policy', (
     ['no installed policy', () => authority(null)],
     ['withdrawn policy', withdrawnAuthority],
     ['expired policy', expiredAuthority],
-    ['tampered canonical bytes', tamperedBytesAuthority],
-    ['tampered digest', tamperedDigestAuthority],
-    [
-      'malformed policy',
-      () => ({ ...authority(), policy: { document: FIXTURE_DOCUMENT } }),
-    ],
   ])(
     '%s → mechanics-only partial, no reservation, nothing chargeable',
     async (_label, body) => {
@@ -1091,6 +1152,27 @@ describe('runCaptureAnalysis gates numerical publication on an active policy', (
       const server = scriptedServer({ kind: 'body', body: body() });
       const outcome = await runOnce(db, server);
       expectMechanicsOnlyPartial(outcome);
+      expect(server.policyRequests).toHaveLength(1);
+      expectNothingChargeable(db, server);
+      expect(await cachedSlot(db.db)).toBeNull();
+    },
+  );
+
+  it.each([
+    ['tampered canonical bytes', tamperedBytesAuthority],
+    ['tampered digest', tamperedDigestAuthority],
+    [
+      'malformed policy',
+      () => ({ ...authority(), policy: { document: FIXTURE_DOCUMENT } }),
+    ],
+    ['foreign envelope', () => ({ ok: true })],
+  ])(
+    '%s → rejected: no reservation, no numerical output, no settled refusal, nothing cached',
+    async (_label, body) => {
+      const db = createCaptureAnalysisDb();
+      const server = scriptedServer({ kind: 'body', body: body() });
+      const outcome = await runOnce(db, server);
+      expect(outcome.kind).toBe('unavailable');
       expect(server.policyRequests).toHaveLength(1);
       expectNothingChargeable(db, server);
       expect(await cachedSlot(db.db)).toBeNull();
@@ -1114,7 +1196,7 @@ describe('runCaptureAnalysis gates numerical publication on an active policy', (
     const db = createCaptureAnalysisDb();
     const server = scriptedServer({ kind: 'offline' });
     const outcome = await runOnce(db, server);
-    expect(outcome.kind).toBe('unavailable');
+    expect(outcome).toEqual({ kind: 'unavailable', reason: RETRY_LATER });
     expectNothingChargeable(db, server);
 
     await writeCachedReleasePolicy(db.db, SCOPE, {
@@ -1130,25 +1212,25 @@ describe('runCaptureAnalysis gates numerical publication on an active policy', (
   it('a cached policy belongs to the account that fetched it', async () => {
     const db = createCaptureAnalysisDb();
     await runOnce(db, scriptedServer({ kind: 'body', body: authority() }));
-    expect(await cachedSlot(db.db)).not.toBeNull();
+    const raw = await getKv(db.db, releasePolicyCacheKeyForOwner(OWNER));
+    expect(raw).not.toBeNull();
 
     closeCaptureHarness();
     signInCaptureOwner(OTHER_OWNER, API_ORIGIN);
     const other = createCaptureAnalysisDb();
-    const raw = await getKv(db.db, RELEASE_POLICY_CACHE_KV_KEY);
-    await setKv(other.db, RELEASE_POLICY_CACHE_KV_KEY, raw!);
+    await setKv(other.db, releasePolicyCacheKeyForOwner(OTHER_OWNER), raw!);
     const server = scriptedServer({ kind: 'offline' });
     const outcome = await runOnce(other, server);
-    expect(outcome.kind).toBe('unavailable');
+    expect(outcome).toEqual({ kind: 'unavailable', reason: RETRY_LATER });
     expectNothingChargeable(other, server);
   });
 
   it('a verified withdrawal evicts the cache so a later offline run is not scored', async () => {
     const db = createCaptureAnalysisDb();
-    expect(
-      (await runOnce(db, scriptedServer({ kind: 'body', body: authority() })))
-        .kind,
-    ).toBe('scored');
+    await writeCachedReleasePolicy(db.db, SCOPE, {
+      policy: verifiedPolicy(),
+      serverTime: nowSeconds(),
+    });
     expectMechanicsOnlyPartial(
       await runOnce(
         db,
@@ -1157,7 +1239,10 @@ describe('runCaptureAnalysis gates numerical publication on an active policy', (
     );
     expect(await cachedSlot(db.db)).toBeNull();
     const offline = scriptedServer({ kind: 'offline' });
-    expect((await runOnce(db, offline)).kind).toBe('unavailable');
+    expect(await runOnce(db, offline)).toEqual({
+      kind: 'unavailable',
+      reason: RETRY_LATER,
+    });
     expect(offline.reserveBodies).toHaveLength(0);
   });
 });
