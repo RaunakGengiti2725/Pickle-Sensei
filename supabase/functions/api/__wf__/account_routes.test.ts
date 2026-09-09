@@ -12,8 +12,13 @@
 //     supabase/functions/api/__wf__/
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { deletionChallengeHash } from "../accountDeletionOperations.ts";
-import { AccountDeletionStub } from "./routesHarness.ts";
+import { ACCOUNT_OWNER_NAMESPACES, deletionChallengeHash } from "../accountDeletionOperations.ts";
+import { isPagedSelect, postgrestSelect } from "./postgrestStandIn.ts";
+import {
+  AccountDeletionStub,
+  SERVICE_ROLE_READABLE_TABLES,
+  filteredRows,
+} from "./routesHarness.ts";
 
 // ─── Fake Supabase ──────────────────────────────────────────────────────────
 
@@ -70,11 +75,17 @@ const state: FakeState = {
 };
 
 const externalCredentials: unknown[] = [];
-const deletions = new AccountDeletionStub(() => ({
+/** Every other account-keyed table starts empty and is cascaded like the rest. */
+const emptyOwnerTables: Record<string, unknown[]> = Object.fromEntries(
+  ACCOUNT_OWNER_NAMESPACES.map((namespace) => [namespace.table, []]),
+);
+const ownerTables = (): Record<string, unknown[]> => ({
+  ...emptyOwnerTables,
   account_deletion_requests: state.deletionRows,
   account_external_credentials: externalCredentials,
   profiles: state.profileRows,
-}));
+});
+const deletions = new AccountDeletionStub(ownerTables);
 
 function resetState(): void {
   state.tokenStatus = 200;
@@ -257,17 +268,26 @@ async function fakeSupabase(request: Request): Promise<Response> {
     return jsonResponse(200, await deletions.rpc(name, args));
   }
 
-  if (path === "/rest/v1/account_deletion_requests" && request.method === "GET") {
-    return jsonResponse(200, state.deletionRows);
-  }
   if (path === "/rest/v1/account_external_credentials") {
     return request.method === "GET"
       ? jsonResponse(200, externalCredentials)
       : jsonResponse(403, { code: "42501", message: "fenced credential helpers required" });
   }
 
-  if (path === "/rest/v1/profiles" && request.method === "GET") {
-    return jsonResponse(200, state.profileRows);
+  const ownerTable = path.slice("/rest/v1/".length);
+  if (request.method === "GET" && Object.hasOwn(emptyOwnerTables, ownerTable)) {
+    if (!isPagedSelect(url)) return jsonResponse(200, ownerTables()[ownerTable]);
+    // the deletion sweep: PostgREST semantics under the grant model
+    if (
+      request.headers.get("authorization") === "Bearer service-role-key" &&
+      !SERVICE_ROLE_READABLE_TABLES.has(ownerTable)
+    ) {
+      return jsonResponse(403, {
+        code: "42501",
+        message: `permission denied for table ${ownerTable}`,
+      });
+    }
+    return jsonResponse(200, postgrestSelect(url, filteredRows(url, ownerTables()[ownerTable])));
   }
 
   if (path === "/rest/v1/rpc/access_state" && request.method === "POST") {
