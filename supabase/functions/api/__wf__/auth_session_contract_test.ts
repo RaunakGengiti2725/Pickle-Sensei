@@ -363,29 +363,54 @@ Deno.test("refresh without a refreshToken is a 400 validation error", async () =
   assertEquals(h.callsTo("/auth/v1/token").length, 0);
 });
 
-Deno.test("refused refreshes count toward the per-IP auth-failure budget", async () => {
-  const h = await loadSessionHarness();
-  const ip = freshIp();
-  await withFrozenClock(async () => {
-    for (let i = 0; i < 30; i += 1) {
-      const response = await h.handler(
-        apiRequest("POST", "/v1/auth/refresh", {
-          token: null,
-          ip,
-          body: { refreshToken: `rt-bogus-${i}` },
-        }),
-      );
-      assertEquals(response.status, 401);
-      await response.body?.cancel();
-    }
-    const minted = h.mintSession(GOOGLE_USER_ID);
-    const blocked = await h.handler(apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }));
-    assertEquals(blocked.status, 429, "a good bearer from the failing IP is throttled");
-    assert(Number(blocked.headers.get("Retry-After")) >= 1);
-    await blocked.body?.cancel();
-    assertEquals(h.callsTo("/auth/v1/user").length, 0);
-  });
-});
+Deno.test(
+  "refused refreshes count toward the per-IP auth-failure budget: the 31st guessed refresh token is 429 before Auth, a good bearer from the same IP is still served",
+  async () => {
+    const h = await loadSessionHarness();
+    const ip = freshIp();
+    // Pin the clock to the first second of a 5-minute auth-failure window so
+    // the minute below can roll (the refresh route's own 30/min budget) while
+    // the auth-failure window stays the same one.
+    const windowMs = 300_000;
+    const toWindowStart = Math.floor(Date.now() / windowMs) * windowMs + 1_000 - Date.now();
+    await withClockOffset(toWindowStart, async () => {
+      for (let i = 0; i < 30; i += 1) {
+        const response = await h.handler(
+          apiRequest("POST", "/v1/auth/refresh", {
+            token: null,
+            ip,
+            body: { refreshToken: `rt-bogus-${i}` },
+          }),
+        );
+        assertEquals(response.status, 401);
+        await response.body?.cancel();
+      }
+      assertEquals(h.callsTo("/auth/v1/token").length, 30, "every guess was judged by GoTrue");
+
+      await withClockOffset(60_000, async () => {
+        const guess = await h.handler(
+          apiRequest("POST", "/v1/auth/refresh", {
+            token: null,
+            ip,
+            body: { refreshToken: "rt-bogus-31" },
+          }),
+        );
+        assertEquals(guess.status, 429, "the 31st guessed refresh token from the IP is throttled");
+        assert(Number(guess.headers.get("Retry-After")) >= 1);
+        await guess.body?.cancel();
+        assertEquals(h.callsTo("/auth/v1/token").length, 30, "before it reached GoTrue");
+
+        const minted = h.mintSession(GOOGLE_USER_ID);
+        const served = await h.handler(
+          apiRequest("GET", "/v1/me", { token: minted.accessToken, ip }),
+        );
+        assertEquals(served.status, 200, "a good bearer from the same IP is verified and served");
+        await served.body?.cancel();
+        assertEquals(h.callsTo("/auth/v1/user").length, 1);
+      });
+    });
+  },
+);
 
 Deno.test(
   "refresh has its own per-IP budget: the 31st rotation in a minute is 429 even when every token is valid",

@@ -11,7 +11,7 @@
 //         --config deno.json rate_limit_test.ts
 
 import { assert, assertEquals } from "@std/assert";
-import { peekRateLimit } from "../rateLimit.ts";
+import { peekAuthStuffing, peekRateLimit } from "../rateLimit.ts";
 import { loadHarness, SUPABASE_URL, TEST_USER_ID } from "./routesHarness.ts";
 
 /** Mirrors AUTH_FAILURE_LIMIT in index.ts. */
@@ -112,6 +112,13 @@ const chargedFailures = async (ip: string): Promise<number> => {
   return window.limit - window.remaining;
 };
 
+/** Refresh tokens are judged by a different upstream call than session
+ * bearers and stuff their own egress signal. */
+const chargedRefreshGuesses = async (ip: string): Promise<number> => {
+  const window = await peekAuthStuffing(ip, AUTH_FAILURE_LIMIT, "refresh");
+  return window.limit - window.remaining;
+};
+
 Deno.test(
   "authfail: 31 genuinely invalid bearers from one IP → 30 × 401 then 429 on the 31st (lockout preserved)",
   async () => {
@@ -192,6 +199,7 @@ Deno.test(
     );
     assertEquals(malformed.status, 503);
     assertEquals(await chargedFailures(ip), 0, "transient refresh failures must not be charged");
+    assertEquals(await chargedRefreshGuesses(ip), 0);
 
     const refused = await withAuthUpstream(
       onRefreshEndpoint(() =>
@@ -203,6 +211,15 @@ Deno.test(
       () => postRefresh(h.handler, ip),
     );
     assertEquals(refused.status, 401);
-    assertEquals(await chargedFailures(ip), 1, "a refused refresh token is a real auth failure");
+    assertEquals(
+      await chargedRefreshGuesses(ip),
+      1,
+      "a refresh token nothing here minted, refused by Auth, is a real auth failure",
+    );
+    assertEquals(
+      await chargedFailures(ip),
+      0,
+      "…charged to the refresh signal, not the bearer one",
+    );
   },
 );

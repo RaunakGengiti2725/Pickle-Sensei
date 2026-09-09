@@ -114,6 +114,16 @@ function liveSessionForToken(token: string): Session | null {
   return null;
 }
 
+/** A bearer this Auth minted at some point (GoTrue verifies the signature
+ * before it looks the session up: a token it never minted is `bad_jwt`, one
+ * it minted for a session that is gone is `session_not_found`). */
+function everMinted(token: string): boolean {
+  for (const session of sessions.values()) {
+    if (session.accessTokens.includes(token)) return true;
+  }
+  return false;
+}
+
 function userJson(userId: string) {
   return {
     id: userId,
@@ -250,12 +260,15 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (url.origin === SUPABASE_URL && url.pathname === "/auth/v1/user") {
     upstreamCalls.push("auth:getUser");
     const session = liveSessionForToken(bearer);
-    if (!session)
-      return json(401, {
-        code: 401,
-        error_code: "session_not_found",
-        msg: "Session from session_id claim in JWT does not exist",
-      });
+    if (!session) {
+      if (everMinted(bearer))
+        return json(401, {
+          code: 401,
+          error_code: "session_not_found",
+          msg: "Session from session_id claim in JWT does not exist",
+        });
+      return json(401, { code: 401, error_code: "bad_jwt", msg: "invalid JWT" });
+    }
     return json(200, userJson(session.userId));
   }
 
@@ -665,7 +678,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "characterization: per-IP auth-failure budget (30/5 min) — 30 DISTINCT forged bearers throttle the NEXT forged bearer Auth refuses, never VALID bearers, bootstrap or refresh from the same address",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -691,21 +704,39 @@ Deno.test(
       );
     }
 
+    const novel = jwt({
+      iss: `${SUPABASE_URL}/auth/v1`,
+      sub: ATTACKER,
+      exp: now + 3600,
+      jti: "junk-novel",
+    });
+    const judged = upstreamCalls.filter((c) => c === "auth:getUser").length;
+    assertEquals(
+      (await call("GET", PROBE_ROUTE, { token: novel, ip })).status,
+      429,
+      "the 31st forged bearer from the address → 429",
+    );
+    assertEquals(
+      upstreamCalls.filter((c) => c === "auth:getUser").length,
+      judged,
+      "…before it reached Auth",
+    );
+
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
-      429,
-      "victim's VALID cached bearer → 429",
+      200,
+      "victim's VALID cached bearer → 200",
     );
-    const bootstrapBlocked = await call("POST", "/v1/account/bootstrap", {
+    const signIn = await call("POST", "/v1/account/bootstrap", {
       token: googleIdToken(VICTIM),
       ip,
       body: {},
     });
-    assertEquals(bootstrapBlocked.status, 429, "sign-in from the address → 429");
+    assertEquals(signIn.status, 200, "sign-in from the address → 200");
     assertEquals(
       (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
-      429,
-      "refresh from the address → 429",
+      200,
+      "refresh from the address → 200",
     );
   },
 );
