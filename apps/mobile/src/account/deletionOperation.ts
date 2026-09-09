@@ -285,11 +285,7 @@ export function createDeletionOperationFoundation(
     nowMs: number,
   ): Promise<boolean> {
     if (entry.receipt !== null || entry.operationId === null) return false;
-    if (
-      entry.serverState === 'expired' ||
-      entry.serverState === 'superseded' ||
-      entry.serverState === 'blocked'
-    )
+    if (entry.serverState === 'expired' || entry.serverState === 'superseded')
       return true;
     if (entry.phase !== 'securing' && entry.phase !== 'ready') return false;
     const expiresAt = Date.parse(entry.expiresAt ?? '');
