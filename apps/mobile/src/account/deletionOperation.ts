@@ -5,7 +5,10 @@ import {
   type DeletionVaultRead,
   type DeletionVaultWrite,
 } from './deletionCapabilityVault';
-import { createDeletionOperationJournal } from './deletionOperationJournal';
+import {
+  createDeletionOperationJournal,
+  type DeletionJournalListing,
+} from './deletionOperationJournal';
 import {
   createDeletionOperationTransport,
   receiptFromVerifiedDeletionStatus,
@@ -236,15 +239,22 @@ export function createDeletionOperationFoundation(
   async function submitRequest(
     entry: DeletionJournalEntry,
     context: DeletionTransportContext,
+    body: Readonly<Record<string, unknown>>,
   ): Promise<DeletionOperationResult> {
     requireCurrent(context);
-    const reply = await transport.request(context);
+    const reply = await transport.request(context, body);
     if (reply.kind !== 'requested') {
+      // The server's word that a confirmed deletion is being carried out
+      // stands until the server itself answers differently; a re-ask it
+      // did not answer (401, network loss, a refusal unrelated to the
+      // deletion) proves nothing and is paced like any other retry.
+      const standing =
+        entry.lastIssue === 'in_progress' && reply.kind !== 'in_progress';
       const unknown = await update(entry, {
         phase: 'request_unknown',
         serverState: 'unknown',
-        lastIssue: remoteIssue(reply),
-        nextAttemptAtMs: now() + delay(entry, reply, true),
+        lastIssue: standing ? 'in_progress' : remoteIssue(reply),
+        nextAttemptAtMs: now() + delay(entry, reply, !standing),
         retryCount: Math.min(20, entry.retryCount + 1),
       });
       return view(unknown, context);
@@ -272,6 +282,27 @@ export function createDeletionOperationFoundation(
     );
     const ready = await update(securing, { phase: 'ready' });
     return view(ready, context);
+  }
+
+  /** A row that can no longer lead anywhere: the server closed the
+   * operation, a never-confirmed challenge lapsed, or the capability of a
+   * `securing` row never reached the Keychain (so no confirmation could
+   * ever have been sent). Unknown requests, unresolved confirmations and
+   * receipts are never inert. */
+  async function inert(
+    entry: DeletionJournalEntry,
+    nowMs: number,
+  ): Promise<boolean> {
+    if (entry.receipt !== null || entry.operationId === null) return false;
+    if (entry.serverState === 'expired' || entry.serverState === 'superseded')
+      return true;
+    if (entry.phase !== 'securing' && entry.phase !== 'ready') return false;
+    const expiresAt = Date.parse(entry.expiresAt ?? '');
+    if (Number.isFinite(expiresAt) && nowMs >= expiresAt) return true;
+    if (entry.phase !== 'securing') return false;
+    const binding = deletionBindingFor(entry);
+    if (!binding) return false;
+    return (await vault.read(binding)).kind === 'empty';
   }
 
   async function seal(
@@ -307,17 +338,45 @@ export function createDeletionOperationFoundation(
       transport.dispose();
     },
     async list(): Promise<
-      | {
-          readonly kind: 'entries';
-          readonly entries: readonly DeletionJournalEntry[];
-        }
+      | ({ readonly kind: 'entries' } & DeletionJournalListing)
       | DeletionOperationResult
     > {
       if (disposed) return held('stale_handler');
       try {
         return Object.freeze({
           kind: 'entries',
-          entries: await journal.list(),
+          ...(await journal.list()),
+        });
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+    /** Frees inert rows so a full journal never leaves the device unable to
+     * start a fresh request. Explicit — never a side effect of `request`. */
+    async reclaim(): Promise<
+      | { readonly kind: 'reclaimed'; readonly jobIds: readonly string[] }
+      | DeletionOperationResult
+    > {
+      if (disposed) return held('stale_handler');
+      try {
+        const nowMs = now();
+        const jobIds: string[] = [];
+        for (const entry of (await journal.list()).entries) {
+          if (activeJobs.get(dependencies.db)?.has(entry.jobId)) continue;
+          if (!(await inert(entry, nowMs))) continue;
+          try {
+            if (await journal.remove(entry)) jobIds.push(entry.jobId);
+          } catch (error) {
+            if (
+              !(error instanceof DeletionFoundationError) ||
+              error.code !== 'stale_handler'
+            )
+              throw error;
+          }
+        }
+        return Object.freeze({
+          kind: 'reclaimed',
+          jobIds: Object.freeze(jobIds),
         });
       } catch (error) {
         return errorResult(error);
@@ -328,6 +387,7 @@ export function createDeletionOperationFoundation(
         references: [],
         legacyMedia: 'unverified',
       },
+      body: Readonly<Record<string, unknown>> = {},
     ): Promise<DeletionOperationResult> {
       const ownership = parseDeletionOwnership(draft);
       if (!ownership) return held('invalid_ownership_draft');
@@ -358,7 +418,7 @@ export function createDeletionOperationFoundation(
             cleanup: { completed: [], pending: null },
             ownership,
           });
-          return submitRequest(entry, context);
+          return submitRequest(entry, context, body);
         });
       } catch (error) {
         return errorResult(error);
@@ -384,6 +444,7 @@ export function createDeletionOperationFoundation(
     },
     retryRequest(
       handle: DeletionOperationHandle,
+      body: Readonly<Record<string, unknown>> = {},
     ): Promise<DeletionOperationResult> {
       return runHandle(handle, async ({ entry, context }) => {
         if (
@@ -397,7 +458,7 @@ export function createDeletionOperationFoundation(
         if (now() < entry.nextAttemptAtMs)
           throw new DeletionFoundationError('retry_later');
         const pending = await update(entry, { phase: 'request_pending' });
-        return submitRequest(pending, context);
+        return submitRequest(pending, context, body);
       });
     },
     confirm(handle: DeletionOperationHandle): Promise<DeletionOperationResult> {

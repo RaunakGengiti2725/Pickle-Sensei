@@ -5,6 +5,7 @@ import {
   DELETION_PHASES,
   DeletionFoundationError,
   deletionMember,
+  deletionOrigin,
   deletionRecord,
   deletionUuid,
   parseDeletionJournalEntry,
@@ -32,6 +33,35 @@ const DDL = `CREATE TABLE ${TABLE} (
   phase TEXT NOT NULL CHECK (phase IN (${DELETION_PHASES.map(phase => `'${phase}'`).join(',')})),
   document TEXT NOT NULL CHECK (length(CAST(document AS BLOB)) <= ${DELETION_FOUNDATION_LIMITS.journalBytes} AND json_valid(document))
 )`;
+
+/** A row whose columns are intact but whose document cannot be read as a
+ * journal entry. It is attributed to its owner and origin from the columns
+ * alone; nothing else about it is trusted. */
+export interface DeletionJournalUnreadableRow {
+  readonly jobId: string;
+  readonly ownerId: string;
+  readonly apiOrigin: string;
+  readonly operationId: string | null;
+  readonly phase: DeletionPhase;
+  readonly reason: 'journal_invalid' | 'journal_unsupported';
+}
+
+/** A row at least one of whose identifying columns is itself not
+ * well-formed. Only the columns that still are say anything about it (a
+ * damaged one reads as null); it belongs to an owner only as far as its
+ * owner and origin columns still name one, and it is never opened, updated
+ * or reclaimed. */
+export interface DeletionJournalDamagedRow {
+  readonly ownerId: string | null;
+  readonly apiOrigin: string | null;
+  readonly phase: DeletionPhase | null;
+}
+
+export interface DeletionJournalListing {
+  readonly entries: readonly DeletionJournalEntry[];
+  readonly unreadable: readonly DeletionJournalUnreadableRow[];
+  readonly damaged: readonly DeletionJournalDamagedRow[];
+}
 
 const TRANSITIONS: Readonly<Record<DeletionPhase, readonly DeletionPhase[]>> = {
   request_pending: ['request_pending', 'request_unknown', 'securing'],
@@ -91,6 +121,45 @@ function parseRow(row: Record<string, unknown>): DeletionJournalEntry {
     throw new DeletionFoundationError('journal_invalid');
   }
   return entry;
+}
+
+function unreadableRow(
+  row: Record<string, unknown>,
+  error: unknown,
+): DeletionJournalUnreadableRow | DeletionJournalDamagedRow {
+  if (
+    !(error instanceof DeletionFoundationError) ||
+    (error.code !== 'journal_invalid' && error.code !== 'journal_unsupported')
+  )
+    throw error;
+  const { job_id, owner_id, api_origin, operation_id, phase } = row;
+  if (
+    deletionUuid(job_id) &&
+    deletionUuid(owner_id) &&
+    deletionOrigin(api_origin) &&
+    (operation_id === null || deletionUuid(operation_id)) &&
+    deletionMember(phase, DELETION_PHASES)
+  ) {
+    return Object.freeze({
+      jobId: job_id,
+      ownerId: owner_id,
+      apiOrigin: api_origin,
+      operationId: operation_id,
+      phase,
+      reason: error.code,
+    });
+  }
+  return Object.freeze({
+    ownerId: deletionUuid(owner_id) ? owner_id : null,
+    apiOrigin: deletionOrigin(api_origin) ? api_origin : null,
+    phase: deletionMember(phase, DELETION_PHASES) ? phase : null,
+  });
+}
+
+function isUnreadableRow(
+  row: DeletionJournalUnreadableRow | DeletionJournalDamagedRow,
+): row is DeletionJournalUnreadableRow {
+  return 'jobId' in row;
 }
 
 function validateTransition(
@@ -191,7 +260,7 @@ export function createDeletionOperationJournal(db: LocalDb) {
       await initialize();
       return transaction(tx => readIn(tx, jobId));
     },
-    async list(): Promise<readonly DeletionJournalEntry[]> {
+    async list(): Promise<DeletionJournalListing> {
       await initialize();
       return transaction(async tx => {
         const { rows } = await tx.execute(
@@ -200,7 +269,23 @@ export function createDeletionOperationJournal(db: LocalDb) {
         );
         if (rows.length > DELETION_FOUNDATION_LIMITS.journalEntries)
           throw new DeletionFoundationError('journal_capacity');
-        return Object.freeze(rows.map(parseRow));
+        const entries: DeletionJournalEntry[] = [];
+        const unreadable: DeletionJournalUnreadableRow[] = [];
+        const damaged: DeletionJournalDamagedRow[] = [];
+        for (const row of rows) {
+          try {
+            entries.push(parseRow(row));
+          } catch (error) {
+            const rest = unreadableRow(row, error);
+            if (isUnreadableRow(rest)) unreadable.push(rest);
+            else damaged.push(rest);
+          }
+        }
+        return Object.freeze({
+          entries: Object.freeze(entries),
+          unreadable: Object.freeze(unreadable),
+          damaged: Object.freeze(damaged),
+        });
       });
     },
     async create(value: DeletionJournalEntry): Promise<DeletionJournalEntry> {
@@ -270,6 +355,28 @@ export function createDeletionOperationJournal(db: LocalDb) {
         if (result.rowsAffected !== 1)
           throw new DeletionFoundationError('stale_handler');
         return after;
+      });
+    },
+    /** Deletes exactly the row `value` describes (same revision and
+     * document); a sealed receipt is never removed. */
+    async remove(value: DeletionJournalEntry): Promise<boolean> {
+      const entry = parseDeletionJournalEntry(value);
+      if (!entry) throw new DeletionFoundationError('journal_invalid');
+      if (entry.receipt !== null)
+        throw new DeletionFoundationError('journal_conflict');
+      await initialize();
+      return transaction(async tx => {
+        const current = await readIn(tx, entry.jobId);
+        if (!current) return false;
+        if (JSON.stringify(current) !== JSON.stringify(entry))
+          throw new DeletionFoundationError('stale_handler');
+        const result = await tx.execute(
+          `DELETE FROM ${TABLE} WHERE job_id = ? AND revision = ?`,
+          [entry.jobId, entry.revision],
+        );
+        if (result.rowsAffected !== 1)
+          throw new DeletionFoundationError('stale_handler');
+        return true;
       });
     },
   });
