@@ -74,31 +74,30 @@ Deno.test("an already-expired provider token is refused before any verification"
 });
 
 Deno.test(
-  "repeated auth failures from one IP trip the auth-failure budget with a bucket-bounded Retry-After",
+  "repeated local 401s (no bearer) from one IP never charge the auth-failure budget: the next bearer from that IP still reaches Auth",
   async () => {
     const ip = `10.9.1.${Math.floor(Math.random() * 250)}`;
     const limit = 30;
-    const windowSeconds = 300;
     for (let i = 0; i < limit; i += 1) {
       const response = await handle(
         new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": ip } }),
       );
-      assertEquals(response.status, 401, `failure ${i + 1} should still reach auth`);
+      assertEquals(response.status, 401, `failure ${i + 1} is refused locally`);
       await response.body?.cancel();
     }
-    const blocked = await handle(
+    // Nothing above was a guess Auth judged, so the budget is untouched: a
+    // bearer from the same address is not 429 — it is verified upstream
+    // (unreachable in this harness, hence a retryable 503, never a lockout).
+    const next = await handle(
       new Request(`${BASE}/v1/me`, {
         headers: {
           "x-forwarded-for": ip,
-          Authorization: `Bearer ${fakeIdToken({ iss: "https://accounts.google.com" })}`,
+          Authorization: `Bearer ${fakeIdToken({ iss: "https://accounts.google.com", sub: "g-1" })}`,
         },
       }),
     );
-    assertEquals(blocked.status, 429);
-    const retryAfter = Number(blocked.headers.get("Retry-After"));
-    assertEquals(Number.isInteger(retryAfter), true);
-    assertEquals(retryAfter >= 1 && retryAfter <= windowSeconds, true);
-    await blocked.body?.cancel();
+    assertEquals(next.status, 503);
+    assertStringIncludes((await errorBody(next)).message, "Sign-in verification");
 
     const other = await handle(
       new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": "10.9.2.2" } }),
