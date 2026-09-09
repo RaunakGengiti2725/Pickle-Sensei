@@ -787,7 +787,8 @@ Deno.test(
       const ring = await rotation.importOfflineGrantKeyRing(
         ringDocument({ retiredAt, overlapEndsAt: retiredAt + max }),
       );
-      // A grant the old key MINTS after the real rotation …
+      // A grant the old key MINTS after the real rotation, verified the
+      // instant it is minted (still more than a grace before `retiredAt`) …
       for (const lateIat of [NOW + max + 1, NOW + ahead - grace - 1]) {
         const mintedLate = await signOfflineExecutionGrant(
           moduleClaims(lateIat),
@@ -800,7 +801,7 @@ Deno.test(
             rotation.verifyOfflineExecutionGrant(
               mintedLate,
               ring,
-              moduleContext(ring.allowedKeyIds, lateIat + 1),
+              moduleContext(ring.allowedKeyIds, lateIat),
             ),
           `ahead=${ahead} iat=${lateIat}`,
         );
@@ -1270,7 +1271,10 @@ Deno.test(
       }),
       ringDocument({ retiredAt: (now - 60) * 1000, overlapEndsAt: (now - 60) * 1000 + max }),
       ringDocument({ retiredAt: now - 60, overlapEndsAt: (now + DAY) * 1000 }),
-      ringDocument({ retiredAt: Number.MAX_SAFE_INTEGER - max, overlapEndsAt: Number.MAX_SAFE_INTEGER }),
+      ringDocument({
+        retiredAt: Number.MAX_SAFE_INTEGER - max,
+        overlapEndsAt: Number.MAX_SAFE_INTEGER,
+      }),
     ]) {
       reset(document);
       const response = await issue(user.token);

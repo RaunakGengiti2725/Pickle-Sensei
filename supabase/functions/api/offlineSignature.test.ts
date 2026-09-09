@@ -601,9 +601,7 @@ Deno.test(
     const orderMinusOne = new Uint8Array(order);
     orderMinusOne[31] -= 1;
     // P-256 field prime p; -P = (x, p - y) is on the curve and controlled by n - d.
-    const fieldPrime = BigInt(
-      "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
-    );
+    const fieldPrime = BigInt("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff");
     const rotatedY = BigInt(
       `0x${Array.from(base64url.decode(rotatedPublicJwk.y!), (byte) =>
         byte.toString(16).padStart(2, "0"),
