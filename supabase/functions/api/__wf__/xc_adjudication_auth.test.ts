@@ -665,7 +665,7 @@ Deno.test(
 );
 
 Deno.test(
-  "characterization: per-IP auth-failure budget (30/5 min) locks out VALID bearers, bootstrap and refresh from the same address",
+  "auth-failure budget behind one address: thirty dead-session bearers (Auth: session_not_found) from a co-tenant are each told 401 and lock out neither a VALID bearer nor bootstrap nor refresh from the same address",
   async () => {
     const ip = freshIp();
     const { accessToken, refreshToken } = await bootstrap(VICTIM, ip);
@@ -675,8 +675,10 @@ Deno.test(
       "victim works before the noise",
     );
 
-    // Co-tenant on the same NAT address presents 30 garbage session tokens.
+    // Co-tenant on the same NAT address presents 30 garbage session tokens;
+    // Auth answers each with session_not_found (a dead session, not a guess).
     const now = Math.floor(Date.now() / 1000);
+    const judgedBefore = upstreamCalls.filter((c) => c === "auth:getUser").length;
     for (let i = 0; i < 30; i += 1) {
       const junk = jwt({
         iss: `${SUPABASE_URL}/auth/v1`,
@@ -690,22 +692,27 @@ Deno.test(
         `junk bearer ${i} → 401`,
       );
     }
+    assertEquals(
+      upstreamCalls.filter((c) => c === "auth:getUser").length,
+      judgedBefore + 30,
+      "every dead bearer was judged by Auth (a 401 the handset can act on)",
+    );
 
     assertEquals(
       (await call("GET", PROBE_ROUTE, { token: accessToken, ip })).status,
-      429,
-      "victim's VALID cached bearer → 429",
+      200,
+      "victim's VALID cached bearer → 200",
     );
-    const bootstrapBlocked = await call("POST", "/v1/account/bootstrap", {
+    const bootstrapped = await call("POST", "/v1/account/bootstrap", {
       token: googleIdToken(VICTIM),
       ip,
       body: {},
     });
-    assertEquals(bootstrapBlocked.status, 429, "sign-in from the address → 429");
+    assertEquals(bootstrapped.status, 200, "sign-in from the address → 200");
     assertEquals(
       (await call("POST", "/v1/auth/refresh", { ip, body: { refreshToken } })).status,
-      429,
-      "refresh from the address → 429",
+      200,
+      "refresh from the address → 200",
     );
   },
 );
