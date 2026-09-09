@@ -1325,6 +1325,13 @@ export function AnalyzeScreen({
         });
         return;
       }
+      if (outcome.kind === 'partial') {
+        usabilityFunnel.log('result_opened');
+        leaveScreen(() =>
+          navigation.replace('Result', { analysisId: outcome.analysisId }),
+        );
+        return;
+      }
       const presentation = strokeIntentPresentation(outcome.record);
       if (presentation) {
         usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);
@@ -1527,7 +1534,15 @@ export function AnalyzeScreen({
             original.operationId,
           );
           if (!current()) return;
-          if (!operation?.finalRecordId) {
+          const settledRefusal =
+            operation !== null &&
+            (await originalAnalysisOperations.hasSettledRefusal(
+              request.db,
+              execution,
+              operation,
+            ));
+          if (!current()) return;
+          if (!operation?.finalRecordId && !settledRefusal) {
             // A released hold may enable a NEW explicit retry button, never
             // an automatic successor while the user only asked to reconcile.
             await showOriginalRecovery(original, execution, current);

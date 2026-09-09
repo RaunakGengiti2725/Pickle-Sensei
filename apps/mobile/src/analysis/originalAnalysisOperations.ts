@@ -30,6 +30,13 @@ import {
   saveLocalOnlyAnalysis,
 } from '../data/repository';
 import { makeUuid } from '../util/uuid';
+import {
+  isSettledRefusalRun,
+  readPartialCaptureAnalysisRecord,
+  readPartialOutcome,
+  readReservationRefusal,
+  type PartialOutcomeMarker,
+} from './partialOutcome';
 import { commitPracticeSet } from './practiceSet';
 import {
   analysisAttemptJournal,
@@ -173,7 +180,11 @@ export interface OriginalAnalysisOperation {
   readonly finalRecordId: string | null;
   readonly winningAttemptId: string | null;
   readonly completionKind:
-    'scored' | 'low_confidence' | 'needs_technique_confirmation' | null;
+    | 'scored'
+    | 'low_confidence'
+    | 'needs_technique_confirmation'
+    | 'partial'
+    | null;
 }
 export interface OriginalAnalysisAttempt {
   readonly run: RunJournalEntry;
@@ -216,6 +227,35 @@ async function currentTransaction<T>(
 }
 function nullableId(value: unknown): string | null {
   return value === null ? null : originalAnalysisId(value);
+}
+/** Every operation read is followed by its PARTIAL completion (kept beside
+ * the row so the operation table itself never changes shape across installs);
+ * the operation statement stays the one existing installs and fences pin. */
+async function readOperationRows(
+  db: LocalDb,
+  ownerKey: string,
+  column: 'operation_id' | 'capture_id' | 'analysis_id',
+  value: string,
+): Promise<Record<string, unknown>[]> {
+  const { rows } = await db.execute(
+    `SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND ${column} = ?`,
+    [ownerKey, value],
+  );
+  const joined: Record<string, unknown>[] = [];
+  for (const row of rows) {
+    const partial = await db.execute(
+      `SELECT attempt_id, analysis_id FROM analysis_partial_completion
+       WHERE owner_key = ? AND operation_id = ?`,
+      [ownerKey, originalAnalysisId(row.operation_id)],
+    );
+    if (partial.rows.length > 1) held('invalid_result_pointer');
+    joined.push({
+      ...row,
+      partial_attempt_id: partial.rows[0]?.attempt_id ?? null,
+      partial_analysis_id: partial.rows[0]?.analysis_id ?? null,
+    });
+  }
+  return joined;
 }
 function sealHash(
   snapshot: OriginalAnalysisSnapshot,
@@ -282,6 +322,17 @@ function decodeOperation(
     )
       held('invalid_observation');
   } else if (row.execution_hash !== null) held('invalid_observation');
+  if (!('partial_attempt_id' in row)) held('invalid_result_pointer');
+  const partialAttemptId = nullableId(row.partial_attempt_id);
+  if (partialAttemptId !== null) {
+    if (
+      row.final_record_id !== null ||
+      row.winning_attempt_id !== null ||
+      row.completion_kind !== null ||
+      row.partial_analysis_id !== row.analysis_id
+    )
+      held('invalid_result_pointer');
+  }
   const operation: OriginalAnalysisOperation = Object.freeze({
     operationId: originalAnalysisId(row.operation_id),
     analysisId: originalAnalysisId(row.analysis_id),
@@ -292,10 +343,18 @@ function decodeOperation(
     executionHash:
       row.execution_hash === null ? null : originalDigest(row.execution_hash),
     currentAttemptId: nullableId(row.current_attempt_id),
-    finalRecordId: nullableId(row.final_record_id),
-    winningAttemptId: nullableId(row.winning_attempt_id),
+    finalRecordId:
+      partialAttemptId === null
+        ? nullableId(row.final_record_id)
+        : originalAnalysisId(row.analysis_id),
+    winningAttemptId:
+      partialAttemptId === null
+        ? nullableId(row.winning_attempt_id)
+        : partialAttemptId,
     completionKind:
-      row.completion_kind as OriginalAnalysisOperation['completionKind'],
+      partialAttemptId === null
+        ? (row.completion_kind as OriginalAnalysisOperation['completionKind'])
+        : 'partial',
   });
   if (
     operation.finalRecordId === null
@@ -303,12 +362,39 @@ function decodeOperation(
       : operation.finalRecordId !== operation.analysisId ||
         operation.winningAttemptId === null ||
         operation.winningAttemptId !== operation.currentAttemptId ||
-        !['scored', 'low_confidence', 'needs_technique_confirmation'].includes(
-          operation.completionKind ?? '',
-        )
+        ![
+          'scored',
+          'low_confidence',
+          'needs_technique_confirmation',
+          'partial',
+        ].includes(operation.completionKind ?? '')
   )
     held('invalid_result_pointer');
   return operation;
+}
+/** A PARTIAL completion is backed by exactly one settled, permit-less attempt:
+ * the authority refused the reservation, so nothing was ever chargeable. The
+ * same attempt is what a later run of the operation reconnects to when its
+ * mechanics record has not landed yet. */
+export function isSettledRefusal(attempt: OriginalAnalysisAttempt): boolean {
+  return isSettledRefusalRun(attempt.run);
+}
+/** An unfinished operation whose current attempt is a settled refusal with
+ * durable refusal metadata: re-running the SAME operation delivers its
+ * PARTIAL without another reservation, so a reconcile must not hold it. */
+async function hasSettledRefusal(
+  db: LocalDb,
+  execution: OriginalAnalysisExecution,
+  operation: OriginalAnalysisOperation,
+): Promise<boolean> {
+  if (operation.finalRecordId !== null || operation.currentAttemptId === null)
+    return false;
+  const attempt = await readAttempt(db, operation, operation.currentAttemptId);
+  execution.assertCurrent();
+  if (!isSettledRefusal(attempt)) return false;
+  const refusal = await readReservationRefusal(db, attempt.run);
+  execution.assertCurrent();
+  return refusal !== null;
 }
 async function read(
   db: LocalDb,
@@ -317,9 +403,11 @@ async function read(
 ): Promise<OriginalAnalysisOperation | null> {
   rawOnly(db);
   execution.assertCurrent();
-  const { rows } = await db.execute(
-    'SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND operation_id = ?',
-    [execution.scope.ownerKey, originalAnalysisId(operationId)],
+  const rows = await readOperationRows(
+    db,
+    execution.scope.ownerKey,
+    'operation_id',
+    originalAnalysisId(operationId),
   );
   execution.assertCurrent();
   if (!rows[0]) return null;
@@ -534,9 +622,11 @@ export async function loadSavedOriginalAnalysis(
           return value;
         },
       };
-      const { rows } = await tx.execute(
-        'SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND capture_id = ?',
-        [scope.ownerKey, captureId],
+      const rows = await readOperationRows(
+        tx,
+        scope.ownerKey,
+        'capture_id',
+        captureId,
       );
       if (rows.length > 1) held('ambiguous_operation');
       const captures = await tx.execute(
@@ -596,15 +686,17 @@ export async function loadSavedOriginalAnalysis(
       if (operation.finalRecordId !== null) {
         if (
           !attempt ||
-          attempt.technicalFailure !== null ||
-          (operation.completionKind === 'scored'
-            ? attempt.run.state !== 'committed' ||
-              attempt.run.resultId !== operation.finalRecordId
-            : attempt.run.permitId === null ||
-              attempt.run.releaseOutcome !== 'low_confidence' ||
-              !['release_pending', 'released', 'terminal'].includes(
-                attempt.run.state,
-              ))
+          (operation.completionKind === 'partial'
+            ? !isSettledRefusal(attempt)
+            : attempt.technicalFailure !== null ||
+              (operation.completionKind === 'scored'
+                ? attempt.run.state !== 'committed' ||
+                  attempt.run.resultId !== operation.finalRecordId
+                : attempt.run.permitId === null ||
+                  attempt.run.releaseOutcome !== 'low_confidence' ||
+                  !['release_pending', 'released', 'terminal'].includes(
+                    attempt.run.state,
+                  )))
         )
           held('invalid_result_pointer');
         // Do NOT compare the current declaration with the original here: the
@@ -698,12 +790,14 @@ async function prepare(
   originalAnalysisId(operationId);
   return currentTransaction(db, execution, async tx => {
     execution.assertCurrent();
-    const existing = await tx.execute(
-      'SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND capture_id = ?',
-      [snapshot.ownerKey, snapshot.captureId],
+    const existing = await readOperationRows(
+      tx,
+      snapshot.ownerKey,
+      'capture_id',
+      snapshot.captureId,
     );
-    if (existing.rows[0]) {
-      const operation = decodeOperation(existing.rows[0]);
+    if (existing[0]) {
+      const operation = decodeOperation(existing[0]);
       if (operation.settingsHash !== originalSettingsHash(snapshot))
         held('definition_changed');
       execution.assertCurrent();
@@ -1122,9 +1216,11 @@ async function requestRelease(
   )
     held('invalid_failure');
   await withTransaction(db, async tx => {
-    const { rows } = await tx.execute(
-      'SELECT * FROM analysis_logical_operations WHERE owner_key = ? AND analysis_id = ?',
-      [run.ownerKey, run.analysisId],
+    const rows = await readOperationRows(
+      tx,
+      run.ownerKey,
+      'analysis_id',
+      run.analysisId,
     );
     if (!rows[0]) held('missing_operation');
     const operation = decodeOperation(rows[0]);
@@ -1161,7 +1257,9 @@ function recordMatches(
   if (
     record.kind === 'needs_technique_confirmation'
       ? !parseNeedsTechniqueConfirmationRecord(record, metadata).ok
-      : !isVerifiedCompletedCaptureRecord(record, metadata)
+      : readPartialOutcome(record) !== null
+        ? readPartialCaptureAnalysisRecord(record, metadata) === null
+        : !isVerifiedCompletedCaptureRecord(record, metadata)
   )
     return false;
   const selection = record.inputSelection;
@@ -1202,6 +1300,7 @@ async function commit(
   operationId: string,
   run: RunJournalIdentity,
   record: CaptureAnalysisRecord,
+  withheld: PartialOutcomeMarker | null = null,
 ): Promise<void> {
   await currentTransaction(db, execution, async tx => {
     const operation = await assertCurrentAttempt(
@@ -1211,9 +1310,18 @@ async function commit(
       run,
     );
     const attempt = await readAttempt(tx, operation, run.operationId);
+    const partial = readPartialOutcome(record);
     if (
-      attempt.run.state !== 'reserved' ||
-      attempt.technicalFailure !== null ||
+      (withheld === null
+        ? attempt.run.state !== 'reserved' ||
+          partial !== null ||
+          attempt.technicalFailure !== null
+        : !isSettledRefusal(attempt) ||
+          partial === null ||
+          originalCanonicalJson(partial) !== originalCanonicalJson(withheld) ||
+          originalCanonicalJson(
+            await readReservationRefusal(tx, attempt.run),
+          ) !== originalCanonicalJson(withheld)) ||
       !recordMatches(operation, attempt.run, record) ||
       operation.finalRecordId !== null ||
       (await hasProduct(tx, operation))
@@ -1230,6 +1338,22 @@ async function commit(
         await commitPracticeSet(ownerDb, operation.snapshot.practiceSet);
       await saveAnalysis(ownerDb, record.result!, attempt.run.permitId!);
       await analysisAttemptJournal.commit(tx, run, record.id);
+    } else if (partial !== null) {
+      await tx.execute(
+        `INSERT INTO analysis_partial_completion
+        (owner_key, operation_id, attempt_id, analysis_id, capture_id, created_at_ms)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          run.ownerKey,
+          operationId,
+          run.operationId,
+          record.id,
+          run.captureId,
+          Date.now(),
+        ],
+      );
+      execution.assertCurrent();
+      return;
     } else {
       if (record.result) await saveLocalOnlyAnalysis(ownerDb, record.result);
       await analysisAttemptJournal.requestRelease(tx, run, 'low_confidence');
@@ -1292,6 +1416,17 @@ async function loadCompletion(
       const parsed = parseNeedsTechniqueConfirmationRecord(value, metadata);
       if (!parsed.ok || row.shot_id !== null) held('invalid_result');
       record = parsed.value;
+    } else if (operation.completionKind === 'partial') {
+      const partial = readPartialCaptureAnalysisRecord(value, metadata);
+      if (
+        partial === null ||
+        row.shot_id !== null ||
+        !isSettledRefusal(attempt) ||
+        originalCanonicalJson(await readReservationRefusal(tx, attempt.run)) !==
+          originalCanonicalJson(partial.partialOutcome)
+      )
+        held('invalid_result');
+      record = partial;
     } else {
       if (!isVerifiedCompletedCaptureRecord(value, metadata))
         held('invalid_result');
@@ -1318,7 +1453,10 @@ async function loadCompletion(
       (operation.completionKind === 'scored'
         ? attempt.run.state !== 'committed' ||
           attempt.run.resultId !== record.id
-        : attempt.run.releaseOutcome !== 'low_confidence')
+        : operation.completionKind === 'partial'
+          ? readPartialOutcome(record) === null
+          : attempt.run.releaseOutcome !== 'low_confidence' ||
+            readPartialOutcome(record) !== null)
     )
       held('invalid_result');
     execution.assertCurrent();
@@ -1331,6 +1469,7 @@ export const originalAnalysisOperations = Object.freeze({
   read,
   readCapture,
   readAttempt,
+  hasSettledRefusal,
   sealObservation,
   admit,
   assertCurrentAttempt,
