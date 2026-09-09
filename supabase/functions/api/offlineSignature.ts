@@ -54,6 +54,22 @@ export const OFFLINE_GRANT_KEY_RING_SCHEMA_VERSION = 1;
  * ever serves a compromised key. */
 export const OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS = OFFLINE_PRO_LEASE_MAX_SECONDS;
 
+/** Latest instant a ring may name (9999-12-31T23:59:59Z): the same
+ * Unix-seconds bound the offline contract applies to every timestamp it
+ * carries. A millisecond value or anything near MAX_SAFE_INTEGER is not a
+ * plausible retirement instant, so it is `invalid_key` rather than a window
+ * anchored some 56,000 years out. */
+export const OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS = 253_402_300_799;
+
+/** Slack around `retiredAtEpochSeconds` for the secret to propagate. The
+ * previous key still counts as an issuer for grants with `iat` at most this
+ * far after `retiredAt` (the route may sign a few more under the old secret
+ * before the ring lands), and the ring's previous key is honoured only once
+ * the trusted clock is within this many seconds of `retiredAt`: a
+ * retirement instant far in the future cannot keep the old key an accepted
+ * issuer indefinitely. Fifteen minutes; well under one maximal overlap. */
+export const OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS = 15 * 60;
+
 export interface OfflineGrantVerificationContext {
   readonly binding: OfflineGrantBinding;
   readonly release: OfflineReleasedArtifacts;
@@ -232,11 +248,13 @@ export async function importOfflineGrantSigningKey(privateJwk: unknown): Promise
  * P-256 JWK (a ring with no previous key) or
  * `{ schemaVersion: 1, active: <private JWK>, previous: null | { jwk: <public
  * JWK>, retiredAtEpochSeconds, overlapEndsAtEpochSeconds } }` where the
- * window is `retiredAt ≤ overlapEndsAt ≤ retiredAt + MAX_OVERLAP`. Private
+ * window is `retiredAt ≤ overlapEndsAt ≤ retiredAt + MAX_OVERLAP` and both
+ * instants are Unix seconds no later than `MAX_EPOCH_SECONDS`. Private
  * material for the previous key, a previous kid equal to the active kid,
- * a previous key carrying the active key's own public point, an active key
- * whose public coordinates do not belong to its `d`, coordinates off the
- * curve, unknown members or an unbounded window are `invalid_key`. */
+ * a previous key sharing the active key's `x` coordinate (the same point or
+ * its negation, both controlled by the active scalar), an active key whose
+ * public coordinates do not belong to its `d`, coordinates off the curve,
+ * unknown members or an unbounded window are `invalid_key`. */
 export async function importOfflineGrantKeyRing(configured: unknown): Promise<OfflineGrantKeyRing> {
   if (!isPlainRecord(configured)) throw new OfflineGrantCryptoError("invalid_key");
   let activeJwk: unknown = configured;
@@ -280,7 +298,10 @@ function publicHalfOf(privateJwk: unknown): { kid: string; x: string; y: string 
 }
 
 const isEpochSeconds = (value: unknown): value is number =>
-  Number.isSafeInteger(value) && !Object.is(value, -0) && (value as number) >= 0;
+  Number.isSafeInteger(value) &&
+  !Object.is(value, -0) &&
+  (value as number) >= 0 &&
+  (value as number) <= OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS;
 
 async function importRetiredKey(
   entry: unknown,
@@ -302,7 +323,7 @@ async function importRetiredKey(
     throw new OfflineGrantCryptoError("invalid_key");
   }
   const key = await importOfflineGrantVerificationKey(entry.jwk.kid, entry.jwk);
-  if (entry.jwk.x === active.x && entry.jwk.y === active.y) {
+  if (coordinateToBigInt(entry.jwk.x as string) === coordinateToBigInt(active.x)) {
     throw new OfflineGrantCryptoError("invalid_key");
   }
   return Object.freeze({
@@ -511,8 +532,10 @@ export async function signOfflineExecutionGrant(
  * binding's allowlist may narrow the ring to a subset of its keys). A key
  * that carries a retirement window — the ring's previous key, whether it is
  * consulted through the ring or handed over as a list entry — is honoured
- * only for a grant issued at or before `retiredAtEpochSeconds` and verified
- * strictly before `overlapEndsAtEpochSeconds`; otherwise it is `retired_key`. */
+ * only for a grant issued no later than `retiredAtEpochSeconds` plus the
+ * propagation grace, verified strictly before `overlapEndsAtEpochSeconds`
+ * and no earlier than one grace before `retiredAtEpochSeconds`; otherwise
+ * it is `retired_key`. */
 export async function verifyOfflineExecutionGrant(
   raw: unknown,
   verificationKeys: OfflineGrantKeyRing | readonly OfflineGrantKey[],
@@ -554,7 +577,10 @@ export async function verifyOfflineExecutionGrant(
   if (
     retired !== undefined &&
     (context.nowEpochSeconds >= retired.overlapEndsAtEpochSeconds ||
-      verifiedClaims.iat > retired.retiredAtEpochSeconds)
+      retired.retiredAtEpochSeconds >
+        context.nowEpochSeconds + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS ||
+      verifiedClaims.iat >
+        retired.retiredAtEpochSeconds + OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS)
   ) {
     throw new OfflineGrantCryptoError("retired_key");
   }

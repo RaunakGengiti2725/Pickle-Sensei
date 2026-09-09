@@ -9,7 +9,9 @@ honoured only inside a **bounded overlap window**. This runbook is the only
 approved way to introduce a new signing key, retire the old one and drop it.
 
 Code: `supabase/functions/api/offlineSignature.ts` (`importOfflineGrantKeyRing`,
-`verifyOfflineExecutionGrant`, `OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`);
+`verifyOfflineExecutionGrant`, `OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`,
+`OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS`,
+`OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS`);
 wiring: `offlineGrantKeyRing()` and `POST /v1/offline/grants` in
 `supabase/functions/api/index.ts`. Regression pins:
 `supabase/functions/api/__wf__/offline_key_rotation.test.ts` and the
@@ -51,21 +53,42 @@ wiring: `offlineGrantKeyRing()` and `POST /v1/offline/grants` in
   - Every `x/y` pair (active and previous) must be a point on P-256 (32-byte
     base64url coordinates that satisfy the curve equation). Off-curve
     material is refused at import rather than failing every verification.
-  - `previous.jwk.x/y` must differ from the active key's point: repeating the
-    active material under an old `kid` is not a rotation and is refused.
+  - `previous.jwk.x` must differ from the active key's `x`. On P-256 two
+    points with the same `x` are the same point or its negation `(x, p - y)`,
+    and the negated point is controlled by the active scalar (`n - d`); either
+    way a single private key would sign under both kids, which is not a
+    rotation and is refused.
 
 - **Window**: `retiredAtEpochSeconds ≤ overlapEndsAtEpochSeconds ≤
 retiredAtEpochSeconds + OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`
-  (7 days = the longest Pro lease). Instants are non-negative integer epoch
-  seconds. The bound is enforced at import and again at verification time.
-- **Verification verdicts** for a grant whose header `kid` is the previous key:
-  - `iat ≤ retiredAtEpochSeconds` **and** `now < overlapEndsAtEpochSeconds`
+  (7 days = the longest Pro lease). Both instants are **Unix seconds**:
+  non-negative integers no later than `OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS`
+  = 253402300799 (9999-12-31T23:59:59Z, the bound every other timestamp of the
+  offline contract uses). A value in **milliseconds** (13 digits for any
+  current date), or anything else past that bound, is `invalid_key` — the
+  overlap length is only meaningful relative to a plausible instant. Both
+  bounds are enforced at import and again at verification time.
+- **Propagation grace** `OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS`
+  (15 minutes, fixed in code): the slack between the instant you write into
+  the ring and the instant the new secret actually takes effect on every
+  isolate. The route keeps signing under the OLD key until the new value has
+  propagated; those grants are spent by the server and may already be on an
+  offline device, so they must verify. The grace also anchors the window to
+  the trusted clock: a ring whose `retiredAt` is more than one grace ahead of
+  `now` is not in force yet and its previous key verifies nothing, so a
+  far-future `retiredAt` cannot keep the old key an accepted issuer.
+- **Verification verdicts** for a grant whose header `kid` is the previous key
+  (`grace` = the constant above; `now` is the server's trusted clock, never a
+  value from the token):
+  - `retiredAt - grace ≤ now < overlapEndsAt` **and** `iat ≤ retiredAt + grace`
     → valid (signature, bindings, expiry and release still checked as before).
   - `now ≥ overlapEndsAtEpochSeconds` → `retired_key`.
-  - `iat > retiredAtEpochSeconds` → `retired_key` (the old key must never mint
-    a grant after it was retired, even inside the overlap).
+  - `now < retiredAtEpochSeconds - grace` → `retired_key` (the ring's
+    retirement instant is not plausible yet).
+  - `iat > retiredAtEpochSeconds + grace` → `retired_key` (the old key must
+    never mint a grant once the new secret has had time to land, even inside
+    the overlap).
   - After the previous entry is dropped (`previous: null`) → `invalid_key`.
-    `now` is the server's trusted clock, never a value from the token.
 - **Issuance** always uses `active`; the response `keyId` and the
   `offline_grant_audit` log line show which key signed. The signed claims do
   **not** carry the key list. `ring.allowedKeyIds = [active kid, previous kid]`
@@ -90,10 +113,23 @@ material into chat, tickets, commits, logs or this repository.
 2. **Extract the public half** of the CURRENT key (`kty`, `crv`, `kid`, `x`,
    `y` only — strip `d`). The current kid is visible in recent
    `offline_grant_audit` log lines (`keyId`) and in grant responses.
-3. **Choose the window.** `retiredAtEpochSeconds` = the instant you will set
-   the secret (now). `overlapEndsAtEpochSeconds` = `retiredAt` + the longest
-   lease the old key may still have outstanding, capped at 7 days. Shorter
-   is better; a longer value than the bound is refused.
+3. **Choose the window** — in **Unix seconds** (`date -u +%s`; 10 digits for
+   any current date, never `Date.now()` milliseconds):
+   - `retiredAtEpochSeconds` = the instant you expect to run `supabase secrets
+set` in step 5, i.e. the clock reading at this step **plus** the time the
+     remaining steps take (assembling, dry-import, review). Step 5 must then
+     happen inside `[retiredAt - grace, retiredAt + grace]` (±15 minutes):
+     earlier and the ring is not in force yet (old-key receipts are
+     `retired_key` until the clock catches up — harmless but visible);
+     later and grants the route still issued under the old key while the
+     secret propagated fall outside `iat ≤ retiredAt + grace` and are refused
+     although the server spent them. If step 5 slips past the grace, re-read
+     the clock, update `retiredAt`/`overlapEndsAt` and dry-import again.
+   - `overlapEndsAtEpochSeconds` = `retiredAt` + the longest lease the old
+     key may still have outstanding (a grant issued at `retiredAt + grace`
+     lives at most 7 days), capped at `retiredAt` + 7 days. Shorter is
+     better; a longer value than the bound, or either instant past
+     9999-12-31, is refused.
 4. **Assemble the ring document** (`active` = new private JWK, `previous` =
    old public JWK + window) and check it locally before touching production:
 
@@ -117,7 +153,8 @@ material into chat, tickets, commits, logs or this repository.
    503 in production — fix it first. Typical causes: `d` and `x/y` from
    different keys (re-export the new key pair together), an `x/y` that is not
    a P-256 point, a previous entry that still carries `d`, a previous entry
-   whose `x/y` equals the active key's, or a window past the 7-day bound.
+   whose `x` equals the active key's (same or negated point), instants given
+   in milliseconds or past 9999-12-31, or a window past the 7-day bound.
 
 5. **Set the secret** (coordinated rollout only; requires an explicit
    human go-ahead per `AGENTS.md`):
@@ -126,7 +163,9 @@ material into chat, tickets, commits, logs or this repository.
    supabase secrets set OFFLINE_GRANT_SIGNING_JWK="$(cat /path/to/ring.json)"
    ```
 
-   No redeploy is required: the next request re-imports the ring.
+   No redeploy is required: the next request re-imports the ring. Check the
+   clock once more before running it: it must be within one grace (15
+   minutes) of the `retiredAtEpochSeconds` in the document.
 
 6. **Verify** with a signed-in test device: `POST /v1/offline/grants` returns
    200 with `keyId` = the NEW kid, and the `offline_grant_audit` line shows the
@@ -159,8 +198,14 @@ record which `kid` was compromised and when the ring was replaced.
   worked around by lengthening the window.
 - Never put the previous key's `d` in the ring — the importer refuses it, and
   the old private key must not remain on the server after rotation.
-- Never widen `OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`, and never make the
+- Never widen `OFFLINE_KEY_ROTATION_MAX_OVERLAP_SECONDS`,
+  `OFFLINE_KEY_ROTATION_MAX_EPOCH_SECONDS` or
+  `OFFLINE_KEY_ROTATION_PROPAGATION_GRACE_SECONDS`, and never make the
   verifier read the window from the token.
+- Never set `retiredAtEpochSeconds` far in the future to "pre-stage" a
+  rotation: the previous key verifies nothing until the clock is within one
+  grace of it, and the route signs with `active` from the moment the secret
+  lands regardless.
 - Validate before shipping any change to this path:
 
   ```bash
