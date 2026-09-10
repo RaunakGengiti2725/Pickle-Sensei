@@ -10862,7 +10862,7 @@ begin
 end $$;
 reset role;
 
--- U8b (W04-04 round 6, 20260910130000): the reversible deny-new freeze is
+-- U8b (W04-04 round 6, 20260910160000): the reversible deny-new freeze is
 -- passed INTO the settlement as p_defer_new and decided AFTER the durable
 -- lookup. As Uli — a fresh device holding a free grant of two tickets:
 --   * a genuinely new chargeable receipt under the freeze is pending: nothing
