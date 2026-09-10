@@ -577,6 +577,26 @@ describe('Result guide — saved read recovery', () => {
     expect(mockHasShotSyncReceipt).toHaveBeenCalledTimes(1);
   });
 
+  it('offers the same explicit retry for a read the server exhausted, naming its last refusal', async () => {
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'exhausted',
+      attempts: 8,
+      lastError: 'access.permit_expired',
+    });
+    const context = getDataOwnerSnapshot();
+    const renderer = await renderScreen();
+    const copy = allText(renderer);
+    expect(copy).toContain('Saved on this device');
+    expect(copy).toContain('The server refused this read 8 times');
+    expect(copy).toContain('access.permit_expired');
+    expect(copy).toContain('once the rating service has been updated');
+    mockHasShotSyncReceipt.mockResolvedValue(true);
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledWith({}, 'analysis-1', context);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(hostByTestId(renderer, 'result-sync-repair')).toHaveLength(0);
+  });
+
   it('keeps retry on the unscored result page too', async () => {
     const unscored = {
       ...scoredAnalysis,

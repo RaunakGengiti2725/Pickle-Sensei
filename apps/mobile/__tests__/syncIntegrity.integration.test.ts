@@ -334,6 +334,73 @@ it('repair retries are fenced at commit and never reset another account or unrel
   ).toBe(8);
 });
 
+it('an exhausted read is re-presented only through the explicit retry, and the server then decides it afresh', async () => {
+  const { store, push, rows, transport } = fixture();
+  push('shot.sync', analysis(100));
+  push('shot.sync', analysis(200));
+  const refusing = jest.fn(async (shots: readonly unknown[]) => ({
+    acceptedIds: [] as string[],
+    rejected: ids([...shots]).map(shotId => ({
+      id: shotId,
+      code: 'access.permit_expired',
+      message: 'The analysis permit expired before this shot was synced.',
+    })),
+  }));
+  transport.syncShots = refusing;
+  for (let attempt = 0; attempt < OUTBOX_MAX_ATTEMPTS; attempt++)
+    await drainOutbox(store.db, transport);
+  expect(await getShotOutboxStatus(store.db, id(100))).toEqual({
+    state: 'exhausted',
+    attempts: OUTBOX_MAX_ATTEMPTS,
+    lastError: expect.stringContaining('access.permit_expired'),
+  });
+  // Nothing about the passage of drains re-arms it.
+  refusing.mockClear();
+  await drainOutbox(store.db, transport);
+  expect(refusing).not.toHaveBeenCalled();
+
+  // The explicit retry re-arms exactly the named read (its sibling stays
+  // exhausted) and the next drain presents it; the server still refuses.
+  expect(
+    await retryShotSync(store.db, id(100), captureDataOwnerContext()),
+  ).toBe(true);
+  expect(await getShotOutboxStatus(store.db, id(100))).toEqual({
+    state: 'queued',
+    attempts: 0,
+    lastError: null,
+  });
+  expect(await getShotOutboxStatus(store.db, id(200))).toMatchObject({
+    state: 'exhausted',
+  });
+  await drainOutbox(store.db, transport);
+  expect(refusing).toHaveBeenCalledTimes(1);
+  expect(ids([...refusing.mock.calls[0]![0]])).toEqual([id(100)]);
+  expect(await getShotOutboxStatus(store.db, id(100))).toMatchObject({
+    state: 'rejected',
+    attempts: 1,
+  });
+
+  // Once the service accepts late permits, the same explicit retry lands the
+  // saved score: a receipt is written and the row leaves the outbox.
+  transport.syncShots = jest.fn(async shots => ({
+    acceptedIds: ids(shots),
+    rejected: [],
+  }));
+  expect(
+    await retryShotSync(store.db, id(100), captureDataOwnerContext()),
+  ).toBe(false);
+  await drainOutbox(store.db, transport);
+  expect(store.count('sync_receipt', OWNER)).toBe(1);
+  expect(rows().map(row => row.kind)).toEqual(['shot.sync']);
+  expect(await getShotOutboxStatus(store.db, id(200))).toMatchObject({
+    state: 'exhausted',
+  });
+  // A read that was never held or exhausted has nothing to re-arm.
+  expect(
+    await retryShotSync(store.db, id(300), captureDataOwnerContext()),
+  ).toBe(false);
+});
+
 it('submits identical duplicate saved shots once and removes both rows only on their matching receipt', async () => {
   const { store, push, transport } = fixture();
   push('shot.sync', analysis(100));

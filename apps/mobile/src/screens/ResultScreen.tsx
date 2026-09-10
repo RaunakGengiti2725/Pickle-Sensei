@@ -601,10 +601,16 @@ function ResultGuide(props: ResultGuideProps) {
               </Text>
             </View>
           ) : null}
-          {props.syncEvidence.kind === 'needs_repair' ? (
+          {props.syncEvidence.kind === 'needs_repair' ||
+          props.syncEvidence.kind === 'exhausted' ? (
             <SyncRepairNotice
               analysisId={props.analysisId}
               ownerContext={props.ownerContext}
+              evidence={{
+                kind: props.syncEvidence.kind,
+                attempts: props.syncEvidence.attempts,
+                lastError: props.syncEvidence.lastError,
+              }}
               onRetried={props.onSyncRetried}
             />
           ) : null}
@@ -673,10 +679,16 @@ function ResultGuide(props: ResultGuideProps) {
     >
       {step === 'score' ? (
         <>
-          {props.syncEvidence.kind === 'needs_repair' ? (
+          {props.syncEvidence.kind === 'needs_repair' ||
+          props.syncEvidence.kind === 'exhausted' ? (
             <SyncRepairNotice
               analysisId={props.analysisId}
               ownerContext={props.ownerContext}
+              evidence={{
+                kind: props.syncEvidence.kind,
+                attempts: props.syncEvidence.attempts,
+                lastError: props.syncEvidence.lastError,
+              }}
               onRetried={props.onSyncRetried}
             />
           ) : null}
@@ -716,6 +728,11 @@ function ResultGuide(props: ResultGuideProps) {
 function SyncRepairNotice(props: {
   analysisId: string;
   ownerContext: DataOwnerContext;
+  evidence: {
+    kind: 'needs_repair' | 'exhausted';
+    attempts: number;
+    lastError: string | null;
+  };
   onRetried: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -761,7 +778,13 @@ function SyncRepairNotice(props: {
       >
         {failed
           ? 'Couldn’t retry yet. Your read is still saved here.'
-          : 'This read needs another attempt to save to your account.'}
+          : props.evidence.kind === 'exhausted'
+            ? `The server refused this read ${props.evidence.attempts} times${
+                props.evidence.lastError
+                  ? ` (last response: ${props.evidence.lastError})`
+                  : ''
+              }. It is not sent again on its own; retry saving once the rating service has been updated.`
+            : 'This read needs another attempt to save to your account.'}
       </Text>
       <Button
         variant="secondary"
@@ -1785,11 +1808,11 @@ function TrainingPlanSection(props: {
                     ? ` (last response: ${syncEvidence.code})`
                     : ''
                 }. The receipt will not be presented again; the read stays on this device. Capture a new read to build training.`
-              : `Sync was refused ${syncEvidence.attempts} times and this read will not be sent again${
+              : `Sync was refused ${syncEvidence.attempts} times and this read will not be sent again on its own${
                   syncEvidence.lastError
                     ? ` (last response: ${syncEvidence.lastError})`
                     : ''
-                }. It stays on this device; capture a new read to build training.`}
+                }. It stays on this device; retry saving from its score page once the rating service has been updated, or capture a new read to build training.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button

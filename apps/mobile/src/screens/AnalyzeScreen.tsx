@@ -1361,6 +1361,7 @@ export function AnalyzeScreen({
       execution: OriginalAnalysisExecution,
       current: () => boolean,
       paywallRequired = false,
+      reason: string | null = null,
     ) => {
       let recovery: Extract<Phase, { kind: 'error' }>['recovery'] =
         'reconcile_saved';
@@ -1420,6 +1421,14 @@ export function AnalyzeScreen({
         // Unknown storage is not empty storage or proof of release.
       }
       if (!current()) return;
+      const recoveryCopy = paywallRequired
+        ? 'The rating service requires an upgrade before another rating can start. This saved analysis has not been replaced.'
+        : recovery === 'retry_saved'
+          ? 'The clip and original analysis settings are saved. Retry this saved analysis without recording or importing again.'
+          : recovery === 'review_saved'
+            ? 'This saved analysis has no complete original file or model proof. Keep the clip in Library; its missing proof will not be recreated from current settings.'
+            : 'The saved analysis or its rating hold is still uncertain. Check only reconciles this original analysis; it does not start another rating.';
+      const cause = paywallRequired ? null : reason?.trim() || null;
       setPhase({
         kind: 'error',
         stage: 'analysis',
@@ -1427,13 +1436,7 @@ export function AnalyzeScreen({
         predecessorAttemptId,
         canStartAnotherClip,
         recovery: paywallRequired ? 'upgrade' : recovery,
-        message: paywallRequired
-          ? 'The rating service requires an upgrade before another rating can start. This saved analysis has not been replaced.'
-          : recovery === 'retry_saved'
-            ? 'The clip and original analysis settings are saved. Retry this saved analysis without recording or importing again.'
-            : recovery === 'review_saved'
-              ? 'This saved analysis has no complete original file or model proof. Keep the clip in Library; its missing proof will not be recreated from current settings.'
-              : 'The saved analysis or its rating hold is still uncertain. Check only reconciles this original analysis; it does not start another rating.',
+        message: cause ? `${cause} ${recoveryCopy}` : recoveryCopy,
       });
     },
     [],
@@ -1453,6 +1456,7 @@ export function AnalyzeScreen({
           execution,
           current,
           outcome.cause === 'paywall_required',
+          outcome.cause === 'recovery_pending' ? null : outcome.reason,
         );
         return;
       }

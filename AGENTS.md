@@ -1298,3 +1298,23 @@ scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
   silent switch. Import copies finish inside the provider callback; metadata
   work then runs asynchronously at enforced default QoS, matching AVFoundation
   completion work rather than blocking a user-initiated picker callback.
+- Production state checked 2026-09-10 (read-only): Edge `api` v35 deployed
+  2026-09-06 08:52 UTC, migrations applied through `20260905190106`. That API
+  predates `GET /v1/analysis/release-policy` (its uncoded 404 reaches the app
+  as 502 `network.invalid_response`), so every fresh original analysis from
+  this client ends `unavailable` at `requireReleaseAuthority` BEFORE any
+  permit is reserved. The original-analysis held screen now prefixes the
+  run's own `unavailable` reason to the recovery copy (`showOriginalRecovery`
+  `reason`); only `recovery_pending` keeps the bare recovery sentence.
+  `analyzeScreenFullFlowE2E` "predates the release-policy route" pins it.
+  Even after the coordinated rollout, a verified `policy: null` is a
+  mechanics-only partial: numeric scores need an installed, approved,
+  activated release policy (database-owner RPCs in
+  `20260908020000_analysis_release_authority.sql`).
+- Settings "N free ratings left" is the server's count of SYNCED scored
+  shots. A score that only exists on the device (its `shot.sync` row refused
+  and exhausted, e.g. production's pre-`20260906130000` 24-hour permit cutoff
+  → `access.permit_expired`) never moves it. Exhausted rows are re-armed ONLY
+  by the explicit "Retry saving" on the Result score page (`retryShotSync`
+  also matches `attempts >= OUTBOX_MAX_ATTEMPTS`); the drain never retries
+  them by itself (`syncIntegrity.integration.test.ts`).

@@ -1169,7 +1169,11 @@ export async function getShotOutboxStatus(
   return { state: 'queued', attempts, lastError };
 }
 
-/** Explicitly retry a held read and its parent, without changing saved evidence.
+/** Explicitly retry a held or exhausted read and its parent, without changing
+ * saved evidence. Exhausted rows re-enter the budget ONLY through this
+ * explicit action (the drain never retries them on its own), so a read the
+ * server refused under an older rule can be presented again once the service
+ * changes; the server re-validates it exactly as a first presentation.
  * The caller retains the owner generation from the screen that offered retry. */
 export async function retryShotSync(
   db: LocalDb,
@@ -1179,9 +1183,10 @@ export async function retryShotSync(
   return withTransaction(forDataOwner(db, context), async transaction => {
     const { rows } = await transaction.execute(
       `SELECT id, CASE WHEN json_valid(payload) THEN json_extract(payload, '$.sessionId') END AS session_id FROM outbox
-       WHERE owner_key = ? AND kind = 'shot.sync' AND repair_reason IS NOT NULL
+       WHERE owner_key = ? AND kind = 'shot.sync'
+         AND (repair_reason IS NOT NULL OR attempts >= ?)
          AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?`,
-      [context.ownerKey, shotId],
+      [context.ownerKey, OUTBOX_MAX_ATTEMPTS, shotId],
     );
     for (const row of rows) {
       await transaction.execute(

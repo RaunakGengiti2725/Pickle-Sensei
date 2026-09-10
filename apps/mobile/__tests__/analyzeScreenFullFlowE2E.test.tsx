@@ -1043,6 +1043,10 @@ describe('camera interruption, permission denial, low storage, network loss', ()
       'original-only network recovery surface',
     );
     expect(textOf(renderer)).not.toMatch(/Nothing was rated|Upgrade to Pro/);
+    // The held surface names the run's own reason before the recovery copy.
+    expect(textOf(renderer)).toContain(
+      'The rating service could not be reached. Your capture is saved and can be scored later.',
+    );
     // The real capture survived locally…
     expect(
       activeDb.calls.some(call =>
@@ -1050,6 +1054,55 @@ describe('camera interruption, permission denial, low storage, network loss', ()
       ),
     ).toBe(true);
     // …but nothing was scored, synced, or invented.
+    expect(persistedRecordInserts()).toHaveLength(0);
+    expect(
+      activeDb.calls.some(call => call.sql.includes('INSERT INTO outbox')),
+    ).toBe(false);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
+
+  it('a rating service that predates the release-policy route (uncoded 404) holds the original with the service reason visible and reserves nothing', async () => {
+    const fetch = jest.fn(async (url: string) => {
+      if (isReleasePolicyRequest(url))
+        return {
+          ok: false,
+          status: 404,
+          statusText: 'Not Found',
+          json: async () => ({
+            error: { message: `Unknown endpoint: GET ${url.slice(-30)}.` },
+          }),
+        } as unknown as Response;
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    (globalThis as { fetch?: unknown }).fetch = fetch;
+    const renderer = await renderScreen();
+    pressByLabel(renderer, 'Forehand Drive');
+    const { clip, sidecarJson } = guidedClip('outdated-service');
+    mockReadArtifact = async () => sidecarJson;
+    const capture = deferredCapture();
+    pressByLabel(renderer, 'Open automatic camera');
+    await flush();
+    driveNativeCaptureSequence();
+    capture.resolve(clip);
+    await waitFor(
+      () => textOf(renderer).includes('Check saved analysis'),
+      'outdated rating service recovery surface',
+    );
+    const copy = textOf(renderer);
+    expect(copy).toContain('Your saved analysis is held.');
+    expect(copy).toContain(
+      'The rating service could not be reached. Your capture is saved and can be scored later.',
+    );
+    expect(copy).toContain('Check only reconciles this original analysis');
+    expect(copy).not.toMatch(/Nothing was rated|Upgrade to Pro/);
+    // Only the policy read was attempted: no permit was reserved on a
+    // service that cannot authorize the run, and nothing was scored.
+    expect(
+      fetch.mock.calls
+        .map(([url]) => String(url))
+        .every(isReleasePolicyRequest),
+    ).toBe(true);
     expect(persistedRecordInserts()).toHaveLength(0);
     expect(
       activeDb.calls.some(call => call.sql.includes('INSERT INTO outbox')),
