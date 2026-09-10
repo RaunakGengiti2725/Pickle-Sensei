@@ -39,12 +39,14 @@ import {
   SIGNED_OUT_DATA_OWNER,
   type DataOwnerContext,
 } from './accountScope';
-import type {
-  OfflineGrantClient,
-  OfflineReceiptSubmission,
-  OfflineReceiptVerdict,
-  OfflineReceiptVerdictKind,
-  OfflineReceiptWireEntry,
+import {
+  isOfflineReceiptCode,
+  OFFLINE_RECEIPT_REFUSED_CODE,
+  type OfflineGrantClient,
+  type OfflineReceiptSubmission,
+  type OfflineReceiptVerdict,
+  type OfflineReceiptVerdictKind,
+  type OfflineReceiptWireEntry,
 } from './api';
 import type { LocalDb } from './db';
 import {
@@ -362,7 +364,9 @@ export async function readOfflineReceiptEvidence(
               verdict.receiptId === receipt.receiptId &&
               verdict.verdict === 'refused'
             ) {
-              code = verdict.code;
+              code = isOfflineReceiptCode(verdict.code)
+                ? verdict.code
+                : OFFLINE_RECEIPT_REFUSED_CODE;
             }
           }
         }
@@ -452,13 +456,16 @@ interface PresentationPlan {
   readonly recovered: number;
   /** Pending rows skipped because their stored receipt is unreadable. */
   readonly unreadable: number;
+  /** Readable pending receipts skipped because the grant they name is
+   * missing or unreadable; they stay queued and are never presented. */
+  readonly unreadableGrant: readonly string[];
 }
 
 /** The longest prefix of `pending` whose wire entries fit the presentation
- * bound (always at least one). Entries are built inside the write-ahead
- * transaction so unreadable grant or shot state fails the drain before any
- * journal row exists — a presentation is journalled only once its exact body
- * is in hand. */
+ * bound (at least one when any entry can be built). Entries are built inside
+ * the write-ahead transaction so a presentation is journalled only once its
+ * exact body is in hand. A receipt whose grant cannot be read is skipped —
+ * not presented, not dropped — so it cannot hold the other receipts hostage. */
 async function chunkPresentation(
   db: LocalDb,
   context: DataOwnerContext,
@@ -467,19 +474,33 @@ async function chunkPresentation(
 ): Promise<{
   receipts: OfflineConsumptionReceipt[];
   entries: OfflineReceiptWireEntry[];
+  unreadableGrant: string[];
 }> {
   const receipts: OfflineConsumptionReceipt[] = [];
   const entries: OfflineReceiptWireEntry[] = [];
+  const unreadableGrant: string[] = [];
   let chars = 2;
   for (const receipt of pending) {
-    const entry = await wireEntry(db, context, receipt);
+    let entry: OfflineReceiptWireEntry;
+    try {
+      entry = await wireEntry(db, context, receipt);
+    } catch (error) {
+      if (
+        error instanceof OfflineGrantError &&
+        error.code === 'offline.wallet_corrupt'
+      ) {
+        unreadableGrant.push(receipt.receiptId);
+        continue;
+      }
+      throw error;
+    }
     const size = JSON.stringify(entry).length + 1;
     if (entries.length > 0 && chars + size > maxChars) break;
     chars += size;
     receipts.push(receipt);
     entries.push(entry);
   }
-  return { receipts, entries };
+  return { receipts, entries, unreadableGrant };
 }
 
 /** Write-ahead step, one transaction: read what is pending, close every
@@ -523,6 +544,7 @@ async function openPresentation(
         opened: null,
         recovered: inFlight.length,
         unreadable: scan.unreadable.length,
+        unreadableGrant: [],
       };
     }
     const chunk = await chunkPresentation(
@@ -531,6 +553,14 @@ async function openPresentation(
       pending,
       maxChars,
     );
+    if (chunk.receipts.length === 0) {
+      return {
+        opened: null,
+        recovered: inFlight.length,
+        unreadable: scan.unreadable.length,
+        unreadableGrant: chunk.unreadableGrant,
+      };
+    }
     const journalId = makeUuid();
     await transaction.execute(
       `INSERT INTO offline_wallet_journal (
@@ -549,10 +579,12 @@ async function openPresentation(
         journalId,
         receipts: chunk.receipts,
         entries: chunk.entries,
-        remaining: pending.length - chunk.receipts.length,
+        remaining:
+          pending.length - chunk.receipts.length - chunk.unreadableGrant.length,
       },
       recovered: inFlight.length,
       unreadable: scan.unreadable.length,
+      unreadableGrant: chunk.unreadableGrant,
     };
   });
 }
@@ -584,6 +616,13 @@ async function applyVerdicts(
       'The server answered for receipts this device did not present; nothing was settled.',
     );
   }
+  // Only protocol codes are journalled; server prose never reaches storage
+  // or the Result copy.
+  verdicts = verdicts.map(verdict =>
+    isOfflineReceiptCode(verdict.code)
+      ? verdict
+      : { ...verdict, code: OFFLINE_RECEIPT_REFUSED_CODE },
+  );
   return withTransaction(db, async transaction => {
     const { rows } = await transaction.execute(
       `SELECT state FROM offline_wallet_journal WHERE owner_key = ? AND journal_id = ?`,
@@ -677,10 +716,10 @@ export interface OfflineWalletReconcileOptions {
  * drain, not this one); a lost answer holds only that chunk's entry. Corrupt
  * grant or shot state fails the same way corrupt journal state does: before
  * anything is journalled or sent. */
-/* A pending row whose stored receipt is unreadable is skipped, not presented
- * and not dropped: it is reported as `unreadable` and the owner's other
- * receipts still drain, so one damaged row cannot hold every paid rating and
- * the next grant pull hostage. */
+/* A pending row whose stored receipt is unreadable, or whose grant row is
+ * missing or unreadable, is skipped, not presented and not dropped: it is
+ * reported as `unreadable` and the owner's other receipts still drain, so one
+ * damaged row cannot hold every paid rating and the next grant pull hostage. */
 export async function reconcileOfflineWallet(
   rawDb: LocalDb,
   client: OfflineGrantClient,
@@ -705,6 +744,7 @@ export async function reconcileOfflineWallet(
   return serializedPerOwner(context.ownerKey, async () => {
     const totals = { submitted: 0, accepted: 0, held: 0, refused: 0, stale: 0 };
     const presented = new Set<string>();
+    const unreadableGrant = new Set<string>();
     let recovered = 0;
     let unreadable = 0;
     for (;;) {
@@ -717,6 +757,10 @@ export async function reconcileOfflineWallet(
       );
       recovered += plan.recovered;
       unreadable = plan.unreadable;
+      for (const receiptId of plan.unreadableGrant) {
+        presented.add(receiptId);
+        unreadableGrant.add(receiptId);
+      }
       if (plan.opened === null) break;
       for (const receipt of plan.opened.receipts)
         presented.add(receipt.receiptId);
@@ -738,9 +782,13 @@ export async function reconcileOfflineWallet(
     const remaining = await scanPendingOfflineReceipts(db);
     return {
       ...totals,
-      pending: remaining.receipts.length,
+      pending: remaining.receipts.filter(
+        receipt => !unreadableGrant.has(receipt.receiptId),
+      ).length,
       recovered,
-      unreadable: Math.max(unreadable, remaining.unreadable.length),
+      unreadable:
+        Math.max(unreadable, remaining.unreadable.length) +
+        unreadableGrant.size,
     };
   });
 }

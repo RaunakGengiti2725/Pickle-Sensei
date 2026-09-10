@@ -926,10 +926,9 @@ export async function listPendingCaptures(
       });
       capture.techniqueConfirmation =
         parsed.ok &&
-        row.permit_id !== null &&
         row.result_id === null &&
         row.release_outcome === 'low_confidence'
-          ? row.journal_state === 'released'
+          ? row.journal_state === 'released' && row.permit_id !== null
             ? 'ready'
             : row.journal_state === 'release_pending'
               ? 'release_pending'

@@ -999,7 +999,7 @@ describe('the drain journals only what it sends', () => {
     return createOfflineGrantClient({ baseUrl: API_ORIGIN, token: BEARER });
   }
 
-  it('a missing grant row fails the drain before anything is journalled or sent; the receipt stays queued, not held', async () => {
+  it('a missing grant row is reported unreadable, nothing is journalled or sent, and the receipt stays queued, not held', async () => {
     const { store, request } = await setup({
       signal: 'offline',
       policy: true,
@@ -1011,9 +1011,12 @@ describe('the drain journals only what it sends', () => {
       .prepare(`DELETE FROM offline_grant WHERE owner_key = ? AND grant_id = ?`)
       .run(OWNER, GRANT_ID);
     const online = court('online');
-    await expect(
-      reconcileOfflineWallet(store.db, client(), reading()),
-    ).rejects.toMatchObject({ code: 'offline.wallet_corrupt' });
+    const drained = await reconcileOfflineWallet(store.db, client(), reading());
+    expect(drained).toMatchObject({
+      submitted: 0,
+      pending: 0,
+      unreadable: 1,
+    });
     expect(
       online.calls.filter(call => call.url === RECEIPTS_ROUTE),
     ).toHaveLength(0);
