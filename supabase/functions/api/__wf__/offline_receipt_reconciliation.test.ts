@@ -35,6 +35,32 @@
 //
 // Runs unchanged against BASE_SHA, where the route answers 404 and the RPC
 // does not exist, so every test fails there.
+//
+// Round 6 pins the 1.0 WIRE CONTRACT the shipping app speaks: each entry's
+// `receipt` is the DEVICE receipt exactly as apps/mobile OfflineReceiptSubmission
+// persists it (no nativeTime / attestation, with queuedAt) and the answer is
+// { receipts: [{ receiptId, status, reasonCode, financialDisposition, resultId,
+// delivery }], rejected: [{ receiptId, code, message }] } — what
+// parseOfflineReceiptVerdicts reads, every submitted receiptId named exactly
+// once. And the ORDERING under a reversible deny-new freeze: durable replay,
+// durable HOLD replay and the same-id/other-digest conflict are decided by
+// settle_offline_receipt() (the freeze travels to SQL as p_defer_new) BEFORE
+// the freeze can answer; only a genuinely new chargeable receipt is pending.
+// Against the round-6 BASE_SHA (d446dcdd), where the route demands the
+// full-evidence receipt and answers results[], the wire-contract and freeze
+// tests fail.
+//
+// Round 7 pins what the shipping device actually sends and what the server
+// must do with it: `output` is the FROZEN 1.0 shape — the shot.sync payload
+// (nested `timestamps`, `source: "real"`) WITHOUT analysisPermitId — which the
+// route admits under the sync ingress's own rules (bounded non-negative ms
+// offsets, real source, no permit / settlement claims) and hands to the RPC
+// flattened to the row shape consume_offline_ticket() reads, the receipt's
+// digest still taken over the device's bytes; a batch is never refused for
+// its length (the device drains EVERY pending receipt in one POST — a Pro
+// week offline is more than 25); and a Pro (no-ticket) receipt answered
+// result_recorded has its rated shot durably written for the owner (the app
+// marks the local shot synced on accepted and never re-sends it).
 
 import postgres from "postgres";
 import { assert, assertEquals, assertMatch } from "@std/assert";
@@ -42,12 +68,11 @@ import { exportJWK, generateKeyPair } from "jose";
 import {
   OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
   OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
-  OFFLINE_RECONCILIATION_SCHEMA_VERSION,
   OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
+  type OfflineDeviceReceipt,
   type OfflineExecutionGrantClaims,
   type OfflineFreeTicketReference,
   type OfflineReleasedArtifacts,
-  type OfflineResultReceipt,
   type OfflineSignedExecutionGrant,
 } from "../../../../packages/shared-types/src/offlineAuthorization.ts";
 import type { AnalysisReleasePolicyDocument } from "../../../../packages/shared-types/src/analysisReleasePolicy.ts";
@@ -285,8 +310,12 @@ async function sign(
   });
 }
 
-/** The flat output the device durably delivered (the consume_offline_ticket()
- * p_shot shape); `id` is the result id the receipt names. */
+/** The output the device durably delivered, in the FROZEN 1.0 wire shape
+ * (build_manifest.py, court-offline shipping path): the shot.sync outbox
+ * payload apps/mobile/src/data/sync.ts toSyncPayload builds — nested
+ * `timestamps`, `source: "real"` — WITHOUT analysisPermitId (no permit was
+ * reserved; the grant authorized the run). `id` is the result id the receipt
+ * names; the receipt's fullOutputSha256 digests exactly this object. */
 function output(
   resultId: string,
   overrides: Record<string, unknown> = {},
@@ -297,12 +326,11 @@ function output(
     shotType: "dink",
     cameraView: "side",
     capturedAt: "2026-09-01T10:00:00.000Z",
-    startMs: 0,
-    contactMs: 100,
-    endMs: 200,
+    timestamps: { startMs: 0, contactMs: 100, endMs: 200 },
     overallScore: 7,
     confidence: 0.9,
     resultKind: "scored",
+    source: "real",
     phases: [{ key: "prep", startMs: 0, representativeMs: 50, endMs: 100, confidence: 0.8 }],
     checkpoints: [
       {
@@ -320,6 +348,31 @@ function output(
   };
 }
 
+/** What the route hands settle_offline_receipt() as p_output for an admitted
+ * frozen-shape output: the row shape consume_offline_ticket() reads (flat
+ * startMs / contactMs / endMs, no `source` — the table writes 'real' itself),
+ * every other field as delivered. The digest the receipt is bound under is
+ * still the one over the device's object. */
+function sqlOutput(out: Record<string, unknown>): Record<string, unknown> {
+  const ts = out.timestamps as Record<string, unknown>;
+  return {
+    id: out.id,
+    sessionId: out.sessionId,
+    shotType: out.shotType,
+    cameraView: out.cameraView,
+    capturedAt: out.capturedAt,
+    startMs: ts.startMs,
+    contactMs: ts.contactMs,
+    endMs: ts.endMs,
+    overallScore: out.overallScore,
+    confidence: out.confidence,
+    resultKind: out.resultKind,
+    phases: out.phases,
+    checkpoints: out.checkpoints,
+    versionVector: out.versionVector,
+  };
+}
+
 interface ReceiptOptions {
   receiptId: string;
   ownerId: string;
@@ -330,26 +383,44 @@ interface ReceiptOptions {
   operationId: string;
   resultId: string;
   fullOutputSha256: string;
-  billingDisposition?: OfflineResultReceipt["billingDisposition"];
+  billingDisposition?: OfflineDeviceReceipt["billingDisposition"];
   installationKeyId?: string;
   grantJwsSha256?: string;
 }
 
-async function receipt(options: ReceiptOptions): Promise<OfflineResultReceipt> {
+/** The DEVICE receipt exactly as apps/mobile/src/data/api.ts
+ * OfflineReceiptSubmission persists and posts it — the OfflineConsumptionReceipt
+ * minus the server-side `settlement` / `settledAt`, key for key. */
+async function receipt(options: ReceiptOptions): Promise<OfflineDeviceReceipt> {
   return {
-    schemaVersion: OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
     receiptId: options.receiptId,
     ownerId: options.ownerId,
     installationKeyId: options.installationKeyId ?? options.claims.installationKeyId,
     grantId: options.claims.jti,
     grantJwsSha256: options.grantJwsSha256 ?? (await digestOfflineGrantTransport(options.grant)),
-    ticket: options.ticket,
     lifecycleSequence: options.lifecycleSequence,
+    ticket: options.ticket,
+    operationId: options.operationId,
+    resultId: options.resultId,
+    fullOutputSha256: options.fullOutputSha256,
+    billingDisposition: options.billingDisposition ?? "joint_verification_required",
+    queuedAt: "2026-09-08T12:00:00.000Z",
+  };
+}
+
+/** The same receipt in the FULL-EVIDENCE offline-result-receipt-v1 form (native
+ * time + App Attest assertion), which the shared validator still accepts for
+ * that form but the wire contract does not carry. */
+function fullEvidenceForm(device: OfflineDeviceReceipt): Record<string, unknown> {
+  const { queuedAt: _queuedAt, ...rest } = device;
+  return {
+    schemaVersion: OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
+    ...rest,
     nativeTime: {
       schemaVersion: OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
       clock: "ios_mach_continuous_time",
       anchorId: "anchor-w04-04",
-      elapsedMs: 120_000 * options.lifecycleSequence,
+      elapsedMs: 120_000 * device.lifecycleSequence,
     },
     attestation: {
       schemaVersion: OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
@@ -359,10 +430,6 @@ async function receipt(options: ReceiptOptions): Promise<OfflineResultReceipt> {
       dataBase64Url: "QUJDRA",
       clientDataSha256: "c".repeat(64),
     },
-    operationId: options.operationId,
-    resultId: options.resultId,
-    fullOutputSha256: options.fullOutputSha256,
-    billingDisposition: options.billingDisposition ?? "joint_verification_required",
   };
 }
 
@@ -387,7 +454,7 @@ async function settledFixture(
 ): Promise<{
   claims: OfflineExecutionGrantClaims;
   grant: OfflineSignedExecutionGrant;
-  receipt: OfflineResultReceipt;
+  receipt: OfflineDeviceReceipt;
   output: Record<string, unknown>;
 }> {
   const claims = options.claims ?? freeClaims(ownerId);
@@ -429,6 +496,10 @@ interface SettleParams {
   p_receipt_sha256: string;
   p_output: Record<string, unknown> | null;
   p_hold_reason: string | null;
+  /** The reversible deny-new freeze on the release the grant names: a
+   * genuinely NEW chargeable receipt is answered pending (nothing durable)
+   * — decided by the RPC after the durable lookup, never by the edge. */
+  p_defer_new: boolean;
 }
 
 const durable = new Map<string, { sha256: string; row: SettleRow }>();
@@ -477,6 +548,20 @@ function durableRespond(call: RecordedCall): Response | null {
       result_id: null,
     };
     durable.set(key, { sha256: params.p_receipt_sha256, row });
+  } else if (
+    params.p_defer_new === true &&
+    params.p_receipt.billingDisposition === "joint_verification_required"
+  ) {
+    // A genuinely new chargeable receipt under a reversible deny-new freeze:
+    // nothing durable, the ticket stays reserved, the redelivery decides.
+    row = {
+      result: "accepted",
+      delivery: "pending",
+      status: "pending",
+      reason_code: null,
+      financial_disposition: params.p_receipt.ticket === null ? "not_applicable" : "reserved",
+      result_id: null,
+    };
   } else if (
     params.p_receipt.ticket !== null &&
     params.p_output !== null &&
@@ -531,18 +616,145 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+/** One `receipts[]` entry of the 1.0 wire contract. */
+interface RouteReceipt {
+  receiptId: string;
+  status: string;
+  reasonCode: string | null;
+  financialDisposition: string;
+  resultId: string | null;
+  delivery: "settled" | "replayed" | "held" | "pending";
+}
+
+/** One `rejected[]` entry of the 1.0 wire contract. */
+interface RouteRejection {
+  receiptId: string;
+  code: string;
+  message: string;
+}
+
+interface WireAnswer {
+  receipts: RouteReceipt[];
+  rejected: RouteRejection[];
+}
+
+const RECEIPT_KEYS = [
+  "receiptId",
+  "status",
+  "reasonCode",
+  "financialDisposition",
+  "resultId",
+  "delivery",
+];
+const REJECTION_KEYS = ["receiptId", "code", "message"];
+
+/** The 200 body, checked key for key against the wire contract. */
+function wire(body: Record<string, unknown>): WireAnswer {
+  assertEquals(Object.keys(body).sort(), ["receipts", "rejected"], JSON.stringify(body));
+  assert(Array.isArray(body.receipts) && Array.isArray(body.rejected), JSON.stringify(body));
+  for (const entry of body.receipts) {
+    assertEquals(Object.keys(entry).sort(), [...RECEIPT_KEYS].sort(), JSON.stringify(entry));
+    assert(typeof entry.receiptId === "string" && entry.receiptId.length > 0);
+    assert(typeof entry.status === "string" && entry.status.length > 0);
+  }
+  for (const entry of body.rejected) {
+    assertEquals(Object.keys(entry).sort(), [...REJECTION_KEYS].sort(), JSON.stringify(entry));
+    assert(typeof entry.receiptId === "string" && entry.receiptId.length > 0);
+    assert(typeof entry.code === "string" && entry.code.length > 0);
+  }
+  return body as unknown as WireAnswer;
+}
+
+/** One entry per submitted receipt, the accepted ones first (in submission
+ * order) then the rejected ones (in submission order): the wire answer folded
+ * into the per-entry view the assertions below read. */
 interface RouteResult {
   receiptId: string;
-  delivery: "settled" | "replayed" | "held" | "pending" | "rejected";
-  reconciliation: Record<string, unknown> | null;
+  delivery: RouteReceipt["delivery"] | "rejected";
+  reconciliation: RouteReceipt | null;
   error: { code: string; message: string } | null;
 }
 
+function fold(body: Record<string, unknown>): RouteResult[] {
+  const answer = wire(body);
+  return [
+    ...answer.receipts.map((entry) => ({
+      receiptId: entry.receiptId,
+      delivery: entry.delivery,
+      reconciliation: entry,
+      error: null,
+    })),
+    ...answer.rejected.map((entry) => ({
+      receiptId: entry.receiptId,
+      delivery: "rejected" as const,
+      reconciliation: null,
+      error: { code: entry.code, message: entry.message },
+    })),
+  ];
+}
+
 async function results(response: Response): Promise<RouteResult[]> {
-  assertEquals(response.status, 200);
   const body = await readJson(response);
-  assert(Array.isArray(body.results), "results[] expected");
-  return body.results as RouteResult[];
+  assertEquals(response.status, 200, JSON.stringify(body));
+  return fold(body);
+}
+
+/** The verdict apps/mobile/src/data/api.ts OFFLINE_RECEIPT_STATUS_VERDICTS
+ * gives each status the route may answer. */
+const MOBILE_STATUS_VERDICTS = new Map<string, "accepted" | "refused" | "held">([
+  ["result_recorded", "accepted"],
+  ["unused_ticket_returned", "refused"],
+  ["pending", "held"],
+  ["reconciliation_required", "held"],
+  ["support_review_required", "held"],
+]);
+
+interface MobileVerdict {
+  receiptId: string;
+  verdict: "accepted" | "refused" | "held";
+  code: string;
+}
+
+/** A faithful mirror of apps/mobile/src/data/api.ts parseOfflineReceiptVerdicts():
+ * what the shipping app makes of the route's answer for the ids it submitted.
+ * null is the app's `unreadableAnswer()` — the drain fails and every receipt
+ * stays queued. */
+function mobileVerdicts(value: unknown, submittedIds: readonly string[]): MobileVerdict[] | null {
+  const isObject = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+  const isText = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+  if (!isObject(value)) return null;
+  const receipts = value.receipts;
+  const rejected = value.rejected ?? [];
+  if (!Array.isArray(receipts) || !Array.isArray(rejected)) return null;
+  const verdicts = new Map<string, MobileVerdict>();
+  const record = (verdict: MobileVerdict): boolean => {
+    if (verdicts.has(verdict.receiptId)) return false;
+    verdicts.set(verdict.receiptId, verdict);
+    return true;
+  };
+  for (const entry of receipts) {
+    if (!isObject(entry)) return null;
+    const { receiptId, status } = entry;
+    if (!isText(receiptId) || !isText(status)) return null;
+    const verdict = MOBILE_STATUS_VERDICTS.get(status);
+    if (verdict === undefined) return null;
+    if (!record({ receiptId, verdict, code: status })) return null;
+  }
+  for (const entry of rejected) {
+    if (!isObject(entry)) return null;
+    const { receiptId, code } = entry;
+    if (!isText(receiptId) || !isText(code)) return null;
+    if (!record({ receiptId, verdict: "refused", code })) return null;
+  }
+  if (verdicts.size !== submittedIds.length) return null;
+  const ordered: MobileVerdict[] = [];
+  for (const id of submittedIds) {
+    const verdict = verdicts.get(id);
+    if (verdict === undefined) return null;
+    ordered.push(verdict);
+  }
+  return ordered;
 }
 
 function settleCalls(): SettleParams[] {
@@ -579,12 +791,12 @@ Deno.test(
       ],
     );
     assertEquals(out[1].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
       receiptId: "receipt-1",
       status: "result_recorded",
-      resultId: first.receipt.resultId,
+      reasonCode: null,
       financialDisposition: "consumed",
+      resultId: first.receipt.resultId,
+      delivery: "settled",
     });
 
     const calls = h.callsTo(SETTLE_RPC);
@@ -593,6 +805,11 @@ Deno.test(
     const params = calls.map(settleParams);
     assertEquals(params[0].p_receipt.receiptId, "receipt-2");
     assertEquals(params[1].p_receipt.receiptId, "receipt-1");
+    // No freeze on the active release: nothing is deferred.
+    assertEquals(
+      params.map((p) => p.p_defer_new),
+      [false, false],
+    );
     // Every identity the settlement rests on travels to the durable RPC exactly
     // as the device signed it — nothing re-derived, nothing dropped.
     assertEquals(params[1].p_receipt, { ...first.receipt });
@@ -606,7 +823,7 @@ Deno.test(
     assertEquals(params[1].p_receipt.resultId, first.receipt.resultId);
     assertEquals(params[1].p_receipt.fullOutputSha256, first.receipt.fullOutputSha256);
     assertEquals(params[1].p_receipt_sha256, await digestCanonicalOfflineJson(first.receipt));
-    assertEquals(params[1].p_output, first.output);
+    assertEquals(params[1].p_output, sqlOutput(first.output));
     assertEquals(params[1].p_hold_reason, null);
     assertEquals(h.callsTo(CONSUME_RPC).length, 0);
     assertEquals(h.callsTo(RELEASE_RPC).length, 0);
@@ -629,8 +846,9 @@ Deno.test(
       again.map((r) => r.delivery),
       ["replayed", "replayed"],
     );
-    assertEquals(again[0].reconciliation, first[0].reconciliation);
-    assertEquals(again[1].reconciliation, first[0].reconciliation);
+    const replayed = { ...first[0].reconciliation, delivery: "replayed" };
+    assertEquals(again[0].reconciliation, replayed);
+    assertEquals(again[1].reconciliation, replayed);
     assertEquals(again[0].error, null);
 
     // Three deliveries, three durable RPC calls with the SAME identity — the
@@ -659,12 +877,12 @@ Deno.test(
     assertEquals(out[0].delivery, "held");
     assertEquals(out[0].error, null);
     assertEquals(out[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
       receiptId: "receipt-1",
       status: "reconciliation_required",
       reasonCode: "evidence_ambiguous",
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "held",
     });
 
     const params = settleCalls();
@@ -684,7 +902,7 @@ Deno.test(
       ),
     );
     assertEquals(again[0].delivery, "replayed");
-    assertEquals(again[0].reconciliation, out[0].reconciliation);
+    assertEquals(again[0].reconciliation, { ...out[0].reconciliation, delivery: "replayed" });
     assertEquals(h.callsTo(RELEASE_RPC).length, 0);
   },
 );
@@ -871,59 +1089,497 @@ Deno.test(
 );
 
 Deno.test(
-  "malformed entries are rejected per receipt without reaching the database; a malformed batch is 400",
+  "malformed entries are rejected per receipt, by the receipt id they name, without reaching the database; an entry naming no receipt id, like a malformed batch, is 400",
   async () => {
     reset();
     const user = freshUser();
     const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const { queuedAt: _queuedAt, ...noQueuedAt } = fixture.receipt;
 
-    const out = await results(
+    const body = await readJson(
       await post(
         {
           receipts: [
+            // the full-evidence result-receipt form is not the wire contract
             {
-              receipt: { ...fixture.receipt, receiptId: 42 },
+              receipt: fullEvidenceForm(fixture.receipt),
               grant: fixture.grant,
               output: fixture.output,
             },
             {
-              receipt: fixture.receipt,
+              receipt: { ...fixture.receipt, receiptId: "receipt-2" },
               grant: { compactJws: "not.a.jws" },
               output: fixture.output,
             },
-            { receipt: fixture.receipt, grant: fixture.grant, output: "not-an-object" },
-            "not-an-entry",
+            {
+              receipt: { ...fixture.receipt, receiptId: "receipt-3" },
+              grant: fixture.grant,
+              output: "not-an-object",
+            },
+            { receipt: { ...noQueuedAt, receiptId: "receipt-4" }, grant: fixture.grant },
+            {
+              receipt: { ...fixture.receipt, receiptId: "receipt-5", ownerId: "not-a-uuid" },
+              grant: fixture.grant,
+              output: fixture.output,
+            },
+            {
+              receipt: { ...fixture.receipt, receiptId: "receipt-6" },
+              grant: fixture.grant,
+              output: fixture.output,
+            },
+          ],
+        },
+        user.token,
+      ),
+    );
+    const answer = wire(body);
+    assertEquals(
+      answer.rejected.map((r) => [r.receiptId, r.code]),
+      [
+        ["receipt-1", "offline.invalid_input"],
+        ["receipt-2", "offline.invalid_input"],
+        ["receipt-3", "offline.invalid_input"],
+        ["receipt-4", "offline.invalid_input"],
+        ["receipt-5", "offline.invalid_input"],
+      ],
+    );
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery]),
+      [["receipt-6", "settled"]],
+    );
+    assertEquals(
+      mobileVerdicts(body, [
+        "receipt-1",
+        "receipt-2",
+        "receipt-3",
+        "receipt-4",
+        "receipt-5",
+        "receipt-6",
+      ])?.map((v) => v.verdict),
+      ["refused", "refused", "refused", "refused", "refused", "accepted"],
+    );
+    assertEquals(settleCalls().length, 1);
+    assertEquals(settleCalls()[0].p_receipt.receiptId, "receipt-6");
+
+    // Without a receipt id there is nothing to answer for; the app could not
+    // attribute the refusal, so the batch is refused as malformed instead.
+    for (const bad of [
+      {},
+      { receipts: [] },
+      { receipts: "x" },
+      { receipts: new Array(26).fill(null) },
+      { receipts: ["not-an-entry"] },
+      { receipts: [{ grant: fixture.grant, output: fixture.output }] },
+      {
+        receipts: [
+          { receipt: { ...fixture.receipt, receiptId: 42 }, grant: fixture.grant, output: null },
+        ],
+      },
+      {
+        receipts: [
+          { receipt: { ...fixture.receipt, receiptId: "" }, grant: fixture.grant, output: null },
+        ],
+      },
+      {
+        receipts: [
+          {
+            receipt: { ...fixture.receipt, receiptId: "has spaces" },
+            grant: fixture.grant,
+            output: null,
+          },
+        ],
+      },
+    ]) {
+      const response = await post(bad, user.token);
+      assertEquals(response.status, 400, JSON.stringify(bad).slice(0, 80));
+      assertEquals(
+        ((await readJson(response)).error as { code?: string }).code,
+        "offline.invalid_input",
+      );
+    }
+    assertEquals(settleCalls().length, 1);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Round 6 — the 1.0 wire contract, end to end with the shipping app's shapes.
+// ---------------------------------------------------------------------------
+
+/** The exact OfflineReceiptSubmission apps/mobile/src/data/api.ts posts for a
+ * queued receipt (offlineWallet.ts submission(): the persisted
+ * OfflineConsumptionReceipt minus `settlement` and `settledAt`), key order
+ * included. Built by hand, not from receipt(), so a drift in either fixture
+ * shows up here. */
+async function mobileSubmission(
+  ownerId: string,
+  grant: OfflineSignedExecutionGrant,
+  claims: OfflineExecutionGrantClaims,
+  ticketId: string,
+  out: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return {
+    receiptId: "mobile-receipt-1",
+    ownerId,
+    installationKeyId: claims.installationKeyId,
+    grantId: claims.jti,
+    grantJwsSha256: await digestOfflineGrantTransport(grant),
+    lifecycleSequence: 1,
+    ticket: ticketRef(ticketId, claims),
+    operationId: "mobile-operation-1",
+    resultId: String(out.id),
+    fullOutputSha256: await digestCanonicalOfflineJson(out),
+    billingDisposition: "joint_verification_required",
+    queuedAt: "2026-09-08T12:00:00.000Z",
+  };
+}
+
+Deno.test(
+  "the exact mobile OfflineReceiptSubmission entry settles, the receipt travels to the RPC byte for byte beside the frozen output in the shots row shape, and the answer is what parseOfflineReceiptVerdicts reads — every submitted id exactly once",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = freeClaims(user.sub);
+    const grant = await sign(claims);
+    const out = output("70000061-0404-4000-8000-000000000061");
+    const submission = await mobileSubmission(user.sub, grant, claims, TICKET_A, out);
+    assertEquals(Object.keys(submission), [
+      "receiptId",
+      "ownerId",
+      "installationKeyId",
+      "grantId",
+      "grantJwsSha256",
+      "lifecycleSequence",
+      "ticket",
+      "operationId",
+      "resultId",
+      "fullOutputSha256",
+      "billingDisposition",
+      "queuedAt",
+    ]);
+    const grantEnvelope = { schemaVersion: grant.schemaVersion, compactJws: grant.compactJws };
+
+    const response = await post(
+      { receipts: [{ receipt: submission, grant: grantEnvelope, output: out }] },
+      user.token,
+    );
+    const body = await readJson(response);
+    assertEquals(response.status, 200, JSON.stringify(body));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(answer.receipts, [
+      {
+        receiptId: "mobile-receipt-1",
+        status: "result_recorded",
+        reasonCode: null,
+        financialDisposition: "consumed",
+        resultId: "70000061-0404-4000-8000-000000000061",
+        delivery: "settled",
+      },
+    ]);
+    assertEquals(mobileVerdicts(body, ["mobile-receipt-1"]), [
+      { receiptId: "mobile-receipt-1", verdict: "accepted", code: "result_recorded" },
+    ]);
+
+    // The RPC received the device receipt exactly as posted (that is what its
+    // digest binds), the frozen output re-shaped into the row the shots
+    // writers read (nested timestamps flattened; the digest was taken over
+    // the posted object) and the freeze flag, false under an unfrozen release.
+    const params = settleCalls();
+    assertEquals(params.length, 1);
+    assertEquals(params[0].p_receipt, submission);
+    assertEquals(params[0].p_receipt_sha256, await digestCanonicalOfflineJson(submission));
+    assertEquals(params[0].p_output, sqlOutput(out));
+    assertEquals(params[0].p_hold_reason, null);
+    assertEquals(params[0].p_defer_new, false);
+
+    // Redelivered together with a second, held receipt and a rejected one:
+    // three ids in, three verdicts out, each named once, order-independent.
+    const held = await receipt({
+      receiptId: "mobile-receipt-2",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_B, claims),
+      lifecycleSequence: 2,
+      operationId: "mobile-operation-2",
+      resultId: "70000062-0404-4000-8000-000000000062",
+      fullOutputSha256: "a".repeat(64),
+    });
+    const mixed = await readJson(
+      await post(
+        {
+          receipts: [
+            { receipt: held, grant: grantEnvelope, output: null },
+            {
+              receipt: { ...submission, receiptId: "mobile-receipt-3" },
+              grant: { compactJws: "not.a.jws" },
+              output: out,
+            },
+            { receipt: submission, grant: grantEnvelope, output: out },
           ],
         },
         user.token,
       ),
     );
     assertEquals(
-      out.map((r) => [r.delivery, r.error?.code]),
+      mobileVerdicts(mixed, ["mobile-receipt-2", "mobile-receipt-3", "mobile-receipt-1"]),
       [
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
+        { receiptId: "mobile-receipt-2", verdict: "held", code: "reconciliation_required" },
+        { receiptId: "mobile-receipt-3", verdict: "refused", code: "offline.invalid_input" },
+        { receiptId: "mobile-receipt-1", verdict: "accepted", code: "result_recorded" },
       ],
     );
-    assertEquals(out[1].receiptId, "receipt-1");
-    assertEquals(settleCalls().length, 0);
+    const folded = fold(mixed);
+    assertEquals(
+      folded.map((r) => [r.receiptId, r.delivery, r.reconciliation?.reasonCode ?? null]),
+      [
+        ["mobile-receipt-2", "held", "evidence_missing"],
+        ["mobile-receipt-1", "replayed", null],
+        ["mobile-receipt-3", "rejected", null],
+      ],
+    );
+    assertEquals(durable.size, 2);
+  },
+);
 
-    for (const bad of [
-      {},
-      { receipts: [] },
-      { receipts: "x" },
-      { receipts: new Array(26).fill(null) },
-    ]) {
-      const response = await post(bad, user.token);
-      assertEquals(response.status, 400);
-      assertEquals(
-        ((await readJson(response)).error as { code?: string }).code,
-        "offline.invalid_input",
-      );
-    }
-    assertEquals(settleCalls().length, 0);
+// ---------------------------------------------------------------------------
+// Round 6 — a reversible deny-new freeze on the release (denyNewAuthorizations
+// set, NOT withdrawn). The freeze may lift or become a withdrawal, so it decides
+// nothing durable — but it must never mask what IS durable: the RPC looks the
+// receipt up under the owner lock first (replay / HOLD replay / same-id conflict)
+// and only a genuinely new chargeable receipt is answered pending. The edge
+// passes the freeze as p_defer_new; it never answers pending on its own.
+// ---------------------------------------------------------------------------
+
+/** The active authority under a reversible freeze: deny_new_authorizations set,
+ * withdrawnAt null. */
+function frozenActiveRow(): Record<string, unknown> {
+  const base = releasePolicyRow.approval as Record<string, unknown>;
+  return {
+    ...releasePolicyRow,
+    denyNewAuthorizations: true,
+    approval: { ...base, withdrawnAt: null, denyNewAuthorizations: true },
+  };
+}
+
+Deno.test(
+  "under a reversible deny-new freeze the durable verdict wins: a settled receipt replays consumed, a held receipt replays its hold, a same-id/other-digest receipt is offline.receipt_conflict — and only a genuinely new chargeable receipt is pending, decided by the RPC with p_defer_new, nothing durable written",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = freeClaims(user.sub);
+    const grant = await sign(claims);
+    const settled = await settledFixture(user.sub, TICKET_A, 1, { claims });
+    const heldRec = await receipt({
+      receiptId: "receipt-held",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_B, claims),
+      lifecycleSequence: 2,
+      operationId: "operation-held",
+      resultId: "70000071-0404-4000-8000-000000000071",
+      fullOutputSha256: "a".repeat(64),
+    });
+    const settledEntry = { receipt: settled.receipt, grant, output: settled.output };
+    const heldEntry = { receipt: heldRec, grant, output: null };
+
+    // Before the freeze: one consumed, one durable HOLD (evidence_missing).
+    const before = await results(await post({ receipts: [settledEntry, heldEntry] }, user.token));
+    assertEquals(
+      before.map((r) => [r.receiptId, r.delivery, r.reconciliation?.financialDisposition]),
+      [
+        ["receipt-1", "settled", "consumed"],
+        ["receipt-held", "held", "reserved"],
+      ],
+    );
+    assertEquals(durable.size, 2);
+    assertEquals(
+      settleCalls().map((p) => p.p_defer_new),
+      [false, false],
+    );
+
+    // The operator freezes (does not withdraw) the active release.
+    h.rpcs.read_analysis_release_policy = frozenActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: frozenActiveRow() });
+    const forged = {
+      receipt: {
+        ...settled.receipt,
+        resultId: "70000072-0404-4000-8000-000000000072",
+        fullOutputSha256: await digestCanonicalOfflineJson(
+          output("70000072-0404-4000-8000-000000000072"),
+        ),
+      },
+      grant,
+      output: output("70000072-0404-4000-8000-000000000072"),
+    };
+    const fresh = await settledFixture(user.sub, TICKET_B, 3, { claims });
+    const abstention = output("70000073-0404-4000-8000-000000000073", {
+      resultKind: "low_confidence",
+      overallScore: null,
+    });
+    const notChargeable = await receipt({
+      receiptId: "receipt-abstain",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: ticketRef(TICKET_B, claims),
+      lifecycleSequence: 4,
+      operationId: "operation-abstain",
+      resultId: "70000073-0404-4000-8000-000000000073",
+      fullOutputSha256: await digestCanonicalOfflineJson(abstention),
+      billingDisposition: "not_chargeable",
+    });
+    const unverifiable = await settledFixture(user.sub, TICKET_B, 5, { key: foreignSigningKey });
+
+    const body = await readJson(
+      await post(
+        {
+          receipts: [
+            settledEntry,
+            heldEntry,
+            forged,
+            { receipt: fresh.receipt, grant, output: fresh.output },
+            { receipt: notChargeable, grant, output: abstention },
+            {
+              receipt: unverifiable.receipt,
+              grant: unverifiable.grant,
+              output: unverifiable.output,
+            },
+          ],
+        },
+        user.token,
+      ),
+    );
+    const out = fold(body);
+    assertEquals(
+      out.map((r) => [
+        r.receiptId,
+        r.delivery,
+        r.reconciliation?.status ?? r.error?.code,
+        r.reconciliation?.reasonCode ?? null,
+        r.reconciliation?.financialDisposition ?? null,
+      ]),
+      [
+        ["receipt-1", "replayed", "result_recorded", null, "consumed"],
+        ["receipt-held", "replayed", "reconciliation_required", "evidence_missing", "reserved"],
+        ["receipt-3", "pending", "pending", null, "reserved"],
+        ["receipt-abstain", "settled", "result_recorded", null, "reserved"],
+        ["receipt-5", "held", "reconciliation_required", "evidence_ambiguous", "reserved"],
+        ["receipt-1", "rejected", "offline.receipt_conflict", null, null],
+      ],
+    );
+    assertEquals(
+      mobileVerdicts(body, [
+        "receipt-1",
+        "receipt-held",
+        "receipt-1",
+        "receipt-3",
+        "receipt-abstain",
+        "receipt-5",
+      ]),
+      null,
+      "fixture: the same id twice in one batch is not something the app ever posts",
+    );
+
+    // Every entry reached the RPC — the edge decided nothing on its own — and
+    // the freeze travelled with it exactly where it applies: a receipt with
+    // complete, bound evidence (the RPC decides replay/conflict before it).
+    const frozenCalls = settleCalls().slice(2);
+    assertEquals(
+      frozenCalls.map((p) => [p.p_receipt.receiptId, p.p_hold_reason, p.p_defer_new]),
+      [
+        ["receipt-1", null, true],
+        ["receipt-held", "evidence_missing", false],
+        ["receipt-1", null, true],
+        ["receipt-3", null, true],
+        ["receipt-abstain", null, true],
+        ["receipt-5", "evidence_ambiguous", false],
+      ],
+    );
+    // Durable: the two from before plus the recorded abstention and the
+    // unverifiable HOLD; the pending chargeable receipt wrote nothing.
+    assertEquals(durable.size, 4);
+    assert(!durable.has(`${callerBearer(user.sub)}|receipt-3`));
+    assertEquals(h.callsTo(RELEASE_RPC).length, 0);
+
+    // The freeze lifts: the identical redelivery of the pending receipt
+    // settles, exactly once, under the same operation.
+    h.rpcs.read_analysis_release_policy = releasePolicyRow;
+    h.respond = durableRespond;
+    const lifted = await results(
+      await post(
+        { receipts: [{ receipt: fresh.receipt, grant, output: fresh.output }] },
+        user.token,
+      ),
+    );
+    assertEquals(lifted[0].delivery, "settled");
+    assertEquals(lifted[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(settleCalls().at(-1)?.p_defer_new, false);
+    assertEquals(durable.size, 5);
+  },
+);
+
+Deno.test(
+  "a chargeable Pro (no-ticket) receipt under a reversible freeze is pending with financialDisposition not_applicable; a not_chargeable one is recorded",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = proClaims(user.sub);
+    const grant = await sign(claims);
+    h.rpcs.read_analysis_release_policy = frozenActiveRow();
+    h.respond = lineageRespond({ [RELEASE.policy.sha256]: frozenActiveRow() });
+    const scored = output("70000081-0404-4000-8000-000000000081");
+    const chargeable = await receipt({
+      receiptId: "receipt-pro-frozen",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 1,
+      operationId: "operation-pro-frozen",
+      resultId: "70000081-0404-4000-8000-000000000081",
+      fullOutputSha256: await digestCanonicalOfflineJson(scored),
+    });
+    const abstention = output("70000082-0404-4000-8000-000000000082", {
+      resultKind: "low_confidence",
+      overallScore: null,
+    });
+    const notChargeable = await receipt({
+      receiptId: "receipt-pro-abstain",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 2,
+      operationId: "operation-pro-abstain",
+      resultId: "70000082-0404-4000-8000-000000000082",
+      fullOutputSha256: await digestCanonicalOfflineJson(abstention),
+      billingDisposition: "not_chargeable",
+    });
+    const out = await results(
+      await post(
+        {
+          receipts: [
+            { receipt: chargeable, grant, output: scored },
+            { receipt: notChargeable, grant, output: abstention },
+          ],
+        },
+        user.token,
+      ),
+    );
+    assertEquals(
+      out.map((r) => [r.receiptId, r.delivery, r.reconciliation?.financialDisposition]),
+      [
+        ["receipt-pro-frozen", "pending", "not_applicable"],
+        ["receipt-pro-abstain", "settled", "not_applicable"],
+      ],
+    );
+    assertEquals(
+      settleCalls().map((p) => p.p_defer_new),
+      [true, true],
+    );
+    assertEquals(durable.size, 1);
   },
 );
 
@@ -1137,12 +1793,12 @@ Deno.test(
     const withdrawn = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(withdrawn[0].delivery, "held");
     assertEquals(withdrawn[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
       receiptId: "receipt-1",
       status: "reconciliation_required",
       reasonCode: "grant_revoked",
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "held",
     });
     assertEquals(settleCalls()[0].p_hold_reason, "grant_revoked");
 
@@ -1200,11 +1856,12 @@ Deno.test(
     assertEquals(early[0].delivery, "pending");
     assertEquals(early[0].error, null);
     assertEquals(early[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
       receiptId: "receipt-early",
       status: "pending",
+      reasonCode: null,
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "pending",
     });
     assertEquals(durable.size, 0);
 
@@ -1269,7 +1926,7 @@ Deno.test(
       200,
       `a consumed receipt must replay its verdict, got ${redelivered.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = fold(body);
     assertEquals(out[0].delivery, "replayed");
     assertEquals(out[0].reconciliation?.status, "result_recorded");
     assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
@@ -1304,7 +1961,7 @@ Deno.test(
       200,
       `expected a per-receipt verdict from the named lineage, got ${response.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = fold(body);
     assertEquals(out[0].delivery, "settled");
     assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
     assertEquals(h.callsTo(LINEAGE_RPC).length, 1);
@@ -1364,7 +2021,7 @@ Deno.test(
       200,
       `an abstention has nothing to charge and must be recorded, got ${response.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = fold(body);
     assertEquals(out[0].delivery, "settled");
     assertEquals(out[0].reconciliation?.status, "result_recorded");
     assertEquals(out[0].reconciliation?.financialDisposition, "reserved");
@@ -1583,6 +2240,278 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
+// Round 7: what the shipping device actually sends. apps/mobile drains EVERY
+// pending receipt in one POST (offlineWallet.ts / offlineCapabilities.ts
+// reconcileOfflineReceipts → pendingOfflineReceipts, no chunking) and its
+// `output` is the frozen shot.sync payload shape (nested `timestamps`,
+// `source`), which the shots writers read flat — the route must answer any
+// batch size per receipt and admit the output under the sync ingress's own
+// field rules before it reaches the database.
+// ---------------------------------------------------------------------------
+
+/** Entries decided per request (index.ts OFFLINE_RECEIPT_BATCH_SETTLE_MAX);
+ * the rest of a larger batch is answered pending and settles next drain. */
+const ROUTE_SETTLE_MAX = 250;
+
+async function proBatch(
+  user: { sub: string; token: string },
+  count: number,
+  outputOverrides: (n: number) => Record<string, unknown> = () => ({}),
+): Promise<{
+  entries: { receipt: OfflineDeviceReceipt; grant: OfflineSignedExecutionGrant; output: unknown }[];
+  ids: string[];
+}> {
+  const claims = proClaims(user.sub);
+  const grant = await sign(claims);
+  const entries = [];
+  const ids: string[] = [];
+  for (let n = 1; n <= count; n += 1) {
+    const resultId = `7100${String(n).padStart(4, "0")}-0404-4000-8000-000000000000`;
+    const out = output(resultId, outputOverrides(n));
+    const rec = await receipt({
+      receiptId: `pro-receipt-${n}`,
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: n,
+      operationId: `pro-operation-${n}`,
+      resultId,
+      fullOutputSha256: await digestCanonicalOfflineJson(out),
+    });
+    entries.push({ receipt: rec, grant, output: out });
+    ids.push(rec.receiptId);
+  }
+  return { entries, ids };
+}
+
+Deno.test(
+  "a batch of 26 Pro receipts — a week offline — is answered per receipt, every one settled and named once; the batch size is never refused",
+  async () => {
+    reset();
+    const user = freshUser();
+    const { entries, ids } = await proBatch(user, 26, (n) =>
+      n % 2 === 0 ? { timestamps: { startMs: 10, contactMs: null, endMs: 400 } } : {},
+    );
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(answer.receipts.length, 26);
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery, r.status, r.financialDisposition]),
+      ids.map((id) => [id, "settled", "result_recorded", "not_applicable"]),
+    );
+    assertEquals(
+      mobileVerdicts(body, ids),
+      ids.map((receiptId) => ({ receiptId, verdict: "accepted", code: "result_recorded" })),
+    );
+    const params = settleCalls();
+    assertEquals(params.length, 26);
+    // The frozen output reaches the RPC in the row shape, an honest null
+    // contact included.
+    assertEquals(params[1].p_output, sqlOutput(entries[1].output as Record<string, unknown>));
+    assertEquals(params[1].p_output?.contactMs, null);
+    assertEquals(params[1].p_output?.startMs, 10);
+    assertEquals(durable.size, 26);
+  },
+);
+
+Deno.test(
+  "a batch beyond the per-request settlement cap decides the first entries and answers the rest pending — nothing durable for them, every id named once, the app keeps them queued for the next drain",
+  async () => {
+    reset();
+    const user = freshUser();
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 2);
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 2);
+    assertEquals(
+      answer.receipts.slice(0, ROUTE_SETTLE_MAX).every((r) => r.delivery === "settled"),
+      true,
+    );
+    assertEquals(answer.receipts.slice(ROUTE_SETTLE_MAX), [
+      {
+        receiptId: ids[ROUTE_SETTLE_MAX],
+        status: "pending",
+        reasonCode: null,
+        financialDisposition: "not_applicable",
+        resultId: null,
+        delivery: "pending",
+      },
+      {
+        receiptId: ids[ROUTE_SETTLE_MAX + 1],
+        status: "pending",
+        reasonCode: null,
+        financialDisposition: "not_applicable",
+        resultId: null,
+        delivery: "pending",
+      },
+    ]);
+    const verdicts = mobileVerdicts(body, ids);
+    assert(verdicts !== null);
+    assertEquals(
+      verdicts.slice(ROUTE_SETTLE_MAX).map((v) => v.verdict),
+      ["held", "held"],
+    );
+    assertEquals(settleCalls().length, ROUTE_SETTLE_MAX);
+    assertEquals(durable.size, ROUTE_SETTLE_MAX);
+
+    // The next drain: the app re-sends what is still queued (the two deferred
+    // ones — an accepted receipt leaves the queue; one redelivered anyway
+    // replays) and the deferred ones settle now.
+    h.reset();
+    h.respond = durableRespond;
+    const again = await results(
+      await post({ receipts: [entries[0], ...entries.slice(ROUTE_SETTLE_MAX)] }, user.token),
+    );
+    assertEquals(
+      again.map((r) => [r.receiptId, r.delivery]),
+      [
+        [ids[0], "replayed"],
+        [ids[ROUTE_SETTLE_MAX], "settled"],
+        [ids[ROUTE_SETTLE_MAX + 1], "settled"],
+      ],
+    );
+    assertEquals(durable.size, ROUTE_SETTLE_MAX + 2);
+  },
+);
+
+Deno.test(
+  "a queue of durable HOLDs never starves the fresh receipt behind it: replays do not spend the per-request decision budget",
+  async () => {
+    reset();
+    const user = freshUser();
+    // ROUTE_SETTLE_MAX chargeable Pro receipts delivered without their output
+    // become durable evidence_missing HOLDs; the app keeps re-presenting held
+    // receipts (they are not settled on the device) ahead of newer ones.
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 1);
+    const held = entries.slice(0, ROUTE_SETTLE_MAX).map((e) => ({ ...e, output: null }));
+    const first = wire(await readJson(await post({ receipts: held }, user.token)));
+    assertEquals(first.rejected, []);
+    assertEquals(
+      first.receipts.every((r) => r.delivery === "held" && r.reasonCode === "evidence_missing"),
+      true,
+    );
+    assertEquals(durable.size, ROUTE_SETTLE_MAX);
+
+    // Every later drain: the same durable HOLDs first, then the honest receipt
+    // queued after them. Its decision must not be deferred behind replays.
+    for (let drain = 0; drain < 3; drain += 1) {
+      h.reset();
+      h.respond = durableRespond;
+      const answer = wire(
+        await readJson(await post({ receipts: [...held, entries[ROUTE_SETTLE_MAX]] }, user.token)),
+      );
+      assertEquals(answer.rejected, []);
+      assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(
+        answer.receipts.slice(0, ROUTE_SETTLE_MAX).every((r) => r.delivery === "replayed"),
+        true,
+      );
+      const fresh = answer.receipts[ROUTE_SETTLE_MAX];
+      assertEquals(
+        [fresh.receiptId, fresh.delivery, fresh.status, fresh.financialDisposition],
+        [
+          ids[ROUTE_SETTLE_MAX],
+          drain === 0 ? "settled" : "replayed",
+          "result_recorded",
+          "not_applicable",
+        ],
+      );
+      assertEquals(settleCalls().length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
+    }
+  },
+);
+
+Deno.test(
+  "an output the shot.sync ingress would refuse — negative or out-of-range ms offsets, a flat (non-frozen) shape, a non-real source, a malformed phase — is HELD evidence_ambiguous with no output for the database, whatever its digest says",
+  async () => {
+    reset();
+    const user = freshUser();
+    const bad: Record<string, Record<string, unknown>> = {
+      "negative-start": { timestamps: { startMs: -1, contactMs: 100, endMs: 200 } },
+      "int-min-contact": { timestamps: { startMs: 0, contactMs: -2147483648, endMs: 200 } },
+      "end-past-int": { timestamps: { startMs: 0, contactMs: 100, endMs: 2147483648 } },
+      "fractional-ms": { timestamps: { startMs: 0.5, contactMs: 100, endMs: 200 } },
+      "missing-contact": { timestamps: { startMs: 0, endMs: 200 } },
+      flat: { timestamps: undefined, startMs: 0, contactMs: 100, endMs: 200 },
+      "non-real-source": { source: "synthetic" },
+      "negative-phase": {
+        phases: [{ key: "prep", startMs: -5, representativeMs: 50, endMs: 100, confidence: 0.8 }],
+      },
+      "score-out-of-range": { overallScore: 10.5 },
+    };
+    const claims = proClaims(user.sub);
+    const grant = await sign(claims);
+    const entries = [];
+    const ids: string[] = [];
+    let n = 0;
+    for (const [tag, overrides] of Object.entries(bad)) {
+      n += 1;
+      const resultId = `7200${String(n).padStart(4, "0")}-0404-4000-8000-000000000000`;
+      const out = output(resultId, overrides);
+      if (overrides.timestamps === undefined && "timestamps" in overrides) delete out.timestamps;
+      const rec = await receipt({
+        receiptId: `bad-${tag}`,
+        ownerId: user.sub,
+        grant,
+        claims,
+        ticket: null,
+        lifecycleSequence: n,
+        operationId: `bad-operation-${tag}`,
+        resultId,
+        fullOutputSha256: await digestCanonicalOfflineJson(out),
+      });
+      entries.push({ receipt: rec, grant, output: out });
+      ids.push(rec.receiptId);
+    }
+    // A well-formed sibling in the same batch settles: the refusal is per
+    // receipt.
+    const goodOut = output("72009999-0404-4000-8000-000000000000");
+    const good = await receipt({
+      receiptId: "good-sibling",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 99,
+      operationId: "good-operation",
+      resultId: "72009999-0404-4000-8000-000000000000",
+      fullOutputSha256: await digestCanonicalOfflineJson(goodOut),
+    });
+    entries.push({ receipt: good, grant, output: goodOut });
+    ids.push("good-sibling");
+
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery, r.status, r.reasonCode]),
+      [
+        ...ids
+          .slice(0, -1)
+          .map((id) => [id, "held", "reconciliation_required", "evidence_ambiguous"]),
+        ["good-sibling", "settled", "result_recorded", null],
+      ],
+    );
+    const params = settleCalls();
+    assertEquals(params.length, ids.length);
+    for (const call of params.slice(0, -1)) {
+      assertEquals(call.p_hold_reason, "evidence_ambiguous");
+      assertEquals(call.p_output, null);
+    }
+    assertEquals(params.at(-1)?.p_hold_reason, null);
+    assertEquals(params.at(-1)?.p_output, sqlOutput(goodOut));
+    assertEquals(
+      mobileVerdicts(body, ids)?.map((v) => v.verdict),
+      [...ids.slice(0, -1).map(() => "held"), "accepted"],
+    );
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Live postgres half — the REAL settle_offline_receipt() on a disposable
 // postgres:16 with every migration applied.
 // ---------------------------------------------------------------------------
@@ -1631,19 +2560,25 @@ function inTx<T>(sql: Sql, n: number | null, fn: (tx: Tx) => Promise<T>): Promis
 
 const lit = (value: unknown): string => `'${JSON.stringify(value).replaceAll("'", "''")}'::jsonb`;
 
+/** settle_offline_receipt() exactly as the route calls it for an admitted
+ * receipt: `out` is the device's frozen-shape output and reaches the RPC in
+ * the row shape (sqlOutput), the digest binding the receipt untouched. */
 async function settle(
   tx: Tx,
-  rec: OfflineResultReceipt,
+  rec: OfflineDeviceReceipt,
   out: Record<string, unknown> | null,
   hold: string | null,
+  deferNew: boolean | null = null,
 ): Promise<SettleRow> {
   const rows = await tx.unsafe<SettleRow[]>(
     `select r.result, r.delivery, r.status, r.reason_code, r.financial_disposition, r.result_id
      from public.settle_offline_receipt(
        ${lit(rec)},
        '${await digestCanonicalOfflineJson(rec)}',
-       ${out === null ? "null::jsonb" : lit(out)},
-       ${hold === null ? "null::text" : `'${hold}'`}
+       ${out === null ? "null::jsonb" : lit(sqlOutput(out))},
+       ${hold === null ? "null::text" : `'${hold}'`}${
+         deferNew === null ? "" : `,\n       ${deferNew ? "true" : "false"}`
+       }
      ) r`,
   );
   assertEquals(rows.length, 1);
@@ -1709,7 +2644,7 @@ async function liveReceipt(
   tag: string,
   overrides: Partial<ReceiptOptions> = {},
   outputOverrides: Record<string, unknown> = {},
-): Promise<{ receipt: OfflineResultReceipt; output: Record<string, unknown> }> {
+): Promise<{ receipt: OfflineDeviceReceipt; output: Record<string, unknown> }> {
   const resultId = crypto.randomUUID();
   const out = output(resultId, outputOverrides);
   const rec = await receipt({
@@ -1732,6 +2667,93 @@ async function shotCount(sql: Sql, ticketId: string): Promise<number> {
     `select count(*)::text as count from public.shots where offline_ticket_id = '${ticketId}'`,
   );
   return Number(count);
+}
+
+interface StoredShot {
+  user_id: string;
+  session_id: string | null;
+  analysis_permit_id: string | null;
+  offline_ticket_id: string | null;
+  shot_type: string;
+  camera_view: string;
+  start_ms: number;
+  contact_ms: number | null;
+  end_ms: number;
+  overall_score: string | null;
+  result_kind: string;
+  source: string;
+  app_version: string;
+  phases: number;
+  checkpoints: number;
+}
+
+/** The rated shot as the owner's history reads it (superuser read: what the
+ * table holds, not what a policy shows), or null when nothing was written. */
+async function storedShot(sql: Sql, resultId: string): Promise<StoredShot | null> {
+  const rows = await sql.unsafe<StoredShot[]>(
+    `select s.user_id, s.session_id, s.analysis_permit_id, s.offline_ticket_id, s.shot_type,
+            s.camera_view, s.start_ms, s.contact_ms, s.end_ms, s.overall_score::text as overall_score,
+            s.result_kind, s.source, s.app_version,
+            (select count(*)::int from public.shot_phases p where p.shot_id = s.id) as phases,
+            (select count(*)::int from public.shot_checkpoints c where c.shot_id = s.id) as checkpoints
+     from public.shots s where s.id = '${resultId}'`,
+  );
+  assert(rows.length <= 1);
+  return rows[0] ?? null;
+}
+
+/** A live verified-store entitlement for the user: issue_offline_grant()
+ * then answers a Pro lease (entitlement_source verified_store, no tickets). */
+async function makePremium(sql: Sql, n: number): Promise<void> {
+  await sql.unsafe(
+    `insert into public.billing_entitlements (user_id, premium, expires_at)
+     values ('${U(n)}', true, now() + interval '30 days')
+     on conflict (user_id) do update set premium = true, expires_at = now() + interval '30 days'`,
+  );
+}
+
+async function issueLeaseGrant(sql: Sql, n: number, key: string): Promise<LiveGrant> {
+  await registerDevice(sql, n, key);
+  const row = await inTx(sql, n, async (tx) => {
+    const rows = await tx.unsafe<{ row: unknown }[]>(
+      `select to_jsonb(g) as row from public.issue_offline_grant('${key}', 0) g`,
+    );
+    return rows[0].row;
+  });
+  const claims = offlineGrantClaimsFromIssuance(row, {
+    issuer: ISSUER,
+    ownerId: U(n),
+    installationKeyId: key,
+    release: RELEASE,
+  });
+  assertEquals(claims.entitlementSource, "verified_store", JSON.stringify(row));
+  assertEquals(claims.allocation, undefined);
+  return { claims, grant: await sign(claims) };
+}
+
+/** A receipt under a Pro lease: no ticket, the grant is the lineage. */
+async function leaseReceipt(
+  n: number,
+  issued: LiveGrant,
+  tag: string,
+  overrides: Partial<ReceiptOptions> = {},
+  outputOverrides: Record<string, unknown> = {},
+): Promise<{ receipt: OfflineDeviceReceipt; output: Record<string, unknown> }> {
+  const resultId = crypto.randomUUID();
+  const out = output(resultId, outputOverrides);
+  const rec = await receipt({
+    receiptId: `receipt-${tag}-${RUN}`,
+    ownerId: U(n),
+    grant: issued.grant,
+    claims: issued.claims,
+    ticket: null,
+    lifecycleSequence: 1,
+    operationId: `operation-${tag}-${RUN}`,
+    resultId,
+    fullOutputSha256: await digestCanonicalOfflineJson(out),
+    ...overrides,
+  });
+  return { receipt: rec, output: out };
 }
 
 async function counters(sql: Sql, n: number): Promise<{ held: number; scored: number }> {
@@ -2340,6 +3362,588 @@ Deno.test({
       });
       assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
       assertEquals(await counters(sql, 6), { held: 2, scored: 0 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: settle_offline_receipt(p_defer_new) decides the durable verdict before the freeze — replay, HOLD replay and receipt_conflict answer as they stand, a terminal ticket HOLDs even a not_chargeable receipt, and only a genuinely new chargeable receipt is pending with nothing written",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 7);
+      const issued = await issueFreeGrant(sql, 7, KEY("freeze"));
+      assert(issued.claims.allocation);
+      const [ticketA, ticketB] = issued.claims.allocation.ticketIds;
+      const settlements = async (): Promise<string[]> =>
+        (
+          await sql.unsafe<{ receipt_id: string }[]>(
+            `select receipt_id from public.offline_receipt_settlements
+             where user_id = '${U(7)}' order by id`,
+          )
+        ).map((row) => row.receipt_id);
+
+      // A genuinely new chargeable receipt under the freeze: pending, nothing
+      // durable, the ticket still reserved (never consumed, never released).
+      const fresh = await liveReceipt(U(7), issued, ticketA, "freeze-new");
+      const deferred = await inTx(sql, 7, (tx) =>
+        settle(tx, fresh.receipt, fresh.output, null, true),
+      );
+      assertEquals(deferred, {
+        result: "accepted",
+        delivery: "pending",
+        status: "pending",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      assertEquals(await settlements(), []);
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated"]);
+      assertEquals(await shotCount(sql, ticketA), 0);
+      assertEquals(await counters(sql, 7), { held: 2, scored: 0 });
+
+      // The freeze lifts: the identical redelivery settles once (the 4-argument
+      // call resolves to the defaulted parameter).
+      const settled = await inTx(sql, 7, (tx) => settle(tx, fresh.receipt, fresh.output, null));
+      assertEquals(settled, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "consumed",
+        result_id: fresh.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+
+      // Frozen again: the durable verdict replays as consumed — the freeze
+      // never masks the ledger — and nothing is consumed twice.
+      for (let i = 0; i < 2; i += 1) {
+        const replay = await inTx(sql, 7, (tx) =>
+          settle(tx, fresh.receipt, fresh.output, null, true),
+        );
+        assertEquals(replay, { ...settled, delivery: "replayed" });
+      }
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // Same receipt id, other body, under the freeze: the conflict is
+      // reported, not deferred.
+      const forged = { ...fresh.receipt, resultId: crypto.randomUUID() };
+      const conflict = await inTx(sql, 7, (tx) => settle(tx, forged, fresh.output, null, true));
+      assertEquals([conflict.result, conflict.delivery], ["offline.receipt_conflict", null]);
+
+      // Contradictory evidence under the freeze is a durable HOLD (never
+      // pending, never refunded) and replays as that HOLD while still frozen.
+      const ambiguous = await liveReceipt(
+        U(7),
+        issued,
+        ticketB,
+        "freeze-ambiguous",
+        {},
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const held = await inTx(sql, 7, (tx) =>
+        settle(tx, ambiguous.receipt, ambiguous.output, null, true),
+      );
+      assertEquals(held, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "evidence_ambiguous",
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      const heldReplay = await inTx(sql, 7, (tx) =>
+        settle(tx, ambiguous.receipt, ambiguous.output, null, true),
+      );
+      assertEquals(heldReplay, { ...held, delivery: "replayed" });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+
+      // An edge-derived HOLD (unverifiable evidence) stays durable under the
+      // freeze too: p_hold_reason wins over p_defer_new.
+      const unverifiable = await liveReceipt(U(7), issued, ticketB, "freeze-unverifiable", {
+        lifecycleSequence: 2,
+      });
+      const heldByEdge = await inTx(sql, 7, (tx) =>
+        settle(tx, unverifiable.receipt, null, "evidence_ambiguous", true),
+      );
+      assertEquals([heldByEdge.delivery, heldByEdge.reason_code], ["held", "evidence_ambiguous"]);
+
+      // Ticket A is terminal (consumed): a not_chargeable receipt under it is
+      // a conflicting_receipt HOLD — frozen or not — and the ledger stands.
+      const afterConsumed = await liveReceipt(
+        U(7),
+        issued,
+        ticketA,
+        "freeze-terminal",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 3 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const terminal = await inTx(sql, 7, (tx) =>
+        settle(tx, afterConsumed.receipt, afterConsumed.output, null, true),
+      );
+      assertEquals(terminal, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "conflicting_receipt",
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      const terminalReplay = await inTx(sql, 7, (tx) =>
+        settle(tx, afterConsumed.receipt, afterConsumed.output, null, false),
+      );
+      assertEquals(terminalReplay, { ...terminal, delivery: "replayed" });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // A not_chargeable abstention under the still-outstanding ticket B is
+      // recorded even while frozen: there is nothing to charge, so nothing to
+      // defer; the ticket stays outstanding.
+      const abstention = await liveReceipt(
+        U(7),
+        issued,
+        ticketB,
+        "freeze-abstain",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 4 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const recorded = await inTx(sql, 7, (tx) =>
+        settle(tx, abstention.receipt, abstention.output, null, true),
+      );
+      assertEquals(recorded, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: abstention.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+
+      assertEquals(await settlements(), [
+        fresh.receipt.receiptId,
+        ambiguous.receipt.receiptId,
+        unverifiable.receipt.receiptId,
+        afterConsumed.receipt.receiptId,
+        abstention.receipt.receiptId,
+      ]);
+      assertEquals(await counters(sql, 7), { held: 1, scored: 1 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Round 7 (live): the Pro lease's rated shot. The receipt is the ONLY channel
+// that carries a court-offline rating (no shot.sync outbox row), so a lease
+// receipt answered result_recorded must leave the owner's public.shots row —
+// once — behind it, written through the scored-shot gate under the owner
+// lock, never for another owner, another installation, a free grant, or a
+// rating the server already holds.
+// ---------------------------------------------------------------------------
+
+interface SqlFailure {
+  code: string;
+  message: string;
+  hint: string | null;
+}
+
+/** The SQLSTATE and text of a statement Postgres refused. */
+async function refused(work: Promise<unknown>): Promise<SqlFailure> {
+  try {
+    await work;
+  } catch (error) {
+    const failure = error as { code?: unknown; message?: unknown; hint?: unknown };
+    return {
+      code: String(failure.code ?? ""),
+      message: String(failure.message ?? ""),
+      hint: typeof failure.hint === "string" ? failure.hint : null,
+    };
+  }
+  throw new Error("expected the statement to be refused");
+}
+
+async function settlementRows(sql: Sql, n: number): Promise<string[]> {
+  const rows = await sql.unsafe<{ receipt_id: string }[]>(
+    `select receipt_id from public.offline_receipt_settlements
+     where user_id = '${U(n)}' order by id`,
+  );
+  return rows.map((row) => row.receipt_id);
+}
+
+async function ownerShotCount(sql: Sql, n: number): Promise<number> {
+  const [{ count }] = await sql.unsafe<{ count: string }[]>(
+    `select count(*)::text as count from public.shots where user_id = '${U(n)}'`,
+  );
+  return Number(count);
+}
+
+Deno.test({
+  name: "live DB: a Pro (no-ticket) receipt writes the owner's rated shot from the frozen output before it is result_recorded; the redelivery replays without a second row; a second receipt for the same rating, a re-bodied receipt and a contradictory abstention leave that one row",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 8);
+      await makePremium(sql, 8);
+      const lease = await issueLeaseGrant(sql, 8, KEY("lease"));
+      assertEquals(await counters(sql, 8), { held: 0, scored: 0 });
+
+      const rated = await leaseReceipt(8, lease, "lease-rated");
+      const first = await inTx(sql, 8, (tx) => settle(tx, rated.receipt, rated.output, null));
+      assertEquals(first, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "not_applicable",
+        result_id: rated.receipt.resultId,
+      });
+      const stored = await storedShot(sql, rated.receipt.resultId);
+      assertEquals(stored, {
+        user_id: U(8),
+        session_id: null,
+        analysis_permit_id: null,
+        offline_ticket_id: null,
+        shot_type: "dink",
+        camera_view: "side",
+        start_ms: 0,
+        contact_ms: 100,
+        end_ms: 200,
+        overall_score: "7.00",
+        result_kind: "scored",
+        source: "real",
+        app_version: "1.0.0",
+        phases: 1,
+        checkpoints: 1,
+      });
+      assertEquals(await counters(sql, 8), { held: 0, scored: 1 });
+
+      // Same receipt, same bytes: the durable verdict, no second write.
+      const again = await inTx(sql, 8, (tx) => settle(tx, rated.receipt, rated.output, null));
+      assertEquals(again, { ...first, delivery: "replayed" });
+      assertEquals(await storedShot(sql, rated.receipt.resultId), stored);
+      assertEquals(await ownerShotCount(sql, 8), 1);
+
+      // Same receipt id, other bytes: refused, nothing changes.
+      const rebodied = { ...rated.receipt, operationId: `operation-lease-rebodied-${RUN}` };
+      const conflict = await inTx(sql, 8, (tx) => settle(tx, rebodied, rated.output, null));
+      assertEquals(conflict.result, "offline.receipt_conflict");
+      assertEquals(await ownerShotCount(sql, 8), 1);
+
+      // A different receipt naming the rating already recorded: HOLD, one row.
+      const second = await leaseReceipt(8, lease, "lease-second", {
+        resultId: rated.receipt.resultId,
+        lifecycleSequence: 2,
+        fullOutputSha256: await digestCanonicalOfflineJson(rated.output),
+      });
+      const heldSecond = await inTx(sql, 8, (tx) => settle(tx, second.receipt, rated.output, null));
+      assertEquals(heldSecond, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "conflicting_receipt",
+        financial_disposition: "not_applicable",
+        result_id: null,
+      });
+      assertEquals(await storedShot(sql, rated.receipt.resultId), stored);
+
+      // "Nothing to charge" beside a scored output: contradictory, HOLD, no row.
+      const contradictory = await leaseReceipt(8, lease, "lease-contradictory", {
+        billingDisposition: "not_chargeable",
+        lifecycleSequence: 3,
+      });
+      const heldContradictory = await inTx(sql, 8, (tx) =>
+        settle(tx, contradictory.receipt, contradictory.output, null),
+      );
+      assertEquals(heldContradictory.delivery, "held");
+      assertEquals(heldContradictory.reason_code, "evidence_ambiguous");
+      assertEquals(heldContradictory.financial_disposition, "not_applicable");
+      assertEquals(await storedShot(sql, contradictory.receipt.resultId), null);
+
+      // An honest abstention under the lease is recorded and writes no shot.
+      const abstention = await leaseReceipt(
+        8,
+        lease,
+        "lease-abstain",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 4 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const recorded = await inTx(sql, 8, (tx) =>
+        settle(tx, abstention.receipt, abstention.output, null),
+      );
+      assertEquals(recorded, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "not_applicable",
+        result_id: abstention.receipt.resultId,
+      });
+      assertEquals(await storedShot(sql, abstention.receipt.resultId), null);
+
+      // A chargeable receipt without its output waits for the evidence.
+      const missing = await leaseReceipt(8, lease, "lease-missing", { lifecycleSequence: 5 });
+      const heldMissing = await inTx(sql, 8, (tx) =>
+        settle(tx, missing.receipt, null, "evidence_missing"),
+      );
+      assertEquals(heldMissing.delivery, "held");
+      assertEquals(heldMissing.reason_code, "evidence_missing");
+      assertEquals(heldMissing.financial_disposition, "not_applicable");
+
+      assertEquals(await settlementRows(sql, 8), [
+        rated.receipt.receiptId,
+        second.receipt.receiptId,
+        contradictory.receipt.receiptId,
+        abstention.receipt.receiptId,
+        missing.receipt.receiptId,
+      ]);
+      assertEquals(await ownerShotCount(sql, 8), 1);
+      assertEquals(await counters(sql, 8), { held: 0, scored: 1 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: the lease shot write is fenced — pending (not durable) while its session is unsynced or the release is frozen, HELD for a rating another owner holds, a row the table refuses, a free grant presented without a ticket, another installation's lease or another owner's lease; nothing is charged or written on a HOLD",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 9);
+      await createUser(sql, 10);
+      await makePremium(sql, 9);
+      const lease = await issueLeaseGrant(sql, 9, KEY("fence-a"));
+
+      // The session outbox may land after the receipt: pending, nothing
+      // durable, then recorded with the session once it exists.
+      const sessionId = crypto.randomUUID();
+      const inSession = await leaseReceipt(9, lease, "fence-session", {}, { sessionId });
+      const early = await inTx(sql, 9, (tx) =>
+        settle(tx, inSession.receipt, inSession.output, null),
+      );
+      assertEquals(early, {
+        result: "accepted",
+        delivery: "pending",
+        status: "pending",
+        reason_code: null,
+        financial_disposition: "not_applicable",
+        result_id: null,
+      });
+      assertEquals(await settlementRows(sql, 9), []);
+      assertEquals(await storedShot(sql, inSession.receipt.resultId), null);
+      await sql.unsafe(
+        `insert into public.sessions (id, user_id, started_at)
+         values ('${sessionId}', '${U(9)}', now())`,
+      );
+      const late = await inTx(sql, 9, (tx) =>
+        settle(tx, inSession.receipt, inSession.output, null),
+      );
+      assertEquals(late.delivery, "settled");
+      assertEquals(late.status, "result_recorded");
+      assertEquals((await storedShot(sql, inSession.receipt.resultId))?.session_id, sessionId);
+
+      // A reversible freeze defers a NEW lease receipt without writing.
+      const frozen = await leaseReceipt(9, lease, "fence-frozen", { lifecycleSequence: 2 });
+      const deferred = await inTx(sql, 9, (tx) =>
+        settle(tx, frozen.receipt, frozen.output, null, true),
+      );
+      assertEquals(deferred.delivery, "pending");
+      assertEquals(deferred.financial_disposition, "not_applicable");
+      assertEquals(await storedShot(sql, frozen.receipt.resultId), null);
+      assertEquals(await settlementRows(sql, 9), [inSession.receipt.receiptId]);
+      const thawed = await inTx(sql, 9, (tx) =>
+        settle(tx, frozen.receipt, frozen.output, null, false),
+      );
+      assertEquals(thawed.delivery, "settled");
+      assertEquals((await storedShot(sql, frozen.receipt.resultId))?.user_id, U(9));
+      // ...and the settled one replays as settled even under the freeze.
+      const replayFrozen = await inTx(sql, 9, (tx) =>
+        settle(tx, frozen.receipt, frozen.output, null, true),
+      );
+      assertEquals(replayFrozen, { ...thawed, delivery: "replayed" });
+
+      // A rating another owner already holds: HOLD, the other's row untouched.
+      await makePremium(sql, 10);
+      const otherLease = await issueLeaseGrant(sql, 10, KEY("fence-other"));
+      const theirs = await leaseReceipt(10, otherLease, "fence-theirs");
+      const theirRow = await inTx(sql, 10, (tx) => settle(tx, theirs.receipt, theirs.output, null));
+      assertEquals(theirRow.status, "result_recorded");
+      const poach = await leaseReceipt(9, lease, "fence-poach", {
+        resultId: theirs.receipt.resultId,
+        lifecycleSequence: 3,
+        fullOutputSha256: await digestCanonicalOfflineJson(theirs.output),
+      });
+      const heldPoach = await inTx(sql, 9, (tx) => settle(tx, poach.receipt, theirs.output, null));
+      assertEquals(heldPoach.delivery, "held");
+      assertEquals(heldPoach.reason_code, "conflicting_receipt");
+      assertEquals((await storedShot(sql, theirs.receipt.resultId))?.user_id, U(10));
+
+      // A row the table refuses (camera view outside the check) is ambiguous
+      // evidence, never a half-written rating.
+      const refusedRow = await leaseReceipt(
+        9,
+        lease,
+        "fence-refused",
+        { lifecycleSequence: 4 },
+        { cameraView: "front" },
+      );
+      const heldRefused = await inTx(sql, 9, (tx) =>
+        settle(tx, refusedRow.receipt, refusedRow.output, null),
+      );
+      assertEquals(heldRefused.delivery, "held");
+      assertEquals(heldRefused.reason_code, "evidence_ambiguous");
+      assertEquals(await storedShot(sql, refusedRow.receipt.resultId), null);
+
+      // A free grant presented without a ticket is not a lease.
+      await createUser(sql, 11);
+      const free = await issueFreeGrant(sql, 11, KEY("fence-free"));
+      const ticketless = await receipt({
+        receiptId: `receipt-fence-free-${RUN}`,
+        ownerId: U(11),
+        grant: free.grant,
+        claims: free.claims,
+        ticket: null,
+        lifecycleSequence: 1,
+        operationId: `operation-fence-free-${RUN}`,
+        resultId: crypto.randomUUID(),
+        fullOutputSha256: "b".repeat(64),
+      });
+      const freeOut = output(ticketless.resultId);
+      const heldFree = await inTx(sql, 11, (tx) => settle(tx, ticketless, freeOut, null));
+      assertEquals(heldFree.delivery, "held");
+      assertEquals(heldFree.reason_code, "evidence_ambiguous");
+      assertEquals(await storedShot(sql, ticketless.resultId), null);
+      assertEquals(await counters(sql, 11), { held: 2, scored: 0 });
+
+      // Another installation's lease, and another owner's lease: lineage HOLDs.
+      const leaseB = await issueLeaseGrant(sql, 9, KEY("fence-b"));
+      const crossed = await leaseReceipt(9, lease, "fence-crossed", {
+        lifecycleSequence: 5,
+        installationKeyId: leaseB.claims.installationKeyId,
+      });
+      const heldCrossed = await inTx(sql, 9, (tx) =>
+        settle(tx, crossed.receipt, crossed.output, null),
+      );
+      assertEquals(heldCrossed.delivery, "held");
+      assertEquals(heldCrossed.reason_code, "evidence_ambiguous");
+      assertEquals(await storedShot(sql, crossed.receipt.resultId), null);
+
+      const borrowed = await leaseReceipt(10, lease, "fence-borrowed", { lifecycleSequence: 2 });
+      const heldBorrowed = await inTx(sql, 10, (tx) =>
+        settle(tx, borrowed.receipt, borrowed.output, null),
+      );
+      assertEquals(heldBorrowed.delivery, "held");
+      assertEquals(heldBorrowed.reason_code, "evidence_ambiguous");
+      assertEquals(await storedShot(sql, borrowed.receipt.resultId), null);
+
+      assertEquals(await ownerShotCount(sql, 9), 2);
+      assertEquals(await ownerShotCount(sql, 10), 1);
+      assertEquals(await ownerShotCount(sql, 11), 0);
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: the lease vouch is private — clients cannot call the writer, and the scored-shot gate refuses a direct scored insert vouched with a lease that is not the caller's verified-store grant, or stacked on a ticket/permit vouch",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 12);
+      await createUser(sql, 13);
+      await makePremium(sql, 12);
+      const lease = await issueLeaseGrant(sql, 12, KEY("gate-lease"));
+      const free = await issueFreeGrant(sql, 13, KEY("gate-free"));
+      assert(free.claims.allocation);
+      const ticket = free.claims.allocation.ticketIds[0];
+
+      const directInsert = (id: string, n: number): string => `
+        insert into public.shots (
+          id, user_id, shot_type, camera_view, captured_at, start_ms, contact_ms, end_ms,
+          overall_score, analysis_confidence, result_kind, app_version, model_bundle_version,
+          pose_model_version, paddle_model_version, stroke_detector_version,
+          phase_model_version, scoring_model_version, shot_config_version, source
+        ) values (
+          '${id}', '${U(n)}', 'dink', 'side', now(), 0, 100, 200, 7, 0.9, 'scored',
+          '1.0.0', 'b', 'p', 'pa', 's', 'ph', 'sc', 'c', 'real'
+        )`;
+      const vouch = (setting: string, value: string): string =>
+        `select set_config('${setting}', '${value}', true)`;
+
+      // The writer itself is not a client surface.
+      const writer = await refused(
+        inTx(sql, 12, (tx) =>
+          tx.unsafe(
+            `select api_private.record_offline_lease_shot('${lease.claims.jti}', '{}'::jsonb)`,
+          ),
+        ),
+      );
+      assertEquals(writer.code, "42501");
+
+      // Gate: a lease vouch naming a grant that is not the caller's.
+      const stolen = await refused(
+        inTx(sql, 13, async (tx) => {
+          await tx.unsafe(vouch("pickle.offline_lease_grant_id", lease.claims.jti));
+          await tx.unsafe(directInsert(crypto.randomUUID(), 13));
+        }),
+      );
+      assertEquals(stolen.code, "23514");
+      assertMatch(stolen.message, /lease/);
+
+      // Gate: the caller's own FREE grant is not a lease.
+      const notALease = await refused(
+        inTx(sql, 13, async (tx) => {
+          await tx.unsafe(vouch("pickle.offline_lease_grant_id", free.claims.jti));
+          await tx.unsafe(directInsert(crypto.randomUUID(), 13));
+        }),
+      );
+      assertEquals(notALease.code, "23514");
+
+      // Gate: an unknown grant id, and a non-uuid vouch (refused at the cast,
+      // as a garbage ticket vouch is).
+      const unknown = await refused(
+        inTx(sql, 12, async (tx) => {
+          await tx.unsafe(vouch("pickle.offline_lease_grant_id", crypto.randomUUID()));
+          await tx.unsafe(directInsert(crypto.randomUUID(), 12));
+        }),
+      );
+      assertEquals(unknown.code, "23514");
+      const garbage = await refused(
+        inTx(sql, 12, async (tx) => {
+          await tx.unsafe(vouch("pickle.offline_lease_grant_id", "not-a-grant"));
+          await tx.unsafe(directInsert(crypto.randomUUID(), 12));
+        }),
+      );
+      assertEquals(garbage.code, "22P02");
+
+      // Gate: a lease vouch stacked on a ticket vouch is two claims for one row.
+      const stacked = await refused(
+        inTx(sql, 12, async (tx) => {
+          await tx.unsafe(vouch("pickle.offline_lease_grant_id", lease.claims.jti));
+          await tx.unsafe(vouch("pickle.offline_ticket_id", ticket));
+          await tx.unsafe(directInsert(crypto.randomUUID(), 12));
+        }),
+      );
+      assertEquals(stacked.code, "23514");
+
+      // The plain client write path stays closed exactly as before.
+      const bare = await refused(
+        inTx(sql, 12, (tx) => tx.unsafe(directInsert(crypto.randomUUID(), 12))),
+      );
+      assertEquals(bare.code, "42501");
+
+      assertEquals(await ownerShotCount(sql, 12), 0);
+      assertEquals(await ownerShotCount(sql, 13), 0);
     } finally {
       await sql.end();
     }
