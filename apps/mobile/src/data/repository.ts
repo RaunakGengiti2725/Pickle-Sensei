@@ -194,6 +194,110 @@ export async function saveAnalysis(
 }
 
 /**
+ * Persists a scored analysis rated on the court without a live permit. The
+ * local allocation the run consumed has already queued `receiptId` for this
+ * exact result (offline_receipt, same owner, same result id, hash of this
+ * exact payload); that receipt — not a `shot.sync` outbox row — carries the
+ * output to the server, so nothing is queued here. The parent session row
+ * still syncs through its own outbox entry.
+ */
+export async function saveOfflineAnalysis(
+  db: LocalDb,
+  analysis: ShotAnalysis,
+  receiptId: string,
+): Promise<void> {
+  if (analysis.source !== 'real') {
+    throw new Error('Only real analyses may be persisted by the app runtime.');
+  }
+  if (analysis.resultKind !== 'scored') {
+    throw new Error(
+      'Only a scored analysis spends an offline allocation; abstentions are persisted via saveLocalOnlyAnalysis.',
+    );
+  }
+  if (!receiptId.trim()) {
+    throw new Error(
+      'A queued offline consumption receipt is required before persisting an offline rating.',
+    );
+  }
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
+    const { rows } = await db.execute(
+      `SELECT receipt FROM offline_receipt
+       WHERE owner_key = ? AND receipt_id = ?`,
+      [owner, receiptId],
+    );
+    const raw = rows[0]?.['receipt'];
+    const receipt =
+      typeof raw === 'string'
+        ? (JSON.parse(raw) as { resultId?: unknown })
+        : null;
+    if (receipt === null || receipt.resultId !== analysis.id) {
+      throw new Error(
+        'The offline receipt does not name this analysis; the rating is not persisted.',
+      );
+    }
+    await db.execute(
+      `INSERT OR REPLACE INTO local_shot
+       (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        owner,
+        analysis.id,
+        analysis.sessionId,
+        analysis.shotType,
+        analysis.capturedAtIso,
+        analysis.overallScore,
+        analysis.analysisConfidence,
+        analysis.resultKind,
+        analysis.source,
+        JSON.stringify(analysis),
+      ],
+    );
+  });
+}
+
+/** The exact persisted payload of one of this owner's real scored shots, as
+ * an offline receipt presents it (`output`), or null when the device no
+ * longer holds it. */
+export async function readScoredShotPayload(
+  db: LocalDb,
+  shotId: string,
+): Promise<Record<string, unknown> | null> {
+  const owner = writeOwner(db);
+  const { rows } = await db.execute(
+    `SELECT payload FROM local_shot
+     WHERE owner_key = ? AND id = ? AND source = 'real' AND result_kind = 'scored'`,
+    [owner, shotId],
+  );
+  const payload = rows[0]?.['payload'];
+  if (typeof payload !== 'string') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null;
+  return parsed as Record<string, unknown>;
+}
+
+/** Mark a shot delivered to the server outside the `shot.sync` outbox — an
+ * offline receipt the server accepted (`result_recorded`) — exactly as a
+ * successful shot.sync marks it. */
+export async function recordShotSyncReceipt(
+  db: LocalDb,
+  shotId: string,
+): Promise<void> {
+  const owner = writeOwner(db);
+  await db.execute(
+    `INSERT OR REPLACE INTO sync_receipt (owner_key, kind, entity_id)
+     VALUES (?, 'shot.sync', ?)`,
+    [owner, shotId],
+  );
+}
+
+/**
  * Persists a low-confidence (unscored) analysis for local display only. It
  * never enters the sync outbox: abstentions are not ratings, consume no
  * permit, and must not masquerade as scored shots anywhere downstream.
@@ -1003,6 +1107,11 @@ export type ShotOutboxStatus =
       lastError: string | null;
     };
 
+/** Marker `getShotOutboxStatus` reads for a court-offline receipt the server
+ * refused for good. It is never stored: an outbox row's `repair_reason`
+ * carries a repairable cause, and `retryShotSync` only ever resets rows. */
+const OFFLINE_RECEIPT_REFUSED = 'offline_receipt.refused';
+
 /**
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
@@ -1013,11 +1122,40 @@ export async function getShotOutboxStatus(
   shotId: string,
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
+  // One statement, two sources. A court-offline rating has no outbox row —
+  // its receipt carries the output — so, when no row exists, the receipt's
+  // durable state stands in for it: `queued` until the server gives a
+  // terminal verdict (each journalled presentation is one attempt), gone
+  // once accepted (the sync receipt then records delivery), and terminal once
+  // refused, with the refusal code the wallet journal recorded as the last
+  // error and OFFLINE_RECEIPT_REFUSED in the third column in place of a
+  // repair reason. A refused paid read is therefore never indistinguishable
+  // from one still waiting to be sent.
+  // `?1` is the owner and `?2` the shot id wherever either recurs.
+  const shotRow = `owner_key = ?1 AND kind = 'shot.sync'
+       AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?2`;
   const { rows } = await db.execute(
     `SELECT attempts, last_error, repair_reason FROM outbox
-     WHERE owner_key = ? AND kind = 'shot.sync'
-       AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?
-     ORDER BY id DESC LIMIT 1`,
+     WHERE ${shotRow}
+       AND id = (SELECT MAX(id) FROM outbox WHERE ${shotRow})
+     UNION ALL
+     SELECT
+       (SELECT COUNT(*) FROM offline_wallet_journal j,
+          json_each(CASE WHEN json_valid(j.receipt_ids) THEN j.receipt_ids ELSE '[]' END) presented
+        WHERE j.owner_key = r.owner_key AND presented.value = r.receipt_id),
+       CASE WHEN r.settlement = 'refused' THEN
+         (SELECT json_extract(answer.value, '$.code') FROM offline_wallet_journal j,
+            json_each(CASE WHEN json_valid(j.verdicts) THEN j.verdicts ELSE '[]' END) answer
+          WHERE j.owner_key = r.owner_key AND j.state = 'applied'
+            AND json_extract(answer.value, '$.receiptId') = r.receipt_id
+            AND json_extract(answer.value, '$.verdict') = 'refused'
+          ORDER BY j.closed_at DESC, j.rowid DESC LIMIT 1) END,
+       CASE WHEN r.settlement = 'refused' THEN '${OFFLINE_RECEIPT_REFUSED}' END
+     FROM offline_receipt r
+     WHERE r.owner_key = ?1
+       AND CASE WHEN json_valid(r.receipt) THEN json_extract(r.receipt, '$.resultId') END = ?2
+       AND r.settlement IS NOT 'accepted'
+       AND NOT EXISTS (SELECT 1 FROM outbox WHERE ${shotRow})`,
     [owner, shotId],
   );
   const row = rows[0];
@@ -1027,6 +1165,9 @@ export async function getShotOutboxStatus(
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
       : null;
+  if (row['repair_reason'] === OFFLINE_RECEIPT_REFUSED) {
+    return { state: 'exhausted', attempts, lastError };
+  }
   if (row['repair_reason'] != null) {
     return { state: 'needs_repair', attempts, lastError };
   }
