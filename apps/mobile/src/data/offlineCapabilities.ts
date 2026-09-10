@@ -20,6 +20,7 @@ import type {
   OfflineReceiptSubmission,
 } from './api';
 import type { LocalDb } from './db';
+import type { RunJournalPermitPort } from '../analysis/runJournal';
 import { OUTBOX_MAX_ATTEMPTS } from './sync';
 import { forDataOwner, withTransaction } from './transactions';
 import {
@@ -387,6 +388,7 @@ export type OfflineGrantErrorCode =
   | 'offline.result_invalid'
   | 'offline.receipt_conflict'
   | 'offline.receipt_unknown'
+  | 'offline.operation_paid'
   | 'offline.receipt_settled'
   | 'offline.wallet_corrupt';
 
@@ -1348,6 +1350,88 @@ export async function pendingOfflineReceipts(
     [context.ownerKey],
   );
   return rows.map(parseReceiptRow);
+}
+
+/** Of the given operation ids, those the owner already paid for with an
+ * offline allocation — a receipt exists, pending or settled. Such an
+ * operation is settled only by presenting that receipt; it is never
+ * unfinished permit work. */
+export async function offlinePaidOperationIds(
+  db: LocalDb,
+  ownerKey: string,
+  operationIds: readonly string[],
+): Promise<Set<string>> {
+  const paid = new Set<string>();
+  const ids = [...new Set(operationIds)];
+  for (let index = 0; index < ids.length; index += 100) {
+    const batch = ids.slice(index, index + 100);
+    const { rows } = await db.execute(
+      `SELECT operation_id FROM offline_receipt
+       WHERE owner_key = ? AND operation_id IN (${batch.map(() => '?').join(', ')})`,
+      [ownerKey, ...batch],
+    );
+    for (const row of rows) {
+      const id = row['operation_id'];
+      if (typeof id === 'string') paid.add(id);
+    }
+  }
+  return paid;
+}
+
+/**
+ * Wraps a permit port so it refuses to reserve a LIVE permit for a journal
+ * row whose operation already spent an offline allocation. That operation's
+ * queued receipt is its one settlement (grant + output, presented by the
+ * wallet drain); a fresh reservation — and the `failed` finalize recovery
+ * would send against it — would tell the server the opposite of what the
+ * receipt records. The run stays held in its journal row instead; a lookup
+ * that cannot be read is treated the same way, never as permission. The
+ * database is resolved per reservation, when the recovery pass runs.
+ */
+export function guardOfflinePaidReservations<P extends RunJournalPermitPort>(
+  openDb: () => LocalDb,
+  port: P,
+): P {
+  const guarded: RunJournalPermitPort = {
+    ownerKey: port.ownerKey,
+    apiOrigin: port.apiOrigin,
+    async reserve(idempotencyKey) {
+      let paid: boolean;
+      try {
+        const { rows } = await openDb().execute(
+          `SELECT 1 AS paid FROM offline_receipt
+           WHERE owner_key = ? AND operation_id IN (
+             SELECT operation_id FROM analysis_run_journal
+             WHERE owner_key = ? AND api_origin = ? AND reservation_key = ?
+             UNION ALL
+             SELECT operation_id FROM analysis_execution_attempts
+             WHERE owner_key = ? AND api_origin = ? AND reservation_key = ?)
+           LIMIT 1`,
+          [
+            port.ownerKey,
+            port.ownerKey,
+            port.apiOrigin,
+            idempotencyKey,
+            port.ownerKey,
+            port.apiOrigin,
+            idempotencyKey,
+          ],
+        );
+        paid = rows.length > 0;
+      } catch {
+        paid = true;
+      }
+      if (paid) {
+        throw new OfflineGrantError(
+          'offline.operation_paid',
+          'This rating was already paid for on the device; its receipt settles it, so no live permit is reserved.',
+        );
+      }
+      return port.reserve(idempotencyKey);
+    },
+    release: (permitId, outcome) => port.release(permitId, outcome),
+  };
+  return { ...port, ...guarded };
 }
 
 /** The queued receipt a rated run's operation id already paid with, for the

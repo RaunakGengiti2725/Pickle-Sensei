@@ -18,7 +18,9 @@ import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
 import { getDb, type LocalDb } from './db';
 import { installationKey } from './installationKey';
 import {
+  guardOfflinePaidReservations,
   offlineGrantPullNeeded,
+  offlinePaidOperationIds,
   readOfflineAllocation,
   requestOfflineGrant,
 } from './offlineCapabilities';
@@ -223,10 +225,10 @@ export function configureSyncRuntime(session: ApiSession): void {
     if (evidence === 'transport') retryPending = true;
   };
   const transport = observingServerAnswers(createTransport(apiConfig), observe);
-  const permits = {
+  const permits = guardOfflinePaidReservations(getDb, {
     ...scope,
     ...observingServerAnswers(createAnalysisPermitClient(apiConfig), observe),
-  };
+  });
   const offlineGrants: OfflineGrantClient = observingServerAnswers(
     createOfflineGrantClient(apiConfig),
     observe,
@@ -304,11 +306,19 @@ export function configureSyncRuntime(session: ApiSession): void {
       // and this drain counts as unfinished, so the timer backs off.
       const reading = await trustedTime.read();
       const receipts = await reconcileOfflineWallet(db, offlineGrants, reading);
+      const unfinished = recovered.items.filter(
+        item => item.kind === 'pending' || item.kind === 'held',
+      );
+      // A run paid for offline is settled by its receipt, not by a permit:
+      // its held journal row is not unfinished recovery work.
+      const paidOffline = await offlinePaidOperationIds(
+        db,
+        scope.ownerKey,
+        unfinished.map(item => item.operationId),
+      );
       const pendingRecovery =
         recovered.unknownStorage ||
-        recovered.items.some(
-          item => item.kind === 'pending' || item.kind === 'held',
-        );
+        unfinished.some(item => !paidOffline.has(item.operationId));
       const clean =
         result.failed === 0 && !pendingRecovery && receipts.pending === 0;
       const pull =
