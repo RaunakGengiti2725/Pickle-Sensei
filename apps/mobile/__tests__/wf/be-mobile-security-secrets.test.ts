@@ -1714,6 +1714,7 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(filesMatching(/['"]react-native-keychain['"]/).sort()).toEqual([
       'src/account/deletionCapabilityVault.ts',
       'src/account/sessionVault.ts',
+      'src/data/installationKey.ts',
       'src/data/trustedTime.ts',
     ]);
     const vault = read('src/account/sessionVault.ts');
@@ -1746,6 +1747,19 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(trustedTimeModule).toContain('cloudSync: false');
     expect(trustedTimeModule).not.toMatch(
       /refreshToken|accessToken|bearerToken|identityToken|idToken|authorizationCode|resetGenericPassword|sessionVault|sessionLifecycle|account-deletion/,
+    );
+    // The installation key is a device-only, credential-free Keychain record
+    // in its own service; it never reads or clears another vault.
+    const installationKeyModule = read('src/data/installationKey.ts');
+    expect(installationKeyModule).toContain(
+      "'com.picklesensei.offline.installation-key'",
+    );
+    expect(installationKeyModule).toContain(
+      'AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY',
+    );
+    expect(installationKeyModule).toContain('cloudSync: false');
+    expect(installationKeyModule).not.toMatch(
+      /refreshToken|accessToken|bearerToken|identityToken|idToken|authorizationCode|resetGenericPassword|sessionVault|sessionLifecycle|account-deletion|trusted-time/,
     );
     // No other durable store is in play for anything: AsyncStorage is not a
     // dependency of the app's sources at all.

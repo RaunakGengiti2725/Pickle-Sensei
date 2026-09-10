@@ -976,19 +976,42 @@ describe('W05-06 the sync runtime pulls an offline grant when it has signal', ()
     await accessAnswered(PRO_ACCESS);
     expect(server.urls()).toHaveLength(4);
     expect(handle.count('offline_grant', OWNER)).toBe(0);
-    // The server answered (503): the device is online and the very next pass
-    // retries, and the timer has backed off.
-    await triggerOutboxSync();
-    expect(server.urls()).toHaveLength(6);
-    expect(handle.count('offline_grant', OWNER)).toBe(0);
+    // A 503 is a failed pass: the timer has backed off, and the backed-off
+    // pass retries the transport failure (the request left the device and
+    // something answered) — once per pass, backing off further while the
+    // outage lasts.
     const delays = scheduledDelays(timers);
     expect(delays[delays.length - 1]).toBeGreaterThanOrEqual(
       2 * SYNC_RETRY_BASE_MS * (1 - SYNC_RETRY_JITTER_RATIO),
     );
-
-    outage = false;
     await triggerOutboxSync();
-    expect(server.urls()).toHaveLength(8);
+    expect(server.urls()).toHaveLength(6);
+    expect(handle.count('offline_grant', OWNER)).toBe(0);
+    const backedOff = scheduledDelays(timers);
+    expect(backedOff[backedOff.length - 1]).toBeGreaterThanOrEqual(
+      4 * SYNC_RETRY_BASE_MS * (1 - SYNC_RETRY_JITTER_RATIO),
+    );
+
+    // The radio goes while the retry is pending: the retry leaves the device
+    // and fails without an answer, and that is the last request — nothing is
+    // signal any more until the server answers again.
+    server.spy.mockRestore();
+    const radioGone = offline();
+    await triggerOutboxSync();
+    expect(radioGone.calls).toEqual([REGISTER_ROUTE]);
+    await triggerOutboxSync();
+    await triggerOutboxSync();
+    expect(radioGone.calls).toEqual([REGISTER_ROUTE]);
+    radioGone.spy.mockRestore();
+
+    server = serveApi({
+      grants: body =>
+        grantResponse({ installationKeyId: String(body['installationKeyId']) }),
+    });
+    await triggerOutboxSync();
+    expect(server.urls()).toHaveLength(0);
+    await accessAnswered(PRO_ACCESS);
+    expect(server.urls()).toHaveLength(2);
     expect(handle.count('offline_grant', OWNER)).toBe(1);
     // Held, the cadence is healthy again, and nothing more is requested.
     const healthy = scheduledDelays(timers);
@@ -996,7 +1019,7 @@ describe('W05-06 the sync runtime pulls an offline grant when it has signal', ()
       SYNC_RETRY_BASE_MS * (1 + SYNC_RETRY_JITTER_RATIO),
     );
     await triggerOutboxSync();
-    expect(server.urls()).toHaveLength(8);
+    expect(server.urls()).toHaveLength(2);
   });
 
   it('a relaunch registers with the same installation key it used before', async () => {
