@@ -81,7 +81,7 @@ function hasControlCharacters(value: string): boolean {
 
 /** Parse without URL normalization: query/fragment, traversal, encoded path
  * separators and control bytes must not become a different native file path. */
-function videoFileName(uri: string): string | null {
+export function captureArtifactFileName(uri: string): string | null {
   if (uri.length > 4096 || /[\\ ?#]/.test(uri) || hasControlCharacters(uri))
     return null;
   const match = /^file:\/\/(?:localhost)?(\/.*)$/.exec(uri);
@@ -124,7 +124,7 @@ export function assertNativeMediaIdentity(
     typeof value.videoFileName !== 'string' ||
     value.videoFileName.length > 240 ||
     !/^[A-Za-z0-9][A-Za-z0-9._-]*\.(mov|mp4|m4v)$/.test(value.videoFileName) ||
-    value.videoFileName !== videoFileName(outer.uri)
+    value.videoFileName !== captureArtifactFileName(outer.uri)
   )
     throw new InvalidNativeMediaIdentityError();
   return value as unknown as NativeMediaIdentityV1;

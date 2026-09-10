@@ -2817,6 +2817,7 @@ export function AnalyzeScreen({
               ) : null}
               {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (
                 <TargetSelector
+                  automaticOnly
                   frameUri={clip.uri}
                   posterUri={clip.posterUri}
                   sourceWidth={clip.width}

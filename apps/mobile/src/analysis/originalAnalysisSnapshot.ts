@@ -8,7 +8,10 @@ import {
 import { isConfirmationTimestamp } from '@pickle/analysis-pipeline';
 import { sha256Hex } from '@pickle/swing-domain';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
-import { MAX_NATIVE_MEDIA_BYTES } from '../camera/nativeMediaIdentity';
+import {
+  captureArtifactFileName,
+  MAX_NATIVE_MEDIA_BYTES,
+} from '../camera/nativeMediaIdentity';
 import type { PracticeSetPlan } from './practiceSet';
 import { runJournal } from './runJournal';
 import { confirmationCaptureHash } from './savedTechniqueConfirmation';
@@ -178,36 +181,8 @@ function object(
 }
 const fields = (value: unknown, keys: string) => object(value, keys.split(' '));
 function fileName(value: unknown): string {
-  if (
-    typeof value !== 'string' ||
-    value.length > 4096 ||
-    /[\\?#]/.test(value) ||
-    hasControls(value, true) ||
-    /%(?:2f|5c)/i.test(value)
-  )
-    return invalid();
-  try {
-    const url = new URL(value);
-    const parts = decodeURIComponent(url.pathname).split('/').slice(1);
-    if (
-      url.protocol !== 'file:' ||
-      (url.hostname !== '' && url.hostname !== 'localhost') ||
-      url.username ||
-      url.password ||
-      parts.some(
-        part =>
-          !part ||
-          part === '.' ||
-          part === '..' ||
-          /[\\%?#]/.test(part) ||
-          hasControls(part),
-      )
-    )
-      return invalid();
-    return parts.at(-1) ?? invalid();
-  } catch {
-    return invalid();
-  }
+  if (typeof value !== 'string') return invalid();
+  return captureArtifactFileName(value) ?? invalid();
 }
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {

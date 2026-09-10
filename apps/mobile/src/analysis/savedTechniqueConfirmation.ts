@@ -14,6 +14,7 @@ import {
   type ModelRef,
 } from '@pickle/swing-domain';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
+import { captureArtifactFileName } from '../camera/nativeMediaIdentity';
 import type { LocalDb } from '../data/db';
 import {
   assertDataOwnerContext,
@@ -149,23 +150,6 @@ export function sameConfirmationJournalIdentity(
   );
 }
 
-function captureArtifactName(uri: string): string | null {
-  try {
-    const url = new URL(uri);
-    const name = decodeURIComponent(url.pathname.split('/').at(-1) ?? '');
-    return url.protocol === 'file:' &&
-      !url.search &&
-      !url.hash &&
-      name.length > 0 &&
-      !name.includes('/') &&
-      !name.includes('\\')
-      ? name
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 export function confirmationCaptureHash(clip: CapturedClip): string {
   // iOS may relocate the app container, but that cannot authorize swapping
   // the saved video/sidecar for a differently named artifact. Poster refresh
@@ -173,12 +157,12 @@ export function confirmationCaptureHash(clip: CapturedClip): string {
   return sha256Hex(
     canonicalJson({
       ...clip,
-      uri: captureArtifactName(clip.uri),
+      uri: captureArtifactFileName(clip.uri),
       posterUri: undefined,
       poseSequence: clip.poseSequence
         ? {
             ...clip.poseSequence,
-            uri: captureArtifactName(clip.poseSequence.uri),
+            uri: captureArtifactFileName(clip.poseSequence.uri),
           }
         : undefined,
     }),

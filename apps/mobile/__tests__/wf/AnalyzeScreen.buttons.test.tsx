@@ -1020,6 +1020,7 @@ describe('AnalyzeScreen button ledger', () => {
       const renderer = await renderScreen('library');
       await press(renderer, 'Dink');
       const selector = renderer.root.findByType(TargetSelector);
+      expect(selector.props.automaticOnly).toBe(true);
       await act(async () => {
         selector.props.onSkip();
       });

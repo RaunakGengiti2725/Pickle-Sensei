@@ -18,7 +18,10 @@ import {
   runJournal,
   type RunJournalPermitPort,
 } from '../src/analysis/runJournal';
-import { loadSavedTechniqueConfirmation } from '../src/analysis/savedTechniqueConfirmation';
+import {
+  confirmationCaptureHash,
+  loadSavedTechniqueConfirmation,
+} from '../src/analysis/savedTechniqueConfirmation';
 import {
   captureDataOwnerContext,
   setActiveDataOwner,
@@ -316,6 +319,51 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   jest.restoreAllMocks();
   closeSqliteTestDatabases();
+});
+
+it('prepares a saved capture with the shipping React Native URL implementation', async () => {
+  const browserURL = globalThis.URL;
+  const { URL: NativeURL } = jest.requireActual<{ URL: typeof URL }>(
+    'react-native/Libraries/Blob/URL',
+  );
+  globalThis.URL = NativeURL;
+  try {
+    const input = await setup();
+    expect(input.operation.snapshot.clip.uri).toBe(input.clip.uri);
+    expect(input.operation.observation?.observationHash).toBe(
+      sha256Hex(input.sidecar),
+    );
+    expect(verifyBytes).not.toHaveBeenCalled();
+  } finally {
+    globalThis.URL = browserURL;
+  }
+});
+
+it('binds actual artifact basenames identically in Node and React Native', () => {
+  const clip = fixture().clip;
+  const expected = confirmationCaptureHash(clip);
+  const browserURL = globalThis.URL;
+  const { URL: NativeURL } = jest.requireActual<{ URL: typeof URL }>(
+    'react-native/Libraries/Blob/URL',
+  );
+  globalThis.URL = NativeURL;
+  try {
+    expect(confirmationCaptureHash(clip)).toBe(expected);
+    expect(
+      confirmationCaptureHash({
+        ...clip,
+        uri: 'file:///private/captures/different.mov',
+      }),
+    ).not.toBe(expected);
+    expect(
+      confirmationCaptureHash({
+        ...clip,
+        uri: 'file:///private/new-container/Captures/original.mov',
+      }),
+    ).toBe(expected);
+  } finally {
+    globalThis.URL = browserURL;
+  }
 });
 
 it('migrates separate original-operation and execution-attempt tables', async () => {

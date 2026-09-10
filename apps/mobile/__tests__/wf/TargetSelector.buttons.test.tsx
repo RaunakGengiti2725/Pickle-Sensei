@@ -193,6 +193,36 @@ afterEach(() => {
 });
 
 describe('TargetSelector button ledger', () => {
+  it('offers one enabled automatic analysis action without requiring a player tap', () => {
+    const { renderer, onConfirm, onSkip } = render({ automaticOnly: true });
+    expect(
+      allPressables(renderer).map(node => node.props.accessibilityLabel),
+    ).toEqual(['Analyze video']);
+    expect(renderer.root.findAllByType(TouchableWithoutFeedback)).toHaveLength(
+      0,
+    );
+    expect(allText(renderer)).toContain('Automatic player selection');
+    expect(allText(renderer)).not.toMatch(/Tap yourself|Which player|Skip/);
+    expect(designButton(renderer, 'Analyze video').props.variant).toBe('volt');
+    expect(pressableFor(renderer, 'Analyze video').props.disabled).toBeFalsy();
+    pressButton(renderer, 'Analyze video');
+    expect(onSkip).toHaveBeenCalledTimes(1);
+    expect(onSkip).toHaveBeenCalledWith();
+    expect(onConfirm).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('keeps automatic analysis available when the preview cannot be shown', () => {
+    const { renderer, onConfirm, onSkip } = render({ automaticOnly: true });
+    act(() => renderer.root.findByType(Image).props.onError());
+    expect(allText(renderer)).toContain('Preview unavailable');
+    expect(allText(renderer)).not.toMatch(/tap where|Tap yourself/);
+    pressButton(renderer, 'Analyze video');
+    expect(onSkip).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
   it('renders exactly the three pressables, each with a button role and label', () => {
     const { renderer } = render();
 

@@ -100,6 +100,7 @@ export function TargetSelector(props: {
    * absent, taps stay view-normalized exactly as before. */
   sourceWidth?: number;
   sourceHeight?: number;
+  automaticOnly?: boolean;
   onConfirm: (selection: TargetSelection) => void;
   onSkip: () => void;
 }) {
@@ -139,6 +140,50 @@ export function TargetSelector(props: {
     [size, sourceWidth, sourceHeight],
   );
 
+  const preview = previewFailed ? (
+    // Honest placeholder: the preview could not be decoded, so say
+    // so instead of leaving a silent black frame under the tap.
+    <View style={styles.previewFallback}>
+      <Icon name="person" color={color.onDarkMuted} size={34} />
+      <Text style={[type.caption, styles.previewFallbackCopy]}>
+        {props.automaticOnly
+          ? 'Preview unavailable. Player selection is automatic.'
+          : 'Preview unavailable — tap where you are in the video'}
+      </Text>
+    </View>
+  ) : (
+    <Image
+      source={{ uri: props.posterUri ?? props.frameUri }}
+      style={StyleSheet.absoluteFill}
+      resizeMode="cover"
+      onError={() => setPreviewFailed(true)}
+    />
+  );
+
+  if (props.automaticOnly) {
+    return (
+      <View style={styles.wrap}>
+        <Text style={[type.h3, styles.title]}>Automatic player selection</Text>
+        <Text style={[type.caption, styles.subtitle]}>
+          No player tap needed.
+        </Text>
+        <View
+          style={styles.frame}
+          accessible
+          accessibilityRole="image"
+          accessibilityLabel={
+            previewFailed
+              ? 'Video preview unavailable'
+              : 'Imported video preview'
+          }
+        >
+          {preview}
+        </View>
+        <Button label="Analyze video" variant="volt" onPress={props.onSkip} />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap}>
       <Text style={[type.h3, styles.title]}>Which player are you?</Text>
@@ -155,23 +200,7 @@ export function TargetSelector(props: {
         }
       >
         <View style={styles.frame} onLayout={onLayout}>
-          {previewFailed ? (
-            // Honest placeholder: the preview could not be decoded, so say
-            // so instead of leaving a silent black frame under the tap.
-            <View style={styles.previewFallback}>
-              <Icon name="person" color={color.onDarkMuted} size={34} />
-              <Text style={[type.caption, styles.previewFallbackCopy]}>
-                Preview unavailable — tap where you are in the video
-              </Text>
-            </View>
-          ) : (
-            <Image
-              source={{ uri: props.posterUri ?? props.frameUri }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-              onError={() => setPreviewFailed(true)}
-            />
-          )}
+          {preview}
           {tap && size ? (
             <Svg style={StyleSheet.absoluteFill}>
               <Circle
