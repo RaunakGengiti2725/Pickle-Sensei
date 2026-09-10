@@ -604,11 +604,14 @@ export function ProgressScreen() {
                   </View>
                   <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
-                      This chart is waiting on you.
+                      {practice.longestStreak > 0
+                        ? 'No verified captures in this range.'
+                        : 'This chart is waiting on you.'}
                     </Text>
                     <Text style={[type.caption, styles.captureZeroDetail]}>
-                      Step into frame or import a clip — every measured swing
-                      lands here.
+                      {practice.longestStreak > 0
+                        ? 'Your verified captures fall outside the selected dates. Check Recent captures below.'
+                        : 'Step into frame or import a clip — every measured swing lands here.'}
                     </Text>
                   </View>
                 </View>

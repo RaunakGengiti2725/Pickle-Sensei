@@ -643,6 +643,72 @@ describe('ProgressScreen dashboard', () => {
     act(() => renderer.unmount());
   });
 
+  it.each([8, 60, 120])(
+    'distinguishes a quiet 7-day window from no verified practice (%i days ago)',
+    async days => {
+      jest.setSystemTime(new Date('2026-09-10T12:00:00.000Z'));
+      mockListRealAnalysisFacts.mockResolvedValue([
+        fact({ shotType: 'forehand_drive', capturedAt: daysAgoIso(days) }),
+      ]);
+      mockListCaptureHistory.mockResolvedValue([
+        importedCapture('earlier-scan', daysAgoIso(days), true),
+        importedCapture('raw', daysAgoIso(0), false, null),
+      ]);
+      const renderer = await renderScreen();
+      await pressByLabel(renderer, 'practice progress');
+      await pressByLabel(renderer, '7 days range');
+      const text = renderedText(renderer);
+
+      expect(text).toContain('No verified captures in this range.');
+      expect(text).toContain(
+        'Your verified captures fall outside the selected dates. Check Recent captures below.',
+      );
+      expect(text).not.toContain('This chart is waiting on you.');
+      expect(text).toContain('forehand drive');
+      expect(text).toContain(
+        '1 saved clip without measured pose evidence is not counted.',
+      );
+      expect(
+        findByTestId(renderer, 'practice-stat-captures')!.props
+          .accessibilityLabel,
+      ).toMatch(/^CAPTURES: 0/);
+      expect(
+        findByTestId(renderer, 'practice-stat-pose-tracked')!.props
+          .accessibilityLabel,
+      ).toBe('POSE TRACKED: —');
+      if (days === 8) {
+        await pressByLabel(renderer, '4 weeks range');
+        expect(renderedText(renderer)).not.toContain(
+          'No verified captures in this range.',
+        );
+        expect(
+          findByTestId(renderer, 'practice-stat-captures')!.props
+            .accessibilityLabel,
+        ).toBe('CAPTURES: 1');
+      }
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('does not use future or corrupt captures as proof of earlier practice', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockListCaptureHistory.mockResolvedValue([
+      importedCapture('future', daysAgoIso(-1), true),
+      {
+        ...capture('corrupt', daysAgoIso(40)),
+        evidenceStatus: 'corrupt',
+        clip: null,
+      },
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'practice progress');
+    expect(renderedText(renderer)).toContain('This chart is waiting on you.');
+    expect(renderedText(renderer)).not.toContain(
+      'Your verified captures fall outside the selected dates.',
+    );
+    act(() => renderer.unmount());
+  });
+
   it('never counts a raw, unmeasured import — and says so instead of staying silent', async () => {
     mockListRealAnalysisFacts.mockResolvedValue([]);
     mockListCaptureHistory.mockResolvedValue([
