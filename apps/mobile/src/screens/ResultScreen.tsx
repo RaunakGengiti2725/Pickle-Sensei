@@ -41,6 +41,7 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
 import {
+  getOfflineShotStatus,
   getShotOutboxStatus,
   hasShotSyncReceipt,
   listRealAnalysisFacts,
@@ -300,8 +301,11 @@ export function useStrokeResultEvidence(analysisId: string): {
     hasShotSyncReceipt(db, analysis.id)
       .then(async accepted => {
         if (accepted) return { kind: 'synced' } as const;
+        const outbox = await getShotOutboxStatus(db, analysis.id);
         return syncEvidenceFromOutbox(
-          await getShotOutboxStatus(db, analysis.id),
+          outbox.state === 'absent'
+            ? await getOfflineShotStatus(db, analysis.id)
+            : outbox,
         );
       })
       .then(next => {

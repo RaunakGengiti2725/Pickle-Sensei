@@ -1125,7 +1125,7 @@ export async function getShotOutboxStatus(
     [owner, shotId],
   );
   const row = rows[0];
-  if (!row) return getOfflineReceiptStatus(db, owner, shotId);
+  if (!row) return { state: 'absent' };
   const attempts = Number(row['attempts'] ?? 0);
   const lastError =
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
@@ -1147,14 +1147,15 @@ export async function getShotOutboxStatus(
  * receipt's: still queued or held (`queued`, attempts = presentations so
  * far) or refused by the server (`exhausted` — a refused receipt is never
  * re-presented; `lastError` is the server's refusal code as journaled by the
- * wallet). Accepted receipts already hold a sync receipt and never reach
- * here; a shot without a receipt has no delivery evidence at all.
+ * wallet). Accepted receipts already hold a sync receipt; a shot without a
+ * receipt has no delivery evidence here. Read after `getShotOutboxStatus`
+ * answers `absent`: a shot has either an outbox row or a receipt, never both.
  */
-async function getOfflineReceiptStatus(
+export async function getOfflineShotStatus(
   db: LocalDb,
-  owner: string,
   shotId: string,
 ): Promise<ShotOutboxStatus> {
+  const owner = getActiveDataOwner();
   const { rows } = await db.execute(
     `SELECT r.receipt_id, r.settlement, r.settled_at,
        (SELECT COUNT(*) FROM offline_wallet_journal j, json_each(j.receipt_ids) p

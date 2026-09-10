@@ -79,6 +79,7 @@ import {
 } from '../src/data/offlineWallet';
 import {
   getAnalysis,
+  getOfflineShotStatus,
   getShotOutboxStatus,
   hasShotSyncReceipt,
 } from '../src/data/repository';
@@ -1275,7 +1276,12 @@ describe('a refused settlement is durably visible to the owner', () => {
     if (outcome.kind !== 'scored' || !outcome.record.result) return;
     const analysis = outcome.record.result;
     expect(outboxKinds(store)).toEqual([]);
+    // No shot.sync row ever exists for a court-offline read: the Result
+    // screen falls through from the outbox reader to the receipt reader.
     expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+      state: 'absent',
+    });
+    expect(await getOfflineShotStatus(store.db, analysis.id)).toEqual({
       state: 'queued',
       attempts: 0,
       lastError: null,
@@ -1299,6 +1305,9 @@ describe('a refused settlement is durably visible to the owner', () => {
     // refused read, not an absent or pending one.
     expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(false);
     expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+      state: 'absent',
+    });
+    expect(await getOfflineShotStatus(store.db, analysis.id)).toEqual({
       state: 'exhausted',
       attempts: 1,
       lastError: REFUSAL_CODE,
@@ -1318,7 +1327,7 @@ describe('a refused settlement is durably visible to the owner', () => {
     clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     signIn(OTHER_OWNER);
-    expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+    expect(await getOfflineShotStatus(store.db, analysis.id)).toEqual({
       state: 'absent',
     });
   });
@@ -1335,7 +1344,7 @@ describe('a refused settlement is durably visible to the owner', () => {
     court('online', 'pending');
     await reconcileOfflineWallet(store.db, walletClient(), reading());
     expect(
-      await getShotOutboxStatus(store.db, outcome.record.result.id),
+      await getOfflineShotStatus(store.db, outcome.record.result.id),
     ).toEqual({ state: 'queued', attempts: 1, lastError: null });
   });
 });
