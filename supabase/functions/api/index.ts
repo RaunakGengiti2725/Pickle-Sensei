@@ -5061,10 +5061,11 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
 
 /** The app drains EVERY queued receipt in one POST (a Pro lease can hold a
  * week of ratings), so a batch is bounded by bytes, never refused for its
- * length. Entries past this many NEW decisions (settled / held / deferred) are
- * answered pending and settle on the next drain. Replays of a durable verdict
- * do not count: the app re-presents held receipts until they resolve, and a
- * queue of durable HOLDs must never starve the fresh receipt queued behind it. */
+ * length. Entries past this many DURABLE decisions (settled / held) are
+ * answered pending and settle on the next drain. Answers that write nothing
+ * do not count — replays of a durable verdict and receipts the database
+ * deferred under a reversible freeze: the app re-presents both until they
+ * resolve, and a queue of them must never starve the fresh receipt behind it. */
 const OFFLINE_RECEIPT_BATCH_SETTLE_MAX = 250;
 const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
@@ -5596,7 +5597,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcRow" });
     }
     tally[delivery] += 1;
-    if (delivery !== "replayed") settlements += 1;
+    if (delivery === "settled" || delivery === "held") settlements += 1;
     if (delivery === "held" && typeof row.reason_code === "string") {
       holdReasons.push(row.reason_code);
     }

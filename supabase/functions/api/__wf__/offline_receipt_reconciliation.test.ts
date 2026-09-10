@@ -2426,6 +2426,97 @@ Deno.test(
 );
 
 Deno.test(
+  "a queue of receipts the database defers under a reversible freeze never starves the fresh receipt behind it: pending answers write nothing and do not spend the per-request decision budget; the deferred ones settle once the freeze lifts",
+  async () => {
+    reset();
+    const user = freshUser();
+    // ROUTE_SETTLE_MAX chargeable Pro receipts queued while the active release
+    // is frozen (deny-new, not withdrawn): the RPC answers each pending with
+    // nothing durable, and the app keeps them queued, ordered before the
+    // receipt it recorded later — one whose output never reached the phone's
+    // queue, an evidence_missing HOLD the database must get to record.
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 1);
+    const deferred = entries.slice(0, ROUTE_SETTLE_MAX);
+    const fresh = { ...entries[ROUTE_SETTLE_MAX], output: null };
+    const freshId = ids[ROUTE_SETTLE_MAX];
+    const freezeOn = () => {
+      h.rpcs.read_analysis_release_policy = frozenActiveRow();
+      h.respond = lineageRespond({ [RELEASE.policy.sha256]: frozenActiveRow() });
+    };
+
+    for (let drain = 0; drain < 2; drain += 1) {
+      h.reset();
+      freezeOn();
+      const answer = wire(
+        await readJson(await post({ receipts: [...deferred, fresh] }, user.token)),
+      );
+      assertEquals(answer.rejected, []);
+      assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(
+        answer.receipts
+          .slice(0, ROUTE_SETTLE_MAX)
+          .every((r) => r.delivery === "pending" && r.status === "pending"),
+        true,
+      );
+      const last = answer.receipts[ROUTE_SETTLE_MAX];
+      assertEquals(
+        [last.receiptId, last.delivery, last.status, last.reasonCode, last.financialDisposition],
+        [
+          freshId,
+          drain === 0 ? "held" : "replayed",
+          "reconciliation_required",
+          "evidence_missing",
+          "not_applicable",
+        ],
+      );
+      // Every deferred receipt AND the fresh one reached the database; the
+      // only durable row is the fresh receipt's HOLD.
+      const params = settleCalls();
+      assertEquals(params.length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(
+        params.slice(0, ROUTE_SETTLE_MAX).every((p) => p.p_defer_new === true),
+        true,
+      );
+      assertEquals(
+        [params[ROUTE_SETTLE_MAX].p_receipt.receiptId, params[ROUTE_SETTLE_MAX].p_hold_reason],
+        [freshId, "evidence_missing"],
+      );
+      assertEquals(durable.size, 1);
+      assert(durable.has(`${callerBearer(user.sub)}|${freshId}`));
+    }
+
+    // The freeze lifts: the same drain settles every deferred receipt exactly
+    // once. Those ARE durable decisions, so they spend the whole budget and
+    // the entry behind them waits for the next drain — the cap, not starvation.
+    h.reset();
+    h.rpcs.read_analysis_release_policy = releasePolicyRow;
+    h.respond = durableRespond;
+    const lifted = wire(await readJson(await post({ receipts: [...deferred, fresh] }, user.token)));
+    assertEquals(lifted.rejected, []);
+    assertEquals(
+      lifted.receipts.map((r) => r.delivery),
+      [...deferred.map(() => "settled"), "pending"],
+    );
+    assertEquals(settleCalls().length, ROUTE_SETTLE_MAX);
+    assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
+
+    // Next drain: the whole queue replays; replays spend nothing, so the
+    // fresh HOLD is reached and answered as it stands.
+    h.reset();
+    h.rpcs.read_analysis_release_policy = releasePolicyRow;
+    h.respond = durableRespond;
+    const again = wire(await readJson(await post({ receipts: [...deferred, fresh] }, user.token)));
+    assertEquals(
+      again.receipts.every((r) => r.delivery === "replayed"),
+      true,
+    );
+    assertEquals(again.receipts[ROUTE_SETTLE_MAX].reasonCode, "evidence_missing");
+    assertEquals(settleCalls().length, ROUTE_SETTLE_MAX + 1);
+    assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
+  },
+);
+
+Deno.test(
   "an output the shot.sync ingress would refuse — negative or out-of-range ms offsets, a flat (non-frozen) shape, a non-real source, a malformed phase — is HELD evidence_ambiguous with no output for the database, whatever its digest says",
   async () => {
     reset();
