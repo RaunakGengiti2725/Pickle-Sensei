@@ -1,0 +1,312 @@
+{
+  "receiptId": "dba23555-2bd9-4613-a434-37d223f94d62",
+  "ownerId": "11111111-1111-4111-8111-111111111111",
+  "installationKeyId": "ios-install-key-1",
+  "grantId": "bbbbbbbb-0000-4000-8000-000000000001",
+  "grantJwsSha256": "d67eca54dc1e397e6a38766e31421c3e0b59f57dc73a43a8aa5b1ef278632317",
+  "lifecycleSequence": 1,
+  "ticket": {
+    "allocationId": "bbbbbbbb-0000-4000-8000-000000000001",
+    "generation": 1,
+    "ticketId": "aaaaaaaa-0000-4000-8000-000000000001"
+  },
+  "operationId": "44444444-4444-4444-8444-444444444444",
+  "resultId": "05526ed0-3d30-453b-90bc-2016c9e9675c",
+  "fullOutputSha256": "dae3680f00c476190974eff03127765f674c5360e67c1e43f75c1d929817169d",
+  "billingDisposition": "joint_verification_required",
+  "queuedAt": "2026-09-10T10:23:27.770Z",
+  "receipt": {
+    "receiptId": "dba23555-2bd9-4613-a434-37d223f94d62",
+    "ownerId": "11111111-1111-4111-8111-111111111111",
+    "installationKeyId": "ios-install-key-1",
+    "grantId": "bbbbbbbb-0000-4000-8000-000000000001",
+    "grantJwsSha256": "d67eca54dc1e397e6a38766e31421c3e0b59f57dc73a43a8aa5b1ef278632317",
+    "lifecycleSequence": 1,
+    "ticket": {
+      "allocationId": "bbbbbbbb-0000-4000-8000-000000000001",
+      "generation": 1,
+      "ticketId": "aaaaaaaa-0000-4000-8000-000000000001"
+    },
+    "operationId": "44444444-4444-4444-8444-444444444444",
+    "resultId": "05526ed0-3d30-453b-90bc-2016c9e9675c",
+    "fullOutputSha256": "dae3680f00c476190974eff03127765f674c5360e67c1e43f75c1d929817169d",
+    "billingDisposition": "joint_verification_required",
+    "queuedAt": "2026-09-10T10:23:27.770Z"
+  },
+  "grant": {
+    "schemaVersion": "offline-signed-execution-grant-v1",
+    "compactJws": "eyJhbGciOiJFUzI1NiIsInR5cCI6InBpY2tsZS1vZmZsaW5lLWV4ZWN1dGlvbi1ncmFudCtqd3QiLCJraWQiOiJvZmZsaW5lLWdyYW50LWtleS0xIn0.eyJzY2hlbWFWZXJzaW9uIjoib2ZmbGluZS1leGVjdXRpb24tZ3JhbnQtdjEiLCJwcm90b2NvbFZlcnNpb24iOiJvZmZsaW5lLWF1dGhvcml6YXRpb24tdjEiLCJpc3MiOiJodHRwczovL2FwaS5leGFtcGxlLnRlc3QvZnVuY3Rpb25zL3YxL2FwaSIsImF1ZCI6InVybjpwaWNrbGUtc2Vuc2VpOm9mZmxpbmUtZXhlY3V0aW9uOnYxIiwic3ViIjoiMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiwianRpIjoiYmJiYmJiYmItMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiaW5zdGFsbGF0aW9uS2V5SWQiOiJpb3MtaW5zdGFsbC1rZXktMSIsImlhdCI6MTc4OTAzNTc0NywiZXhwIjoxNzg5NTU0MTQ3LCJjYXBhYmlsaXRpZXMiOlsiYW5hbHl6ZV9qb2ludF9vdXRwdXQiXSwicmVsZWFzZSI6eyJwb2xpY3kiOnsidmVyc2lvbiI6InYxIiwic2hhMjU2IjoiYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYSJ9LCJtZWNoYW5pY3NNb2RlbCI6eyJ2ZXJzaW9uIjoidjEiLCJzaGEyNTYiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIn0sImJlbmNobWFya01vZGVsIjp7InZlcnNpb24iOiJ2MSIsInNoYTI1NiI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEifX0sImVudGl0bGVtZW50U291cmNlIjoiaWRlbnRpdHlfbGlmZXRpbWVfZnJlZSIsImFsbG9jYXRpb24iOnsic2NoZW1hVmVyc2lvbiI6Im9mZmxpbmUtZnJlZS1hbGxvY2F0aW9uLXYxIiwiYWxsb2NhdGlvbklkIjoiYmJiYmJiYmItMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZ2VuZXJhdGlvbiI6MSwidGlja2V0SWRzIjpbImFhYWFhYWFhLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImFhYWFhYWFhLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiJdLCJidWRnZXRQb2xpY3kiOiJpZGVudGl0eS1saWZldGltZS1pbmNsdWRpbmctbGVnYWN5LXVzZWQtdjEiLCJmaW5hbmNpYWxFeHBpcnkiOiJyZWNvbmNpbGlhdGlvbl9vbmx5In19.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+  },
+  "output": {
+    "id": "05526ed0-3d30-453b-90bc-2016c9e9675c",
+    "sessionId": null,
+    "shotType": "forehand_drive",
+    "cameraView": "side",
+    "handedness": "right",
+    "capturedAtIso": "2026-09-06T12:00:00.000Z",
+    "timestamps": {
+      "startMs": 0,
+      "contactMs": 1083,
+      "endMs": 1970
+    },
+    "phases": [
+      {
+        "key": "ready",
+        "startMs": 0,
+        "endMs": 450,
+        "representativeMs": 217,
+        "confidence": 0.9500000000000018
+      },
+      {
+        "key": "prepare",
+        "startMs": 450,
+        "endMs": 900,
+        "representativeMs": 667,
+        "confidence": 0.9500000000000018
+      },
+      {
+        "key": "accelerate",
+        "startMs": 900,
+        "endMs": 1074.6681034482758,
+        "representativeMs": 983,
+        "confidence": 0.9500000000000018
+      },
+      {
+        "key": "contact",
+        "startMs": 1074.6681034482758,
+        "representativeMs": 1083,
+        "endMs": 1091.3318965517242,
+        "confidence": 0.9500000000000018
+      },
+      {
+        "key": "follow_through",
+        "startMs": 1091.3318965517242,
+        "endMs": 1267,
+        "representativeMs": 1183,
+        "confidence": 0.9500000000000018
+      }
+    ],
+    "measurements": [
+      {
+        "metricKey": "stance_width_ratio",
+        "value": 1.3500000000000008,
+        "unit": "ratio",
+        "confidence": 0.95,
+        "source": "real"
+      },
+      {
+        "metricKey": "knee_flexion_deg",
+        "value": 29.99999999999997,
+        "unit": "degrees",
+        "confidence": 0.9499999999999998,
+        "source": "real"
+      },
+      {
+        "metricKey": "paddle_ready_height_ratio",
+        "value": 0.3999999999999998,
+        "unit": "ratio",
+        "confidence": 0.7124999999999999,
+        "source": "real"
+      },
+      {
+        "metricKey": "shoulder_turn_deg",
+        "value": 49.999999999999986,
+        "unit": "degrees",
+        "confidence": 0.6649999999999999,
+        "source": "real"
+      },
+      {
+        "metricKey": "paddle_set_height_ratio",
+        "value": 0.33066539387154814,
+        "unit": "ratio",
+        "confidence": 0.7124999999999999,
+        "source": "real"
+      },
+      {
+        "metricKey": "paddle_set_forward_norm",
+        "value": -0.6269574332854544,
+        "unit": "normalized",
+        "confidence": 0.7124999999999999,
+        "source": "real"
+      },
+      {
+        "metricKey": "backswing_length_norm",
+        "value": 0.845628679071056,
+        "unit": "normalized",
+        "confidence": 0.9499999999999995,
+        "source": "real"
+      },
+      {
+        "metricKey": "hip_shoulder_lag_ms",
+        "value": 0,
+        "unit": "ms",
+        "confidence": 0.8074999999999999,
+        "source": "real"
+      },
+      {
+        "metricKey": "weight_transfer_norm",
+        "value": 0,
+        "unit": "normalized",
+        "confidence": 0.95,
+        "source": "real"
+      },
+      {
+        "metricKey": "path_low_to_high_slope",
+        "value": 0.2052427074095271,
+        "unit": "ratio",
+        "confidence": 0.95,
+        "source": "real"
+      },
+      {
+        "metricKey": "contact_forward_of_hip_norm",
+        "value": 0.25231964880404856,
+        "unit": "normalized",
+        "confidence": 0.9499999999999998,
+        "source": "real"
+      },
+      {
+        "metricKey": "contact_height_ratio",
+        "value": 0.335884025341818,
+        "unit": "ratio",
+        "confidence": 0.9499999999999998,
+        "source": "real"
+      },
+      {
+        "metricKey": "wrist_angle_variance_deg",
+        "value": 6.32983598494827,
+        "unit": "degrees",
+        "confidence": 0.95,
+        "source": "real"
+      },
+      {
+        "metricKey": "follow_through_length_norm",
+        "value": 0.5474715704493294,
+        "unit": "normalized",
+        "confidence": 0.95,
+        "source": "real"
+      }
+    ],
+    "checkpoints": [
+      {
+        "key": "ready_position",
+        "score": 99.99999999999999,
+        "confidence": 0.7124999999999999,
+        "band": "green",
+        "direction": "none",
+        "severity": 1.4210854715202004e-16,
+        "applicable": true
+      },
+      {
+        "key": "athletic_base",
+        "score": 100,
+        "confidence": 0.95,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "preparation",
+        "score": 99.99999999999999,
+        "confidence": 0.6649999999999999,
+        "band": "green",
+        "direction": "none",
+        "severity": 1.4210854715202004e-16,
+        "applicable": true
+      },
+      {
+        "key": "paddle_set",
+        "score": 99.99999999999999,
+        "confidence": 0.7124999999999999,
+        "band": "green",
+        "direction": "none",
+        "severity": 1.4210854715202004e-16,
+        "applicable": true
+      },
+      {
+        "key": "swing_length",
+        "score": 100,
+        "confidence": 0.9499999999999995,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "sequencing",
+        "score": 76.96202558780286,
+        "confidence": 0.8708333333333332,
+        "band": "yellow",
+        "direction": "short",
+        "severity": 0.23037974412197143,
+        "applicable": true
+      },
+      {
+        "key": "paddle_path",
+        "score": 100,
+        "confidence": 0.95,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "contact_position",
+        "score": 100,
+        "confidence": 0.9499999999999998,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "face_wrist_stability",
+        "score": 100,
+        "confidence": 0.95,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "follow_through",
+        "score": 100,
+        "confidence": 0.95,
+        "band": "green",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      },
+      {
+        "key": "recovery",
+        "score": null,
+        "confidence": 0,
+        "band": "unscored",
+        "direction": "none",
+        "severity": 0,
+        "applicable": true
+      }
+    ],
+    "overallScore": 9.7,
+    "analysisConfidence": 0.8279249999999998,
+    "resultKind": "scored",
+    "guidance": null,
+    "priorityFix": {
+      "checkpoint": "sequencing",
+      "reasonKey": "highest_weighted_priority",
+      "severity": 0.23037974412197143,
+      "confidence": 0.8708333333333332
+    },
+    "versionVector": {
+      "appVersion": "0.1.0",
+      "modelBundleVersion": "on-device-fusion-2",
+      "poseModelVersion": "synthetic-swing-1",
+      "paddleModelVersion": "paddle-none-0",
+      "strokeDetectorVersion": "imported-full-clip-1",
+      "phaseModelVersion": "phase-geometry-2",
+      "scoringModelVersion": "sm-v1",
+      "shotConfigVersion": "forehand_drive@1"
+    },
+    "source": "real"
+  }
+}
