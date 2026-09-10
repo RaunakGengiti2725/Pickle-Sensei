@@ -9911,16 +9911,24 @@ values
   ('00000000-0000-4000-8000-000000000481', 'uri@example.com',
    '{"full_name":"Uri"}', '{"provider":"google"}'),
   ('00000000-0000-4000-8000-000000000482', 'ula@example.com',
-   '{"full_name":"Ula"}', '{"provider":"apple"}');
+   '{"full_name":"Ula"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000483', 'ursula@example.com',
+   '{"full_name":"Ursula"}', '{"provider":"apple"}');
 insert into auth.identities (provider, provider_id, user_id, identity_data)
 values
   ('google', 'google-sub-uri', '00000000-0000-4000-8000-000000000481',
    '{"sub":"google-sub-uri","email":"uri@example.com"}'),
   ('apple', 'apple-sub-ula', '00000000-0000-4000-8000-000000000482',
-   '{"sub":"apple-sub-ula","email":"ula@example.com"}');
+   '{"sub":"apple-sub-ula","email":"ula@example.com"}'),
+  ('apple', 'apple-sub-ursula', '00000000-0000-4000-8000-000000000483',
+   '{"sub":"apple-sub-ursula","email":"ursula@example.com"}');
 insert into auth.sessions (id, user_id) values
   ('00000000-0000-4000-8000-000000004801', '00000000-0000-4000-8000-000000000481'),
-  ('00000000-0000-4000-8000-000000004802', '00000000-0000-4000-8000-000000000482');
+  ('00000000-0000-4000-8000-000000004802', '00000000-0000-4000-8000-000000000482'),
+  ('00000000-0000-4000-8000-000000004803', '00000000-0000-4000-8000-000000000483');
+-- Ursula is a verified subscriber: her grant is a Pro lease (no tickets).
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000483', true, now() + interval '30 days');
 
 create temporary table u_state (key text primary key, id uuid);
 grant select, insert on u_state to authenticated;
@@ -9998,6 +10006,31 @@ $$;
 create function u_probe.recorded(p_uid uuid) returns integer
 language sql security definer set search_path = '' as $$
   select count(*)::int from public.offline_receipt_settlements s where s.user_id = p_uid;
+$$;
+-- the frozen 1.0 wire output: the shot.sync payload without analysisPermitId,
+-- timestamps nested, source real, with its phases and checkpoints
+create function u_probe.mobile_shot(p_id uuid, p_kind text) returns jsonb
+language sql immutable set search_path = '' as $$
+  select (u_probe.shot(p_id, null, p_kind) - 'analysisPermitId' - 'startMs' - 'contactMs' - 'endMs')
+    || jsonb_build_object(
+      'sessionId', null,
+      'source', 'real',
+      'timestamps', jsonb_build_object('startMs', 0, 'contactMs', 500, 'endMs', 1000),
+      'phases', jsonb_build_array(jsonb_build_object(
+        'key', 'prep', 'startMs', 0, 'representativeMs', 250, 'endMs', 500, 'confidence', 0.8)),
+      'checkpoints', jsonb_build_array(jsonb_build_object(
+        'key', 'paddle_height', 'score', 70, 'confidence', 0.8, 'band', 'green',
+        'direction', 'up', 'severity', 0.1, 'applicable', true)))
+$$;
+create function u_probe.lease_shots(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce((
+    select string_agg(s.id::text || ':' || s.result_kind || '/' || coalesce(s.analysis_permit_id::text, '-')
+        || '/' || coalesce(s.offline_ticket_id::text, '-') || '/' || s.start_ms || '-' || coalesce(s.contact_ms::text, '-')
+        || '-' || s.end_ms || '/p' || (select count(*) from public.shot_phases p where p.shot_id = s.id)
+        || '/c' || (select count(*) from public.shot_checkpoints c where c.shot_id = s.id),
+      ',' order by s.id)
+    from public.shots s where s.user_id = p_uid), '');
 $$;
 grant usage on schema u_probe to authenticated;
 grant execute on all functions in schema u_probe to authenticated;
@@ -10279,14 +10312,24 @@ begin
   if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt' then
     raise exception 'U3: the conflicting abstention replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
   end if;
-  -- and a Pro (no-ticket) receipt records its result with no financial disposition
+  -- a chargeable receipt that omits its ticket under a FREE grant claims a
+  -- lease the server never issued: HELD, nothing stored — never a third free
+  -- rating through the settlement (the lease path is U3b, as a subscriber)
   select * into v from u_probe.settle(
     u_probe.receipt('rcpt-12', uri, 'uri-key-1', g, null, null, 'op-12', '00000000-0000-4000-8000-000000004819', 'joint_verification_required'),
     u_probe.shot('00000000-0000-4000-8000-000000004819', null, 'scored'), null);
-  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
-     or u_probe.events(uri) <> 'allocated:2,consumed:2' then
-    raise exception 'U3: a no-ticket receipt is recorded without touching the ledger (got %, %, %, %)',
-      v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004819')
+     or u_probe.events(uri) <> 'allocated:2,consumed:2' or public.lifetime_scored_count() <> 2 then
+    raise exception 'U3: a no-ticket receipt under a free grant is held and stores nothing (got %, %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, u_probe.events(uri), public.lifetime_scored_count();
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12', uri, 'uri-key-1', g, null, null, 'op-12', '00000000-0000-4000-8000-000000004819', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004819', null, 'scored'), null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: the held no-ticket free receipt replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
   end if;
   -- a Pro (no-ticket) receipt is judged against its output exactly like a
   -- ticketed one: contradictory evidence HOLDs, it is never recorded
@@ -10349,6 +10392,135 @@ begin
     raise exception 'U3: lease receipts never touch the allocation ledger (got %)', u_probe.events(uri);
   end if;
 end $$;
+
+-- U3b (W04-04 round 7, 20260910150000): the rating a Pro (no-ticket) receipt
+-- carries is STORED before it is answered result_recorded. As Ursula — a
+-- verified subscriber whose grant is a lease: the frozen 1.0 wire output
+-- (timestamps nested, source real, no permit) becomes her public.shots row
+-- with its phases and checkpoints, once, under neither permit nor ticket and
+-- with no ledger event; the redelivery replays; a second receipt for the same
+-- result is held; an output the shot.sync ingress refuses (a negative offset)
+-- is held with nothing stored; the pre-contract flat shape still settles; a
+-- receipt naming another owner's grant is held. A free grant is never a lease:
+-- the shots gate refuses a lease vouch naming one, and the writer is not a
+-- client-executable function.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000483';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004803"}';
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('ursula-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('ursula-key-1', 2);
+  if r.result <> 'accepted' or g.result <> 'accepted' or g.entitlement_source <> 'verified_store'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'U3b precondition: Ursula holds a Pro lease without tickets (got %, %, %)', r.result, g.result, g.entitlement_source;
+  end if;
+  insert into u_state values ('ursula-grant', g.grant_id);
+end $$;
+do $$
+declare
+  ursula uuid := (select auth.uid());
+  lease uuid := (select id from u_state where key = 'ursula-grant');
+  free_grant uuid := (select id from u_state where key = 'grant');
+  rp1 jsonb := u_probe.receipt('rp-1', ursula, 'ursula-key-1', lease, null, null, 'op-p1',
+    '00000000-0000-4000-8000-000000004831', 'joint_verification_required');
+  o1 jsonb := u_probe.mobile_shot('00000000-0000-4000-8000-000000004831', 'scored');
+  v record;
+begin
+  select * into v from u_probe.settle(rp1, o1, null);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded'
+     or v.reason_code is not null or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004831' then
+    raise exception 'U3b: a lease receipt beside the frozen wire output is recorded (got %, %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition, v.result_id;
+  end if;
+  if u_probe.lease_shots(ursula) <> '00000000-0000-4000-8000-000000004831:scored/-/-/0-500-1000/p1/c1'
+     or u_probe.events(ursula) <> '' then
+    raise exception 'U3b: the rating is stored under neither permit nor ticket, with its phases and checkpoints, and no ledger event (got %, %)',
+      u_probe.lease_shots(ursula), u_probe.events(ursula);
+  end if;
+  select * into v from u_probe.settle(rp1, o1, null);
+  if v.delivery <> 'replayed' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or u_probe.lease_shots(ursula) <> '00000000-0000-4000-8000-000000004831:scored/-/-/0-500-1000/p1/c1' then
+    raise exception 'U3b: the redelivery replays and stores nothing twice (got %, %, %)',
+      v.delivery, v.status, u_probe.lease_shots(ursula);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rp-2', ursula, 'ursula-key-1', lease, null, null, 'op-p2', '00000000-0000-4000-8000-000000004831', 'joint_verification_required'),
+    o1, null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3b: a second lease receipt for the same result is held (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rp-3', ursula, 'ursula-key-1', lease, null, null, 'op-p3', '00000000-0000-4000-8000-000000004833', 'joint_verification_required'),
+    jsonb_set(u_probe.mobile_shot('00000000-0000-4000-8000-000000004833', 'scored'), '{timestamps,startMs}', '-1'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004833') then
+    raise exception 'U3b: an output the shot.sync ingress refuses is held with nothing stored (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rp-4', ursula, 'ursula-key-1', lease, null, null, 'op-p4', '00000000-0000-4000-8000-000000004834', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004834', null, 'scored'), null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004834'
+     or u_probe.lease_shots(ursula) <> '00000000-0000-4000-8000-000000004831:scored/-/-/0-500-1000/p1/c1,'
+       || '00000000-0000-4000-8000-000000004834:scored/-/-/0-500-1000/p0/c0' then
+    raise exception 'U3b: the pre-contract flat output still settles and is stored (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, u_probe.lease_shots(ursula);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rp-5', ursula, 'ursula-key-1', free_grant, null, null, 'op-p5', '00000000-0000-4000-8000-000000004835', 'joint_verification_required'),
+    u_probe.mobile_shot('00000000-0000-4000-8000-000000004835', 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004835') then
+    raise exception 'U3b: a lease receipt naming another owner''s grant is held with nothing stored (got %, %, %)',
+      v.delivery, v.status, v.reason_code;
+  end if;
+  if u_probe.recorded(ursula) <> 5 or u_probe.events(ursula) <> '' or (select count(*) from public.shots where user_id = ursula) <> 2 then
+    raise exception 'U3b: five durable verdicts, two ratings, no ledger event (got %, %, %)',
+      u_probe.recorded(ursula), u_probe.events(ursula), (select count(*) from public.shots where user_id = ursula);
+  end if;
+end $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000481';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004801"}';
+do $$
+declare
+  uri uuid := (select auth.uid());
+  g uuid := (select id from u_state where key = 'grant');
+begin
+  -- a free grant is never a lease: the shots gate refuses the vouch
+  perform set_config('pickle.offline_lease_grant_id', g::text, true);
+  begin
+    insert into public.shots (id, user_id, shot_type, camera_view, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind, source)
+    values ('00000000-0000-4000-8000-000000004839', uri, 'drive', 'side', now(), 0, 1000, 7.1, 0.9, 'scored', 'real');
+    raise exception 'U3b: a lease vouch naming a free grant must not admit a scored shot';
+  exception when check_violation then null;
+  end;
+  perform set_config('pickle.offline_lease_grant_id', '', true);
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004839') then
+    raise exception 'U3b: the refused insert stored nothing';
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if has_function_privilege('authenticated', 'api_private.record_offline_lease_shot(uuid, jsonb)', 'EXECUTE')
+     or has_function_privilege('anon', 'api_private.record_offline_lease_shot(uuid, jsonb)', 'EXECUTE')
+     or has_function_privilege('service_role', 'api_private.record_offline_lease_shot(uuid, jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'api_private.offline_receipt_shot(jsonb)', 'EXECUTE')
+     or has_function_privilege('anon', 'api_private.offline_receipt_shot(jsonb)', 'EXECUTE') then
+    raise exception 'U3b: the lease writer and the ingress judge are not client-executable';
+  end if;
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000481';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004801"}';
 
 -- U4: the settlement table is closed to the owner role — no read, no write —
 -- and the RPC is bound to a live session of the caller.
@@ -10501,7 +10673,9 @@ values
   ('00000000-0000-4000-8000-000000000492', 'uma@example.com',
    '{"full_name":"Uma"}', '{"provider":"apple"}'),
   ('00000000-0000-4000-8000-000000000493', 'uli@example.com',
-   '{"full_name":"Uli"}', '{"provider":"google"}');
+   '{"full_name":"Uli"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000494', 'ulla@example.com',
+   '{"full_name":"Ulla"}', '{"provider":"apple"}');
 insert into auth.identities (provider, provider_id, user_id, identity_data)
 values
   ('google', 'google-sub-ugo', '00000000-0000-4000-8000-000000000491',
@@ -10509,11 +10683,17 @@ values
   ('apple', 'apple-sub-uma', '00000000-0000-4000-8000-000000000492',
    '{"sub":"apple-sub-uma","email":"uma@example.com"}'),
   ('google', 'google-sub-uli', '00000000-0000-4000-8000-000000000493',
-   '{"sub":"google-sub-uli","email":"uli@example.com"}');
+   '{"sub":"google-sub-uli","email":"uli@example.com"}'),
+  ('apple', 'apple-sub-ulla', '00000000-0000-4000-8000-000000000494',
+   '{"sub":"apple-sub-ulla","email":"ulla@example.com"}');
 insert into auth.sessions (id, user_id) values
   ('00000000-0000-4000-8000-000000004901', '00000000-0000-4000-8000-000000000491'),
   ('00000000-0000-4000-8000-000000004902', '00000000-0000-4000-8000-000000000492'),
-  ('00000000-0000-4000-8000-000000004903', '00000000-0000-4000-8000-000000000493');
+  ('00000000-0000-4000-8000-000000004903', '00000000-0000-4000-8000-000000000493'),
+  ('00000000-0000-4000-8000-000000004904', '00000000-0000-4000-8000-000000000494');
+-- Ulla is a verified subscriber: her grant is a Pro lease (no tickets).
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000494', true, now() + interval '30 days');
 
 create temporary table u2_state (key text primary key, id uuid);
 grant select, insert on u2_state to authenticated;
@@ -10870,11 +11050,16 @@ reset role;
 --     contradictory or missing evidence and a ticket the ledger already
 --     closed are held durably regardless of the freeze;
 --   * a not_chargeable abstention is recorded regardless of the freeze;
---   * a Pro (no-ticket) chargeable receipt under the freeze is pending with
---     financial_disposition not_applicable and nothing recorded; a Pro
---     abstention is recorded not_applicable;
+--   * a chargeable receipt that omits its ticket under the FREE grant claims
+--     a lease that was never issued: a durable evidence_ambiguous HOLD,
+--     decided before the freeze, nothing stored; a no-ticket abstention is
+--     recorded not_applicable;
 --   * the 4-argument call still resolves (p_defer_new defaults to false) and
 --     the function stays a definer executable by authenticated alone.
+-- Then as Ulla — a verified subscriber holding a lease: a genuinely new
+-- chargeable Pro receipt under the freeze is pending with
+-- financial_disposition not_applicable and nothing recorded or stored; the
+-- identical redelivery once the freeze lifts stores the rating and records it.
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000493';
 set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004903"}';
@@ -10980,13 +11165,16 @@ begin
     raise exception 'U8b: a receipt under a consumed ticket is held as conflicting_receipt under the freeze (got %, %, %)',
       v.delivery, v.reason_code, v.financial_disposition;
   end if;
-  -- a Pro (no-ticket) chargeable receipt under the freeze: pending, nothing
-  -- financial, nothing recorded; the Pro abstention is recorded regardless
+  -- a chargeable receipt omitting its ticket under the FREE grant: no lease
+  -- was ever issued to this identity — a durable HOLD decided before the
+  -- freeze, nothing financial, nothing stored; the abstention is recorded
+  -- regardless
   select * into v from u2_probe.settle_frozen(r_pro, o_pro, null);
-  if v.result <> 'accepted' or v.delivery <> 'pending' or v.status <> 'pending' or v.reason_code is not null
-     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
-    raise exception 'U8b: a no-ticket chargeable receipt under the freeze is pending / not_applicable (got %, %, %, %)',
-      v.result, v.delivery, v.status, v.financial_disposition;
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.status <> 'reconciliation_required'
+     or v.reason_code <> 'evidence_ambiguous' or v.financial_disposition <> 'not_applicable' or v.result_id is not null
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004956') then
+    raise exception 'U8b: a no-ticket chargeable receipt under a free grant is held, frozen or not (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
   end if;
   select * into v from u2_probe.settle_frozen(
     u2_probe.receipt('r5-7', uli, 'uli-key-1', g, null, null, 'op5-7', '00000000-0000-4000-8000-000000004958', 'not_chargeable'),
@@ -11005,12 +11193,13 @@ begin
     raise exception 'U8b: a ticketed abstention is recorded under the freeze (got %, %, %)',
       v.delivery, v.status, v.financial_disposition;
   end if;
-  -- the freeze lifts: the Pro receipt settles, and the frozen holds stand
+  -- the freeze lifts: the frozen holds stand, the free no-ticket hold included
   select * into v from u2_probe.settle(r_pro, o_pro, null);
-  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
-     or v.result_id <> '00000000-0000-4000-8000-000000004956' then
-    raise exception 'U8b: the no-ticket receipt settles once the freeze lifts (got %, %, %)',
-      v.delivery, v.status, v.financial_disposition;
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004956') then
+    raise exception 'U8b: the no-ticket hold under a free grant stands after the freeze (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
   end if;
   select * into v from u2_probe.settle(r_held, o_held, null);
   if v.delivery <> 'replayed' or v.reason_code <> 'evidence_ambiguous' then
@@ -11020,6 +11209,56 @@ begin
      or u2_probe.shots_on(uli, t1) <> 1 or u2_probe.shots_on(uli, t2) <> 0 or public.lifetime_scored_count() <> 1 then
     raise exception 'U8b: eight durable verdicts, one rating, t2 still reserved (got %, %, %, %, %)',
       u2_probe.recorded(uli), u2_probe.events(uli), u2_probe.shots_on(uli, t1), u2_probe.shots_on(uli, t2), public.lifetime_scored_count();
+  end if;
+end $$;
+-- as Ulla: the lease receipt under the freeze is pending, nothing durable,
+-- nothing stored; the identical redelivery after the freeze stores and records
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000494';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004904"}';
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('ulla-key-1', 'production', true);
+  select * into g from public.issue_offline_grant('ulla-key-1', 2);
+  if r.result <> 'accepted' or g.result <> 'accepted' or g.entitlement_source <> 'verified_store'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 0 then
+    raise exception 'U8b precondition: Ulla holds a Pro lease without tickets (got %, %, %)', r.result, g.result, g.entitlement_source;
+  end if;
+  insert into u2_state values ('ulla-lease', g.grant_id);
+end $$;
+do $$
+declare
+  ulla uuid := (select auth.uid());
+  lease uuid := (select id from u2_state where key = 'ulla-lease');
+  r_pro jsonb := u2_probe.receipt('r5-9', ulla, 'ulla-key-1', lease, null, null, 'op5-9',
+    '00000000-0000-4000-8000-000000004960', 'joint_verification_required');
+  o_pro jsonb := u2_probe.shot('00000000-0000-4000-8000-000000004960', 'scored');
+  v record;
+begin
+  select * into v from u2_probe.settle_frozen(r_pro, o_pro, null);
+  if v.result <> 'accepted' or v.delivery <> 'pending' or v.status <> 'pending' or v.reason_code is not null
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U8b: a new lease receipt under the freeze is pending / not_applicable (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle_frozen(r_pro, o_pro, null);
+  if v.delivery <> 'pending' or u2_probe.recorded(ulla) <> 0
+     or exists (select 1 from public.shots where user_id = ulla) then
+    raise exception 'U8b: the frozen lease receipt records and stores nothing (got %, %)', v.delivery, u2_probe.recorded(ulla);
+  end if;
+  select * into v from u2_probe.settle(r_pro, o_pro, null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004960'
+     or (select count(*) from public.shots where id = '00000000-0000-4000-8000-000000004960' and user_id = ulla
+           and result_kind = 'scored' and analysis_permit_id is null and offline_ticket_id is null) <> 1 then
+    raise exception 'U8b: the lease receipt stores its rating and settles once the freeze lifts (got %, %, %)',
+      v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle_frozen(r_pro, o_pro, null);
+  if v.delivery <> 'replayed' or v.status <> 'result_recorded' or u2_probe.recorded(ulla) <> 1
+     or (select count(*) from public.shots where user_id = ulla) <> 1 or u2_probe.events(ulla) <> '' then
+    raise exception 'U8b: the settled lease receipt replays under a later freeze, one rating, no ledger event (got %, %, %)',
+      v.delivery, u2_probe.recorded(ulla), u2_probe.events(ulla);
   end if;
 end $$;
 reset role;

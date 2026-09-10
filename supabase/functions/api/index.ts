@@ -5050,7 +5050,9 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
 // explicit HOLD reason. A held receipt is recorded with its ticket left
 // reserved: it is never refunded here and never re-run under a new operation.
 
-const OFFLINE_RECEIPT_BATCH_MAX = 25;
+// The shipping client drains EVERY pending receipt in one POST (no chunking),
+// so the batch is bounded by the body cap alone — a whole-batch 400 on a long
+// offline week would wedge the queue for good. Entries are decided one by one.
 const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
 
@@ -5351,7 +5353,20 @@ async function offlineReceiptHoldReason(
     if (error instanceof CanonicalDigestError) return "evidence_ambiguous";
     throw error;
   }
+  if (!offlineReceiptOutputAdmissible(output)) return "evidence_ambiguous";
   return null;
+}
+
+/** The delivered output must be a shot the shots:sync ingress would accept
+ * (same field rules as parseSyncShot — bounded non-negative integer offsets,
+ * score/confidence ranges, phase/checkpoint shapes, version vector), minus
+ * the online permit: a receipt carries no analysisPermitId. Anything the
+ * online path would refuse is ambiguous evidence, never a stored rating. */
+const OFFLINE_RECEIPT_PERMIT_PLACEHOLDER = "00000000-0000-4000-8000-000000000000";
+function offlineReceiptOutputAdmissible(output: Record<string, unknown>): boolean {
+  if (output.analysisPermitId !== undefined && output.analysisPermitId !== null) return false;
+  const parsed = parseSyncShot({ ...output, analysisPermitId: OFFLINE_RECEIPT_PERMIT_PLACEHOLDER });
+  return !("rejectedCode" in parsed);
 }
 
 /** The durable verdict row → the versioned reconciliation status the client
@@ -5404,16 +5419,8 @@ function offlineReconciliationFromRow(
 async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request, OFFLINE_RECEIPT_BATCH_BODY_BYTES);
   const receipts = body.receipts;
-  if (
-    !Array.isArray(receipts) ||
-    receipts.length === 0 ||
-    receipts.length > OFFLINE_RECEIPT_BATCH_MAX
-  ) {
-    return codedError(
-      400,
-      OFFLINE_INVALID_INPUT_CODE,
-      `receipts must be an array of 1-${OFFLINE_RECEIPT_BATCH_MAX} entries.`,
-    );
+  if (!Array.isArray(receipts) || receipts.length === 0) {
+    return codedError(400, OFFLINE_INVALID_INPUT_CODE, "receipts must be a non-empty array.");
   }
   const entries: { readonly raw: Record<string, unknown>; readonly receiptId: string }[] = [];
   for (const raw of receipts) {
