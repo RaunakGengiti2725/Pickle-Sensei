@@ -2252,10 +2252,11 @@ async function runCaptureAnalysisCore(
         return { ...recoveryPendingOutcome(), reason: error.message };
       throw error;
     }
-    if (phase === 'commit' && !ownerChanged && !cancelled) {
+    if (phase === 'commit' && !ownerChanged) {
       // A court-offline commit whose COMMIT landed but whose acknowledgement
-      // was lost: the receipt, the spent ticket and the shot are durable, so
-      // the caller receives the rating it paid for instead of an error.
+      // was lost, or that was cancelled the instant it became durable: the
+      // receipt, the spent ticket and the shot are durable, so the caller
+      // receives the rating it paid for instead of an error.
       const rated = await readOfflineScoredReplay(request.db, run).catch(
         () => null,
       );
