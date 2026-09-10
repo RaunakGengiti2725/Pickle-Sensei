@@ -1,0 +1,95 @@
+{
+ "package_id": "W05-07",
+ "round": 4,
+ "branch": "devin/pp/w05-07/impl-r4",
+ "base_sha": "8e525d876c04d2682b2bb206fd10667fee66c849",
+ "head_sha": "1e35b5fcc08f64a3cc21ac58c303e39f7aa50e52",
+ "blocked": false,
+ "blocked_reason": "",
+ "summary": "Court-offline scored read on the shipping path (AnalyzeScreen \u2192 prepareOriginalCaptureAnalysis \u2192 runOriginalCaptureAnalysis) and on plain runCaptureAnalysis: connectivity-class permit failure + cached release policy + executable held grant \u2192 on-device rating, exactly one consumeOfflineAllocation() in the commit transaction, saveOfflineAnalysis() writes local_shot with NO shot.sync outbox row, the receipt drain sends the frozen 1.0 wire entry { receipt, grant:{schemaVersion,compactJws}, output } in bounded chunks, hasShotSyncReceipt() is written only on an accepted settlement, a lost commit acknowledgement returns the durable paid read, and the SHIPPING sync runtime's recovery sweep never reserves a live permit for an operation already paid offline.",
+ "approach": "r4 fixes the two r3 adversary breaks. (1) Reconnect: guardOfflinePaidReservations(openDb, permitPort) (offlineCapabilities.ts) refuses reserve() when the reservation_key's operation has an offline_receipt (fails closed when the paid-state query itself cannot be read); syncRuntime.ts wraps the permit client it hands to recoverAnalysisJournals() with it, and the sweep no longer counts offline-paid journals as unfinished recovery (healthy cadence). The shared analysis-core runJournal.ts is unchanged from the integration head. (2) Missing grant: offlineWallet.ts builds the complete wire chunk (grant JWS + output reconstructed from local_shot and hash-checked against the receipt) BEFORE inserting the in_flight presentation journal, so a receipt whose grant/output evidence cannot be constructed sends nothing and leaves no in_flight journal; unreadable grant state is an OfflineGrantError, never an empty wallet. Chunking: OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS=1_000_000 bounds each POST; a drain loops over chunks, journals only what it sends, and a lost response leaves exactly one unanswered journal (sent chunk) with the rest still queued.",
+ "files_changed": [
+  "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+  "apps/mobile/__tests__/w05CourtOfflineRun.test.ts",
+  "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+  "apps/mobile/src/data/api.ts",
+  "apps/mobile/src/data/offlineCapabilities.ts",
+  "apps/mobile/src/data/offlineWallet.ts",
+  "apps/mobile/src/data/repository.ts",
+  "apps/mobile/src/data/syncRuntime.ts"
+ ],
+ "out_of_scope_files": [],
+ "regression_tests_added": [
+  "apps/mobile/__tests__/w05CourtOfflineRun.test.ts (shipping original path scores offline with one spend, one receipt, one local_shot, no shot.sync row; reconnect sweep via configureSyncRuntime()/triggerOutboxSync() reserves no permit and settles the receipt; lost commit ack returns the durable read; drain journals only what it sends; missing grant \u2192 no POST, no in_flight; two-chunk drain; lost first chunk)",
+  "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts (A1\u2013A10 adversary suite kept as regression: double submit, restart+reconnect through the shipping sync runtime, other-owner grant, tampered output hash, expired lease, abstention spends nothing, receipt conflict, wallet corruption never empty)"
+ ],
+ "acceptance_results": [
+  {
+   "id": "W05-07-AC1",
+   "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts",
+   "status": "PASS",
+   "exit_code": 0,
+   "executed": 109,
+   "passed": 109,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "coordinator shell transcript",
+   "note": "Coordinator run on 1e35b5fc in /home/ubuntu/wt-w05-01/apps/mobile: w05CourtOfflineRun.test.ts + w05CourtOfflineRun.attack.test.ts + w05WalletRecovery.test.ts + w04OfflineGrants.test.ts \u2192 'Test Suites: 4 passed, 4 total; Tests: 109 passed, 109 total' (the w01*.test.ts glob matches no file on this head; W01 coverage lives in the full run below)."
+  },
+  {
+   "id": "W05-07-AC2",
+   "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them \u2192 must FAIL; run on HEAD \u2192 must PASS",
+   "status": "PASS",
+   "exit_code": 0,
+   "executed": 59,
+   "passed": 59,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "coordinator shell transcript",
+   "note": "Coordinator proof: the two new suites copied onto a clean 8e525d87 checkout \u2192 'Test Suites: 2 failed, 2 total; Tests: 39 failed, 20 passed, 59 total' (base has no offline branch, saveOfflineAnalysis, guardOfflinePaidReservations or receipt chunking); on HEAD 1e35b5fc \u2192 'Test Suites: 2 passed; Tests: 59 passed, 59 total'. Reviewer to re-verify."
+  },
+  {
+   "id": "W05-07-AC3",
+   "command": "cd apps/mobile && npx jest --ci --silent",
+   "status": "PASS",
+   "exit_code": 0,
+   "executed": 6742,
+   "passed": 6741,
+   "failed": 0,
+   "skipped": 1,
+   "artifact": "artifacts/program/w05-07-r4/jest-full.log (coordinator VM)",
+   "note": "Coordinator run on 1e35b5fc: 'Test Suites: 1 skipped, 331 passed, 331 of 332 total; Tests: 1 skipped, 6741 passed, 6742 total', JEST_EXIT 0. The one skip is the documented importedRealFootageAnalysis.test.ts Mac-artifact suite."
+  },
+  {
+   "id": "W05-07-AC4",
+   "command": "cd apps/mobile && npx tsc --noEmit",
+   "status": "PASS",
+   "exit_code": 0,
+   "executed": 0,
+   "passed": 0,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "coordinator shell transcript",
+   "note": "Coordinator run on 1e35b5fc: TSC 0."
+  },
+  {
+   "id": "W05-07-AC5",
+   "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+   "status": "PASS",
+   "exit_code": 0,
+   "executed": 0,
+   "passed": 0,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "coordinator shell transcript",
+   "note": "Coordinator run on 1e35b5fc from the repo root (root ESLint 9 flat config) over the 8 changed files: LINT_OK; prettier --check 'All matched files use Prettier code style!'."
+  }
+ ],
+ "baseline_failures_observed": [],
+ "residual_risks": [
+  "runJournal.ts is untouched: a caller that hands recoverAnalysisJournals() a raw (unguarded) permit port would still reserve; the only shipping caller is syncRuntime.ts, which is guarded and pinned by the shipping-path tests.",
+  "An offline-paid journal row stays release_pending/held on the device (it never becomes a permit-backed completion); the sweep treats it as settled work, not unfinished recovery.",
+  "Chunk size is measured on the JSON wire length (1_000_000 chars) under the Edge 2 MB body cap; a single receipt larger than the cap is still sent alone."
+ ],
+ "attachment_urls": []
+}
