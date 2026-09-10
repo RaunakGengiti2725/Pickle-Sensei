@@ -223,6 +223,27 @@ export interface OfflineResultReceipt extends OfflineReceiptBase {
   readonly billingDisposition: "joint_verification_required" | "not_chargeable";
 }
 
+/** The consumption receipt exactly as the device persists and submits it
+ * (apps/mobile `OfflineReceiptSubmission`): owner / installation / grant /
+ * ticket / operation / result / output-digest bindings plus the queue
+ * instant, with NO native-time or attestation evidence and no server-side
+ * settlement fields. It is the 1.0 wire entry of the delayed reconciliation
+ * route; the full-evidence `OfflineResultReceipt` stays the v1 result form. */
+export interface OfflineDeviceReceipt {
+  readonly receiptId: string;
+  readonly ownerId: string;
+  readonly installationKeyId: string;
+  readonly grantId: string;
+  readonly grantJwsSha256: string;
+  readonly lifecycleSequence: number;
+  readonly ticket: OfflineFreeTicketReference | null;
+  readonly operationId: string;
+  readonly resultId: string;
+  readonly fullOutputSha256: string;
+  readonly billingDisposition: "joint_verification_required" | "not_chargeable";
+  readonly queuedAt: string;
+}
+
 export interface OfflineUnusedTicketReturn extends OfflineReceiptBase {
   readonly schemaVersion: typeof OFFLINE_UNUSED_TICKET_RETURN_SCHEMA_VERSION;
   readonly ticket: OfflineFreeTicketReference;
@@ -312,6 +333,20 @@ const RECEIPT_BASE_FIELDS = [
   "lifecycleSequence",
   "nativeTime",
   "attestation",
+] as const;
+const DEVICE_RECEIPT_FIELDS = [
+  "receiptId",
+  "ownerId",
+  "installationKeyId",
+  "grantId",
+  "grantJwsSha256",
+  "lifecycleSequence",
+  "ticket",
+  "operationId",
+  "resultId",
+  "fullOutputSha256",
+  "billingDisposition",
+  "queuedAt",
 ] as const;
 const MAX_UNIX_SECONDS = 253_402_300_799;
 
@@ -496,6 +531,32 @@ export function validateOfflineResultReceiptShape(raw: unknown): Result<OfflineR
   return ok(immutableCopy(raw as unknown as OfflineResultReceipt));
 }
 
+export function validateOfflineDeviceReceiptShape(raw: unknown): Result<OfflineDeviceReceipt> {
+  if (
+    !isRecord(raw) ||
+    !hasExactFields(raw, DEVICE_RECEIPT_FIELDS) ||
+    !isIdentifier(raw.receiptId) ||
+    !isCanonicalOwner(raw.ownerId) ||
+    !isIdentifier(raw.installationKeyId) ||
+    !isIdentifier(raw.grantId) ||
+    !isSha256(raw.grantJwsSha256) ||
+    !isPositiveSequence(raw.lifecycleSequence) ||
+    (raw.ticket !== null && !isTicketReference(raw.ticket)) ||
+    !isIdentifier(raw.operationId) ||
+    !isIdentifier(raw.resultId) ||
+    !isSha256(raw.fullOutputSha256) ||
+    (raw.billingDisposition !== "joint_verification_required" &&
+      raw.billingDisposition !== "not_chargeable") ||
+    !isIsoInstant(raw.queuedAt)
+  ) {
+    return invalid(
+      "device_receipt_shape",
+      "Require the device's immutable owner/installation/grant/ticket/operation/result/digest receipt with its queue instant and nothing else.",
+    );
+  }
+  return ok(immutableCopy(raw as unknown as OfflineDeviceReceipt));
+}
+
 export function validateOfflineResultReceiptBinding(
   raw: unknown,
   expected: OfflineReceiptBinding,
@@ -590,9 +651,12 @@ export function validateOfflineReconciliationStatus(
   originalReceipt: unknown,
 ): Result<OfflineReconciliationStatus> {
   const resultReceipt = validateOfflineResultReceiptShape(originalReceipt);
-  const parsed = resultReceipt.ok
+  const unusedReturn = resultReceipt.ok
     ? resultReceipt
     : validateOfflineUnusedTicketReturnShape(originalReceipt);
+  const parsed = unusedReturn.ok
+    ? unusedReturn
+    : validateOfflineDeviceReceiptShape(originalReceipt);
   if (
     !parsed.ok ||
     !isRecord(raw) ||
@@ -611,10 +675,7 @@ export function validateOfflineReconciliationStatus(
   let valid = false;
   if (raw.status === "pending") {
     valid = hasExactFields(raw, base) && raw.financialDisposition === held;
-  } else if (
-    raw.status === "result_recorded" &&
-    receipt.schemaVersion === OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION
-  ) {
+  } else if (raw.status === "result_recorded" && "resultId" in receipt) {
     const disposition =
       receipt.ticket === null
         ? "not_applicable"
@@ -625,10 +686,7 @@ export function validateOfflineReconciliationStatus(
       hasExactFields(raw, [...base, "resultId"]) &&
       raw.resultId === receipt.resultId &&
       raw.financialDisposition === disposition;
-  } else if (
-    raw.status === "unused_ticket_returned" &&
-    receipt.schemaVersion === OFFLINE_UNUSED_TICKET_RETURN_SCHEMA_VERSION
-  ) {
+  } else if (raw.status === "unused_ticket_returned" && "terminalState" in receipt) {
     valid = hasExactFields(raw, base) && raw.financialDisposition === "returned";
   } else if (raw.status === "reconciliation_required") {
     valid =
@@ -812,6 +870,17 @@ function isReceiptBase(value: Record<string, unknown>): boolean {
     isPositiveSequence(value.lifecycleSequence) &&
     isNativeTimeEvidence(value.nativeTime) &&
     isAppAttestEvidence(value.attestation, "assertion")
+  );
+}
+
+/** The `Date#toISOString` grammar the device stamps `queuedAt` with. */
+function isIsoInstant(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(value);
+  return (
+    match !== null &&
+    Number.isFinite(Date.parse(value)) &&
+    new Date(value).toISOString() === `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`
   );
 }
 
