@@ -62,7 +62,12 @@ import {
   pendingOfflineReceipts,
   readOfflineAllocation,
 } from '../src/data/offlineCapabilities';
-import { reconcileOfflineWallet } from '../src/data/offlineWallet';
+import {
+  OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS,
+  readOfflineWalletJournal,
+  readOfflineWalletStatus,
+  reconcileOfflineWallet,
+} from '../src/data/offlineWallet';
 import { getAnalysis, hasShotSyncReceipt } from '../src/data/repository';
 import {
   clearSyncRuntime,
@@ -953,5 +958,163 @@ describe('reconnect: an operation paid offline is settled only by its receipt', 
     expect(permitPosts(online.calls)).toHaveLength(0);
     expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
     expect(store.count('local_shot', OWNER)).toBe(1);
+  });
+});
+
+describe('the drain journals only what it sends', () => {
+  const SECOND_CAPTURE = '55555555-5555-4555-8555-555555555555';
+  const SECOND_OPERATION = '66666666-6666-4666-8666-666666666666';
+
+  async function twoScoredReads() {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const first = await runCaptureAnalysis(request);
+    expect(first.kind).toBe('scored');
+    const { clip, sidecar } = fixture();
+    const secondClip = { ...clip, uri: 'file:///private/captures/second.mov' };
+    mockReadArtifact = async () => sidecar;
+    seedSqliteCapture(store.db, OWNER, SECOND_CAPTURE, secondClip);
+    const second = await runCaptureAnalysis({
+      ...request,
+      operationId: SECOND_OPERATION,
+      captureId: SECOND_CAPTURE,
+      clip: secondClip,
+    });
+    expect(second.kind).toBe('scored');
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 2 });
+    const receipts = await pendingOfflineReceipts(store.db);
+    expect(receipts).toHaveLength(2);
+    return { store, receipts };
+  }
+
+  function client() {
+    return createOfflineGrantClient({ baseUrl: API_ORIGIN, token: BEARER });
+  }
+
+  it('a missing grant row fails the drain before anything is journalled or sent; the receipt stays queued, not held', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
+    store.native
+      .prepare(`DELETE FROM offline_grant WHERE owner_key = ? AND grant_id = ?`)
+      .run(OWNER, GRANT_ID);
+    const online = court('online');
+    await expect(
+      reconcileOfflineWallet(store.db, client(), reading()),
+    ).rejects.toMatchObject({ code: 'offline.wallet_corrupt' });
+    expect(
+      online.calls.filter(call => call.url === RECEIPTS_ROUTE),
+    ).toHaveLength(0);
+    expect(await readOfflineWalletJournal(store.db)).toEqual([]);
+    const status = await readOfflineWalletStatus(store.db);
+    expect(status.hold).toBe(false);
+    expect(status.unansweredPresentations).toBe(0);
+    expect(status.pending.map(entry => entry.phase)).toEqual(['queued']);
+    expect(store.count('offline_receipt', OWNER)).toBe(1);
+    expect(store.count('local_shot', OWNER)).toBe(1);
+  });
+
+  it('a queue over the presentation bound is presented in bounded chunks, each journalled separately, and fully settled in one drain', async () => {
+    const { store, receipts } = await twoScoredReads();
+    const online = court('online');
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      client(),
+      reading(),
+      { presentationMaxChars: 1 },
+    );
+    expect(drained).toMatchObject({
+      submitted: 2,
+      accepted: 2,
+      held: 0,
+      refused: 0,
+      pending: 0,
+    });
+    const posts = online.calls.filter(call => call.url === RECEIPTS_ROUTE);
+    expect(posts).toHaveLength(2);
+    const presentedIds = posts.map(post => {
+      const entries = post.body.receipts as Array<{ receiptId: string }>;
+      expect(entries).toHaveLength(1);
+      return entries[0]!.receiptId;
+    });
+    expect(presentedIds.sort()).toEqual(
+      receipts.map(receipt => receipt.receiptId).sort(),
+    );
+    const journal = await readOfflineWalletJournal(store.db);
+    expect(journal.map(entry => entry.state)).toEqual(['applied', 'applied']);
+    expect(journal.map(entry => entry.receiptIds.length)).toEqual([1, 1]);
+    for (const receipt of receipts)
+      expect(await hasShotSyncReceipt(store.db, receipt.resultId)).toBe(true);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+  });
+
+  it('a held chunk is not re-presented by the same drain; the next drain presents it again', async () => {
+    const { store } = await twoScoredReads();
+    const online = court('online', 'pending');
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      client(),
+      reading(),
+      { presentationMaxChars: 1 },
+    );
+    expect(drained).toMatchObject({ submitted: 2, held: 2, pending: 2 });
+    expect(
+      online.calls.filter(call => call.url === RECEIPTS_ROUTE),
+    ).toHaveLength(2);
+    const again = court('online');
+    const settled = await reconcileOfflineWallet(store.db, client(), reading());
+    expect(settled).toMatchObject({ submitted: 2, accepted: 2, pending: 0 });
+    const posts = again.calls.filter(call => call.url === RECEIPTS_ROUTE);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.body.receipts).toHaveLength(2);
+    expect(JSON.stringify(posts[0]!.body).length).toBeLessThanOrEqual(
+      OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS,
+    );
+  });
+
+  it('a lost answer on the first chunk holds only that chunk and stops the drain', async () => {
+    const { store, receipts } = await twoScoredReads();
+    let answered = 0;
+    court('online');
+    const failFirst = globalThis.fetch;
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (String(input) === RECEIPTS_ROUTE && answered++ === 0)
+        throw new TypeError('Network request failed');
+      return failFirst(input, init);
+    }) as typeof fetch;
+    await expect(
+      reconcileOfflineWallet(store.db, client(), reading(), {
+        presentationMaxChars: 1,
+      }),
+    ).rejects.toThrow();
+    const status = await readOfflineWalletStatus(store.db);
+    expect(status.hold).toBe(true);
+    expect(status.unansweredPresentations).toBe(1);
+    expect(status.pending.map(entry => entry.phase).sort()).toEqual([
+      'presented_unanswered',
+      'queued',
+    ]);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(2);
+    // The next drain supersedes the unanswered entry, re-presents the same
+    // ids and settles everything.
+    const settled = await reconcileOfflineWallet(store.db, client(), reading());
+    expect(settled).toMatchObject({
+      submitted: 2,
+      accepted: 2,
+      pending: 0,
+      recovered: 1,
+    });
+    for (const receipt of receipts)
+      expect(await hasShotSyncReceipt(store.db, receipt.resultId)).toBe(true);
   });
 });

@@ -83,6 +83,13 @@ export const OFFLINE_WALLET_JOURNAL_DDL: readonly string[] = [
 
 const JOURNAL_KIND = 'receipt_submission';
 
+/** Upper bound on the JSON of one presentation. The server refuses a body
+ * over 2,000,000 bytes whole (naming no receipt), so a queue is presented in
+ * chunks under half that — the margin covers UTF-8 expansion of the JSON
+ * text — and a week of ratings can never be refused forever for its size. A
+ * single entry over the bound is still presented alone. */
+export const OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS = 1_000_000;
+
 /** `in_flight`: committed before the request; the answer is not recorded.
  * `applied`: every verdict recorded with the receipts, atomically.
  * `superseded`: an unanswered entry closed by a later drain — the same
@@ -363,6 +370,9 @@ async function wireEntry(
 interface OpenedPresentation {
   readonly journalId: string;
   readonly receipts: readonly OfflineConsumptionReceipt[];
+  readonly entries: readonly OfflineReceiptWireEntry[];
+  /** Pending receipts left for a later chunk of this drain. */
+  readonly remaining: number;
 }
 
 interface PresentationPlan {
@@ -372,18 +382,52 @@ interface PresentationPlan {
   readonly recovered: number;
 }
 
+/** The longest prefix of `pending` whose wire entries fit the presentation
+ * bound (always at least one). Entries are built inside the write-ahead
+ * transaction so unreadable grant or shot state fails the drain before any
+ * journal row exists — a presentation is journalled only once its exact body
+ * is in hand. */
+async function chunkPresentation(
+  db: LocalDb,
+  context: DataOwnerContext,
+  pending: readonly OfflineConsumptionReceipt[],
+  maxChars: number,
+): Promise<{
+  receipts: OfflineConsumptionReceipt[];
+  entries: OfflineReceiptWireEntry[];
+}> {
+  const receipts: OfflineConsumptionReceipt[] = [];
+  const entries: OfflineReceiptWireEntry[] = [];
+  let chars = 2;
+  for (const receipt of pending) {
+    const entry = await wireEntry(db, context, receipt);
+    const size = JSON.stringify(entry).length + 1;
+    if (entries.length > 0 && chars + size > maxChars) break;
+    chars += size;
+    receipts.push(receipt);
+    entries.push(entry);
+  }
+  return { receipts, entries };
+}
+
 /** Write-ahead step, one transaction: read what is pending, close every
  * unanswered entry as superseded — either the same receipts are about to be
  * re-presented, or every receipt it named has since been settled terminally
- * (the ambiguity is resolved either way) — and commit the new `in_flight`
- * entry for the pending receipts. */
+ * (the ambiguity is resolved either way) — build the exact wire entries of
+ * the next chunk, and commit the new `in_flight` entry for exactly those
+ * receipts. Receipts in `presented` were already presented by this drain and
+ * wait for the next one. */
 async function openPresentation(
   db: LocalDb,
   context: DataOwnerContext,
   reading: TrustedTimeReading,
+  presented: ReadonlySet<string>,
+  maxChars: number,
 ): Promise<PresentationPlan> {
   return withTransaction(db, async transaction => {
-    const pending = await pendingOfflineReceipts(transaction);
+    const pending = (await pendingOfflineReceipts(transaction)).filter(
+      receipt => !presented.has(receipt.receiptId),
+    );
     const inFlight = await loadJournal(
       transaction,
       context.ownerKey,
@@ -403,6 +447,12 @@ async function openPresentation(
     if (pending.length === 0) {
       return { opened: null, recovered: inFlight.length };
     }
+    const chunk = await chunkPresentation(
+      transaction,
+      context,
+      pending,
+      maxChars,
+    );
     const journalId = makeUuid();
     await transaction.execute(
       `INSERT INTO offline_wallet_journal (
@@ -412,12 +462,17 @@ async function openPresentation(
         context.ownerKey,
         journalId,
         JOURNAL_KIND,
-        JSON.stringify(pending.map(receipt => receipt.receiptId)),
+        JSON.stringify(chunk.receipts.map(receipt => receipt.receiptId)),
         now,
       ],
     );
     return {
-      opened: { journalId, receipts: pending },
+      opened: {
+        journalId,
+        receipts: chunk.receipts,
+        entries: chunk.entries,
+        remaining: pending.length - chunk.receipts.length,
+      },
       recovered: inFlight.length,
     };
   });
@@ -527,15 +582,28 @@ function serializedPerOwner<T>(
 }
 
 /** Present every pending receipt of the active owner through the write-ahead
- * journal: journal → submit (keyed by receipt id) → apply atomically. A lost
- * connection or an unreadable answer leaves the entry `in_flight` (a HOLD)
- * and throws; the receipts stay queued and the next drain re-presents the
- * same ids. Corrupt journal state fails before anything is sent. */
+ * journal, one byte-bounded chunk at a time: journal → submit (keyed by
+ * receipt id) → apply atomically, then the next chunk, until every receipt
+ * pending at the start has been presented once (a receipt the server held
+ * stays pending and is re-presented by the NEXT drain, not this one). A lost
+ * connection or an unreadable answer leaves that chunk's entry `in_flight`
+ * (a HOLD) and throws; its receipts stay queued and the next drain
+ * re-presents the same ids. Corrupt journal, grant or shot state fails before
+ * anything is journalled or sent. */
+export interface OfflineWalletReconcileOptions {
+  /** Presentation bound in JSON characters; defaults to
+   * `OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS`. */
+  readonly presentationMaxChars?: number;
+}
+
 export async function reconcileOfflineWallet(
   rawDb: LocalDb,
   client: OfflineGrantClient,
   reading: TrustedTimeReading,
+  options: OfflineWalletReconcileOptions = {},
 ): Promise<OfflineWalletReconciliation> {
+  const maxChars =
+    options.presentationMaxChars ?? OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS;
   const idle: OfflineWalletReconciliation = {
     submitted: 0,
     accepted: 0,
@@ -549,27 +617,40 @@ export async function reconcileOfflineWallet(
   const context = captureDataOwnerContext();
   const db = forDataOwner(rawDb, context);
   return serializedPerOwner(context.ownerKey, async () => {
-    const plan = await openPresentation(db, context, reading);
-    if (plan.opened === null) return { ...idle, recovered: plan.recovered };
-    const entries: OfflineReceiptWireEntry[] = [];
-    for (const receipt of plan.opened.receipts)
-      entries.push(await wireEntry(db, context, receipt));
-    const verdicts = await client.submitReceipts(entries);
-    const applied = await applyVerdicts(
-      db,
-      context,
-      plan.opened,
-      verdicts,
-      reading,
-    );
+    const totals = { submitted: 0, accepted: 0, held: 0, refused: 0, stale: 0 };
+    const presented = new Set<string>();
+    let recovered = 0;
+    for (;;) {
+      const plan = await openPresentation(
+        db,
+        context,
+        reading,
+        presented,
+        maxChars,
+      );
+      recovered += plan.recovered;
+      if (plan.opened === null) break;
+      for (const receipt of plan.opened.receipts)
+        presented.add(receipt.receiptId);
+      const verdicts = await client.submitReceipts(plan.opened.entries);
+      const applied = await applyVerdicts(
+        db,
+        context,
+        plan.opened,
+        verdicts,
+        reading,
+      );
+      totals.submitted += plan.opened.receipts.length;
+      totals.accepted += applied.accepted;
+      totals.held += applied.held;
+      totals.refused += applied.refused;
+      totals.stale += applied.stale;
+      if (plan.opened.remaining === 0) break;
+    }
     return {
-      submitted: plan.opened.receipts.length,
-      accepted: applied.accepted,
-      held: applied.held,
-      refused: applied.refused,
+      ...totals,
       pending: (await pendingOfflineReceipts(db)).length,
-      recovered: plan.recovered,
-      stale: applied.stale,
+      recovered,
     };
   });
 }
