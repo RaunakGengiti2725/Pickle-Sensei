@@ -2,3 +2,7 @@ project_id = "pickle-sensei"
 
 [functions.api]
 verify_jwt = false
+# Server-side bundling (no Docker) walks imports literally and cannot follow the
+# deno.json ".js" -> ".ts" import-map entries into packages/shared-types, so the
+# mapped modules are uploaded as assets; the bundler then resolves them as usual.
+static_files = ["../packages/shared-types/src/*.ts"]
