@@ -47,6 +47,10 @@ import {
   createSqliteTestDb,
   seedSqliteCapture,
 } from '../testSupport/sqlite';
+import {
+  activeReleaseAuthorityResponse,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
 
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
@@ -147,6 +151,8 @@ describeReal(
       };
 
       const fetchMock = jest.fn(async (url: string) => {
+        if (isReleasePolicyRequest(url))
+          return activeReleaseAuthorityResponse();
         if (url.endsWith('/v1/analysis-permits')) {
           return {
             ok: true,
@@ -213,6 +219,9 @@ describeReal(
           }`,
         );
       }
+      expect(
+        fetchMock.mock.calls.some(([url]) => isReleasePolicyRequest(url)),
+      ).toBe(true);
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('/v1/analysis-permits'),
         expect.anything(),
