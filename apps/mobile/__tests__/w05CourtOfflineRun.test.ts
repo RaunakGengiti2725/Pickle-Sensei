@@ -1322,16 +1322,30 @@ describe('a refused verdict', () => {
     expect((await readOfflineWalletStatus(store.db)).pending).toEqual([]);
   });
 
-  it('control: a shot with no offline receipt and no outbox row reads as absent', async () => {
+  it('control: a court-scored read whose receipt is still pending reads as queued (never presented yet), and as absent once accepted', async () => {
     const { store, request } = await setup({
       signal: 'offline',
       policy: true,
       grant: true,
     });
     const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
     if (outcome.kind !== 'scored' || !outcome.record.result) return;
-    expect(
-      await getShotOutboxStatus(store.db, outcome.record.result.id),
-    ).toEqual({ state: 'absent' });
+    const shotId = outcome.record.result.id;
+    expect(await getShotOutboxStatus(store.db, shotId)).toEqual({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
+    court('online', 'result_recorded');
+    const client = createOfflineGrantClient({
+      baseUrl: API_ORIGIN,
+      token: BEARER,
+    });
+    await reconcileOfflineWallet(store.db, client, reading());
+    expect(await hasShotSyncReceipt(store.db, shotId)).toBe(true);
+    expect(await getShotOutboxStatus(store.db, shotId)).toEqual({
+      state: 'absent',
+    });
   });
 });
