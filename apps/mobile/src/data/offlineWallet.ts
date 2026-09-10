@@ -58,7 +58,8 @@ import {
   type OfflineReceiptReconciliation,
   type OfflineReceiptSettlement,
 } from './offlineCapabilities';
-import { readScoredShotPayload, recordShotSyncReceipt } from './repository';
+import { readScoredShotAnalysis, recordShotSyncReceipt } from './repository';
+import { toOfflineOutput } from './sync';
 import { forDataOwner, withTransaction } from './transactions';
 import type { TrustedTimeReading } from './trustedTime';
 
@@ -328,21 +329,26 @@ function submission(
   return body;
 }
 
-/** The exact output a receipt paid for, as the receipt hashed it: the shot
- * payload without any live-permit binding. Null when this device no longer
- * holds that exact payload — the server is told so rather than shown a
- * substitute. */
+/** The exact output a receipt paid for, as the receipt hashed it: the
+ * rating's frozen shot.sync payload without any live-permit binding. Null
+ * when this device no longer holds that exact rating (missing, unreadable
+ * or altered) — the server is told so rather than shown a substitute. */
 async function presentedOutput(
   db: LocalDb,
   context: DataOwnerContext,
   receipt: OfflineConsumptionReceipt,
 ): Promise<Record<string, unknown> | null> {
-  const payload = await readScoredShotPayload(
+  const analysis = await readScoredShotAnalysis(
     forDataOwner(db, context),
     receipt.resultId,
   );
-  if (payload === null) return null;
-  const { analysisPermitId: _analysisPermitId, ...output } = payload;
+  if (analysis === null) return null;
+  let output: Record<string, unknown>;
+  try {
+    output = toOfflineOutput(analysis);
+  } catch {
+    return null;
+  }
   return sha256Hex(originalCanonicalJson(output)) === receipt.fullOutputSha256
     ? output
     : null;

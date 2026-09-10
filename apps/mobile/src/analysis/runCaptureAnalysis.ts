@@ -1,5 +1,9 @@
 import { Platform } from 'react-native';
-import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
+import type {
+  EnvelopeVerdict,
+  ShotAnalysis,
+  ShotTypeSlug,
+} from '@pickle/shared-types';
 import {
   analyzeCapture,
   FUSION_ENGINE_VERSION,
@@ -57,6 +61,7 @@ import {
   readOfflineAllocation,
   readOfflineReceiptForOperation,
 } from '../data/offlineCapabilities';
+import { toOfflineOutput } from '../data/sync';
 import { trustedTime, type TrustedTimeReading } from '../data/trustedTime';
 import { createFusionProviders } from '../vision/providers';
 import {
@@ -1231,11 +1236,21 @@ async function readOfflineScoredReplay(
     }) ||
     record.captureId !== run.captureId ||
     record.result.resultKind !== 'scored' ||
-    sha256Hex(originalCanonicalJson(JSON.parse(row.shot_payload))) !==
-      receipt.fullOutputSha256
+    offlineOutputSha256(row.shot_payload) !== receipt.fullOutputSha256
   )
     throw new RunJournalError('identity_conflict');
   return record;
+}
+
+/** Digest of the persisted rating as its receipt paid for it (frozen
+ * shot.sync shape); null when the payload cannot be read as a rating. */
+function offlineOutputSha256(shotPayload: string): string | null {
+  try {
+    const analysis = JSON.parse(shotPayload) as ShotAnalysis;
+    return sha256Hex(originalCanonicalJson(toOfflineOutput(analysis)));
+  } catch {
+    return null;
+  }
 }
 
 class TechniqueConfirmationHeldError extends Error {}
@@ -2100,18 +2115,18 @@ async function runCaptureAnalysisCore(
             assertCurrent();
           }
           if (offlineAuthority !== null) {
-            // Spend the held grant on this exact output — hashed as the shot
-            // payload is persisted and later presented — then persist the
-            // rating the receipt names: one transaction, exactly once.
-            const shotPayload: unknown = JSON.parse(
-              JSON.stringify(record.result),
-            );
+            // Spend the held grant on this exact output — the rating's frozen
+            // shot.sync payload, as the receipt later presents it to the
+            // server — then persist the rating the receipt names: one
+            // transaction, exactly once.
             const consumed = await consumeOfflineAllocation(
               rawTransaction,
               {
                 operationId: journalRun.operationId,
                 resultId: record.result.id,
-                fullOutputSha256: sha256Hex(originalCanonicalJson(shotPayload)),
+                fullOutputSha256: sha256Hex(
+                  originalCanonicalJson(toOfflineOutput(record.result)),
+                ),
                 grantId: offlineAuthority.grantId,
               },
               offlineAuthority.reading,

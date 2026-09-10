@@ -256,13 +256,12 @@ export async function saveOfflineAnalysis(
   });
 }
 
-/** The exact persisted payload of one of this owner's real scored shots, as
- * an offline receipt presents it (`output`), or null when the device no
- * longer holds it. */
-export async function readScoredShotPayload(
+/** One of this owner's persisted real scored ratings, or null when the
+ * device no longer holds it or holds a payload it can no longer read. */
+export async function readScoredShotAnalysis(
   db: LocalDb,
   shotId: string,
-): Promise<Record<string, unknown> | null> {
+): Promise<ShotAnalysis | null> {
   const owner = writeOwner(db);
   const { rows } = await db.execute(
     `SELECT payload FROM local_shot
@@ -271,10 +270,20 @@ export async function readScoredShotPayload(
   );
   const payload = rows[0]?.['payload'];
   if (typeof payload !== 'string') return null;
-  const parsed: unknown = JSON.parse(payload);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
+  }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
     return null;
-  return parsed as Record<string, unknown>;
+  const analysis = parsed as ShotAnalysis;
+  return analysis.id === shotId &&
+    analysis.source === 'real' &&
+    analysis.resultKind === 'scored'
+    ? analysis
+    : null;
 }
 
 /** Mark a shot delivered to the server outside the `shot.sync` outbox — an

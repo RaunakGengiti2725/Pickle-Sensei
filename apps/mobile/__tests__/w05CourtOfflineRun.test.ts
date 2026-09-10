@@ -39,6 +39,7 @@ import {
 } from '../src/analysis/runCaptureAnalysis';
 import { OriginalAnalysisExecution } from '../src/analysis/originalAnalysisOperations';
 import { originalCanonicalJson } from '../src/analysis/originalAnalysisSnapshot';
+import { toOfflineOutput } from '../src/data/sync';
 import {
   verifyReleasePolicy,
   writeCachedReleasePolicy,
@@ -586,7 +587,9 @@ it('offline reservation failure + cached policy + executable grant → scored re
     operationId: OPERATION,
     resultId: analysis.id,
     grantId: GRANT_ID,
-    fullOutputSha256: sha256Hex(originalCanonicalJson(analysis)),
+    fullOutputSha256: sha256Hex(
+      originalCanonicalJson(toOfflineOutput(analysis)),
+    ),
     settlement: null,
   });
   expect(receipt.ticket?.ticketId).toBe(TICKETS[0]);
@@ -709,7 +712,7 @@ it('the drain presents { receipt, grant, output } and an accepted verdict marks 
           schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
           compactJws: grantCompactJws(),
         },
-        output: analysis,
+        output: toOfflineOutput(analysis),
       },
     ],
   });
@@ -800,7 +803,9 @@ describe('the shipping entry point (AnalyzeScreen → runOriginalCaptureAnalysis
       operationId: attempts[0]?.operation_id,
       resultId: analysis.id,
       grantId: GRANT_ID,
-      fullOutputSha256: sha256Hex(originalCanonicalJson(analysis)),
+      fullOutputSha256: sha256Hex(
+        originalCanonicalJson(toOfflineOutput(analysis)),
+      ),
       settlement: null,
     });
     expect(await getAnalysis(store.db, analysis.id)).toEqual(analysis);

@@ -32,7 +32,10 @@ import {
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
 import { OriginalAnalysisExecution } from '../src/analysis/originalAnalysisOperations';
-import { runJournal } from '../src/analysis/runJournal';
+import {
+  recoverAnalysisJournals,
+  runJournal,
+} from '../src/analysis/runJournal';
 import {
   verifyReleasePolicy,
   writeCachedReleasePolicy,
@@ -702,6 +705,32 @@ describe('A2 process restart + reconnect recovery', () => {
       expect.objectContaining({ state: 'released', release_outcome: 'failed' }),
     ]);
     expect(analysis.id).toBeTruthy();
+  });
+
+  it('a recovery caller with a RAW permit port still cannot reserve a live permit for an operation paid offline', async () => {
+    const { store, request } = await seed({});
+    await scoredOffline(store, request);
+    const scope = { ownerKey: OWNER, apiOrigin: API_ORIGIN };
+    const reserve = jest.fn(async () => ({
+      permit: {
+        id: '99999999-9999-4999-8999-999999999999',
+        status: 'reserved',
+      },
+    }));
+    const release = jest.fn(async () => undefined);
+
+    await recoverAnalysisJournals(store.db, scope, {
+      ...scope,
+      reserve,
+      release,
+    });
+
+    expect(reserve).not.toHaveBeenCalled();
+    expect(release).not.toHaveBeenCalled();
+    expect(journalRows(store)).not.toEqual([
+      expect.objectContaining({ state: 'released', release_outcome: 'failed' }),
+    ]);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(1);
   });
 
   it('whatever the reconnect sweep did, the replay is the same rating with no second spend and the drain still settles it', async () => {

@@ -69,6 +69,25 @@ export function toSyncPayload(
   };
 }
 
+const OFFLINE_OUTPUT_PERMIT_STAND_IN = 'offline-receipt';
+
+/**
+ * The output an offline consumption receipt pays for and later presents to
+ * the server: this rating in the frozen `shot.sync` payload shape, without
+ * any live-permit binding — exactly the object the server's sync ingress
+ * parses and records. JSON-normalized so the digest taken when the grant is
+ * spent equals the digest of the same rating re-read from the device later.
+ */
+export function toOfflineOutput(
+  analysis: ShotAnalysis,
+): Record<string, unknown> {
+  const { analysisPermitId: _analysisPermitId, ...output } = toSyncPayload(
+    analysis,
+    OFFLINE_OUTPUT_PERMIT_STAND_IN,
+  );
+  return JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+}
+
 /** Bounded attempt budget for permanent failures; transient failures never
  * consume it (see isPermanentSyncFailure). */
 export const OUTBOX_MAX_ATTEMPTS = 8;
