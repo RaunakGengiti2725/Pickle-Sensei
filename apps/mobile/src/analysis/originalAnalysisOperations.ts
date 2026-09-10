@@ -5,6 +5,7 @@ import {
   parseNeedsTechniqueConfirmationRecord,
   type CaptureAnalysisRecord,
 } from '@pickle/analysis-pipeline';
+import type { ShotAnalysis } from '@pickle/shared-types';
 import { parsePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import {
   getApiSession,
@@ -22,6 +23,7 @@ import {
   type DataOwnerContext,
 } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
+import { readOfflineReceiptForOperation } from '../data/offlineCapabilities';
 import { forDataOwner, withTransaction } from '../data/transactions';
 import {
   markCaptureAnalyzed,
@@ -60,7 +62,10 @@ import {
   originalSettingsHash,
   type OriginalAnalysisSnapshot,
 } from './originalAnalysisSnapshot';
-import { confirmationInputsMatch } from './savedTechniqueConfirmation';
+import {
+  confirmationInputsMatch,
+  receiptPaidRun,
+} from './savedTechniqueConfirmation';
 import type { SavedConfirmationUnavailableReason } from './savedTechniqueConfirmation';
 
 export type AnalysisTechnicalFailure =
@@ -249,10 +254,18 @@ async function readOperationRows(
       [ownerKey, originalAnalysisId(row.operation_id)],
     );
     if (partial.rows.length > 1) held('invalid_result_pointer');
+    const offline = await db.execute(
+      `SELECT attempt_id, analysis_id FROM analysis_offline_completion
+       WHERE owner_key = ? AND operation_id = ?`,
+      [ownerKey, originalAnalysisId(row.operation_id)],
+    );
+    if (offline.rows.length > 1) held('invalid_result_pointer');
     joined.push({
       ...row,
       partial_attempt_id: partial.rows[0]?.attempt_id ?? null,
       partial_analysis_id: partial.rows[0]?.analysis_id ?? null,
+      offline_attempt_id: offline.rows[0]?.attempt_id ?? null,
+      offline_analysis_id: offline.rows[0]?.analysis_id ?? null,
     });
   }
   return joined;
@@ -322,17 +335,30 @@ function decodeOperation(
     )
       held('invalid_observation');
   } else if (row.execution_hash !== null) held('invalid_observation');
-  if (!('partial_attempt_id' in row)) held('invalid_result_pointer');
+  if (!('partial_attempt_id' in row) || !('offline_attempt_id' in row))
+    held('invalid_result_pointer');
   const partialAttemptId = nullableId(row.partial_attempt_id);
+  const offlineAttemptId = nullableId(row.offline_attempt_id);
   if (partialAttemptId !== null) {
     if (
       row.final_record_id !== null ||
       row.winning_attempt_id !== null ||
       row.completion_kind !== null ||
+      offlineAttemptId !== null ||
       row.partial_analysis_id !== row.analysis_id
     )
       held('invalid_result_pointer');
   }
+  if (offlineAttemptId !== null) {
+    if (
+      row.final_record_id !== null ||
+      row.winning_attempt_id !== null ||
+      row.completion_kind !== null ||
+      row.offline_analysis_id !== row.analysis_id
+    )
+      held('invalid_result_pointer');
+  }
+  const sideAttemptId = partialAttemptId ?? offlineAttemptId;
   const operation: OriginalAnalysisOperation = Object.freeze({
     operationId: originalAnalysisId(row.operation_id),
     analysisId: originalAnalysisId(row.analysis_id),
@@ -344,17 +370,19 @@ function decodeOperation(
       row.execution_hash === null ? null : originalDigest(row.execution_hash),
     currentAttemptId: nullableId(row.current_attempt_id),
     finalRecordId:
-      partialAttemptId === null
+      sideAttemptId === null
         ? nullableId(row.final_record_id)
         : originalAnalysisId(row.analysis_id),
     winningAttemptId:
-      partialAttemptId === null
+      sideAttemptId === null
         ? nullableId(row.winning_attempt_id)
-        : partialAttemptId,
+        : sideAttemptId,
     completionKind:
-      partialAttemptId === null
+      sideAttemptId === null
         ? (row.completion_kind as OriginalAnalysisOperation['completionKind'])
-        : 'partial',
+        : partialAttemptId !== null
+          ? 'partial'
+          : 'scored',
   });
   if (
     operation.finalRecordId === null
@@ -690,9 +718,11 @@ export async function loadSavedOriginalAnalysis(
             ? !isSettledRefusal(attempt)
             : attempt.technicalFailure !== null ||
               (operation.completionKind === 'scored'
-                ? attempt.run.state !== 'committed' ||
-                  attempt.run.resultId !== operation.finalRecordId
-                : attempt.run.permitId === null ||
+                ? (attempt.run.state !== 'committed' ||
+                    attempt.run.resultId !== operation.finalRecordId) &&
+                  !(await receiptPaidCompletion(tx, operation, attempt))
+                : (attempt.run.permitId === null &&
+                    attempt.run.state !== 'release_pending') ||
                   attempt.run.releaseOutcome !== 'low_confidence' ||
                   !['release_pending', 'released', 'terminal'].includes(
                     attempt.run.state,
@@ -1294,6 +1324,85 @@ function recordMatches(
           operation.snapshot.modelPolicy?.[2]))
   );
 }
+/** The receipt-paid completion of a court-offline scored original: the
+ * attempt never held a permit and stays on its unanswered reservation; the
+ * receipt names this exact result and output digest. */
+async function receiptPaidCompletion(
+  db: LocalDb,
+  operation: OriginalAnalysisOperation,
+  attempt: OriginalAnalysisAttempt,
+): Promise<boolean> {
+  if (attempt.technicalFailure !== null) return false;
+  const { rows } = await db.execute(
+    `SELECT payload FROM local_shot WHERE owner_key = ? AND id = ? AND source = 'real' AND result_kind = 'scored'`,
+    [operation.snapshot.ownerKey, operation.analysisId],
+  );
+  const payload = rows[0]?.payload;
+  if (typeof payload !== 'string') return false;
+  let result: ShotAnalysis;
+  try {
+    result = JSON.parse(payload) as ShotAnalysis;
+  } catch {
+    return false;
+  }
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    result.id !== operation.analysisId ||
+    result.resultKind !== 'scored'
+  )
+    return false;
+  return receiptPaidRun(db, attempt.run, result);
+}
+/** Finalize an original whose scored rating was paid by a held grant inside
+ * the caller's transaction: the rating, the receipt and the run's unanswered
+ * reservation are already durable there. Like the PARTIAL completion, the
+ * pointer lives beside the operation row (`analysis_offline_completion`,
+ * whose admission trigger re-proves the whole chain); the row itself keeps
+ * its permit-backed contract. */
+async function commitReceiptPaid(
+  tx: LocalDb,
+  execution: OriginalAnalysisExecution,
+  operationId: string,
+  run: RunJournalIdentity,
+  record: CaptureAnalysisRecord,
+): Promise<void> {
+  rawOnly(tx);
+  const operation = await assertCurrentAttempt(tx, execution, operationId, run);
+  const attempt = await readAttempt(tx, operation, run.operationId);
+  const receipt = await readOfflineReceiptForOperation(tx, run.operationId);
+  if (
+    record.result?.resultKind !== 'scored' ||
+    readPartialOutcome(record) !== null ||
+    record.result.id !== record.id ||
+    !recordMatches(operation, attempt.run, record) ||
+    operation.finalRecordId !== null ||
+    receipt === null ||
+    receipt.resultId !== record.id ||
+    !(await receiptPaidCompletion(tx, operation, attempt))
+  )
+    held('commit_not_admitted');
+  const { rows } = await tx.execute(
+    `SELECT 1 AS found FROM local_analysis_record WHERE owner_key = ? AND id = ? AND capture_id = ?`,
+    [run.ownerKey, record.id, run.captureId],
+  );
+  if (!rows[0]) held('commit_not_admitted');
+  await tx.execute(
+    `INSERT INTO analysis_offline_completion
+    (owner_key, operation_id, attempt_id, analysis_id, capture_id, receipt_id, created_at_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      run.ownerKey,
+      operationId,
+      run.operationId,
+      record.id,
+      run.captureId,
+      receipt.receiptId,
+      Date.now(),
+    ],
+  );
+  execution.assertCurrent();
+}
 async function commit(
   db: LocalDb,
   execution: OriginalAnalysisExecution,
@@ -1301,6 +1410,7 @@ async function commit(
   run: RunJournalIdentity,
   record: CaptureAnalysisRecord,
   withheld: PartialOutcomeMarker | null = null,
+  reservation: 'reserved' | 'unanswered' = 'reserved',
 ): Promise<void> {
   await currentTransaction(db, execution, async tx => {
     const operation = await assertCurrentAttempt(
@@ -1311,9 +1421,18 @@ async function commit(
     );
     const attempt = await readAttempt(tx, operation, run.operationId);
     const partial = readPartialOutcome(record);
+    // A court-offline abstention never got its reservation answered and
+    // spends nothing: it completes on the pending reservation, which
+    // recovery releases as `low_confidence` once the service answers.
+    const admittedState =
+      reservation === 'reserved'
+        ? attempt.run.state === 'reserved'
+        : attempt.run.state === 'reserve_pending' &&
+          attempt.run.permitId === null &&
+          record.result?.resultKind !== 'scored';
     if (
       (withheld === null
-        ? attempt.run.state !== 'reserved' ||
+        ? !admittedState ||
           partial !== null ||
           attempt.technicalFailure !== null
         : !isSettledRefusal(attempt) ||
@@ -1451,8 +1570,9 @@ async function loadCompletion(
     if (
       !recordMatches(operation, attempt.run, record) ||
       (operation.completionKind === 'scored'
-        ? attempt.run.state !== 'committed' ||
-          attempt.run.resultId !== record.id
+        ? (attempt.run.state !== 'committed' ||
+            attempt.run.resultId !== record.id) &&
+          !(await receiptPaidCompletion(tx, operation, attempt))
         : operation.completionKind === 'partial'
           ? readPartialOutcome(record) === null
           : attempt.run.releaseOutcome !== 'low_confidence' ||
@@ -1475,6 +1595,7 @@ export const originalAnalysisOperations = Object.freeze({
   assertCurrentAttempt,
   requestRelease,
   commit,
+  commitReceiptPaid,
   loadCompletion,
   loadSavedOriginalAnalysis,
 });

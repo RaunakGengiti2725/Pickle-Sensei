@@ -346,4 +346,65 @@ export const ORIGINAL_ANALYSIS_DDL: readonly string[] = [
     BEGIN
       DELETE FROM analysis_partial_completion WHERE owner_key = OLD.owner_key AND operation_id = OLD.operation_id;
     END`,
+  // SCORED completion of an original operation paid on court by an offline
+  // receipt instead of a live permit: the attempt's reservation was never
+  // answered (release_pending / failed, no permit, no result pointer), the
+  // receipt names the attempt and the rating, and the rating is the durable
+  // local shot. Kept beside the operation row exactly like the PARTIAL
+  // completion, for the same reasons; readers join it. Admission proves the
+  // whole chain in one statement.
+  `CREATE TABLE IF NOT EXISTS analysis_offline_completion (
+    owner_key TEXT NOT NULL,
+    operation_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    analysis_id TEXT NOT NULL,
+    capture_id TEXT NOT NULL,
+    receipt_id TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+    PRIMARY KEY (owner_key, operation_id),
+    UNIQUE (owner_key, attempt_id),
+    UNIQUE (owner_key, analysis_id),
+    UNIQUE (owner_key, capture_id),
+    UNIQUE (owner_key, receipt_id)
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_offline_completion_admission
+    BEFORE INSERT ON analysis_offline_completion
+    WHEN NOT EXISTS (
+        SELECT 1 FROM analysis_logical_operations p WHERE p.owner_key = NEW.owner_key AND p.operation_id = NEW.operation_id
+          AND p.analysis_id = NEW.analysis_id AND p.capture_id = NEW.capture_id AND p.current_attempt_id = NEW.attempt_id
+          AND p.final_record_id IS NULL AND p.winning_attempt_id IS NULL AND p.completion_kind IS NULL)
+      OR NOT EXISTS (
+        SELECT 1 FROM analysis_execution_attempts a WHERE a.owner_key = NEW.owner_key AND a.operation_id = NEW.attempt_id
+          AND a.analysis_id = NEW.analysis_id AND a.capture_id = NEW.capture_id AND a.state = 'release_pending'
+          AND a.release_outcome = 'failed' AND a.permit_id IS NULL AND a.result_id IS NULL AND a.technical_failure IS NULL)
+      OR NOT EXISTS (
+        SELECT 1 FROM offline_receipt c WHERE c.owner_key = NEW.owner_key AND c.receipt_id = NEW.receipt_id
+          AND c.operation_id = NEW.attempt_id AND json_valid(c.receipt)
+          AND json_extract(c.receipt, '$.resultId') = NEW.analysis_id)
+      OR NOT EXISTS (
+        SELECT 1 FROM local_analysis_record r WHERE r.owner_key = NEW.owner_key AND r.id = NEW.analysis_id
+          AND r.capture_id = NEW.capture_id)
+      OR NOT EXISTS (
+        SELECT 1 FROM local_shot s WHERE s.owner_key = NEW.owner_key AND s.id = NEW.analysis_id
+          AND s.source = 'real' AND s.result_kind = 'scored')
+      OR EXISTS (SELECT 1 FROM analysis_partial_completion WHERE owner_key = NEW.owner_key AND operation_id = NEW.operation_id)
+    BEGIN SELECT RAISE(ABORT, 'Offline completion requires an unanswered attempt, its receipt and its rating'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_offline_completion_immutable
+    BEFORE UPDATE ON analysis_offline_completion
+    BEGIN SELECT RAISE(ABORT, 'Offline completion is immutable'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_logical_operations_offline_settled
+    BEFORE UPDATE ON analysis_logical_operations
+    WHEN (NEW.current_attempt_id IS NOT OLD.current_attempt_id OR NEW.final_record_id IS NOT NULL
+        OR NEW.winning_attempt_id IS NOT NULL OR NEW.completion_kind IS NOT NULL)
+      AND EXISTS (SELECT 1 FROM analysis_offline_completion c WHERE c.owner_key = OLD.owner_key AND c.operation_id = OLD.operation_id)
+    BEGIN SELECT RAISE(ABORT, 'Original analysis settled offline'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_partial_completion_offline_settled
+    BEFORE INSERT ON analysis_partial_completion
+    WHEN EXISTS (SELECT 1 FROM analysis_offline_completion c WHERE c.owner_key = NEW.owner_key AND c.operation_id = NEW.operation_id)
+    BEGIN SELECT RAISE(ABORT, 'Original analysis settled offline'); END`,
+  `CREATE TRIGGER IF NOT EXISTS analysis_logical_operations_offline_cascade
+    AFTER DELETE ON analysis_logical_operations
+    BEGIN
+      DELETE FROM analysis_offline_completion WHERE owner_key = OLD.owner_key AND operation_id = OLD.operation_id;
+    END`,
 ];

@@ -20,12 +20,14 @@ import {
   isDataOwnerContextCurrent,
   type DataOwnerContext,
 } from '../data/accountScope';
+import { readOfflineReceiptForOperation } from '../data/offlineCapabilities';
 import {
   parseCaptureTargetSeed,
   readCaptureAnalysisSnapshot,
   type CaptureTargetSeed,
   type StoredCaptureAnalysisSnapshot,
 } from '../data/repository';
+import { offlineOutputSha256 } from '../data/sync';
 import {
   readAnalysisJournal,
   runJournal,
@@ -259,11 +261,36 @@ function unavailable(
   return { kind: 'unavailable', reason };
 }
 
-function completed(
+/** A court-offline rating never held a permit: its run keeps the unanswered
+ * reservation and the receipt that spent the grant on exactly this output is
+ * the durable proof of completion. */
+export async function receiptPaidRun(
+  db: LocalDb,
+  journal: RunJournalEntry,
+  result: VerifiedCompletedCaptureRecord['result'],
+): Promise<boolean> {
+  if (
+    journal.permitId !== null ||
+    journal.state !== 'release_pending' ||
+    journal.releaseOutcome !== 'failed' ||
+    journal.resultId !== null ||
+    result.resultKind !== 'scored'
+  )
+    return false;
+  const receipt = await readOfflineReceiptForOperation(db, journal.operationId);
+  return (
+    receipt !== null &&
+    receipt.resultId === result.id &&
+    receipt.fullOutputSha256 === offlineOutputSha256(result)
+  );
+}
+
+async function completed(
+  db: LocalDb,
   snapshot: StoredCaptureAnalysisSnapshot,
   record: Record<string, unknown>,
   journal: RunJournalEntry,
-): SavedTechniqueConfirmationLoad {
+): Promise<SavedTechniqueConfirmationLoad> {
   const row = snapshot.recordRow;
   if (
     !row ||
@@ -298,6 +325,8 @@ function completed(
     metadata.analysisConfidence !== result.analysisConfidence
   )
     return unavailable('corrupt');
+  const receiptPaid =
+    journal.permitId === null && (await receiptPaidRun(db, journal, result));
   if (
     snapshot.status !== 'analyzed' ||
     journal.analysisId !== record.id ||
@@ -306,12 +335,13 @@ function completed(
     selection.ownerKey !== journal.ownerKey ||
     selection.ownerGeneration !== journal.ownerGeneration ||
     selection.apiOrigin !== journal.apiOrigin ||
-    journal.permitId === null ||
+    (journal.permitId === null && !receiptPaid) ||
     result.resultKind !== snapshot.resultKind ||
     result.source !== snapshot.resultSource ||
     result.id !== snapshot.resultId ||
     (result.resultKind === 'scored'
-      ? journal.state !== 'committed' || journal.resultId !== result.id
+      ? !receiptPaid &&
+        (journal.state !== 'committed' || journal.resultId !== result.id)
       : journal.resultId !== null ||
         journal.releaseOutcome !== 'low_confidence' ||
         !['released', 'release_pending', 'terminal'].includes(journal.state))
@@ -438,7 +468,8 @@ export async function loadSavedTechniqueConfirmation(
     )
       return unavailable('superseded');
     if (record.kind !== 'needs_technique_confirmation') {
-      const result = completed(snapshot, record, journal);
+      const result = await completed(request.db, snapshot, record, journal);
+      assertCurrent();
       if (result.kind !== 'already_completed') return result;
       // Completion replay needs no new inference or sidecar, but publishing
       // a newest-result lookup must still survive every intervening await.
@@ -458,7 +489,7 @@ export async function loadSavedTechniqueConfirmation(
         !sameConfirmationJournalIdentity(authoritative, journal)
       )
         return unavailable('corrupt');
-      return completed(latest, record, authoritative);
+      return await completed(request.db, latest, record, authoritative);
     }
     if (!parsed?.ok) return unavailable('corrupt');
     const original = parsed.value;
@@ -468,7 +499,9 @@ export async function loadSavedTechniqueConfirmation(
       selection.apiOrigin !== scope.apiOrigin ||
       selection.ownerGeneration !== journal.ownerGeneration ||
       selection.definitionHash !== journal.requestHash ||
-      journal.permitId === null ||
+      // A court-offline abstention's reservation was never answered: the
+      // permit arrives when recovery finishes the release with signal.
+      (journal.permitId === null && journal.state !== 'release_pending') ||
       journal.resultId !== null ||
       journal.releaseOutcome !== 'low_confidence' ||
       snapshot.resultId !== null ||
