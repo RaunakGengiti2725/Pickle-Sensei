@@ -130,15 +130,15 @@ describe("planOfflineReceiptBatches", () => {
     expect(flat.length).toBe(count);
     flat.forEach((item, i) => expect(item).toBe(queue[i]));
     // Every batch is full: the next queued receipt would not have fit.
-    for (let i = 0; i + 1 < plan.batches.length; i += 1) {
-      const batch = plan.batches[i];
-      const next = plan.batches[i + 1][0];
-      const wouldBe = wireBytes([...batch, next]);
+    plan.batches.forEach((batch, i) => {
+      const following = plan.batches[i + 1];
+      if (following === undefined) return;
+      const wouldBe = wireBytes([...batch, ...following.slice(0, 1)]);
       expect(
         wouldBe > OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES ||
           batch.length === OFFLINE_RECEIPT_BATCH_MAX_ENTRIES,
       ).toBe(true);
-    }
+    });
   });
 
   it("never asks the route to decide more than its per-request budget", () => {
@@ -201,9 +201,9 @@ describe("planOfflineReceiptBatches", () => {
     expect(() => planOfflineReceiptBatches([entry(1)], { maxBodyBytes: 0, maxEntries: 1 })).toThrow(
       RangeError,
     );
-    expect(() => planOfflineReceiptBatches([entry(1)], { maxBodyBytes: 100, maxEntries: 0 })).toThrow(
-      RangeError,
-    );
+    expect(() =>
+      planOfflineReceiptBatches([entry(1)], { maxBodyBytes: 100, maxEntries: 0 }),
+    ).toThrow(RangeError);
     expect(() =>
       planOfflineReceiptBatches([entry(1)], { maxBodyBytes: Number.NaN, maxEntries: 1 }),
     ).toThrow(RangeError);
