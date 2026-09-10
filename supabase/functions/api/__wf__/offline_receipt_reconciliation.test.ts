@@ -56,7 +56,6 @@ import { exportJWK, generateKeyPair } from "jose";
 import {
   OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
   OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
-  OFFLINE_RECONCILIATION_SCHEMA_VERSION,
   OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
   type OfflineDeviceReceipt,
   type OfflineExecutionGrantClaims,
