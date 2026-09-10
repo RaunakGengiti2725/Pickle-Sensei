@@ -557,7 +557,10 @@ Deno.test(
     assertEquals(claims.installationKeyId, INSTALLATION_KEY);
     assertEquals(claims.entitlementSource, "identity_lifetime_free");
     assertEquals(claimsAttestation(signedPayload(body.grant)), []);
-    assertEquals(Object.keys(claims).filter((key) => /attest/i.test(key)), []);
+    assertEquals(
+      Object.keys(claims).filter((key) => /attest/i.test(key)),
+      [],
+    );
 
     // An attested installation's row is echoed as attested — and still not signed.
     h.rpcs.issue_offline_grant = [
@@ -1213,7 +1216,10 @@ Deno.test({
       assertEquals(claims.entitlementSource, "identity_lifetime_free");
       assertEquals(claims.allocation?.ticketIds.length, 2);
       assertEquals(claims.exp - claims.iat, OFFLINE_PRO_LEASE_MAX_SECONDS);
-      assertEquals(Object.keys(claims).filter((k) => /attest/i.test(k)), []);
+      assertEquals(
+        Object.keys(claims).filter((k) => /attest/i.test(k)),
+        [],
+      );
       const verified = await signAndVerify(claims, U(4), key);
       assertEquals(verified.sub, U(4));
       assertEquals(verified.installationKeyId, key);

@@ -2339,7 +2339,9 @@ Deno.test(
       "a grant's attestation state is one of the two device states",
     );
     ok(
-      statements.includes("alter table public.offline_devices add column if not exists revoked_at timestamptz"),
+      statements.includes(
+        "alter table public.offline_devices add column if not exists revoked_at timestamptz",
+      ),
       "a device carries an explicit revocation timestamp",
     );
 
@@ -2451,7 +2453,9 @@ Deno.test(
     ok(
       !statements.some((s) => s.startsWith("create policy")) &&
         !statements.some((s) => s.startsWith("drop policy")) &&
-        !statements.some((s) => s.startsWith("alter table") && s.includes("disable row level security")),
+        !statements.some(
+          (s) => s.startsWith("alter table") && s.includes("disable row level security"),
+        ),
       "the forward migration touches no RLS policy",
     );
     ok(
@@ -2468,7 +2472,8 @@ Deno.test(
       "registration is unchanged — re-registering never clears a revocation",
     );
     ok(
-      !raw.toLowerCase().includes("revoked_at = null") && !raw.toLowerCase().includes("revoked_at := null"),
+      !raw.toLowerCase().includes("revoked_at = null") &&
+        !raw.toLowerCase().includes("revoked_at := null"),
       "nothing in the forward migration clears a revocation",
     );
   },
