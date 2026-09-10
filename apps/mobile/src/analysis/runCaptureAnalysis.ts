@@ -61,6 +61,7 @@ import {
   OfflineGrantError,
   readOfflineAllocation,
   readOfflineReceiptForOperation,
+  type OfflineConsumption,
 } from '../data/offlineCapabilities';
 import { offlineOutputSha256 } from '../data/sync';
 import { trustedTime, type TrustedTimeReading } from '../data/trustedTime';
@@ -1187,13 +1188,49 @@ async function readOfflineRatingAuthority(
   );
   if (policy?.status !== 'active') return null;
   const allocation = await readOfflineAllocation(db, reading).catch(() => null);
-  const grant = allocation?.grants.find(
+  const active = (allocation?.grants ?? []).filter(
+    held => held.execution.kind === 'active',
+  );
+  // A held store lease rates without spending; lifetime free tickets are
+  // spent only when no lease is held, as the live path bypasses the free
+  // allowance for a premium account.
+  const grant =
+    active.find(held => held.entitlementSource !== 'identity_lifetime_free') ??
+    active.find(held => held.remaining > 0);
+  return grant ? { grantId: grant.grantId, reading } : null;
+}
+
+/** Trusted time at the moment of spending. The reading that selected the
+ * authority predates inference; the lease is judged now. An unreadable clock
+ * is the typed reconcile-required refusal, never a spend. */
+async function readSpendTime(): Promise<TrustedTimeReading> {
+  try {
+    return await trustedTime.read();
+  } catch {
+    throw new OfflineGrantError(
+      'offline.time_reconcile_required',
+      'Trusted time is unavailable; connect to reconcile before rating offline.',
+    );
+  }
+}
+
+/** Whether the device has no lifetime free ticket left to spend after this
+ * consumption: the spend was a free ticket and no active held grant keeps a
+ * remaining one. A lease execution never reaches the free limit. */
+async function offlineFreeLimitReached(
+  db: LocalDb,
+  consumed: OfflineConsumption,
+  reading: TrustedTimeReading,
+): Promise<boolean> {
+  if (consumed.grant.entitlementSource !== 'identity_lifetime_free')
+    return false;
+  const wallet = await readOfflineAllocation(db, reading);
+  return !wallet.grants.some(
     held =>
       held.execution.kind === 'active' &&
-      (held.entitlementSource !== 'identity_lifetime_free' ||
-        held.remaining > 0),
+      held.entitlementSource === 'identity_lifetime_free' &&
+      held.remaining > 0,
   );
-  return grant ? { grantId: grant.grantId, reading } : null;
 }
 
 /**
@@ -2119,6 +2156,8 @@ async function runCaptureAnalysisCore(
             // shot.sync payload, as the receipt later presents it to the
             // server — then persist the rating the receipt names: one
             // transaction, exactly once.
+            const spendTime = await readSpendTime();
+            assertCurrent();
             const consumed = await consumeOfflineAllocation(
               rawTransaction,
               {
@@ -2127,16 +2166,19 @@ async function runCaptureAnalysisCore(
                 fullOutputSha256: offlineOutputSha256(record.result),
                 grantId: offlineAuthority.grantId,
               },
-              offlineAuthority.reading,
+              spendTime,
             );
             assertCurrent();
             if (consumed.replayed)
               throw new RunJournalError('invalid_transition');
             // The free limit is reached the moment the last free ticket is
             // spent, exactly as the live path reports it for the last permit.
-            freeLimitReached =
-              consumed.grant.entitlementSource === 'identity_lifetime_free' &&
-              consumed.grant.remaining === 0;
+            freeLimitReached = await offlineFreeLimitReached(
+              rawTransaction,
+              consumed,
+              spendTime,
+            );
+            assertCurrent();
             await saveOfflineAnalysis(
               db,
               record.result,
@@ -2283,7 +2325,8 @@ async function runCaptureAnalysisCore(
         error instanceof OfflineGrantError &&
         (error.code === 'offline.allocation_exhausted' ||
           error.code === 'offline.grant_expired' ||
-          error.code === 'offline.grant_not_held')
+          error.code === 'offline.grant_not_held' ||
+          error.code === 'offline.time_reconcile_required')
       )
         return { kind: 'unavailable', reason: error.message };
       throw error;

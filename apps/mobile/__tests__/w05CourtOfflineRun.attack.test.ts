@@ -1241,9 +1241,12 @@ describe('A8 corrupt or partial persisted state before the drain', () => {
       .prepare(`DELETE FROM offline_grant WHERE owner_key = ? AND grant_id = ?`)
       .run(OWNER, GRANT_ID);
     const online = network({ reserve: OFFLINE, receipts: acceptAll() });
-    await expect(
-      reconcileOfflineWallet(store.db, offlineClient(), reading()),
-    ).rejects.toThrow();
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      offlineClient(),
+      reading(),
+    );
+    expect(drained).toMatchObject({ submitted: 0, unreadable: 1 });
     // Nothing reached the server…
     expect(
       online.calls.filter(call => call.url === RECEIPTS_ROUTE),
