@@ -31,8 +31,6 @@
  * `offline.wallet_corrupt` failure, never an empty wallet.
  */
 import { OFFLINE_SIGNED_GRANT_SCHEMA_VERSION } from '@pickle/shared-types';
-import { sha256Hex } from '@pickle/swing-domain';
-import { originalCanonicalJson } from '../analysis/originalAnalysisSnapshot';
 import { makeUuid } from '../util/uuid';
 import {
   captureDataOwnerContext,
@@ -53,13 +51,14 @@ import {
   OfflineGrantError,
   pendingOfflineReceipts,
   readHeldOfflineGrantJws,
+  readOfflineReceiptForResult,
   settleOfflineReceipt,
   type OfflineConsumptionReceipt,
   type OfflineReceiptReconciliation,
   type OfflineReceiptSettlement,
 } from './offlineCapabilities';
 import { readScoredShotAnalysis, recordShotSyncReceipt } from './repository';
-import { toOfflineOutput } from './sync';
+import { offlineOutputSha256, toOfflineOutput } from './sync';
 import { forDataOwner, withTransaction } from './transactions';
 import type { TrustedTimeReading } from './trustedTime';
 
@@ -322,6 +321,67 @@ export async function readOfflineWalletStatus(
   });
 }
 
+/** What this phone durably knows about the receipt that paid for a rated
+ * result. `queued`: never presented. `held`: the server's decision is not
+ * on file — either a presentation is still unanswered (`answered: false`)
+ * or the server answered and withheld a verdict (`answered: true`).
+ * `refused` carries the server's last refusal code when a journal recorded
+ * one. Null when no offline receipt names the result. */
+export type OfflineReceiptResultEvidence =
+  | { readonly kind: 'queued' }
+  | { readonly kind: 'held'; readonly answered: boolean }
+  | { readonly kind: 'accepted' }
+  | { readonly kind: 'refused'; readonly code: string | null };
+
+export async function readOfflineReceiptEvidence(
+  rawDb: LocalDb,
+  resultId: string,
+): Promise<OfflineReceiptResultEvidence | null> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  return withTransaction(db, async transaction => {
+    const receipt = await readOfflineReceiptForResult(transaction, resultId);
+    if (receipt === null) return null;
+    switch (receipt.settlement) {
+      case 'accepted':
+        return { kind: 'accepted' };
+      case 'refused': {
+        const journal = await loadJournal(
+          transaction,
+          context.ownerKey,
+          'applied',
+        );
+        let code: string | null = null;
+        for (const entry of journal) {
+          for (const verdict of entry.verdicts ?? []) {
+            if (
+              verdict.receiptId === receipt.receiptId &&
+              verdict.verdict === 'refused'
+            ) {
+              code = verdict.code;
+            }
+          }
+        }
+        return { kind: 'refused', code };
+      }
+      case 'held':
+        return { kind: 'held', answered: true };
+      case null: {
+        const inFlight = await loadJournal(
+          transaction,
+          context.ownerKey,
+          'in_flight',
+        );
+        return inFlight.some(entry =>
+          entry.receiptIds.includes(receipt.receiptId),
+        )
+          ? { kind: 'held', answered: false }
+          : { kind: 'queued' };
+      }
+    }
+  });
+}
+
 function submission(
   receipt: OfflineConsumptionReceipt,
 ): OfflineReceiptSubmission {
@@ -349,7 +409,7 @@ async function presentedOutput(
   } catch {
     return null;
   }
-  return sha256Hex(originalCanonicalJson(output)) === receipt.fullOutputSha256
+  return offlineOutputSha256(analysis) === receipt.fullOutputSha256
     ? output
     : null;
 }
@@ -419,10 +479,11 @@ async function chunkPresentation(
 /** Write-ahead step, one transaction: read what is pending, close every
  * unanswered entry as superseded — either the same receipts are about to be
  * re-presented, or every receipt it named has since been settled terminally
- * (the ambiguity is resolved either way) — build the exact wire entries of
- * the next chunk, and commit the new `in_flight` entry for exactly those
- * receipts. Receipts in `presented` were already presented by this drain and
- * wait for the next one. */
+ * (the ambiguity is resolved either way) — and commit the new `in_flight`
+ * entry for the pending receipts. */
+/* The entry names exactly the receipts of the next chunk, whose wire entries
+ * are built here before anything is journalled. Receipts in `presented` were
+ * already presented by this drain and wait for the next one. */
 async function openPresentation(
   db: LocalDb,
   context: DataOwnerContext,
@@ -587,21 +648,23 @@ function serializedPerOwner<T>(
   return result;
 }
 
-/** Present every pending receipt of the active owner through the write-ahead
- * journal, one byte-bounded chunk at a time: journal → submit (keyed by
- * receipt id) → apply atomically, then the next chunk, until every receipt
- * pending at the start has been presented once (a receipt the server held
- * stays pending and is re-presented by the NEXT drain, not this one). A lost
- * connection or an unreadable answer leaves that chunk's entry `in_flight`
- * (a HOLD) and throws; its receipts stay queued and the next drain
- * re-presents the same ids. Corrupt journal, grant or shot state fails before
- * anything is journalled or sent. */
 export interface OfflineWalletReconcileOptions {
   /** Presentation bound in JSON characters; defaults to
    * `OFFLINE_RECEIPT_PRESENTATION_MAX_CHARS`. */
   readonly presentationMaxChars?: number;
 }
 
+/** Present every pending receipt of the active owner through the write-ahead
+ * journal: journal → submit (keyed by receipt id) → apply atomically. A lost
+ * connection or an unreadable answer leaves the entry `in_flight` (a HOLD)
+ * and throws; the receipts stay queued and the next drain re-presents the
+ * same ids. Corrupt journal state fails before anything is sent. */
+/* The queue is presented one byte-bounded chunk at a time, then the next
+ * chunk, until every receipt pending at the start has been presented once (a
+ * receipt the server held stays pending and is re-presented by the NEXT
+ * drain, not this one); a lost answer holds only that chunk's entry. Corrupt
+ * grant or shot state fails the same way corrupt journal state does: before
+ * anything is journalled or sent. */
 export async function reconcileOfflineWallet(
   rawDb: LocalDb,
   client: OfflineGrantClient,

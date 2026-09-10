@@ -21,6 +21,7 @@ import {
   OFFLINE_GRANT_AUDIENCE,
   OFFLINE_GRANT_JWS_TYPE,
   OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
+  type ShotAnalysis,
 } from '@pickle/shared-types';
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
@@ -54,17 +55,23 @@ import {
   type IssuedOfflineGrant,
 } from '../src/data/api';
 import {
+  guardOfflinePaidReservations,
   holdOfflineGrant,
   pendingOfflineReceipts,
   readOfflineAllocation,
 } from '../src/data/offlineCapabilities';
 import {
+  readOfflineReceiptEvidence,
   readOfflineWalletJournal,
   readOfflineWalletStatus,
   reconcileOfflineWallet,
 } from '../src/data/offlineWallet';
 import { getDb } from '../src/data/db';
-import { hasShotSyncReceipt } from '../src/data/repository';
+import {
+  hasShotSyncReceipt,
+  purgeOwnerData,
+  saveOfflineAnalysis,
+} from '../src/data/repository';
 import {
   clearSyncRuntime,
   configureSyncRuntime,
@@ -707,7 +714,7 @@ describe('A2 process restart + reconnect recovery', () => {
     expect(analysis.id).toBeTruthy();
   });
 
-  it('a recovery caller with a RAW permit port still cannot reserve a live permit for an operation paid offline', async () => {
+  it('a recovery caller whose permit port is guarded the way the shipping sync runtime guards it cannot reserve a live permit for an operation paid offline', async () => {
     const { store, request } = await seed({});
     await scoredOffline(store, request);
     const scope = { ownerKey: OWNER, apiOrigin: API_ORIGIN };
@@ -719,11 +726,15 @@ describe('A2 process restart + reconnect recovery', () => {
     }));
     const release = jest.fn(async () => undefined);
 
-    await recoverAnalysisJournals(store.db, scope, {
-      ...scope,
-      reserve,
-      release,
-    });
+    await recoverAnalysisJournals(
+      store.db,
+      scope,
+      guardOfflinePaidReservations(() => store.db, {
+        ...scope,
+        reserve,
+        release,
+      }),
+    );
 
     expect(reserve).not.toHaveBeenCalled();
     expect(release).not.toHaveBeenCalled();
@@ -1435,5 +1446,187 @@ describe('A10 free-rating conservation across settlement', () => {
     expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
     expect(await pendingOfflineReceipts(store.db)).toHaveLength(1);
     expect(outboxKinds(store)).toEqual([]);
+  });
+});
+
+describe('A10 the offline wallet is owner data: purge, digest binding and Result evidence', () => {
+  function refuseAll(code = 'offline.receipt_refused') {
+    return (call: FetchCall) => {
+      const receipts = (call.body.receipts ?? []) as Array<
+        Record<string, unknown>
+      >;
+      return response(200, {
+        receipts: [],
+        rejected: receipts.map(entry => ({
+          receiptId: (entry.receipt as Record<string, unknown>).receiptId,
+          code,
+        })),
+      });
+    };
+  }
+
+  it('deleting the account purges every offline wallet row of that owner and none of another owner', async () => {
+    signIn(OTHER);
+    const store = createSqliteTestDb();
+    await holdOfflineGrant(
+      store.db,
+      issuedGrant(OTHER, OTHER_GRANT_ID, OTHER_TICKETS),
+      BINDING,
+    );
+    signIn(OWNER);
+    const { clip, sidecar } = fixture();
+    mockReadArtifact = async () => sidecar;
+    seedSqliteCapture(store.db, OWNER, CAPTURE, clip);
+    mockReading = reading();
+    const verified = verifyReleasePolicy(activeReleaseAuthority().policy);
+    if (!verified.ok) throw new Error('fixture policy must verify');
+    await writeCachedReleasePolicy(
+      store.db,
+      { ownerKey: OWNER, apiOrigin: API_ORIGIN },
+      { policy: verified.policy, serverTime: Math.floor(NOW_MS / 1000) },
+    );
+    await holdOfflineGrant(store.db, issuedGrant(), BINDING);
+    const request: RunCaptureAnalysisRequest = {
+      db: store.db,
+      ownerContext: captureDataOwnerContext(),
+      operationId: OPERATION,
+      captureId: CAPTURE,
+      clip,
+      declaredStroke: 'forehand_drive',
+      declaredCanonical: 'FOREHAND_DRIVE',
+      handedness: 'right',
+      cameraView: 'side',
+      apiConfig: { baseUrl: API_ORIGIN, token: BEARER },
+      appVersion: '0.1.0',
+    };
+    await scoredOffline(store, request);
+    // A drain the network drops leaves an unanswered journal entry too.
+    network({ reserve: OFFLINE, receipts: () => response(503, {}) });
+    await expect(
+      reconcileOfflineWallet(store.db, offlineClient(), reading()),
+    ).rejects.toThrow();
+    const WALLET_TABLES = [
+      'offline_grant',
+      'offline_ticket',
+      'offline_receipt',
+      'offline_wallet_journal',
+    ] as const;
+    for (const table of WALLET_TABLES) {
+      expect(store.count(table, OWNER)).toBeGreaterThan(0);
+    }
+    expect(store.count('offline_grant', OTHER)).toBe(1);
+    expect(store.count('offline_ticket', OTHER)).toBe(2);
+
+    await purgeOwnerData(store.db, OWNER);
+
+    for (const table of WALLET_TABLES) {
+      expect(store.count(table, OWNER)).toBe(0);
+    }
+    expect(store.count('local_shot', OWNER)).toBe(0);
+    expect(store.count('offline_grant', OTHER)).toBe(1);
+    expect(store.count('offline_ticket', OTHER)).toBe(2);
+    // The purged owner signing back in holds nothing and owes nothing.
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 0 });
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+    expect(await readOfflineWalletStatus(store.db)).toMatchObject({
+      pending: [],
+      hold: false,
+    });
+  });
+
+  it('saveOfflineAnalysis refuses a same-id analysis whose output differs from what the receipt paid for', async () => {
+    const { store, request } = await seed({});
+    const { analysis, receipt } = await scoredOffline(store, request);
+    const before = store.native
+      .prepare(`SELECT payload FROM local_shot WHERE owner_key = ? AND id = ?`)
+      .get(OWNER, analysis.id) as { payload: string };
+    const inflated: ShotAnalysis = {
+      ...analysis,
+      overallScore: Math.min(100, (analysis.overallScore ?? 0) + 25),
+    };
+    await expect(
+      saveOfflineAnalysis(store.db, inflated, receipt.receiptId),
+    ).rejects.toThrow(/paid for a different output/);
+    const after = store.native
+      .prepare(`SELECT payload FROM local_shot WHERE owner_key = ? AND id = ?`)
+      .get(OWNER, analysis.id) as { payload: string };
+    expect(after.payload).toBe(before.payload);
+    expect(store.count('local_shot', OWNER)).toBe(1);
+    // The exact paid output is still persistable (idempotent re-save).
+    await expect(
+      saveOfflineAnalysis(store.db, analysis, receipt.receiptId),
+    ).resolves.toBeUndefined();
+    expect(store.count('local_shot', OWNER)).toBe(1);
+  });
+
+  it('saveOfflineAnalysis refuses a receipt row whose JSON is unreadable instead of throwing a parse error', async () => {
+    const { store, request } = await seed({});
+    const { analysis, receipt } = await scoredOffline(store, request);
+    store.native
+      .prepare(
+        `UPDATE offline_receipt SET receipt = 'not json' WHERE owner_key = ? AND receipt_id = ?`,
+      )
+      .run(OWNER, receipt.receiptId);
+    await expect(
+      saveOfflineAnalysis(store.db, analysis, receipt.receiptId),
+    ).rejects.toThrow(/does not name this analysis/);
+  });
+
+  it('Result evidence names the wallet state: queued → unanswered HOLD → server HOLD → accepted', async () => {
+    const { store, request } = await seed({});
+    const { analysis } = await scoredOffline(store, request);
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toEqual({
+      kind: 'queued',
+    });
+    // A read this owner never paid offline has no receipt evidence at all.
+    expect(
+      await readOfflineReceiptEvidence(
+        store.db,
+        '99999999-9999-4999-8999-999999999999',
+      ),
+    ).toBeNull();
+
+    network({ reserve: OFFLINE, receipts: () => response(503, {}) });
+    await expect(
+      reconcileOfflineWallet(store.db, offlineClient(), reading()),
+    ).rejects.toThrow();
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toEqual({
+      kind: 'held',
+      answered: false,
+    });
+
+    network({ reserve: OFFLINE, receipts: acceptAll('pending') });
+    await reconcileOfflineWallet(store.db, offlineClient(), reading());
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toEqual({
+      kind: 'held',
+      answered: true,
+    });
+
+    network({ reserve: OFFLINE, receipts: acceptAll() });
+    await reconcileOfflineWallet(store.db, offlineClient(), reading());
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toEqual({
+      kind: 'accepted',
+    });
+    expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(true);
+  });
+
+  it('Result evidence for a refused receipt carries the server code and is never "unknown"', async () => {
+    const { store, request } = await seed({});
+    const { analysis } = await scoredOffline(store, request);
+    network({ reserve: OFFLINE, receipts: refuseAll('offline.grant_revoked') });
+    await reconcileOfflineWallet(store.db, offlineClient(), reading());
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toEqual({
+      kind: 'refused',
+      code: 'offline.grant_revoked',
+    });
+    expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(false);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+  });
+
+  it("another owner's receipt is not evidence for the active owner", async () => {
+    const { store, request } = await seed({});
+    const { analysis } = await scoredOffline(store, request);
+    signIn(OTHER);
+    expect(await readOfflineReceiptEvidence(store.db, analysis.id)).toBeNull();
   });
 });

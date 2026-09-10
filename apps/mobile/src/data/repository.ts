@@ -18,7 +18,7 @@ import {
   type DataOwnerContext,
 } from './accountScope';
 import { forDataOwner, withTransaction } from './transactions';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import { OUTBOX_MAX_ATTEMPTS, offlineOutputSha256 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -111,6 +111,10 @@ const OWNER_SCOPED_TABLES = [
   'analysis_run_journal',
   'outbox',
   'sync_receipt',
+  'offline_wallet_journal',
+  'offline_receipt',
+  'offline_ticket',
+  'offline_grant',
 ] as const;
 
 /** Every owner-scoped kv namespace (`<namespace>:<owner>`). Must stay in
@@ -226,14 +230,15 @@ export async function saveOfflineAnalysis(
        WHERE owner_key = ? AND receipt_id = ?`,
       [owner, receiptId],
     );
-    const raw = rows[0]?.['receipt'];
-    const receipt =
-      typeof raw === 'string'
-        ? (JSON.parse(raw) as { resultId?: unknown })
-        : null;
+    const receipt = parseOfflineReceiptIdentity(rows[0]?.['receipt']);
     if (receipt === null || receipt.resultId !== analysis.id) {
       throw new Error(
         'The offline receipt does not name this analysis; the rating is not persisted.',
+      );
+    }
+    if (receipt.fullOutputSha256 !== offlineOutputSha256(analysis)) {
+      throw new Error(
+        'The offline receipt paid for a different output than this analysis; the rating is not persisted.',
       );
     }
     await db.execute(
@@ -254,6 +259,26 @@ export async function saveOfflineAnalysis(
       ],
     );
   });
+}
+
+/** The result and output digest a durable offline receipt commits to; null
+ * when the stored receipt is missing, unreadable or not a receipt. */
+function parseOfflineReceiptIdentity(
+  raw: unknown,
+): { resultId: string; fullOutputSha256: string } | null {
+  if (typeof raw !== 'string') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null;
+  const { resultId, fullOutputSha256 } = parsed as Record<string, unknown>;
+  return typeof resultId === 'string' && typeof fullOutputSha256 === 'string'
+    ? { resultId, fullOutputSha256 }
+    : null;
 }
 
 /** One of this owner's persisted real scored ratings, or null when the

@@ -1,4 +1,6 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
+import { sha256Hex } from '@pickle/swing-domain';
+import { originalCanonicalJson } from '../analysis/originalAnalysisSnapshot';
 import type { LocalDb } from './db';
 import {
   ApiError,
@@ -86,6 +88,14 @@ export function toOfflineOutput(
     OFFLINE_OUTPUT_PERMIT_STAND_IN,
   );
   return JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+}
+
+/** The digest an offline receipt commits to: `toOfflineOutput` canonicalized
+ * the way every other original-analysis digest is. The same function serves
+ * the spend, the replay identity check and the persistence guard, so the
+ * three can never disagree about which output a receipt paid for. */
+export function offlineOutputSha256(analysis: ShotAnalysis): string {
+  return sha256Hex(originalCanonicalJson(toOfflineOutput(analysis)));
 }
 
 /** Bounded attempt budget for permanent failures; transient failures never

@@ -1452,6 +1452,28 @@ export async function readOfflineReceiptForOperation(
   return row ? parseReceiptRow(row) : null;
 }
 
+/** The receipt that paid for the active owner's rated result `resultId`, or
+ * null when no offline receipt names it (the result was rated with a live
+ * permit, or belongs to another owner). Settled receipts are included. */
+export async function readOfflineReceiptForResult(
+  rawDb: LocalDb,
+  resultId: string,
+): Promise<OfflineConsumptionReceipt | null> {
+  if (!isIdentifier(resultId)) return null;
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_receipt WHERE owner_key = ? AND receipt LIKE ?
+     ORDER BY lifecycle_sequence ASC`,
+    [context.ownerKey, `%${JSON.stringify(resultId)}%`],
+  );
+  for (const row of rows) {
+    const receipt = parseReceiptRow(row);
+    if (receipt.resultId === resultId) return receipt;
+  }
+  return null;
+}
+
 /** The exact compact JWS of a grant the active owner holds, re-verified
  * against its stored digest, for presenting a receipt. Another owner's grant
  * and an unknown grant id are both absent. */

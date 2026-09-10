@@ -61,7 +61,7 @@ import {
   readOfflineAllocation,
   readOfflineReceiptForOperation,
 } from '../data/offlineCapabilities';
-import { toOfflineOutput } from '../data/sync';
+import { offlineOutputSha256 } from '../data/sync';
 import { trustedTime, type TrustedTimeReading } from '../data/trustedTime';
 import { createFusionProviders } from '../vision/providers';
 import {
@@ -1236,7 +1236,7 @@ async function readOfflineScoredReplay(
     }) ||
     record.captureId !== run.captureId ||
     record.result.resultKind !== 'scored' ||
-    offlineOutputSha256(row.shot_payload) !== receipt.fullOutputSha256
+    persistedOfflineOutputSha256(row.shot_payload) !== receipt.fullOutputSha256
   )
     throw new RunJournalError('identity_conflict');
   return record;
@@ -1244,10 +1244,9 @@ async function readOfflineScoredReplay(
 
 /** Digest of the persisted rating as its receipt paid for it (frozen
  * shot.sync shape); null when the payload cannot be read as a rating. */
-function offlineOutputSha256(shotPayload: string): string | null {
+function persistedOfflineOutputSha256(shotPayload: string): string | null {
   try {
-    const analysis = JSON.parse(shotPayload) as ShotAnalysis;
-    return sha256Hex(originalCanonicalJson(toOfflineOutput(analysis)));
+    return offlineOutputSha256(JSON.parse(shotPayload) as ShotAnalysis);
   } catch {
     return null;
   }
@@ -2124,9 +2123,7 @@ async function runCaptureAnalysisCore(
               {
                 operationId: journalRun.operationId,
                 resultId: record.result.id,
-                fullOutputSha256: sha256Hex(
-                  originalCanonicalJson(toOfflineOutput(record.result)),
-                ),
+                fullOutputSha256: offlineOutputSha256(record.result),
                 grantId: offlineAuthority.grantId,
               },
               offlineAuthority.reading,
