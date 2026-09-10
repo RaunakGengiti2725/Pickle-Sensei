@@ -1,0 +1,25 @@
+{
+  "tool": "verify-cloud",
+  "git_sha": "6a04b8bd247d0cdbd953da53f3ff8778db24e58a",
+  "dirty": false,
+  "tier": "pr",
+  "started_utc": "20260910T163653Z",
+  "host": "Linux 6.8.0-1061-aws x86_64",
+  "node": "v24.19.0",
+  "ok": true,
+  "reason": "",
+  "stages": [
+    {"name": "deps", "status": "passed", "seconds": 1, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/deps.log"},
+    {"name": "format", "status": "passed", "seconds": 36, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/format.log"},
+    {"name": "lint", "status": "passed", "seconds": 17, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/lint.log"},
+    {"name": "typecheck", "status": "passed", "seconds": 28, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/typecheck.log"},
+    {"name": "test", "status": "passed", "seconds": 168, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/test.log"},
+    {"name": "db", "status": "passed", "seconds": 2, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/db.log"},
+    {"name": "mobile", "status": "passed", "seconds": 448, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/mobile.log"},
+    {"name": "ml", "status": "passed", "seconds": 0, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/ml.log"},
+    {"name": "scripts", "status": "passed", "seconds": 22, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/scripts.log"},
+    {"name": "edge", "status": "passed", "seconds": 106, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/edge.log"},
+    {"name": "rls", "status": "passed", "seconds": 32, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/rls.log"},
+    {"name": "security", "status": "passed", "seconds": 14, "note": "", "log": "artifacts/verify-cloud/20260910T163653Z/security.log"}
+  ]
+}

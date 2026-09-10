@@ -1,0 +1,4 @@
+- `managed-media-ios-simulator.xcresult`: **Passed** — total 37, passed 37, failed 0, skipped 0
+- `managed-media-macos.xcresult`: **Passed** — total 37, passed 37, failed 0, skipped 0
+- `vision-core-ios-simulator.xcresult`: **Passed** — total 165, passed 165, failed 0, skipped 0
+- `vision-core-macos.xcresult`: **Passed** — total 165, passed 165, failed 0, skipped 0

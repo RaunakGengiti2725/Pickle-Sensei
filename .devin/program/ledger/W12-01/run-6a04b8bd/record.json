@@ -1,0 +1,12 @@
+{
+  "package_id": "W12-01",
+  "status": "ACCEPTED",
+  "frozen_sha": "6a04b8bd247d0cdbd953da53f3ff8778db24e58a",
+  "recorded_at": "2026-09-10T17:14:04Z",
+  "evidence": {
+    "pr": "artifacts/verify-cloud/20260910T163653Z (ok=true)",
+    "full": "artifacts/verify-cloud/20260910T165243Z (ok=true)",
+    "edge_live_pg": "1024 passed / 0 failed / 0 ignored"
+  },
+  "note": "coordinator-run on the frozen integration HEAD after W05-07 r11 integration"
+}

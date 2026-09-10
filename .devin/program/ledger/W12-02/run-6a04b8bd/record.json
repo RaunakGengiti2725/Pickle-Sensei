@@ -1,0 +1,12 @@
+{
+  "package_id": "W12-02",
+  "status": "ACCEPTED",
+  "frozen_sha": "6a04b8bd247d0cdbd953da53f3ff8778db24e58a",
+  "recorded_at": "2026-09-10T17:14:04Z",
+  "evidence": {
+    "run_url": "https://github.com/RaunakGengiti2725/Pickle-Sensei/actions/runs/34503212469",
+    "trigger_branch": "ci/mac-w12-02-6a04b8bd",
+    "summary": "ok=true; environment/swift-native/ios-app passed; crash_reports=0 fatal_log_lines=0; wallet survived force-quit"
+  },
+  "note": "coordinator-run on the same frozen SHA as W12-01; packet docs/RELEASE_READINESS_2026-09-10.md"
+}
