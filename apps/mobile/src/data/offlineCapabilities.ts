@@ -1132,6 +1132,25 @@ export async function readOfflineAllocation(
   };
 }
 
+/** Whether the wallet needs a grant from the server: it holds none that can
+ * execute — every grant is expired under trusted time or is a free grant
+ * whose tickets are all spent — and no receipt is still pending (the server
+ * must settle what was spent before the client asks for more). A grant whose
+ * verdict is `reconcile_required` is not a reason to pull: the time is
+ * unproven, not the grant. Pure — it never spends, releases or reclaims. */
+export function offlineGrantPullNeeded(
+  wallet: OfflineAllocationSnapshot,
+): boolean {
+  if (wallet.pendingReceipts > 0) return false;
+  return wallet.grants.every(
+    grant =>
+      grant.execution.kind === 'expired' ||
+      (grant.execution.kind === 'active' &&
+        grant.entitlementSource === 'identity_lifetime_free' &&
+        grant.remaining === 0),
+  );
+}
+
 function selectExecutableGrant(
   grants: readonly StoredOfflineGrant[],
   requestedGrantId: string | undefined,
