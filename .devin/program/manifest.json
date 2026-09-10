@@ -1,7 +1,7 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_sha256": "41b0879fcebc3fc65eabac1c110b967c6459b7272ad02b1e41e334201b9a9465",
   "manifest_version": "2026-09-08.4",
   "packages": [
     {
@@ -2533,6 +2533,68 @@
     {
       "acceptance": [
         {
+          "command": "./supabase/tests/run_rls_tests.sh",
+          "criterion": "fresh-install + all historical-upgrade SQL security matrices pass",
+          "id": "W04-06-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+          "criterion": "frozen Deno 2.5.6 typecheck of the Edge entry point passes",
+          "id": "W04-06-AC2",
+          "kind": "check"
+        },
+        {
+          "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable postgres url> deno task test",
+          "criterion": "full Edge suite passes with a disposable PostgreSQL so no live-DB test is ignored (ignored == 0)",
+          "id": "W04-06-AC3",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "registered 'unattested' installation receives a bounded grant; revoked installation refused; grant row records attestation state",
+          "id": "W04-06-AC4",
+          "kind": "regress"
+        }
+      ],
+      "additive_shared_paths": [],
+      "competing": 1,
+      "deps": [
+        "W04-03"
+      ],
+      "estimate_minutes": 60,
+      "external_blocker": null,
+      "id": "W04-06",
+      "invariants": [
+        "Pro lease ≤ 7 days and ≤ verified entitlement expiry",
+        "free tickets never exceed the identity-lifetime allowance",
+        "no grant claims an attestation the server did not verify"
+      ],
+      "mode": null,
+      "objective": "The shipping app registers its installation through POST /v1/devices/register with p_attested=false, yet issue_offline_grant()/guard_offline_grant refuse any installation that is not 'attested', so no real phone can ever hold a grant. Add a FORWARD migration that lets a registered installation in attestation_state 'unattested' or 'attested' receive a grant (still owner+device bound, ≤7d, ≤ verified entitlement expiry, free tickets ≤ lifetime allowance, revoked/deleted still refused) and records the attestation state the grant was issued under on public.offline_grants; the Edge grant route must not add any 'attested' claim it did not verify. Do NOT weaken: the device must exist and belong to the caller, a revoked device stays refused, conservation stays intact, App Attest verification (when wired later) stays possible. Regress: a live SQL test proving an 'unattested' registered installation is issued a bounded grant and a revoked one is refused; the W04-02 route test proving register→issue works for a fresh installation end to end.",
+      "parent": "W04",
+      "plane": "cloud",
+      "serial_groups": [
+        "sql",
+        "edge-index"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "W04",
+        "W05"
+      ],
+      "title": "SQL+Edge: issue 1.0 offline grants to registered-but-unattested installations (truthfully recorded)",
+      "write_paths": [
+        "supabase/migrations/20260910140000_offline_grants_unattested_installations.sql",
+        "supabase/tests/security_regression.sql",
+        "supabase/functions/api/index.ts",
+        "supabase/functions/api/__wf__/offline_grants_routes.test.ts",
+        "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
           "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
           "criterion": "XCTest for wallet passes on iOS Simulator via mac-full-verify swift-native stage",
           "id": "W05-01-AC1",
@@ -2752,6 +2814,147 @@
       "title": "Native acceptance: wallet + secure storage on simulator (launch, store, kill, restore)",
       "write_paths": [
         "tools/macos-ci/"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05GrantPull.test.ts __tests__/syncRuntime*.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w05WalletRecovery.test.ts",
+          "criterion": "grant pull + sync runtime + wallet suites pass",
+          "id": "W05-06-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "signed-in online app with an empty wallet pulls and holds a grant; offline app never requests",
+          "id": "W05-06-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "W05-06-AC3",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "W05-06-AC4",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [
+        "apps/mobile/src/data/api.ts"
+      ],
+      "competing": 1,
+      "deps": [
+        "W04-05",
+        "W05-03",
+        "W05-02"
+      ],
+      "estimate_minutes": 75,
+      "external_blocker": null,
+      "id": "W05-06",
+      "invariants": [
+        "disconnect never reclaims an allocation",
+        "installation key lives only in Keychain",
+        "no request without signal"
+      ],
+      "mode": null,
+      "objective": "Nothing in the shipping app ever calls registerDevice()/requestOfflineGrant(): the wallet is always empty. Wire the pull: (1) a stable per-install installation key id generated once and kept in the device Keychain via react-native-keychain (same service/accessibility pattern as src/account/sessionVault.ts; never SQLite kv; matches ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$); (2) after a successful sync pass in src/data/syncRuntime.ts (signed-in owner, online, trusted-time reading available) when the wallet holds no executable grant — none, expired by trusted time, or a free grant with zero unconsumed tickets and no pending receipts — call registerDevice (idempotent) then requestOfflineGrant with requestedTickets=2 for free and 0 for Pro (server clamps; the app displays only what the server issued) and hold it with holdOfflineGrant; (3) refusals (paywall/entitlement/allowance exhausted) are recorded once and not retried until access changes; transport failures follow the sync backoff; never request while offline; never spend, release or reclaim anything here (allocation ≠ consumption). Add apps/mobile/__tests__/w05GrantPull.test.ts covering: empty wallet + online → register+issue+hold; wallet holding a live grant → no request; expired grant → new request; offline → no request; refusal → no retry storm; installation key stable across relaunch and never persisted outside Keychain.",
+      "parent": "W05",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-data"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "W05",
+        "W04"
+      ],
+      "title": "Mobile: the signed-in app pulls an offline grant when it has signal (stable installation key, register, issue, hold)",
+      "write_paths": [
+        "apps/mobile/src/data/installationKey.ts",
+        "apps/mobile/src/data/syncRuntime.ts",
+        "apps/mobile/src/data/offlineCapabilities.ts",
+        "apps/mobile/__tests__/w05GrantPull.test.ts",
+        "apps/mobile/__tests__/syncRuntime*.test.ts"
+      ]
+    },
+    {
+      "acceptance": [
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts",
+          "criterion": "court-offline run + wallet + partial-outcome suites pass",
+          "id": "W05-07-AC1",
+          "kind": "test"
+        },
+        {
+          "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+          "criterion": "no live permit + held grant + cached policy → scored read with a queued receipt; abstention consumes nothing",
+          "id": "W05-07-AC2",
+          "kind": "regress"
+        },
+        {
+          "command": "cd apps/mobile && npx jest --ci --silent",
+          "criterion": "full mobile Jest suite: 0 failed; the only tolerated skip is the documented Mac-artifact suite",
+          "documented_skips": [
+            "importedRealFootageAnalysis.test.ts"
+          ],
+          "id": "W05-07-AC3",
+          "kind": "test"
+        },
+        {
+          "command": "cd apps/mobile && npx tsc --noEmit",
+          "criterion": "mobile TypeScript passes",
+          "id": "W05-07-AC4",
+          "kind": "check"
+        },
+        {
+          "command": "npx eslint <changed apps/mobile files> && npx prettier --check <changed files>",
+          "criterion": "root ESLint + Prettier pass on every changed file",
+          "id": "W05-07-AC5",
+          "kind": "check"
+        }
+      ],
+      "additive_shared_paths": [
+        "apps/mobile/src/data/api.ts"
+      ],
+      "competing": 1,
+      "deps": [
+        "W04-05",
+        "W01-06",
+        "W05-04"
+      ],
+      "estimate_minutes": 90,
+      "external_blocker": null,
+      "id": "W05-07",
+      "invariants": [
+        "a partial/abstained result never consumes a ticket",
+        "no new numeric score without a cached release policy",
+        "the receipt carries grant + output; nothing is invented server-side"
+      ],
+      "mode": null,
+      "objective": "runCaptureAnalysis() (src/analysis/runCaptureAnalysis.ts) still requires a live reserve_analysis_permit reservation, so a court with no signal can never produce a scored read. Implement the offline branch: when the permit reservation fails for CONNECTIVITY (network/offline classification only — an explicit server refusal such as paywall/allowance is NOT an offline case) and a cached release policy exists (W01-06) and readOfflineAllocation() yields an executable grant (trusted time), run the on-device analysis; on a SCORED, complete result call consumeOfflineAllocation({operationId, resultId, fullOutputSha256 = sha256 of the canonical JSON of the shot payload}) and persist the shot via a new repository saveOfflineAnalysis(db, analysis, receiptId) that writes local_shot but NO `shot.sync` outbox row (the receipt carries the output; the parent session.create row still syncs). Abstentions/partial results spend nothing (no consume). No policy or no grant → the existing honest no-score path. Receipt drain (src/data/offlineWallet.ts submission()) must send the frozen 1.0 wire entry { receipt: <device receipt as persisted>, grant: { schemaVersion: 'offline-signed-grant-v1', compactJws: <held grant's compact_jws> }, output: <the shot payload without analysisPermitId> | null } and parse { receipts, rejected } (api.ts already does). On accepted (result_recorded) mark the local shot synced exactly as a successful shot.sync does; held stays pending (W05-04 copy); refused is surfaced honestly. Extend OfflineReceiptSubmission in api.ts additively. Regress in apps/mobile/__tests__/w05CourtOfflineRun.test.ts: offline reservation failure + grant + policy → scored result + receipt queued; no grant → honest no-score; abstention → nothing consumed; drain posts receipt+grant+output; accepted → shot marked synced; explicit server refusal is not treated as offline.",
+      "parent": "W05",
+      "plane": "cloud",
+      "serial_groups": [
+        "mobile-data"
+      ],
+      "severity": "P0",
+      "source_ids": [
+        "W05",
+        "W04",
+        "W01"
+      ],
+      "title": "Mobile: court-offline scored read — no live permit + held grant → rate, consume locally, queue the receipt with grant+output, settle later",
+      "write_paths": [
+        "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+        "apps/mobile/src/data/repository.ts",
+        "apps/mobile/src/data/offlineWallet.ts",
+        "apps/mobile/src/data/offlineCapabilities.ts",
+        "apps/mobile/__tests__/w05CourtOfflineRun.test.ts",
+        "apps/mobile/__tests__/offlineWallet*.test.ts"
       ]
     },
     {

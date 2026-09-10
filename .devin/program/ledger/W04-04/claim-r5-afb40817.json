@@ -1,0 +1,78 @@
+{
+ "acceptance_results": [
+  {
+   "id": "W04-04-AC1",
+   "status": "PASS",
+   "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+   "exit_code": 0,
+   "executed": 0,
+   "passed": 0,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "artifacts/program/w04-04-r5/ac1_check.log (coordinator VM)",
+   "note": "Run by the coordinator on afb40817: 'Check file:///.../supabase/functions/api/index.ts', EXIT 0."
+  },
+  {
+   "id": "W04-04-AC2",
+   "status": "PASS",
+   "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+   "exit_code": 0,
+   "executed": 1006,
+   "passed": 1006,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "artifacts/program/w04-04-r5/ac2_edge.log (coordinator VM)",
+   "note": "Run by the coordinator on afb40817 against disposable postgres:16 (container pp-edge-pg, shim_auth.sql + every migration in order incl. the r5 20260910120000): 'ok | 1006 passed (31 steps) | 0 failed', EXIT 0, no ignored tests."
+  },
+  {
+   "id": "W04-04-AC3",
+   "status": "PASS",
+   "command": "./supabase/tests/run_rls_tests.sh",
+   "exit_code": 0,
+   "executed": 4,
+   "passed": 4,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "artifacts/program/w04-04-r5/ac3_rls.log (coordinator VM)",
+   "note": "Run by the coordinator on afb40817: fresh + production_20260906 + upstream_20260906 + ordered_20260907 each print SECURITY REGRESSION MATRIX / W07 / W08: ALL CASES PASSED and 'Analysis release policy authority: PASS'; EXIT 0."
+  },
+  {
+   "id": "W04-04-AC4",
+   "status": "PASS",
+   "command": "base de02212a: (a) rls_base built from shim_auth.sql + every migration except the r5 20260910120000 body, HEAD security_regression.sql -> FAILS at U3; (b) git worktree at de02212a + HEAD offline_receipt_reconciliation.test.ts -> 23 passed / 2 failed (the two new tests). HEAD afb40817: both green.",
+   "exit_code": 0,
+   "executed": 2,
+   "passed": 2,
+   "failed": 0,
+   "skipped": 0,
+   "artifact": "coordinator shell transcript (this record)",
+   "note": "BASE: 'U3: a not_chargeable receipt under a consumed ticket is held as conflicting_receipt (got settled, result_recorded, <NULL>, reserved, allocated:2,consumed:2)'; route: FAILED | 23 passed | 2 failed, failures = 'a reversible deny-new freeze on the release is not a withdrawal ...' and 'a reversible freeze on a Pro lease (no ticket) answers pending ...'. HEAD: ALL CASES PASSED; ok | 25 passed | 0 failed. r3/r4 cases (rcpt-10b duplicate batch, rcpt-12b..12g lease evidence) unchanged and still pass."
+  }
+ ],
+ "approach": "Coordinator requeue of the REJECTED r4 candidate (de02212a; verify-6 adversary breaks P1/P1/P2). (1) settle_offline_receipt() [forward-only 20260910120000, replaced in place on the never-applied file] now inspects the ticket's terminal ledger state on the not_chargeable branch too: a receipt naming a ticket the ledger already CONSUMED (another rating) or RELEASED (device returned it) is a durable conflicting_receipt HOLD with the ticket untouched, never result_recorded/reserved that contradicts the ledger; exact redelivery replays the hold. (2) POST /v1/offline/receipts: offlineReceiptReleaseLineage() distinguishes the reversible control-plane freeze (deny_new_authorizations=true, release approved, withdrawnAt null/future) from permanent withdrawal (withdrawnAt<=now). Chargeable work under a freeze is answered delivery:'pending' (reconciliation status 'pending', financialDisposition reserved / not_applicable for a Pro lease) with NO settle RPC and nothing durable, so the identical redelivery settles once the freeze lifts; abstentions still settle under a freeze; only withdrawnAt is the durable grant_revoked HOLD. Regressions: security_regression.sql U3 rcpt-11b (not_chargeable under a CONSUMED ticket -> conflicting_receipt, events unchanged allocated:2,consumed:2, replay idempotent; U3 durable count 22->23) and U8 (release t2 then not_chargeable receipt -> conflicting_receipt, no ticket movement, no shot, replay idempotent); offline_receipt_reconciliation.test.ts +2 route tests (ticketed freeze -> pending, lift -> replay+settle; Pro-lease freeze -> pending not_applicable, later withdrawal -> grant_revoked). Red on base de02212a: U3 'got settled, result_recorded, <NULL>, reserved, allocated:2,consumed:2'; route suite 23 passed / 2 failed (exactly the two new tests). Green on head.",
+ "attachment_urls": [],
+ "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+ "baseline_failures_observed": [],
+ "blocked": false,
+ "blocked_reason": "",
+ "branch": "devin/pp/w04-04/impl-r4",
+ "files_changed": [
+  "supabase/migrations/20260910120000_offline_receipt_lease_evidence.sql",
+  "supabase/tests/security_regression.sql",
+  "supabase/functions/api/index.ts",
+  "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts"
+ ],
+ "head_sha": "afb40817fd014ae9d73156b8f584d35df3466f70",
+ "out_of_scope_files": [],
+ "package_id": "W04-04",
+ "regression_tests_added": [
+  "supabase/tests/security_regression.sql (U3 rcpt-11b: not_chargeable receipt under a CONSUMED ticket is a durable conflicting_receipt HOLD, replay idempotent; U8: not_chargeable receipt under a RELEASED ticket is a durable conflicting_receipt HOLD, no ticket movement, no shot, replay idempotent)",
+  "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (reversible deny-new freeze: chargeable ticketed receipt pending/reserved with no settle RPC, abstention settles, redelivery while frozen pending, lifted -> abstention replayed + chargeable settled; Pro lease under freeze pending/not_applicable, withdrawal afterwards -> durable grant_revoked)"
+ ],
+ "residual_risks": [
+  "A receipt during a reversible freeze is answered pending, the device keeps it queued and redelivers (same path as the unsynced-session pending); if the release is later withdrawn the redelivery becomes the durable grant_revoked HOLD. Mobile already treats delivery:pending as retry-later (W04-05), no mobile change.",
+  "The SQL function is the durable authority for terminal-ticket detection on every billing branch; the route-level freeze handling is defense in depth only (a caller bypassing the route still cannot record against a consumed/released ticket)."
+ ],
+ "round": 5,
+ "summary": "W04-04 r5: not_chargeable receipts under a CONSUMED or RELEASED ticket are durable conflicting_receipt HOLDs (SQL authority, forward-only migration, U3/U8 regressions red on base); the reversible deny_new freeze is no longer a permanent grant_revoked \u2014 chargeable work is answered pending with nothing durable and settles once the freeze lifts, withdrawal alone revokes (2 route regressions red on base). deno check EXIT 0, Edge 1006/0, RLS matrix PASS x4 on afb40817."
+}

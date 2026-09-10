@@ -425,6 +425,66 @@ pkg(
 )
 
 # ---------------------------------------------------------------------------
+# Court-offline shipping path (1.0). The W04/W05 modules exist but the SHIPPING
+# app never pulls a grant, never runs a scored read without a live permit, and
+# never turns its receipts in with the evidence the server needs. These three
+# packages close that gap. Contract frozen 2026-09-08 (W04-04 r6 implements
+# the Edge side):
+#   POST /v1/offline/receipts  body { receipts: [ { receipt, grant, output } ] }
+#     receipt: the DEVICE receipt exactly as apps/mobile persists it
+#              (OfflineReceiptSubmission: receiptId, ownerId, installationKeyId,
+#              grantId, grantJwsSha256, lifecycleSequence, ticket|null,
+#              operationId, resultId, fullOutputSha256, billingDisposition,
+#              queuedAt) — shared-types `validateOfflineDeviceReceiptShape`
+#     grant:   { schemaVersion: "offline-signed-grant-v1", compactJws } — the
+#              held grant the receipt names (offline_grant.compact_jws)
+#     output:  the shot payload the device rated (same object shape as the
+#              `shot.sync` outbox payload, WITHOUT analysisPermitId; its `id` is
+#              the receipt's resultId, sha256 of canonical JSON is
+#              fullOutputSha256) or null for a non-scored outcome
+#   answers 200 { receipts: [ { receiptId, status, reasonCode, financialDisposition,
+#                               resultId, delivery } ],
+#                 rejected: [ { receiptId, code, message } ] }
+#     status ∈ result_recorded | pending | reconciliation_required |
+#              support_review_required | unused_ticket_returned  (what
+#              apps/mobile/src/data/api.ts parseOfflineReceiptVerdicts maps)
+#   POST /v1/devices/register + POST /v1/offline/grants are the W04-02 routes;
+#   1.0 issues grants to a REGISTERED installation whose attestation_state is
+#   'unattested' (App Attest is not wired in the shipping app) and records
+#   that state on the grant — it never claims attestation it did not verify.
+# ---------------------------------------------------------------------------
+pkg(
+    "W04-06", "W04", "SQL+Edge: issue 1.0 offline grants to registered-but-unattested installations (truthfully recorded)",
+    "The shipping app registers its installation through POST /v1/devices/register with p_attested=false, yet issue_offline_grant()/guard_offline_grant refuse any installation that is not 'attested', so no real phone can ever hold a grant. Add a FORWARD migration that lets a registered installation in attestation_state 'unattested' or 'attested' receive a grant (still owner+device bound, ≤7d, ≤ verified entitlement expiry, free tickets ≤ lifetime allowance, revoked/deleted still refused) and records the attestation state the grant was issued under on public.offline_grants; the Edge grant route must not add any 'attested' claim it did not verify. Do NOT weaken: the device must exist and belong to the caller, a revoked device stays refused, conservation stays intact, App Attest verification (when wired later) stays possible. Regress: a live SQL test proving an 'unattested' registered installation is issued a bounded grant and a revoked one is refused; the W04-02 route test proving register→issue works for a fresh installation end to end.",
+    severity="P0", source_ids=["W04", "W05"], plane="cloud", deps=["W04-03"],
+    write_paths=["supabase/migrations/20260910140000_offline_grants_unattested_installations.sql", "supabase/tests/security_regression.sql", "supabase/functions/api/index.ts", "supabase/functions/api/__wf__/offline_grants_routes.test.ts", "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts"],
+    serial_groups=["sql", "edge-index"],
+    acceptance=[RLS, EDGE_CHECK, EDGE_TESTS, regress("registered 'unattested' installation receives a bounded grant; revoked installation refused; grant row records attestation state")],
+    invariants=["Pro lease ≤ 7 days and ≤ verified entitlement expiry", "free tickets never exceed the identity-lifetime allowance", "no grant claims an attestation the server did not verify"],
+    estimate_minutes=60,
+)
+pkg(
+    "W05-06", "W05", "Mobile: the signed-in app pulls an offline grant when it has signal (stable installation key, register, issue, hold)",
+    "Nothing in the shipping app ever calls registerDevice()/requestOfflineGrant(): the wallet is always empty. Wire the pull: (1) a stable per-install installation key id generated once and kept in the device Keychain via react-native-keychain (same service/accessibility pattern as src/account/sessionVault.ts; never SQLite kv; matches ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$); (2) after a successful sync pass in src/data/syncRuntime.ts (signed-in owner, online, trusted-time reading available) when the wallet holds no executable grant — none, expired by trusted time, or a free grant with zero unconsumed tickets and no pending receipts — call registerDevice (idempotent) then requestOfflineGrant with requestedTickets=2 for free and 0 for Pro (server clamps; the app displays only what the server issued) and hold it with holdOfflineGrant; (3) refusals (paywall/entitlement/allowance exhausted) are recorded once and not retried until access changes; transport failures follow the sync backoff; never request while offline; never spend, release or reclaim anything here (allocation ≠ consumption). Add apps/mobile/__tests__/w05GrantPull.test.ts covering: empty wallet + online → register+issue+hold; wallet holding a live grant → no request; expired grant → new request; offline → no request; refusal → no retry storm; installation key stable across relaunch and never persisted outside Keychain.",
+    severity="P0", source_ids=["W05", "W04"], plane="cloud", deps=["W04-05", "W05-03", "W05-02"],
+    write_paths=["apps/mobile/src/data/installationKey.ts", "apps/mobile/src/data/syncRuntime.ts", "apps/mobile/src/data/offlineCapabilities.ts", "apps/mobile/__tests__/w05GrantPull.test.ts", "apps/mobile/__tests__/syncRuntime*.test.ts"],
+    serial_groups=["mobile-data"], additive_shared_paths=["apps/mobile/src/data/api.ts"],
+    acceptance=[mobile_jest("__tests__/w05GrantPull.test.ts __tests__/syncRuntime*.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w05WalletRecovery.test.ts", "grant pull + sync runtime + wallet suites pass"), regress("signed-in online app with an empty wallet pulls and holds a grant; offline app never requests"), MOBILE_TSC, MOBILE_LINT],
+    invariants=["disconnect never reclaims an allocation", "installation key lives only in Keychain", "no request without signal"],
+    estimate_minutes=75,
+)
+pkg(
+    "W05-07", "W05", "Mobile: court-offline scored read — no live permit + held grant → rate, consume locally, queue the receipt with grant+output, settle later",
+    "runCaptureAnalysis() (src/analysis/runCaptureAnalysis.ts) still requires a live reserve_analysis_permit reservation, so a court with no signal can never produce a scored read. Implement the offline branch: when the permit reservation fails for CONNECTIVITY (network/offline classification only — an explicit server refusal such as paywall/allowance is NOT an offline case) and a cached release policy exists (W01-06) and readOfflineAllocation() yields an executable grant (trusted time), run the on-device analysis; on a SCORED, complete result call consumeOfflineAllocation({operationId, resultId, fullOutputSha256 = sha256 of the canonical JSON of the shot payload}) and persist the shot via a new repository saveOfflineAnalysis(db, analysis, receiptId) that writes local_shot but NO `shot.sync` outbox row (the receipt carries the output; the parent session.create row still syncs). Abstentions/partial results spend nothing (no consume). No policy or no grant → the existing honest no-score path. Receipt drain (src/data/offlineWallet.ts submission()) must send the frozen 1.0 wire entry { receipt: <device receipt as persisted>, grant: { schemaVersion: 'offline-signed-grant-v1', compactJws: <held grant's compact_jws> }, output: <the shot payload without analysisPermitId> | null } and parse { receipts, rejected } (api.ts already does). On accepted (result_recorded) mark the local shot synced exactly as a successful shot.sync does; held stays pending (W05-04 copy); refused is surfaced honestly. Extend OfflineReceiptSubmission in api.ts additively. Regress in apps/mobile/__tests__/w05CourtOfflineRun.test.ts: offline reservation failure + grant + policy → scored result + receipt queued; no grant → honest no-score; abstention → nothing consumed; drain posts receipt+grant+output; accepted → shot marked synced; explicit server refusal is not treated as offline.",
+    severity="P0", source_ids=["W05", "W04", "W01"], plane="cloud", deps=["W04-05", "W01-06", "W05-04"],
+    write_paths=["apps/mobile/src/analysis/runCaptureAnalysis.ts", "apps/mobile/src/data/repository.ts", "apps/mobile/src/data/offlineWallet.ts", "apps/mobile/src/data/offlineCapabilities.ts", "apps/mobile/__tests__/w05CourtOfflineRun.test.ts", "apps/mobile/__tests__/offlineWallet*.test.ts"],
+    serial_groups=["mobile-data"], additive_shared_paths=["apps/mobile/src/data/api.ts"],
+    acceptance=[mobile_jest("__tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts", "court-offline run + wallet + partial-outcome suites pass"), regress("no live permit + held grant + cached policy → scored read with a queued receipt; abstention consumes nothing"), MOBILE_FULL_JEST, MOBILE_TSC, MOBILE_LINT],
+    invariants=["a partial/abstained result never consumes a ticket", "no new numeric score without a cached release policy", "the receipt carries grant + output; nothing is invented server-side"],
+    estimate_minutes=90,
+)
+
+# ---------------------------------------------------------------------------
 # W06 — release authority + scoring comparability
 # ---------------------------------------------------------------------------
 pkg(

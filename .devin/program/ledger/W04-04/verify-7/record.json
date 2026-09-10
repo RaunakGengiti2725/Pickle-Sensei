@@ -1,0 +1,242 @@
+{
+  "agent_counts": {
+    "completed": 2,
+    "failed": 0,
+    "launched": 2,
+    "requested": 2
+  },
+  "agents": [
+    {
+      "label": "review-W04-04-vafb40817",
+      "phase": "review",
+      "prompt_sha256": "a7633745d3b54d6910680e34fe8c2b51ddf68cb3316a05b9d198323b0ce3a63f",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-04-vafb40817",
+      "phase": "adversary",
+      "prompt_sha256": "2e7841d5156eea862fe882d997825a645b67b0da0429d5beab01e973fd706bd8",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "coordinator_evidence": [],
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "kind": "candidate_verification",
+  "lib_version": "2026-09-08.10",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-04",
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5087018e-db73-445c-a75f-117030747bfa/attack_candidate_afb40817.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f60a4874-4e4e-4a91-a2d3-779dd293e3ea/attack_base_7cfeacbb.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f42ec6a-f8d2-4427-b2ce-07b35bbefcd6/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/883e9ce5-032e-4874-9dff-98300151abab/ac2_edge_suite_candidate_full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ecde1ba-730a-4486-85e2-17b634124bf6/ac3_rls_candidate.log"
+        ],
+        "attack_branch": "devin/pp/w04-04/attack-afb40817",
+        "attack_branch_sha": "f91d9f8f76acecf5d0d85f0d7844bb0a6088ebf2",
+        "attacked_sha": "afb40817fd014ae9d73156b8f584d35df3466f70",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "The objective ('accepting batches of signed consumption receipts ... each settles at most once') is behaviour on the shipping path: the route must accept what the shipping app sends (or the same package must adapt the client) and answer in the shape the app reads — receipts[{receiptId,status}] + rejected[{receiptId,code}] with every submitted receiptId named exactly once — so a valid receipt reaches settle_offline_receipt and is answered result_recorded/consumed.",
+            "observed": "VERIFIED: POST /v1/offline/receipts with the exact body apps/mobile/src/data/offlineWallet.ts submission() → api.ts submitReceipts() sends ({receipts:[<OfflineResultReceipt without settlement/settledAt>]}) answers 200 {\"results\":[{\"receiptId\":null,\"delivery\":\"rejected\",\"reconciliation\":null,\"error\":{\"code\":\"offline.invalid_input\",\"message\":\"Each entry needs receipt, grant and output.\"}}]}. The answer has no receipts[]/rejected[] and no entry naming the submitted receiptId. INFERRED from base code: apps/mobile/src/data/api.ts parseOfflineReceiptVerdicts() returns null → unreadableAnswer() thrown → syncRuntime.ts catch increments consecutiveFailures on every drain; receipts stay queued forever, the allocated tickets stay counted by offline_hold_count() so a free user's online ratings remain paywalled and the offline results are never settled server-side.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A1 ' attack_w04_04_receipts.test.ts  (test 'A1 [wire contract] ...'; VERIFIED on afb40817: FAILED; on base 7cfeacbb: FAILED with Unknown endpoint)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_04_receipts.test.ts",
+            "title": "Shipping app's receipt drain is incompatible with the route: mobile posts bare OfflineReceiptSubmission entries and reads receipts[]/rejected[], the route demands {receipt,grant,output} envelopes and answers results[] — every device receipt is rejected with receiptId=null and the app can never settle"
+          },
+          {
+            "expected": "Out-of-order and duplicate batches must be safe and replay the durable verdict: an exact redelivery of a settled receipt answers delivery=replayed, status=result_recorded, financialDisposition=consumed regardless of the current release freeze (the freeze may only gate NEW chargeable settlements).",
+            "observed": "VERIFIED: first delivery → delivery=settled, status=result_recorded, financialDisposition=consumed (durable row present). After read_analysis_release_policy reports the same release as deny_new (not withdrawn), the byte-identical receipt is answered {\"delivery\":\"pending\",\"reconciliation\":{\"status\":\"pending\",\"financialDisposition\":\"reserved\"}} and the settlement RPC is not called. reconcileOfflineReceipts (index.ts) evaluates the freeze before the durable replay lookup, so the wire verdict contradicts the ledger (consumed reported as reserved). The mobile maps 'pending' to held, keeps the receipt queued and backs off sync for the whole freeze.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A2a' attack_w04_04_receipts.test.ts  (VERIFIED on afb40817: FAILED; on base: FAILED with Unknown endpoint)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_04_receipts.test.ts",
+            "title": "Reversible deny-new freeze masks the durable verdict: a receipt already SETTLED (ticket consumed, ledger written) redelivered while the release is frozen is answered pending/financialDisposition=reserved without ever consulting settle_offline_receipt"
+          },
+          {
+            "expected": "Exact redelivery of a durably HELD receipt replays delivery=replayed/status=reconciliation_required/reasonCode=conflicting_receipt; a same-id/different-digest receipt is rejected offline.receipt_conflict — the durable identity check (user_id, receipt_id, receipt_sha256) must run before the freeze gate.",
+            "observed": "VERIFIED A2c: receipt first answered held/reasonCode=conflicting_receipt (durable reconciliation_required row); redelivered under deny-new → delivery=pending, status=pending, financialDisposition=reserved. VERIFIED A2b: after a settled receipt, a forged receipt with the same receiptId but a different resultId/fullOutputSha256 under deny-new → delivery=pending instead of rejected offline.receipt_conflict. Nothing durable changes in either case (no double consumption), but the route's verdict is not the database's verdict while the release is frozen.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A2' attack_w04_04_receipts.test.ts  (tests A2b and A2c; VERIFIED on afb40817: both FAILED; on base: FAILED with Unknown endpoint)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_04_receipts.test.ts",
+            "title": "Same freeze short-circuit hides the durable HOLD and the receipt-id conflict: a durably held (conflicting_receipt) receipt redelivered under deny-new is answered pending, and a different receipt reusing a settled receipt id is answered pending instead of offline.receipt_conflict"
+          }
+        ],
+        "package_id": "W04-04",
+        "summary": "ADVERSARY W04-04 vs afb40817fd014ae9d73156b8f584d35df3466f70 (branch devin/pp/w04-04/impl-r4). Attack branch devin/pp/w04-04/attack-afb40817 @ f91d9f8f76acecf5d0d85f0d7844bb0a6088ebf2 (parent afb40817; one file added: supabase/functions/api/__wf__/attack_w04_04_receipts.test.ts, 1463 lines; no production code or candidate tests touched; deno fmt/lint/check of the file clean).\n\nATTACK RUN (VERIFIED) — cmd: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json attack_w04_04_receipts.test.ts → exit 1, 12 executed / 8 passed / 4 failed / 0 ignored (log attack_candidate_afb40817.log). Failing = confirmed breaks: A1 (P1 wire contract), A2a (P1 freeze masks consumed verdict), A2b + A2c (P2 freeze masks conflict / durable hold). Same file on BASE 7cfeacbb (git worktree, own disposable postgres with base migrations, port 55434) → exit 1, 0 passed / 12 failed (route 'Unknown endpoint: POST /v1/offline/receipts', function public.settle_offline_receipt does not exist; log attack_base_7cfeacbb.log) — so every passing attack is candidate-specific behaviour.\n\nATTACKS TRIED (12 tests, 10 classes): A1 wire contract with shipping app drain — BROKE. A2a/A2b/A2c reversible deny-new freeze vs durable settled/held/conflict verdicts — BROKE (3). A3 boundaries (empty/26/non-array/missing batch → 400 no RPC; 25-entry batch with 24 malformed entries settles exactly the valid one; in-batch duplicate ids replay, same-id/different-digest conflicts; oversized body → 413) — held. A4 network failure mid-batch (5xx, 429+Retry-After, 502, malformed row, empty row from the RPC on entry 2 → generic 503, entry 1 durable and replays, nothing fabricated; release-authority unavailable → 503 with no settlement) — held. A5 clocks (grant expired 40 days ago settles via delayed verification at exp-1; future-iat grant HELD; tampered exp HELD, nothing consumed) — held. A6 account switch (B presenting A's receipt+grant → owner_mismatch HOLD under B, nothing settled for A, RPC authorized as B; A settles once later; B's own same-id receipt independent) — held. A7 live concurrency (8-way double submit consumes once + 7 replayed; 8 different receipts racing one ticket → 1 consumed, 7 conflicting_receipt HOLDs; settlement racing release_offline_ticket ends in exactly one terminal ledger event) — held. A8 live authorization (anon, service_role, no API key, no session, expired session, banned user → 42501 and nothing durable; direct table access denied; foreign owner HELD; owner settles once) — held. A9 live free-rating conservation (partial/abstaining/contradictory/out-of-range/far-future outputs never charge; honest receipt charges once; replayed operation under fresh receipt id HOLDs; lifetime_scored_count changes only for the honest scored result) — held. A10 live crash between steps (rolled-back settlement leaves no shot/ledger/settlement row and SETTLES on redelivery; unused-ticket return then late receipt → HOLD; foreign-session evidence not written) — held.\n\nACCEPTANCE RE-RUN ON afb40817 (VERIFIED): AC1 npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts → exit 0 (ac1_deno_check.log). AC2 cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test → exit 0, 1006 passed / 0 failed / 0 ignored (ac2_edge_suite_candidate_full.log; note: with only XC_PG_URL set the run is 994 passed / 12 ignored because W06-01 tests key off PICKLE_AUDIT_PG_URL — the package's literal AC2 command therefore does NOT reach ignored==0 by itself). AC3 ./supabase/tests/run_rls_tests.sh → exit 0, 4 scenarios (fresh, ordered_20260907, production_20260906, upstream_20260906) each 'Analysis release policy authority: PASS', W07 14/14 and W08 5/5 concurrent scenarios (ac3_rls_candidate.log). Disposable postgres: pickle-xc-pg (postgres:16 via __wf__/xc_pg_up.sh, port 55433); never touched project ucqnaiwqwjtgvlduiuib. AC4 (candidate's own regressions on base) was not re-run by the adversary — UNKNOWN here (reviewer's task).\n\nVERDICT: 2 P1 + 1 P2 confirmed breaks → candidate should be REJECTED/requeued. Money-safety held under every attack (no double consumption, no charge for partial/replayed/held work, no unauthorized settlement); the breaks are (1) the route is unreachable by the shipping app's receipt drain (wire-shape mismatch on both request and response — nothing in apps/mobile calls the route as written, so the behaviour objective is not met end to end), and (2) the reversible deny-new freeze gate runs before the durable identity/replay lookup in reconcileOfflineReceipts, so settled/held/conflicting receipts are mis-answered as pending/reserved while a release is frozen."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/program/w04-04-r5/ac1_check.log (coordinator VM)",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC1",
+            "note": "Run by the coordinator on afb40817: 'Check file:///.../supabase/functions/api/index.ts', EXIT 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/program/w04-04-r5/ac2_edge.log (coordinator VM)",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+            "executed": 1006,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC2",
+            "note": "Run by the coordinator on afb40817 against disposable postgres:16 (container pp-edge-pg, shim_auth.sql + every migration in order incl. the r5 20260910120000): 'ok | 1006 passed (31 steps) | 0 failed', EXIT 0, no ignored tests.",
+            "passed": 1006,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/program/w04-04-r5/ac3_rls.log (coordinator VM)",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC3",
+            "note": "Run by the coordinator on afb40817: fresh + production_20260906 + upstream_20260906 + ordered_20260907 each print SECURITY REGRESSION MATRIX / W07 / W08: ALL CASES PASSED and 'Analysis release policy authority: PASS'; EXIT 0.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "coordinator shell transcript (this record)",
+            "command": "base de02212a: (a) rls_base built from shim_auth.sql + every migration except the r5 20260910120000 body, HEAD security_regression.sql -> FAILS at U3; (b) git worktree at de02212a + HEAD offline_receipt_reconciliation.test.ts -> 23 passed / 2 failed (the two new tests). HEAD afb40817: both green.",
+            "executed": 2,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC4",
+            "note": "BASE: 'U3: a not_chargeable receipt under a consumed ticket is held as conflicting_receipt (got settled, result_recorded, <NULL>, reserved, allocated:2,consumed:2)'; route: FAILED | 23 passed | 2 failed, failures = 'a reversible deny-new freeze on the release is not a withdrawal ...' and 'a reversible freeze on a Pro lease (no ticket) answers pending ...'. HEAD: ALL CASES PASSED; ok | 25 passed | 0 failed. r3/r4 cases (rcpt-10b duplicate batch, rcpt-12b..12g lease evidence) unchanged and still pass.",
+            "passed": 2,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Coordinator requeue of the REJECTED r4 candidate (de02212a; verify-6 adversary breaks P1/P1/P2). (1) settle_offline_receipt() [forward-only 20260910120000, replaced in place on the never-applied file] now inspects the ticket's terminal ledger state on the not_chargeable branch too: a receipt naming a ticket the ledger already CONSUMED (another rating) or RELEASED (device returned it) is a durable conflicting_receipt HOLD with the ticket untouched, never result_recorded/reserved that contradicts the ledger; exact redelivery replays the hold. (2) POST /v1/offline/receipts: offlineReceiptReleaseLineage() distinguishes the reversible control-plane freeze (deny_new_authorizations=true, release approved, withdrawnAt null/future) from permanent withdrawal (withdrawnAt<=now). Chargeable work under a freeze is answered delivery:'pending' (reconciliation status 'pending', financialDisposition reserved / not_applicable for a Pro lease) with NO settle RPC and nothing durable, so the identical redelivery settles once the freeze lifts; abstentions still settle under a freeze; only withdrawnAt is the durable grant_revoked HOLD. Regressions: security_regression.sql U3 rcpt-11b (not_chargeable under a CONSUMED ticket -> conflicting_receipt, events unchanged allocated:2,consumed:2, replay idempotent; U3 durable count 22->23) and U8 (release t2 then not_chargeable receipt -> conflicting_receipt, no ticket movement, no shot, replay idempotent); offline_receipt_reconciliation.test.ts +2 route tests (ticketed freeze -> pending, lift -> replay+settle; Pro-lease freeze -> pending not_applicable, later withdrawal -> grant_revoked). Red on base de02212a: U3 'got settled, result_recorded, <NULL>, reserved, allocated:2,consumed:2'; route suite 23 passed / 2 failed (exactly the two new tests). Green on head.",
+        "attachment_urls": [],
+        "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w04-04/impl-r4",
+        "files_changed": [
+          "supabase/migrations/20260910120000_offline_receipt_lease_evidence.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts"
+        ],
+        "head_sha": "afb40817fd014ae9d73156b8f584d35df3466f70",
+        "out_of_scope_files": [],
+        "package_id": "W04-04",
+        "regression_tests_added": [
+          "supabase/tests/security_regression.sql (U3 rcpt-11b: not_chargeable receipt under a CONSUMED ticket is a durable conflicting_receipt HOLD, replay idempotent; U8: not_chargeable receipt under a RELEASED ticket is a durable conflicting_receipt HOLD, no ticket movement, no shot, replay idempotent)",
+          "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (reversible deny-new freeze: chargeable ticketed receipt pending/reserved with no settle RPC, abstention settles, redelivery while frozen pending, lifted -> abstention replayed + chargeable settled; Pro lease under freeze pending/not_applicable, withdrawal afterwards -> durable grant_revoked)"
+        ],
+        "residual_risks": [
+          "A receipt during a reversible freeze is answered pending, the device keeps it queued and redelivers (same path as the unsynced-session pending); if the release is later withdrawn the redelivery becomes the durable grant_revoked HOLD. Mobile already treats delivery:pending as retry-later (W04-05), no mobile change.",
+          "The SQL function is the durable authority for terminal-ticket detection on every billing branch; the route-level freeze handling is defense in depth only (a caller bypassing the route still cannot record against a consumed/released ticket)."
+        ],
+        "round": 5,
+        "summary": "W04-04 r5: not_chargeable receipts under a CONSUMED or RELEASED ticket are durable conflicting_receipt HOLDs (SQL authority, forward-only migration, U3/U8 regressions red on base); the reversible deny_new freeze is no longer a permanent grant_revoked — chargeable work is answered pending with nothing durable and settles once the freeze lifts, withdrawal alone revokes (2 route regressions red on base). deno check EXIT 0, Edge 1006/0, RLS matrix PASS x4 on afb40817."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/review/w04-04-r5/ac1_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC1",
+            "note": "VERIFIED on afb40817 with local Deno 2.9.6 bypassed via npx deno@2.5.6: 'Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts', EXIT 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review/w04-04-r5/ac2_edge_bothvars.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno task test",
+            "executed": 1006,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC2",
+            "note": "VERIFIED on afb40817 against disposable postgres:16 container w0404-pg (shim_auth.sql + every migration incl. 20260910120000; provisioning log artifacts/review/w04-04-r5/pg_provision.log): 'ok | 1006 passed (31 steps) | 0 failed', 0 ignored tests, EXIT 0. A first run with only XC_PG_URL (artifacts/review/w04-04-r5/ac2_edge.log) showed 994 passed / 12 ignored (W06-01 golden cases gated on PICKLE_AUDIT_PG_URL per docs/devin/TEST_MATRIX.md) and was NOT accepted as the pass; the rerun with both URLs is the recorded result.",
+            "passed": 1006,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review/w04-04-r5/ac3_rls.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC3",
+            "note": "VERIFIED on afb40817 with Docker postgres:16: histories fresh, production_20260906, upstream_20260906, ordered_20260907 each print 'SECURITY REGRESSION MATRIX: ALL CASES PASSED', 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED', 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED', 'Analysis release policy authority: PASS'; EXIT 0.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review/w04-04-r5/ac4_route_on_head.log",
+            "command": "BASE: git worktree at 87c4a40d (integration tip = accepted W04-04 r3, parent of the r4/r5 commits; disposable postgres w0404-pg-base built from its migrations, i.e. WITHOUT 20260910120000) + candidate offline_receipt_reconciliation.test.ts: `XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts`; candidate security_regression.sql: `docker exec w0404-pg-base psql -U postgres -v ON_ERROR_STOP=1 -f /head_security_regression.sql`. HEAD afb40817: same deno test against w0404-pg (55432); same psql against a fresh xc_pg_up.sh database (w0404-pg-head-sql, 55436).",
+            "executed": 26,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC4",
+            "note": "VERIFIED. HEAD counts = 25 route tests 'ok | 25 passed | 0 failed' EXIT 0 (ac4_route_on_head.log) + 1 SQL matrix run 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' EXIT 0 (artifacts/review/w04-04-r5/ac4_sql_on_head.log). BASE 87c4a40d: route file 'FAILED | 23 passed | 2 failed' EXIT 1, failures exactly the two new tests 'a reversible deny-new freeze on the release is not a withdrawal ...' (test.ts:1392, got held expected pending) and 'a reversible freeze on a Pro lease (no ticket) answers pending ...' (test.ts:1474) — artifacts/review/w04-04-r5/ac4_route_on_base.log; SQL matrix EXIT 3 at U3 'a not_chargeable receipt under a consumed ticket is held as conflicting_receipt (got settled, result_recorded, <NULL>, reserved, allocated:2,consumed:2)' — artifacts/review/w04-04-r5/ac4_sql_on_base.log. To prove the second new SQL case is also red, a /tmp-only copy with the U3 rcpt-11b/12b..12e RAISE EXCEPTIONs downgraded to NOTICE (repo file untouched) then fails at U8 'a not_chargeable receipt under a released ticket is held as conflicting_receipt (got accepted, settled, result_recorded, <NULL>, reserved)' EXIT 3 — artifacts/review/w04-04-r5/ac4_sql_on_base_u3relaxed2.log. Literal frozen BASE_SHA 7cfeacbb has no /v1/offline/receipts route at all: the copied route file gives 'FAILED | 1 passed | 19 failed | 5 ignored' EXIT 1 (artifacts/review/w04-04-r5/ac4_route_on_frozen_base_7cfeacbb.log; ignored = no XC_PG_URL in that throwaway run), so the meaningful red/green base is the accepted-r3 integration tip. Duplicate-batch-settles-once (rcpt-10b, replay tests) and ambiguous-receipt-HOLD cases remain green on HEAD.",
+            "passed": 26,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Manifest write_path names supabase/migrations/20260908130000_offline_receipt_settlement.sql, but the frozen base already carried migrations up to 20260909210000, so that filename would have violated the 'later than every existing migration' rule; the candidate's W04-04 migrations (20260909220000, 20260909230000, 20260910120000) are all inside the held `sql` serial group and are the only compliant choice. Manifest write_path should be updated to match.",
+          "Two one-line wiring edits outside the literal write_paths originate from the accepted r3 integration (c2236b49 / 7aef8d2a), not from the r5 delta, and are not re-declared in r5's out_of_scope_files: supabase/functions/api/__wf__/http_test.ts:295 (console sink pin 19->20 for the one new structured audit sink in index.ts) and supabase/functions/api/accountDeletionOperations.ts:129 (offline_receipt_settlements: 'cascade_only' so the deletion-inventory test knows the new table). Neither path is under a serial group this package does not hold; both are minimal and required by existing pin tests. Judged justified wiring, not a violation.",
+          "Route-level freeze short-circuit (supabase/functions/api/index.ts ~5444) runs before settle_offline_receipt(), so an exact redelivery of a receipt that was ALREADY durably settled before the freeze is answered delivery:'pending' during the freeze instead of 'replayed'. Nothing durable changes and the ticket cannot move (RPC not called), so at-most-once settlement holds; the device simply keeps the receipt queued until the freeze lifts. Cosmetic/latency only.",
+          "The r5 delta rewords JSDoc/SQL header comments authored by W04-04 in earlier rounds (OfflineReceiptReleaseLineage doc, route verdict legend, 20260910120000 header). No pre-existing (frozen-base) comment is modified: the only removed lines in index.ts vs 7cfeacbb are two import lines; in security_regression.sql the only removed lines are the two grant-matrix rows extended with the new table/function."
+        ],
+        "package_id": "W04-04",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "afb40817fd014ae9d73156b8f584d35df3466f70",
+        "scope_violation": false,
+        "summary": "W04-04 r5 (afb40817) APPROVED. Scope: the 7cfeacbb..afb40817 diff (60 files) is the integration branch's accepted W05-01/W05-04/W05-05/W11-03 integrations plus W04-04; the W04-04-authored commits touch only index.ts, offline_receipt_reconciliation.test.ts, security_regression.sql, three W04-04 migrations inside the held `sql` group, and two one-line pin/wiring edits (http_test.ts sink count, accountDeletionOperations.ts table inventory) that are outside any foreign serial group — no scope violation; the r5 delta itself (87c4a40d..afb40817, 4 files) is entirely inside write_paths/held groups. Behaviour is shipped: apps/mobile/src/data/api.ts:783 POSTs /v1/offline/receipts, the route is dispatched (index.ts:6294) and rate-limited (25/60s). All four acceptance criteria re-run by me on the candidate: AC1 deno 2.5.6 check EXIT 0; AC2 1006 passed / 0 failed / 0 ignored with XC_PG_URL+PICKLE_AUDIT_PG_URL; AC3 four SQL histories all PASS; AC4 red on base (route 23/2 with exactly the two new tests failing; SQL U3 rcpt-11b and U8 r3-released both fail) and green on HEAD (25/0; matrix PASS). Invariants: settle_offline_receipt stays SECURITY DEFINER with search_path='', requires auth.uid()+api_private.is_active_session(), grants execute to authenticated only (revoked from public/anon/service_role), owner/lineage/digest binding and advisory-lock order unchanged; the new terminal-ticket check turns a not_chargeable receipt on a consumed/released ticket into a conflicting_receipt HOLD with the ledger untouched (never refund/retry); the reversible deny-new freeze now yields non-durable 'pending' (no RPC, ticket stays reserved) while withdrawal alone is the durable grant_revoked HOLD; no test weakened (only additive grant-matrix rows and settlement count 16->23), no |any|@ts-ignore|eslint-disable|; migration 20260910120000 is later than every existing file and no applied migration was edited. Non-blocking notes: manifest write_path filename is stale, r3-era wiring edits not re-declared in out_of_scope_files, and an already-settled receipt redelivered during a freeze is answered pending instead of replayed (cosmetic).",
+        "verdict": "approve"
+      },
+      "round": 5
+    }
+  ],
+  "status": "REQUEUE",
+  "wave_id": "verify-7"
+}
