@@ -5050,9 +5050,16 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
 // explicit HOLD reason. A held receipt is recorded with its ticket left
 // reserved: it is never refunded here and never re-run under a new operation.
 
-const OFFLINE_RECEIPT_BATCH_MAX = 25;
+/** The app drains EVERY queued receipt in one POST (a Pro lease can hold a
+ * week of ratings), so a batch is bounded by bytes, never refused for its
+ * length. Entries past this many settlement round trips are answered pending
+ * and settle on the next drain. */
+const OFFLINE_RECEIPT_BATCH_SETTLE_MAX = 250;
 const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
+/** Stands where the permit id would in the shot.sync payload so the offline
+ * output is admitted by the same parser; no permit is reserved offline. */
+const OFFLINE_OUTPUT_PERMIT_STAND_IN = "00000000-0000-4000-8000-000000000000";
 
 type OfflineReceiptHoldReason =
   | "evidence_missing"
@@ -5070,6 +5077,40 @@ interface OfflineReceiptEntry {
   readonly receipt: OfflineDeviceReceipt;
   readonly grant: OfflineSignedExecutionGrant;
   readonly output: Record<string, unknown> | null;
+}
+
+/** The rated shot as the shots writers read it (consume_offline_ticket(),
+ * record_offline_lease_shot()): the shot.sync row without a permit. */
+type OfflineReceiptOutputRow = Omit<SyncShot, "analysisPermitId">;
+
+/** The delivered output is the frozen shot.sync payload WITHOUT
+ * analysisPermitId. It is admitted under exactly the sync ingress's field
+ * rules (parseSyncShot: bounded non-negative ms offsets, real source, score
+ * and confidence ranges, bounded phases/checkpoints, version vector) and
+ * handed on in the row shape; anything the ingress would refuse is null —
+ * ambiguous evidence, never a row. The receipt's digest stays bound to the
+ * object the device delivered, not to this row. */
+function offlineReceiptOutputRow(output: Record<string, unknown>): OfflineReceiptOutputRow | null {
+  if ("analysisPermitId" in output || "settlement" in output) return null;
+  const parsed = parseSyncShot({ ...output, analysisPermitId: OFFLINE_OUTPUT_PERMIT_STAND_IN });
+  if ("rejectedCode" in parsed) return null;
+  const shot = parsed.shot;
+  return {
+    id: shot.id,
+    sessionId: shot.sessionId,
+    shotType: shot.shotType,
+    cameraView: shot.cameraView,
+    capturedAt: shot.capturedAt,
+    startMs: shot.startMs,
+    contactMs: shot.contactMs,
+    endMs: shot.endMs,
+    overallScore: shot.overallScore,
+    confidence: shot.confidence,
+    resultKind: shot.resultKind,
+    phases: shot.phases,
+    checkpoints: shot.checkpoints,
+    versionVector: shot.versionVector,
+  };
 }
 
 /** One `receipts[]` entry of the 1.0 wire contract — what apps/mobile
@@ -5388,7 +5429,8 @@ function offlineReconciliationFromRow(
 // refusal to it. A reversible deny-new freeze on the release travels to the
 // RPC as p_defer_new — settle_offline_receipt() answers what is durable
 // (replay, HOLD replay, same-id conflict) first and defers only a genuinely
-// new chargeable receipt as pending; the edge never answers pending itself.
+// new chargeable receipt as pending; the edge itself answers pending only for
+// entries past OFFLINE_RECEIPT_BATCH_SETTLE_MAX, which it never looked at.
 /** POST /v1/offline/receipts — body { receipts: [{ receipt, grant, output }] }.
  * Answers one result per entry, in order:
  *   settled  — the ticket is consumed (or the no-ticket result recorded) now
@@ -5404,16 +5446,8 @@ function offlineReconciliationFromRow(
 async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request, OFFLINE_RECEIPT_BATCH_BODY_BYTES);
   const receipts = body.receipts;
-  if (
-    !Array.isArray(receipts) ||
-    receipts.length === 0 ||
-    receipts.length > OFFLINE_RECEIPT_BATCH_MAX
-  ) {
-    return codedError(
-      400,
-      OFFLINE_INVALID_INPUT_CODE,
-      `receipts must be an array of 1-${OFFLINE_RECEIPT_BATCH_MAX} entries.`,
-    );
+  if (!Array.isArray(receipts) || receipts.length === 0) {
+    return codedError(400, OFFLINE_INVALID_INPUT_CODE, "receipts must be a non-empty array.");
   }
   const entries: { readonly raw: Record<string, unknown>; readonly receiptId: string }[] = [];
   for (const raw of receipts) {
@@ -5455,6 +5489,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
   const rejected: OfflineReceiptRejection[] = [];
   const tally = { settled: 0, replayed: 0, held: 0, pending: 0 };
   const holdReasons: string[] = [];
+  let settlements = 0;
   for (const entry of entries) {
     const parsed = parseOfflineReceiptEntry(entry.raw, entry.receiptId);
     if ("code" in parsed) {
@@ -5462,6 +5497,20 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       continue;
     }
     const { receipt, output } = parsed;
+    if (settlements >= OFFLINE_RECEIPT_BATCH_SETTLE_MAX) {
+      // Beyond the per-request settlement budget: undecided, nothing written,
+      // the app keeps the receipt queued and redelivers it on the next drain.
+      tally.pending += 1;
+      verdicts.push({
+        receiptId: receipt.receiptId,
+        status: "pending",
+        reasonCode: null,
+        financialDisposition: receipt.ticket === null ? "not_applicable" : "reserved",
+        resultId: null,
+        delivery: "pending",
+      });
+      continue;
+    }
     let holdReason: OfflineReceiptHoldReason | null;
     let frozen: boolean;
     let receiptSha256: string;
@@ -5479,14 +5528,19 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     } catch (error) {
       return serviceUnavailable("Offline receipt settlement", error);
     }
+    const outputRow = output === null ? null : offlineReceiptOutputRow(output);
+    if (holdReason === null && output !== null && outputRow === null) {
+      holdReason = "evidence_ambiguous";
+    }
 
     // The freeze is the database's to apply, AFTER it has looked the receipt
     // up: only a genuinely new chargeable receipt is deferred. The edge never
     // answers pending on its own.
+    settlements += 1;
     const settled = await authed.db.rpc("settle_offline_receipt", {
       p_receipt: receipt,
       p_receipt_sha256: receiptSha256,
-      p_output: output,
+      p_output: outputRow,
       p_hold_reason: holdReason,
       p_defer_new: frozen && holdReason === null,
     });
