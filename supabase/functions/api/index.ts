@@ -106,6 +106,9 @@ import {
   type OfflineGrantKeyRing,
 } from "./offlineSignature.ts";
 import {
+  OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES,
+  OFFLINE_RECEIPT_BATCH_MAX_ENTRIES,
+  OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
   OFFLINE_RECONCILIATION_SCHEMA_VERSION,
   validateOfflineDeviceReceiptShape,
   validateOfflineReconciliationStatus,
@@ -5065,8 +5068,8 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
  * answered pending and settle on the next drain. Replays of a durable verdict
  * do not count: the app re-presents held receipts until they resolve, and a
  * queue of durable HOLDs must never starve the fresh receipt queued behind it. */
-const OFFLINE_RECEIPT_BATCH_SETTLE_MAX = 250;
-const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
+const OFFLINE_RECEIPT_BATCH_SETTLE_MAX = OFFLINE_RECEIPT_BATCH_MAX_ENTRIES;
+const OFFLINE_RECEIPT_BATCH_BODY_BYTES = OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
 /** Stands where the permit id would in the shot.sync payload so the offline
  * output is admitted by the same parser; no permit is reserved offline. */
@@ -5455,7 +5458,17 @@ function offlineReconciliationFromRow(
  * access lock. A database failure answers a generic 503 for the batch —
  * entries already decided stay decided and simply replay next time. */
 async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): Promise<Response> {
-  const body = await readBody(request, OFFLINE_RECEIPT_BATCH_BODY_BYTES);
+  let body: Record<string, unknown>;
+  try {
+    body = await readBody(request, OFFLINE_RECEIPT_BATCH_BODY_BYTES);
+  } catch (error) {
+    if (!(error instanceof RequestBodyTooLarge)) throw error;
+    return codedError(
+      413,
+      OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
+      `A receipt batch is at most ${OFFLINE_RECEIPT_BATCH_BODY_BYTES} bytes of JSON. Deliver the queue in smaller batches.`,
+    );
+  }
   const receipts = body.receipts;
   if (!Array.isArray(receipts) || receipts.length === 0) {
     return codedError(400, OFFLINE_INVALID_INPUT_CODE, "receipts must be a non-empty array.");

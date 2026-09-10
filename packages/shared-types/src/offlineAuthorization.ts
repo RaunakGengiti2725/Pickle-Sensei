@@ -1132,3 +1132,95 @@ function immutableCopy<T>(value: T): T {
 function invalid(code: string, message: string): Result<never> {
   return fail(failure("permanent", `offline_authorization.invalid_${code}`, message));
 }
+
+// ---------------------------------------------------------------------------
+// Delayed reconciliation batches (POST /v1/offline/receipts, 1.0 wire contract)
+// ---------------------------------------------------------------------------
+
+/** The route reads at most this many bytes of request JSON per POST and
+ * answers 413 `OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE` above it. */
+export const OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES = 2_000_000;
+/** The route decides at most this many NEW receipts per POST; entries past
+ * the budget are answered `pending` and must be presented again. */
+export const OFFLINE_RECEIPT_BATCH_MAX_ENTRIES = 250;
+export const OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE = "offline.batch_too_large" as const;
+
+export interface OfflineReceiptBatchLimits {
+  readonly maxBodyBytes: number;
+  readonly maxEntries: number;
+}
+
+export const OFFLINE_RECEIPT_BATCH_LIMITS: OfflineReceiptBatchLimits = Object.freeze({
+  maxBodyBytes: OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES,
+  maxEntries: OFFLINE_RECEIPT_BATCH_MAX_ENTRIES,
+});
+
+export interface OfflineReceiptBatchPlan<T> {
+  /** Requests to send in order; each fits both limits, entries keep queue order. */
+  readonly batches: readonly (readonly T[])[];
+  /** Entries that exceed `maxBodyBytes` alone and can never be delivered as one request. */
+  readonly oversized: readonly T[];
+}
+
+// `JSON.stringify({ receipts: [a, b] })` is `{"receipts":[` a `,` b `]}`.
+const BATCH_ENVELOPE_BYTES = '{"receipts":[]}'.length;
+
+/** Splits a receipt queue into the requests the route accepts: every batch
+ * is at most `maxEntries` entries and its exact wire body
+ * (`JSON.stringify({ receipts: batch })`, UTF-8) is at most `maxBodyBytes`.
+ * Queue order is preserved and every entry appears exactly once, in a batch
+ * or in `oversized`. Batches are filled greedily, so a drain never sends a
+ * request the route would refuse for size or leave undecided for budget. */
+export function planOfflineReceiptBatches<T>(
+  entries: readonly T[],
+  limits: OfflineReceiptBatchLimits = OFFLINE_RECEIPT_BATCH_LIMITS,
+): OfflineReceiptBatchPlan<T> {
+  if (!Number.isInteger(limits.maxBodyBytes) || limits.maxBodyBytes <= BATCH_ENVELOPE_BYTES)
+    throw new RangeError("maxBodyBytes must be an integer larger than the empty batch envelope");
+  if (!Number.isInteger(limits.maxEntries) || limits.maxEntries < 1)
+    throw new RangeError("maxEntries must be a positive integer");
+  const batches: T[][] = [];
+  const oversized: T[] = [];
+  let current: T[] = [];
+  let currentBytes = BATCH_ENVELOPE_BYTES;
+  for (const entry of entries) {
+    const entryBytes = utf8ByteLength(JSON.stringify(entry) ?? "null");
+    if (BATCH_ENVELOPE_BYTES + entryBytes > limits.maxBodyBytes) {
+      oversized.push(entry);
+      continue;
+    }
+    const separator = current.length === 0 ? 0 : 1;
+    if (
+      current.length >= limits.maxEntries ||
+      currentBytes + separator + entryBytes > limits.maxBodyBytes
+    ) {
+      batches.push(current);
+      current = [];
+      currentBytes = BATCH_ENVELOPE_BYTES;
+    }
+    currentBytes += (current.length === 0 ? 0 : 1) + entryBytes;
+    current.push(entry);
+  }
+  if (current.length > 0) batches.push(current);
+  return { batches, oversized };
+}
+
+/** UTF-8 length of `text` as `fetch` encodes a string body (well-formed
+ * JSON.stringify output never contains lone surrogates; one is counted as
+ * the 3-byte replacement the encoder emits). */
+function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const unit = text.charCodeAt(i);
+    if (unit < 0x80) bytes += 1;
+    else if (unit < 0x800) bytes += 2;
+    else if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < text.length ? text.charCodeAt(i + 1) : 0;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        i += 1;
+      } else bytes += 3;
+    } else bytes += 3;
+  }
+  return bytes;
+}
