@@ -11,7 +11,11 @@
  * a single failure for the whole presentation (the journal stays in flight and
  * the SAME receipt ids are re-presented — the route replays durable verdicts).
  */
-import { ApiError, createOfflineGrantClient } from '../src/data/api';
+import {
+  ApiError,
+  OFFLINE_RECEIPT_REQUEST_BUDGET_BYTES,
+  createOfflineGrantClient,
+} from '../src/data/api';
 import type { OfflineReceiptSubmission } from '../src/data/api';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
@@ -24,11 +28,15 @@ function uuidFrom(prefix: string, n: number): string {
   return `${prefix}-${String(n).padStart(4, '0')}-4000-8000-${String(n).padStart(12, '0')}`;
 }
 
-function receipt(n: number, ticket: boolean): OfflineReceiptSubmission {
+function receipt(
+  n: number,
+  ticket: boolean,
+  installationKeyId = 'ios-install-key-1',
+): OfflineReceiptSubmission {
   return {
     receiptId: uuidFrom('aaaaaaaa', n),
     ownerId: OWNER,
-    installationKeyId: 'ios-install-key-1',
+    installationKeyId,
     grantId: uuidFrom('bbbbbbbb', Math.ceil(n / 50)),
     grantJwsSha256: 'c'.repeat(64),
     lifecycleSequence: n,
@@ -48,11 +56,13 @@ function receipt(n: number, ticket: boolean): OfflineReceiptSubmission {
 }
 
 /** Enough receipts that their single-POST body would cross the route cap. */
-function oversizedQueue(): OfflineReceiptSubmission[] {
+function oversizedQueue(
+  installationKeyId?: string,
+): OfflineReceiptSubmission[] {
   const receipts: OfflineReceiptSubmission[] = [];
   let bytes = Buffer.byteLength(JSON.stringify({ receipts: [] }));
   for (let n = 1; bytes <= ROUTE_BODY_CAP_BYTES * 1.2; n += 1) {
-    const next = receipt(n, n % 3 !== 0);
+    const next = receipt(n, n % 3 !== 0, installationKeyId);
     receipts.push(next);
     bytes += Buffer.byteLength(JSON.stringify(next)) + 1;
   }
@@ -110,34 +120,42 @@ describe('W04-04 mobile drain of an oversized receipt queue', () => {
     token: 'access-token',
   });
 
-  it('a queue whose single body would exceed the route cap is presented in requests the route accepts — every receipt named once, verdicts in submitted order', async () => {
-    const queue = oversizedQueue();
-    expect(
-      Buffer.byteLength(JSON.stringify({ receipts: queue })),
-    ).toBeGreaterThan(ROUTE_BODY_CAP_BYTES);
-    const posts: Posted[] = [];
-    const fetchSpy = routeStandIn(posts);
-    try {
-      const verdicts = await client.submitReceipts(queue);
-      expect(verdicts).toEqual(
-        queue.map(entry => ({
-          receiptId: entry.receiptId,
-          verdict: 'accepted',
-          code: 'result_recorded',
-        })),
-      );
-      expect(posts.length).toBeGreaterThan(1);
-      for (const post of posts) {
-        expect(post.bytes).toBeLessThanOrEqual(ROUTE_BODY_CAP_BYTES);
-        expect(post.receiptIds.length).toBeGreaterThan(0);
+  it.each([
+    ['ascii', 'ios-install-key-1'],
+    ['multi-byte (bytes, not characters, are budgeted)', 'ios-clé-键-🔑-1'],
+  ])(
+    'a queue whose single body would exceed the route cap is presented in requests the route accepts — every receipt named once, verdicts in submitted order [%s]',
+    async (_label, installationKeyId) => {
+      const queue = oversizedQueue(installationKeyId);
+      expect(
+        Buffer.byteLength(JSON.stringify({ receipts: queue })),
+      ).toBeGreaterThan(ROUTE_BODY_CAP_BYTES);
+      const posts: Posted[] = [];
+      const fetchSpy = routeStandIn(posts);
+      try {
+        const verdicts = await client.submitReceipts(queue);
+        expect(verdicts).toEqual(
+          queue.map(entry => ({
+            receiptId: entry.receiptId,
+            verdict: 'accepted',
+            code: 'result_recorded',
+          })),
+        );
+        expect(posts.length).toBeGreaterThan(1);
+        for (const post of posts) {
+          expect(post.bytes).toBeLessThanOrEqual(
+            OFFLINE_RECEIPT_REQUEST_BUDGET_BYTES,
+          );
+          expect(post.receiptIds.length).toBeGreaterThan(0);
+        }
+        expect(posts.flatMap(post => post.receiptIds)).toEqual(
+          queue.map(entry => entry.receiptId),
+        );
+      } finally {
+        fetchSpy.mockRestore();
       }
-      expect(posts.flatMap(post => post.receiptIds)).toEqual(
-        queue.map(entry => entry.receiptId),
-      );
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
+    },
+  );
 
   it('a small queue is still one request — the drain is not cut below what the route accepts', async () => {
     const queue = Array.from({ length: 40 }, (_, i) => receipt(i + 1, true));
@@ -183,12 +201,10 @@ describe('W04-04 mobile drain of an oversized receipt queue', () => {
     const posts: Posted[] = [];
     const fetchSpy = routeStandIn(posts);
     try {
-      const error = await client
-        .submitReceipts([...queue, queue[0]!])
-        .then(
-          () => null,
-          (thrown: unknown) => thrown,
-        );
+      const error = await client.submitReceipts([...queue, queue[0]!]).then(
+        () => null,
+        (thrown: unknown) => thrown,
+      );
       expect(error).toBeInstanceOf(ApiError);
       expect((error as ApiError).code).toBe('offline.receipt_duplicate');
       expect(posts).toEqual([]);
