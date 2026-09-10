@@ -688,6 +688,55 @@ const OFFLINE_RECEIPT_STATUS_VERDICTS: ReadonlyMap<
   ['support_review_required', 'held'],
 ]);
 
+/** Upper bound on one `POST /v1/offline/receipts` body. The route refuses a
+ * larger body wholesale before it looks at a single receipt, and the queue
+ * grows without bound while the device is offline, so a drain is cut into
+ * requests under this budget before it leaves the device. Half the route's
+ * cap: headers, framing and the server's own byte count must never cross it. */
+export const OFFLINE_RECEIPT_REQUEST_BUDGET_BYTES = 1_000_000;
+
+function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4;
+      i += 1;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
+/** Split a presentation into consecutive requests whose serialized body stays
+ * under the budget. Order is preserved so the verdicts concatenate back in
+ * submitted order; a single receipt larger than the budget still travels
+ * alone (the route decides it). */
+function chunkOfflineReceiptSubmissions(
+  receipts: readonly OfflineReceiptSubmission[],
+): readonly (readonly OfflineReceiptSubmission[])[] {
+  const framing = utf8ByteLength(JSON.stringify({ receipts: [] }));
+  const chunks: OfflineReceiptSubmission[][] = [];
+  let current: OfflineReceiptSubmission[] = [];
+  let bytes = framing;
+  for (const receipt of receipts) {
+    const size = utf8ByteLength(JSON.stringify(receipt)) + 1;
+    if (
+      current.length > 0 &&
+      bytes + size > OFFLINE_RECEIPT_REQUEST_BUDGET_BYTES
+    ) {
+      chunks.push(current);
+      current = [];
+      bytes = framing;
+    }
+    current.push(receipt);
+    bytes += size;
+  }
+  if (current.length > 0 || chunks.length === 0) chunks.push(current);
+  return chunks;
+}
+
 /** Validate the whole batch before any verdict can settle a receipt: every
  * submitted receipt named exactly once, as a status or a refusal, and no
  * receipt the device did not submit. */
@@ -779,13 +828,21 @@ export function createOfflineGrantClient(
           'The same receipt cannot be presented twice in one batch.',
         );
       }
-      const verdicts = parseOfflineReceiptVerdicts(
-        await request<unknown>(config, 'POST', '/v1/offline/receipts', {
-          receipts,
-        }),
-        ids,
-      );
-      if (verdicts === null) throw unreadableAnswer();
+      // Requests are sequential and the presentation fails as a whole on the
+      // first request without a readable answer: the caller keeps every id
+      // queued and re-presents them, and the route replays what it already
+      // decided durably — no receipt is settled twice, none is dropped.
+      const verdicts: OfflineReceiptVerdict[] = [];
+      for (const chunk of chunkOfflineReceiptSubmissions(receipts)) {
+        const answered = parseOfflineReceiptVerdicts(
+          await request<unknown>(config, 'POST', '/v1/offline/receipts', {
+            receipts: chunk,
+          }),
+          chunk.map(receipt => receipt.receiptId),
+        );
+        if (answered === null) throw unreadableAnswer();
+        verdicts.push(...answered);
+      }
       return verdicts;
     },
   };
