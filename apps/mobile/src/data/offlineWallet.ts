@@ -363,6 +363,8 @@ async function wireEntry(
 interface OpenedPresentation {
   readonly journalId: string;
   readonly receipts: readonly OfflineConsumptionReceipt[];
+  /** The exact request body the journal entry stands for. */
+  readonly entries: readonly OfflineReceiptWireEntry[];
 }
 
 interface PresentationPlan {
@@ -403,6 +405,12 @@ async function openPresentation(
     if (pending.length === 0) {
       return { opened: null, recovered: inFlight.length };
     }
+    // Every wire entry exists before the journal entry is written: a receipt
+    // that cannot be presented fails here, and a request that was never sent
+    // is never journaled as an unanswered presentation.
+    const entries: OfflineReceiptWireEntry[] = [];
+    for (const receipt of pending)
+      entries.push(await wireEntry(transaction, context, receipt));
     const journalId = makeUuid();
     await transaction.execute(
       `INSERT INTO offline_wallet_journal (
@@ -417,7 +425,7 @@ async function openPresentation(
       ],
     );
     return {
-      opened: { journalId, receipts: pending },
+      opened: { journalId, receipts: pending, entries },
       recovered: inFlight.length,
     };
   });
@@ -551,10 +559,7 @@ export async function reconcileOfflineWallet(
   return serializedPerOwner(context.ownerKey, async () => {
     const plan = await openPresentation(db, context, reading);
     if (plan.opened === null) return { ...idle, recovered: plan.recovered };
-    const entries: OfflineReceiptWireEntry[] = [];
-    for (const receipt of plan.opened.receipts)
-      entries.push(await wireEntry(db, context, receipt));
-    const verdicts = await client.submitReceipts(entries);
+    const verdicts = await client.submitReceipts(plan.opened.entries);
     const applied = await applyVerdicts(
       db,
       context,

@@ -271,7 +271,12 @@ export async function readScoredShotPayload(
   );
   const payload = rows[0]?.['payload'];
   if (typeof payload !== 'string') return null;
-  const parsed: unknown = JSON.parse(payload);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
+  }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
     return null;
   return parsed as Record<string, unknown>;
@@ -1120,7 +1125,7 @@ export async function getShotOutboxStatus(
     [owner, shotId],
   );
   const row = rows[0];
-  if (!row) return { state: 'absent' };
+  if (!row) return getOfflineReceiptStatus(db, owner, shotId);
   const attempts = Number(row['attempts'] ?? 0);
   const lastError =
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
@@ -1134,6 +1139,55 @@ export async function getShotOutboxStatus(
   }
   if (attempts > 0) return { state: 'rejected', attempts, lastError };
   return { state: 'queued', attempts, lastError };
+}
+
+/**
+ * A court-offline rating reaches the server through its consumption receipt
+ * instead of a `shot.sync` row, so its durable delivery state is the
+ * receipt's: still queued or held (`queued`, attempts = presentations so
+ * far) or refused by the server (`exhausted` — a refused receipt is never
+ * re-presented; `lastError` is the server's refusal code as journaled by the
+ * wallet). Accepted receipts already hold a sync receipt and never reach
+ * here; a shot without a receipt has no delivery evidence at all.
+ */
+async function getOfflineReceiptStatus(
+  db: LocalDb,
+  owner: string,
+  shotId: string,
+): Promise<ShotOutboxStatus> {
+  const { rows } = await db.execute(
+    `SELECT r.receipt_id, r.settlement, r.settled_at,
+       (SELECT COUNT(*) FROM offline_wallet_journal j, json_each(j.receipt_ids) p
+        WHERE j.owner_key = r.owner_key AND json_valid(j.receipt_ids)
+          AND p.value = r.receipt_id) AS presentations,
+       (SELECT json_extract(v.value, '$.code')
+        FROM offline_wallet_journal j, json_each(j.verdicts) v
+        WHERE j.owner_key = r.owner_key AND j.state = 'applied'
+          AND json_valid(j.verdicts)
+          AND json_extract(v.value, '$.receiptId') = r.receipt_id
+          AND json_extract(v.value, '$.verdict') = 'refused'
+        ORDER BY j.closed_at DESC, j.rowid DESC LIMIT 1) AS refusal_code
+     FROM offline_receipt r
+     WHERE r.owner_key = ?
+       AND CASE WHEN json_valid(r.receipt) THEN json_extract(r.receipt, '$.resultId') END = ?
+     ORDER BY r.queued_at DESC, r.lifecycle_sequence DESC LIMIT 1`,
+    [owner, shotId],
+  );
+  const row = rows[0];
+  if (!row) return { state: 'absent' };
+  const attempts = Number(row['presentations'] ?? 0);
+  if (row['settled_at'] == null) {
+    return { state: 'queued', attempts, lastError: null };
+  }
+  if (row['settlement'] === 'refused') {
+    const code = row['refusal_code'];
+    return {
+      state: 'exhausted',
+      attempts,
+      lastError: typeof code === 'string' && code.length > 0 ? code : null,
+    };
+  }
+  return { state: 'absent' };
 }
 
 /** Explicitly retry a held read and its parent, without changing saved evidence.
