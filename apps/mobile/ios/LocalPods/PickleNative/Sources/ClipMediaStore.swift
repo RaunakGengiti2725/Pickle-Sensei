@@ -984,7 +984,7 @@ enum ClipMediaStore {
     guard available >= required else { throw ImportMediaFailure.lowStorage }
   }
 
-  private static func copyProviderVideo(from source: URL, operation: ClipMediaOperation) throws -> URL {
+  static func copyProviderVideo(from source: URL, operation: ClipMediaOperation) throws -> URL {
     do {
       try operation.checkActive()
       guard source.isFileURL, source.host == nil || source.host == "" || source.host == "localhost",

@@ -1281,3 +1281,20 @@ scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
   compiles the shipping storage code and tests it in a root-read-denied macOS
   process with disposable home/temp directories. The canonical Mac
   `swift-native` stage runs it; this is not physical-device acceptance.
+- React Native 0.87's `URL.pathname` parses HTTP(S), not `file://`: it returns
+  `/` for a capture URI. Saved-analysis validation and confirmation hashes use
+  `captureArtifactFileName` from `camera/nativeMediaIdentity.ts`, the existing
+  strict non-normalizing parser. Do not replace it with the global URL parser
+  or synthesize missing byte proof. `originalAnalysisRetry.test.ts` exercises
+  the installed React Native URL class as well as Node's implementation.
+- The shipping import review uses `TargetSelector automaticOnly`: one enabled
+  Analyze video action, no player tap or fabricated seed. Persisted selections
+  on older analyses and the native target-tracking contract remain unchanged.
+- Launch audio uses the app's `.ambient` / `.default` session before React
+  starts. The installed react-native-video 6.19.2 manager otherwise combines
+  `.ambient` with `.moviePlayback` and repeatedly fails with OSStatus -50.
+  Its public management-disable API and the splash's matching prop prevent
+  those category rewrites without muting the original intro or ignoring the
+  silent switch. Import copies finish inside the provider callback; metadata
+  work then runs asynchronously at enforced default QoS, matching AVFoundation
+  completion work rather than blocking a user-initiated picker callback.

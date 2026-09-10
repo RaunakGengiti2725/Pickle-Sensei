@@ -37,6 +37,21 @@ function section(source: string, start: string, end: string): string {
 }
 
 describe('native import safety source contracts (not device execution)', () => {
+  it('configures launch audio with a valid ambient/default pair before the video player can manage it', () => {
+    const app = readFileSync(
+      resolve(__dirname, '../ios/PickleSensei/AppDelegate.swift'),
+      'utf8',
+    );
+    expect(app).toContain(
+      'PublicAudioSessionManager.setIsAudioSessionManagementDisabled(true)',
+    );
+    expect(app).toContain('setCategory(.ambient, mode: .default)');
+    expect(
+      app.indexOf('setIsAudioSessionManagementDisabled(true)'),
+    ).toBeLessThan(app.indexOf('factory.startReactNative('));
+    expect(app).not.toContain('.moviePlayback');
+  });
+
   it('exports the real read-only byte comparison selector and enrolls it in cancellable media work', () => {
     expect(selectors).toContain(
       'RCT_EXTERN_METHOD(compareCapturedClipBytes:(NSDictionary *)request',
@@ -158,7 +173,7 @@ describe('native import safety source contracts (not device execution)', () => {
     );
     const providerCopy = section(
       store,
-      'private static func copyProviderVideo(',
+      'static func copyProviderVideo(',
       'static func preflightImport(',
     );
     expect(providerCopy).toContain(
@@ -200,6 +215,27 @@ describe('native import safety source contracts (not device execution)', () => {
     );
     expect(finish).toContain(
       'ImportMediaFailure.classify(error, fallbackCode: fallbackCode)',
+    );
+  });
+
+  it('releases the provider callback after copying and schedules metadata work without a synchronous QoS hop', () => {
+    const picker = section(
+      bridge,
+      'func picker(',
+      'private func armMediaDeadline(',
+    );
+    const copy = picker.indexOf('ClipMediaStore.copyProviderVideo(');
+    const work = picker.indexOf(
+      'self.importMediaQueue.async(qos: .default, flags: .enforceQoS)',
+    );
+    expect(copy).toBeGreaterThan(0);
+    expect(work).toBeGreaterThan(copy);
+    expect(picker.indexOf('ClipMediaStore.preflightImport(')).toBeGreaterThan(
+      work,
+    );
+    expect(picker).not.toContain('self.importMediaQueue.sync');
+    expect(bridge).toContain(
+      'DispatchQueue(label: "com.picklesensei.import-media", qos: .default)',
     );
   });
 

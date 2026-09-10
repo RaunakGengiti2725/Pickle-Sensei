@@ -1,7 +1,9 @@
 import UIKit
+import AVFAudio
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import react_native_video
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -14,6 +16,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    PublicAudioSessionManager.setIsAudioSessionManagementDisabled(true)
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
+    } catch {
+      NSLog("Launch audio session unavailable (%ld)", (error as NSError).code)
+    }
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()

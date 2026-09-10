@@ -18,7 +18,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     case comparing(String)
   }
 
-  private let importMediaQueue = DispatchQueue(label: "com.picklesensei.import-media", qos: .userInitiated)
+  private let importMediaQueue = DispatchQueue(label: "com.picklesensei.import-media", qos: .default)
   private var mediaOperation: ClipMediaOperation?
   private var guidedMediaOperation: ClipMediaOperation?
   private var mediaResult: Result<[String: Any], Error>?
@@ -249,7 +249,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         self.cancelMediaOperation(mediaOperation, reason: .timedOut)
         return
       }
-      self.importMediaQueue.async {
+      self.importMediaQueue.async(qos: .default, flags: .enforceQoS) {
         let result = Result {
           try ClipMediaStore.compareCapturedClipBytes(expectation, operation: mediaOperation)
         }
@@ -322,7 +322,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         self.cancelMediaOperation(mediaOperation, reason: .timedOut)
         return
       }
-      self.importMediaQueue.async {
+      self.importMediaQueue.async(qos: .default, flags: .enforceQoS) {
         let result = Result {
           try autoreleasepool {
             try self.performImportedPoseExtraction(
@@ -745,29 +745,38 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         mediaOperation.cleanupOwnedOutputs()
         return
       }
-      let result: Result<[String: Any], Error> = self.importMediaQueue.sync {
-        Result {
+      let source: URL
+      let destination: URL
+      do {
+        try mediaOperation.checkActive()
+        if let error { throw ImportMediaFailure.classify(error, fallbackCode: "camera.import_file_unavailable") }
+        guard let url else { throw ImportMediaFailure.fileUnavailable }
+        source = url
+        // The provider URL is ephemeral and must be copied before this callback
+        // returns. The destination uses data protection in Application Support.
+        destination = try ClipMediaStore.copyProviderVideo(from: source, operation: mediaOperation)
+      } catch {
+        self.finishMediaOperation(mediaOperation, result: .failure(error))
+        return
+      }
+      self.importMediaQueue.async(qos: .default, flags: .enforceQoS) {
+        let result: Result<[String: Any], Error> = Result {
           try autoreleasepool {
             try mediaOperation.checkActive()
-            if let error { throw ImportMediaFailure.classify(error, fallbackCode: "camera.import_file_unavailable") }
-            guard let url else { throw ImportMediaFailure.fileUnavailable }
-            // The provider URL is ephemeral and must be copied before this callback
-            // returns. The destination uses data protection in Application Support.
-            let metadata = try ClipMediaStore.preflightImport(from: url, operation: mediaOperation, copying: true)
-            let destination = try ClipMediaStore.persistImportedVideo(from: url, metadata: metadata, operation: mediaOperation)
             // Poster/metadata describe the completed private copy, not the
             // ephemeral provider URL (which may change or disappear on return).
-            let copiedMetadata = try ClipMediaStore.preflightImport(from: destination, operation: mediaOperation)
-            return try ClipMediaStore.importedPayload(for: destination, metadata: copiedMetadata, operation: mediaOperation)
+            let metadata = try ClipMediaStore.preflightImport(from: destination, operation: mediaOperation)
+            let prepared = try ClipMediaStore.persistImportedVideo(from: source, metadata: metadata, operation: mediaOperation)
+            return try ClipMediaStore.importedPayload(for: prepared, metadata: metadata, operation: mediaOperation)
           }
         }
+        self.finishMediaOperation(mediaOperation, result: result, completionEvent: [
+          "type": "import",
+          "state": "completed",
+          "captureId": importId,
+          "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
+        ])
       }
-      self.finishMediaOperation(mediaOperation, result: result, completionEvent: [
-        "type": "import",
-        "state": "completed",
-        "captureId": importId,
-        "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
-      ])
     }
     _ = mediaOperation.onCancel { progress.cancel() }
   }

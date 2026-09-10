@@ -197,6 +197,24 @@ for (filename, code) in [
   }
 }
 
+test("deferred metadata and sealing use only the private copy after the provider callback expires") {
+  let source = fixture("ephemeral-provider.mp4")
+  try manager.copyItem(at: fixture("retry.mp4"), to: source)
+  let operation = ClipMediaOperation()
+  defer { operation.endWork(); operation.cleanupOwnedOutputs() }
+  let before = try captureFiles()
+  try require(operation.startWork(), "Provider worker did not start")
+  let destination = try ClipMediaStore.copyProviderVideo(from: source, operation: operation)
+  try manager.removeItem(at: source)
+  let metadata = try ClipMediaStore.preflightImport(from: destination, operation: operation)
+  let sealed = try ClipMediaStore.persistImportedVideo(from: source, metadata: metadata, operation: operation)
+  try require(sealed == destination, "Deferred validation recopied the provider source")
+  try require(try operation.videoIdentityPayload(for: sealed) != nil, "Deferred copy has no byte identity")
+  operation.endWork()
+  operation.cleanupOwnedOutputs()
+  try require(try captureFiles() == before, "Deferred copy leaked an owned artifact")
+}
+
 test("cancellation before copy creates no private output") {
   let operation = ClipMediaOperation()
   operation.cancel()

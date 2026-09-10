@@ -181,6 +181,7 @@ export function SplashScreen(props: {
           // (ambient category, which also mixes over anything already
           // playing) and never steal Android audio focus from the user's music.
           ignoreSilentSwitch="obey"
+          disableAudioSessionManagement
           disableFocus
           playInBackground={false}
           shutterColor={CANVAS}
