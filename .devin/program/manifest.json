@@ -1,7 +1,7 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "7a5c14e5547c1704af2129f11a668b9bf8180f70dd094fe6b7b93502cdc3c033",
+  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
   "manifest_version": "2026-09-08.4",
   "packages": [
     {
@@ -2473,7 +2473,7 @@
         "supabase/migrations/20260910130000_offline_receipt_freeze_defer.sql",
         "supabase/tests/security_regression.sql",
         "packages/shared-types/src/offlineAuthorization.ts",
-        "packages/shared-types/src/offlineAuthorization.test.ts",
+        "packages/shared-types/src/__tests__/",
         "packages/shared-types/src/index.ts"
       ]
     },
