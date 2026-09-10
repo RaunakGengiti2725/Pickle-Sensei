@@ -18,6 +18,7 @@ import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
 import { getDb, type LocalDb } from './db';
 import { installationKey } from './installationKey';
 import {
+  guardOfflinePaidReservations,
   offlineGrantPullNeeded,
   offlinePaidOperationIds,
   readOfflineAllocation,
@@ -224,10 +225,12 @@ export function configureSyncRuntime(session: ApiSession): void {
     if (evidence === 'transport') retryPending = true;
   };
   const transport = observingServerAnswers(createTransport(apiConfig), observe);
-  const permits = {
+  // A run paid for offline is settled by its receipt: the recovery sweep
+  // never reserves a live permit for it.
+  const permits = guardOfflinePaidReservations(getDb, {
     ...scope,
     ...observingServerAnswers(createAnalysisPermitClient(apiConfig), observe),
-  };
+  });
   const offlineGrants: OfflineGrantClient = observingServerAnswers(
     createOfflineGrantClient(apiConfig),
     observe,

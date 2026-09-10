@@ -32,10 +32,7 @@ import {
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
 import { OriginalAnalysisExecution } from '../src/analysis/originalAnalysisOperations';
-import {
-  recoverAnalysisJournals,
-  runJournal,
-} from '../src/analysis/runJournal';
+import { runJournal } from '../src/analysis/runJournal';
 import {
   verifyReleasePolicy,
   writeCachedReleasePolicy,
@@ -49,7 +46,6 @@ import {
   establishApiSession,
 } from '../src/account/apiSession';
 import {
-  createAnalysisPermitClient,
   createOfflineGrantClient,
   parseIssuedOfflineGrant,
   type IssuedOfflineGrant,
@@ -64,7 +60,13 @@ import {
   readOfflineWalletStatus,
   reconcileOfflineWallet,
 } from '../src/data/offlineWallet';
+import { getDb } from '../src/data/db';
 import { hasShotSyncReceipt } from '../src/data/repository';
+import {
+  clearSyncRuntime,
+  configureSyncRuntime,
+  triggerOutboxSync,
+} from '../src/data/syncRuntime';
 import {
   captureDataOwnerContext,
   setActiveDataOwner,
@@ -378,6 +380,20 @@ function finalizedPermit(call: FetchCall) {
   });
 }
 
+/** Signal comes back after a restart: nothing is executing and the SHIPPING
+ * sync runtime runs its recovery sweep, outbox drain and receipt drain
+ * against whatever `network()` answers. */
+async function reconnectSweep(store: Store): Promise<void> {
+  (getDb as jest.Mock).mockReturnValue(store.db);
+  configureSyncRuntime({
+    apiBaseUrl: API_ORIGIN,
+    bearerToken: BEARER,
+    canonicalAppUserId: OWNER,
+    provider: 'apple',
+  });
+  await triggerOutboxSync();
+}
+
 async function seed(options: {
   policy?: boolean;
   grant?: boolean;
@@ -480,8 +496,10 @@ beforeEach(() => {
   signIn();
 });
 afterEach(() => {
+  clearSyncRuntime();
   for (const lease of leases.splice(0)) lease.dispose();
   clearApiSession();
+  (getDb as jest.Mock).mockReset();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   globalThis.fetch = originalFetch;
   mockReading = null;
@@ -664,21 +682,15 @@ describe('A2 process restart + reconnect recovery', () => {
     // Restart: nothing is executing, the journal is whatever SQLite holds.
     expect(runJournal.activeOperationIds(scope)).toEqual([]);
 
-    // The court gets signal back; the runtime runs its recovery sweep first
-    // (syncRuntime.ts) with a server that WOULD hand out a permit.
+    // The court gets signal back; the shipping runtime runs its recovery
+    // sweep first (syncRuntime.ts) with a server that WOULD hand out a permit.
     const online = network({
       reserve: () => reservedPermit('99999999-9999-4999-8999-999999999999'),
       finalize: finalizedPermit,
       receipts: acceptAll(),
       policy: 'online',
     });
-    const permits = {
-      ...scope,
-      ...createAnalysisPermitClient({ baseUrl: API_ORIGIN, token: BEARER }),
-    };
-    await recoverAnalysisJournals(store.db, scope, permits, {
-      excludeOperationIds: runJournal.activeOperationIds(scope),
-    });
+    await reconnectSweep(store);
 
     // A paid, persisted offline rating is settled by its receipt. Reserving
     // a live permit for the same reservation key and then finalizing it as
@@ -696,19 +708,16 @@ describe('A2 process restart + reconnect recovery', () => {
     const { store, request } = await seed({});
     const { analysis } = await scoredOffline(store, request);
     const scope = runJournal.scope({ ownerKey: OWNER, apiOrigin: API_ORIGIN });
-    network({
+    // Signal for permits, none yet for receipts: the sweep must leave the
+    // paid rating alone and the receipt queued for a later drain.
+    const online = network({
       reserve: () => reservedPermit('99999999-9999-4999-8999-999999999999'),
       finalize: finalizedPermit,
-      receipts: acceptAll(),
       policy: 'online',
     });
-    const permits = {
-      ...scope,
-      ...createAnalysisPermitClient({ baseUrl: API_ORIGIN, token: BEARER }),
-    };
-    await recoverAnalysisJournals(store.db, scope, permits, {
-      excludeOperationIds: runJournal.activeOperationIds(scope),
-    });
+    await reconnectSweep(store);
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(runJournal.activeOperationIds(scope)).toEqual([]);
     const replay = await runCaptureAnalysis(request);
     expect(replay.kind).toBe('scored');
     if (replay.kind === 'scored') {
@@ -716,6 +725,13 @@ describe('A2 process restart + reconnect recovery', () => {
     }
     expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
     expect(await pendingOfflineReceipts(store.db)).toHaveLength(1);
+    // The receipts route answers on a later pass: the same receipt settles.
+    network({
+      reserve: () => reservedPermit('99999999-9999-4999-8999-999999999999'),
+      finalize: finalizedPermit,
+      receipts: acceptAll(),
+      policy: 'online',
+    });
     const drained = await reconcileOfflineWallet(
       store.db,
       offlineClient(),

@@ -1,5 +1,4 @@
 import type { LocalDb } from '../data/db';
-import { guardOfflinePaidReservations } from '../data/offlineCapabilities';
 import { withTransaction } from '../data/transactions';
 import {
   isReleaseNotAuthorized,
@@ -921,10 +920,7 @@ export async function readAnalysisJournal(
 }
 
 /** Storage versions reconcile independently. Failure reading one is UNKNOWN,
- * not an empty/successful recovery and not permission to replace its runs.
- * A held run whose operation already spent an offline allocation is settled
- * by its queued receipt alone: no live permit is reserved for it, whatever
- * port the caller supplies. */
+ * not an empty/successful recovery and not permission to replace its runs. */
 export async function recoverAnalysisJournals(
   db: LocalDb,
   scope: RunJournalScope,
@@ -936,10 +932,9 @@ export async function recoverAnalysisJournals(
 }> {
   const items: RunJournalRecoveryItem[] = [];
   let unknownStorage = false;
-  const guarded = guardOfflinePaidReservations(() => db, port);
   for (const journal of [runJournal, analysisAttemptJournal]) {
     try {
-      items.push(...(await journal.recover(db, scope, guarded, options)));
+      items.push(...(await journal.recover(db, scope, port, options)));
     } catch {
       unknownStorage = true;
     }
