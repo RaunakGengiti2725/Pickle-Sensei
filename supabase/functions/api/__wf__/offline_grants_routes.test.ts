@@ -89,6 +89,7 @@ interface GrantRow {
   expires_at: string | null;
   entitlement_expires_at: string | null;
   ticket_ids: string[] | null;
+  attestation_state: string | null;
 }
 
 function refusedRow(result: string): GrantRow {
@@ -101,6 +102,7 @@ function refusedRow(result: string): GrantRow {
     expires_at: null,
     entitlement_expires_at: null,
     ticket_ids: null,
+    attestation_state: null,
   };
 }
 
@@ -109,6 +111,7 @@ function proRow(options: {
   leaseSeconds: number;
   entitlementExpiresAt: number | null;
   generation?: number;
+  attestationState?: string;
 }): GrantRow {
   const issuedAt = options.issuedAt ?? nowSeconds() - 1;
   return {
@@ -121,6 +124,7 @@ function proRow(options: {
     entitlement_expires_at:
       options.entitlementExpiresAt === null ? null : iso(options.entitlementExpiresAt),
     ticket_ids: [],
+    attestation_state: options.attestationState ?? "unattested",
   };
 }
 
@@ -128,6 +132,7 @@ function freeRow(options: {
   issuedAt?: number;
   leaseSeconds?: number;
   tickets?: string[];
+  attestationState?: string;
 }): GrantRow {
   const issuedAt = options.issuedAt ?? nowSeconds() - 1;
   return {
@@ -139,7 +144,35 @@ function freeRow(options: {
     expires_at: iso(issuedAt + (options.leaseSeconds ?? 7 * DAY)),
     entitlement_expires_at: null,
     ticket_ids: options.tickets ?? [TICKET_A, TICKET_B],
+    attestation_state: options.attestationState ?? "unattested",
   };
+}
+
+/** The signed payload as a plain object, for asserting what the server did NOT claim. */
+function signedPayload(grant: unknown): Record<string, unknown> {
+  const compact = (grant as { compactJws: string }).compactJws;
+  const payload = compact.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  return JSON.parse(atob(payload)) as Record<string, unknown>;
+}
+
+function claimsAttestation(payload: Record<string, unknown>): string[] {
+  const hits: string[] = [];
+  const walk = (value: unknown, path: string): void => {
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        if (/attest/i.test(key)) hits.push(`${path}.${key}`);
+        walk(entry, `${path}.${key}`);
+      }
+      return;
+    }
+    if (typeof value === "string" && /attest/i.test(value)) hits.push(`${path}=${value}`);
+  };
+  walk(payload, "claims");
+  return hits;
 }
 
 let userSeq = 0;
@@ -488,6 +521,103 @@ Deno.test(
   },
 );
 
+// W04-06: the shipping app registers with p_attested=false and is issued a
+// grant as that unattested installation. The route echoes the state the SQL
+// recorded and signs NO attestation claim — the server verified none.
+Deno.test(
+  "POST /v1/devices/register then POST /v1/offline/grants issues a fresh unattested installation a grant recorded as unattested, with no attestation claim signed",
+  async () => {
+    reset();
+    const user = freshUser();
+    const issuedAt = nowSeconds() - 2;
+    const registered = await post(
+      REGISTER_PATH,
+      { installationKeyId: INSTALLATION_KEY, attestationEnvironment: "production" },
+      user.token,
+    );
+    assertEquals(registered.status, 200);
+    assertEquals(
+      ((await readJson(registered)).device as { attestationState: string }).attestationState,
+      "unattested",
+    );
+
+    h.rpcs.issue_offline_grant = [freeRow({ issuedAt, attestationState: "unattested" })];
+    const response = await post(
+      GRANTS_PATH,
+      { installationKeyId: INSTALLATION_KEY, requestedTickets: 2 },
+      user.token,
+    );
+    assertEquals(response.status, 200);
+    const body = await readJson(response);
+    assertEquals(body.attestationState, "unattested");
+    assertEquals(body.ticketIds, [TICKET_A, TICKET_B]);
+    assertEquals(body.expiresAt, issuedAt + 7 * DAY);
+    const claims = await verifyGrant(body.grant, user.sub);
+    assertEquals(claims.sub, user.sub);
+    assertEquals(claims.installationKeyId, INSTALLATION_KEY);
+    assertEquals(claims.entitlementSource, "identity_lifetime_free");
+    assertEquals(claimsAttestation(signedPayload(body.grant)), []);
+    assertEquals(
+      Object.keys(claims).filter((key) => /attest/i.test(key)),
+      [],
+    );
+
+    // An attested installation's row is echoed as attested — and still not signed.
+    h.rpcs.issue_offline_grant = [
+      proRow({
+        issuedAt,
+        leaseSeconds: 3 * DAY,
+        entitlementExpiresAt: issuedAt + 30 * DAY,
+        attestationState: "attested",
+      }),
+    ];
+    const attested = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, user.token);
+    assertEquals(attested.status, 200);
+    const attestedBody = await readJson(attested);
+    assertEquals(attestedBody.attestationState, "attested");
+    await verifyGrant(attestedBody.grant, user.sub);
+    assertEquals(claimsAttestation(signedPayload(attestedBody.grant)), []);
+
+    const calls = h.callsTo(GRANT_RPC);
+    assertEquals(calls.length, 2);
+    for (const call of calls) {
+      assertEquals(call.headers.authorization, callerBearer(user.sub));
+      assertEquals(Object.keys(call.body as Record<string, unknown>).sort(), [
+        "p_installation_key_id",
+        "p_requested_tickets",
+      ]);
+    }
+  },
+);
+
+Deno.test(
+  "POST /v1/offline/grants refuses an accepted row that does not record a known attestation state",
+  async () => {
+    reset();
+    const issuedAt = nowSeconds() - 2;
+    const base = proRow({ issuedAt, leaseSeconds: DAY, entitlementExpiresAt: issuedAt + 30 * DAY });
+    const { attestation_state: _omitted, ...withoutState } = base;
+    for (const row of [
+      { ...base, attestation_state: null },
+      { ...base, attestation_state: "verified" },
+      { ...base, attestation_state: "ATTESTED" },
+      { ...base, attestation_state: true },
+      withoutState,
+      { ...freeRow({ issuedAt }), attestation_state: "" },
+    ]) {
+      h.rpcs.issue_offline_grant = [row];
+      const { result: response, logs } = await captureConsole(() =>
+        post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, freshUser().token),
+      );
+      assertEquals(response.status, 503, JSON.stringify(row));
+      const text = await response.text();
+      assert(!text.includes("compactJws"));
+      assert(!text.includes(GRANT_ID));
+      assertStringIncludes(Deno.inspect(logs, { depth: Infinity }), "row_malformed");
+    }
+  },
+);
+
 // ---------------------------------------------------------------------------
 // Grant issuance — denied paths
 // ---------------------------------------------------------------------------
@@ -584,7 +714,7 @@ Deno.test(
     const user = freshUser();
     for (const [result, status] of [
       ["offline.device_not_registered", 409],
-      ["offline.device_not_attested", 403],
+      ["offline.device_revoked", 403],
       ["access.paywall_required", 402],
       ["offline.invalid_input", 400],
     ] as const) {
@@ -595,6 +725,12 @@ Deno.test(
       assertEquals(errorCode(body), result);
       assertEquals(body.grant, undefined);
     }
+    // The SQL no longer refuses an unattested installation; the route does not
+    // advertise such a requirement either.
+    h.rpcs.issue_offline_grant = [refusedRow("offline.device_not_attested")];
+    const stale = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, user.token);
+    assertEquals(stale.status, 503);
+    assert(!(await stale.text()).includes("device_not_attested"));
   },
 );
 
@@ -1034,6 +1170,237 @@ Deno.test({
         `select count(*)::text as n from public.offline_grants where generation = 99`,
       );
       assertEquals(rows[0].n, "0");
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// W04-06 live half — the installation exactly as POST /v1/devices/register
+// records it (p_attested = false → 'unattested') is issued a bounded grant
+// whose row records 'unattested'; a revoked installation is refused and a
+// deleted one is not registered; nothing is reclaimed by either.
+// ---------------------------------------------------------------------------
+
+function pgCode(error: unknown): string {
+  return (error as { code?: string }).code ?? "";
+}
+
+Deno.test({
+  name: "live DB: register(p_attested=false) → issue_offline_grant() issues the unattested installation a bounded free grant recorded as unattested; the signed grant carries no attestation claim",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2 });
+    try {
+      const build = await loadClaimBuilder();
+      await createUser(sql, 4);
+      const key = KEY("unattested-free");
+      await inTx(sql, 4, async (tx) => {
+        const rows = await tx.unsafe<{ result: string; attestation_state: string }[]>(
+          `select r.result, r.attestation_state from public.register_offline_device('${key}', 'production', false) r`,
+        );
+        assertEquals(rows[0].result, "accepted");
+        assertEquals(rows[0].attestation_state, "unattested");
+      });
+      const row = await inTx(sql, 4, (tx) => issueRow(tx, key));
+      const record = row as Record<string, unknown>;
+      assertEquals(record.result, "accepted", JSON.stringify(row));
+      assertEquals(record.attestation_state, "unattested");
+      const claims = build(row, {
+        issuer: ISSUER,
+        ownerId: U(4),
+        installationKeyId: key,
+        release: RELEASE,
+      });
+      assertEquals(claims.entitlementSource, "identity_lifetime_free");
+      assertEquals(claims.allocation?.ticketIds.length, 2);
+      assertEquals(claims.exp - claims.iat, OFFLINE_PRO_LEASE_MAX_SECONDS);
+      assertEquals(
+        Object.keys(claims).filter((k) => /attest/i.test(k)),
+        [],
+      );
+      const verified = await signAndVerify(claims, U(4), key);
+      assertEquals(verified.sub, U(4));
+      assertEquals(verified.installationKeyId, key);
+
+      const stored = await sql.unsafe<
+        { attestation_state: string; user_id: string; installation_key_id: string; lease: string }[]
+      >(
+        `select g.attestation_state, g.user_id, d.installation_key_id,
+                (g.expires_at - g.issued_at)::text as lease
+         from public.offline_grants g join public.offline_devices d on d.id = g.device_id
+         where g.id = '${claims.jti}'`,
+      );
+      assertEquals(stored.length, 1);
+      assertEquals(stored[0].attestation_state, "unattested");
+      assertEquals(stored[0].user_id, U(4));
+      assertEquals(stored[0].installation_key_id, key);
+      assertEquals(stored[0].lease, "7 days");
+
+      // Conservation: two tickets held, no third rating online or offline.
+      const held = await inTx(sql, 4, async (tx) => {
+        const holds = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
+        const online = await tx.unsafe<{ result: string }[]>(
+          `select r.result from public.reserve_analysis_permit('${KEY("online")}') r`,
+        );
+        return { n: holds[0].n, online: online[0].result };
+      });
+      assertEquals(held.n, 2);
+      assertEquals(held.online, "access.paywall_required");
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: an unattested Pro installation's lease is capped at the verified entitlement expiry and recorded as unattested; an attested installation's grant records attested",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2 });
+    try {
+      const build = await loadClaimBuilder();
+      await createUser(sql, 5);
+      await sql.unsafe(
+        `insert into public.billing_entitlements (user_id, premium, product_key, expires_at)
+         values ('${U(5)}', true, 'pickle_sensei_pro_monthly', now() + interval '3 days')`,
+      );
+      const key = KEY("unattested-pro");
+      const attestedKey = KEY("attested-pro");
+      await inTx(sql, 5, async (tx) => {
+        await tx.unsafe(
+          `select r.result from public.register_offline_device('${key}', 'production', false) r`,
+        );
+        await tx.unsafe(
+          `select r.result from public.register_offline_device('${attestedKey}', 'production', true) r`,
+        );
+      });
+      const row = await inTx(sql, 5, (tx) => issueRow(tx, key, 0));
+      assertEquals((row as Record<string, unknown>).attestation_state, "unattested");
+      const claims = build(row, {
+        issuer: ISSUER,
+        ownerId: U(5),
+        installationKeyId: key,
+        release: RELEASE,
+      });
+      assertEquals(claims.entitlementSource, "verified_store");
+      assert(claims.lease?.kind === "subscription");
+      assertEquals(claims.exp, claims.lease.verifiedEntitlementExpiresAt);
+      assert(claims.exp - claims.iat <= 3 * DAY);
+      await signAndVerify(claims, U(5), key);
+
+      const attestedRow = await inTx(sql, 5, (tx) => issueRow(tx, attestedKey, 0));
+      assertEquals((attestedRow as Record<string, unknown>).attestation_state, "attested");
+      const attestedClaims = build(attestedRow, {
+        issuer: ISSUER,
+        ownerId: U(5),
+        installationKeyId: attestedKey,
+        release: RELEASE,
+      });
+      const states = await sql.unsafe<{ id: string; attestation_state: string }[]>(
+        `select id, attestation_state from public.offline_grants
+         where id in ('${claims.jti}', '${attestedClaims.jti}') order by attestation_state`,
+      );
+      assertEquals(
+        states.map((s) => [s.id, s.attestation_state]),
+        [
+          [attestedClaims.jti, "attested"],
+          [claims.jti, "unattested"],
+        ],
+      );
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: a revoked installation is refused (offline.device_revoked, RPC and table), re-registration never clears the revocation, a deleted installation is not registered, and neither reclaims a held ticket",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2 });
+    try {
+      const key = KEY("unattested-free");
+      const device = await sql.unsafe<{ id: string }[]>(
+        `select id from public.offline_devices where user_id = '${U(4)}' and installation_key_id = '${key}'`,
+      );
+      assertEquals(device.length, 1, "the unattested free test must have registered its device");
+      await sql.unsafe(
+        `update public.offline_devices set revoked_at = now() where id = '${device[0].id}'`,
+      );
+      const before = await sql.unsafe<{ n: string }[]>(
+        `select count(*)::text as n from public.offline_grants where device_id = '${device[0].id}'`,
+      );
+
+      const refused = await inTx(sql, 4, (tx) => issueRow(tx, key));
+      assertEquals((refused as Record<string, unknown>).result, "offline.device_revoked");
+      assertEquals((refused as Record<string, unknown>).grant_id, null);
+
+      const reregistered = await inTx(sql, 4, async (tx) => {
+        const rows = await tx.unsafe<{ result: string; device_id: string }[]>(
+          `select r.result, r.device_id from public.register_offline_device('${key}', 'production', false) r`,
+        );
+        return rows[0];
+      });
+      assertEquals(reregistered.result, "accepted");
+      assertEquals(reregistered.device_id, device[0].id);
+      const still = await sql.unsafe<{ revoked: boolean }[]>(
+        `select revoked_at is not null as revoked from public.offline_devices where id = '${device[0].id}'`,
+      );
+      assertEquals(still[0].revoked, true);
+      const again = await inTx(sql, 4, (tx) => issueRow(tx, key));
+      assertEquals((again as Record<string, unknown>).result, "offline.device_revoked");
+
+      // The table refuses a grant for the revoked device even from the owner role.
+      let code = "";
+      try {
+        await sql.unsafe(
+          `insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, attestation_state)
+           values ('${U(4)}', '${device[0].id}', 'identity_lifetime_free', 98, now() + interval '1 day', 'unattested')`,
+        );
+      } catch (error) {
+        code = pgCode(error);
+      }
+      assertEquals(code, "23514");
+      // ...and a grant that claims 'attested' for an unattested device.
+      const proDevice = await sql.unsafe<{ id: string; expires_at: string }[]>(
+        `select d.id, b.expires_at::text as expires_at from public.offline_devices d
+         join public.billing_entitlements b on b.user_id = d.user_id
+         where d.user_id = '${U(5)}' and d.installation_key_id = '${KEY("unattested-pro")}'`,
+      );
+      assertEquals(proDevice.length, 1);
+      code = "";
+      try {
+        await sql.unsafe(
+          `insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at, attestation_state)
+           values ('${U(5)}', '${proDevice[0].id}', 'verified_store', 98, now() + interval '1 day', '${proDevice[0].expires_at}', 'attested')`,
+        );
+      } catch (error) {
+        code = pgCode(error);
+      }
+      assertEquals(code, "23514");
+      const after = await sql.unsafe<{ n: string }[]>(
+        `select count(*)::text as n from public.offline_grants where device_id = '${device[0].id}'`,
+      );
+      assertEquals(after[0].n, before[0].n);
+
+      // Revocation reclaims nothing: both tickets are still held.
+      const heldAfterRevoke = await inTx(sql, 4, async (tx) => {
+        const rows = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
+        return rows[0].n;
+      });
+      assertEquals(heldAfterRevoke, 2);
+
+      // Deletion (reinstall / key replacement): not registered, hold stays.
+      await sql.unsafe(`delete from public.offline_devices where id = '${device[0].id}'`);
+      const deleted = await inTx(sql, 4, (tx) => issueRow(tx, key));
+      assertEquals((deleted as Record<string, unknown>).result, "offline.device_not_registered");
+      const heldAfterDelete = await inTx(sql, 4, async (tx) => {
+        const rows = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
+        return rows[0].n;
+      });
+      assertEquals(heldAfterDelete, 2);
     } finally {
       await sql.end();
     }

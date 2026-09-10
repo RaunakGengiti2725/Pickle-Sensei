@@ -4485,6 +4485,10 @@ set local request.jwt.claim.sub = '';
 -- T1  registration: attested vs unattested devices, idempotent re-registration
 --     never downgrades, environment mismatch is refused, grants need an
 --     attested registration
+--     (W04-06, 20260910140000: an unattested registration is no longer a
+--     refusal reason — the request falls through to allocation; section W
+--     proves the issued grant. T1 asks for no ticket so Tara's allowance is
+--     untouched for T2.)
 -- T2  free allocation: two tickets, generation 1, 7-day execution window; the
 --     online reservation path counts the outstanding tickets (conservation
 --     across online + offline), a refresh re-issues the SAME outstanding
@@ -4722,9 +4726,9 @@ begin
   if (select count(*) from public.offline_devices where user_id = (select auth.uid())) <> 2 then
     raise exception 'T1: refused registrations must not persist';
   end if;
-  select * into g from public.issue_offline_grant('tara-sim', 2);
-  if g.result <> 'offline.device_not_attested' then
-    raise exception 'T1: an unattested device never receives a grant (got %)', g.result;
+  select * into g from public.issue_offline_grant('tara-sim', 0);
+  if g.result <> 'offline.invalid_input' then
+    raise exception 'T1: an unattested registration is not a refusal reason — a request for no ticket reaches input validation (got %)', g.result;
   end if;
   select * into g from public.issue_offline_grant('never-registered', 2);
   if g.result <> 'offline.device_not_registered' then
@@ -11362,6 +11366,362 @@ begin
   begin
     perform api_private.sweep_stale_analysis_permits();
     raise exception 'V6: anon must not run the sweep';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+rollback;
+
+-- ============================================================================
+-- W. (W04-06, 20260910140000_offline_grants_unattested_installations) the 1.0
+-- app registers its installation with p_attested = false, so a real phone is
+-- 'unattested' — and it must still hold an offline grant. A registered
+-- installation in EITHER attestation state receives a grant that is still
+-- owner+device bound, ≤ 7 days, ≤ the verified entitlement expiry and within
+-- the lifetime free allowance; the grant row records the state it was issued
+-- under (never one the server did not verify); a revoked installation is
+-- refused (RPC and table) and a deleted one stays unregistered; revocation
+-- and deletion reclaim nothing. Users: Wanda (free, Google, unattested
+-- phone), Walt (Pro, expires in 3 days, one unattested + one attested
+-- installation), Wes (free, Apple, deleted installation).
+-- W1  Wanda's unattested registration receives a free grant: generation 1,
+--     two tickets, expires exactly issued + 7 days, no entitlement expiry,
+--     attestation_state 'unattested' on the result AND the stored row; the
+--     hold counts online (paywall) and a refresh re-issues the SAME tickets
+--     under generation 2 without allocating more
+-- W2  Walt's unattested registration receives a Pro lease capped at the
+--     verified entitlement expiry (3 days < 7), recording that expiry and
+--     'unattested'; an attested installation of the same owner records
+--     'attested' — the state is read from the device, never from the caller
+-- W3  revocation: revoked_at set by the owner → issue_offline_grant() answers
+--     offline.device_revoked, writes no grant; re-registration is accepted
+--     but never clears revoked_at and the refusal stands; Wanda's two tickets
+--     stay outstanding (no reclaim). Deletion (Wes, one ticket) →
+--     offline.device_not_registered and the hold stays
+-- W4  the table refuses: a grant for the revoked device, a grant claiming
+--     'attested' for an unattested device, a grant claiming 'unattested' for
+--     an attested device, and any change to attestation_state; a row inserted
+--     without the column is stamped from the device; every pre-existing grant
+--     carries a state; a grant for another owner's device is still refused
+-- W5  clients: authenticated holds no UPDATE/DELETE on offline_devices (no
+--     self-un-revoke), reads only its own device rows including revoked_at;
+--     anon and service_role cannot call issue_offline_grant()
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000081', 'wanda@example.com',
+   '{"full_name":"Wanda"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000082', 'walt@example.com',
+   '{"full_name":"Walt"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000083', 'wes@example.com',
+   '{"full_name":"Wes"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-wanda', '00000000-0000-4000-8000-000000000081',
+   '{"sub":"google-sub-wanda","email":"wanda@example.com"}'),
+  ('apple', 'apple-sub-walt', '00000000-0000-4000-8000-000000000082',
+   '{"sub":"apple-sub-walt","email":"walt@example.com"}'),
+  ('apple', 'apple-sub-wes', '00000000-0000-4000-8000-000000000083',
+   '{"sub":"apple-sub-wes","email":"wes@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000008101', '00000000-0000-4000-8000-000000000081'),
+  ('00000000-0000-4000-8000-000000008201', '00000000-0000-4000-8000-000000000082'),
+  ('00000000-0000-4000-8000-000000008301', '00000000-0000-4000-8000-000000000083');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000082', true, now() + interval '3 days');
+
+create temporary table w_state (key text primary key, id uuid);
+grant select, insert, update on w_state to authenticated;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
+-- W1: an unattested registration (exactly what POST /v1/devices/register
+-- records) receives a bounded free grant recorded as 'unattested'.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000081';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008101"}';
+do $$
+declare
+  r record; g record; g2 record; s record; p record; stored record;
+begin
+  select * into r from public.register_offline_device('wanda-iphone', 'production', false);
+  if r.result <> 'accepted' or r.attestation_state <> 'unattested' then
+    raise exception 'W1: the shipping registration is recorded as unattested (got %, %)',
+      r.result, r.attestation_state;
+  end if;
+  insert into w_state values ('wanda-device', r.device_id);
+
+  select * into g from public.issue_offline_grant('wanda-iphone', 2);
+  if g.result <> 'accepted' then
+    raise exception 'W1: a registered unattested installation receives a grant (got %)', g.result;
+  end if;
+  if g.entitlement_source <> 'identity_lifetime_free' or g.generation <> 1
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 2
+     or g.entitlement_expires_at is not null
+     or g.expires_at <> g.issued_at + interval '7 days' then
+    raise exception 'W1: free grant = generation 1, two tickets, exactly 7 days, no entitlement expiry (got %, %, %, %, %)',
+      g.entitlement_source, g.generation, g.ticket_ids, g.entitlement_expires_at, g.expires_at - g.issued_at;
+  end if;
+  if g.attestation_state <> 'unattested' then
+    raise exception 'W1: the result records the state the grant was issued under (got %)', g.attestation_state;
+  end if;
+  select * into stored from public.offline_grants where id = g.grant_id;
+  if not found or stored.attestation_state <> 'unattested'
+     or stored.user_id <> (select auth.uid()) or stored.device_id <> r.device_id then
+    raise exception 'W1: the stored grant is owner+device bound and records unattested (got %)',
+      stored.attestation_state;
+  end if;
+  insert into w_state values ('wanda-grant', g.grant_id),
+    ('wanda-t1', g.ticket_ids[1]), ('wanda-t2', g.ticket_ids[2]);
+
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W1: two outstanding holds (got %)', public.offline_hold_count();
+  end if;
+  select * into s from public.access_state();
+  if s.reserved_count <> 2 or s.premium then
+    raise exception 'W1: the holds count against the lifetime allowance online (got %, %)',
+      s.reserved_count, s.premium;
+  end if;
+  select * into p from public.reserve_analysis_permit('w0406-wanda-online');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'W1: conservation — no third rating online while two tickets are held (got %)', p.result;
+  end if;
+
+  select * into g2 from public.issue_offline_grant('wanda-iphone', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.attestation_state <> 'unattested'
+     or g2.ticket_ids <> g.ticket_ids then
+    raise exception 'W1: a refresh re-issues the same tickets under generation 2 (got %, %, %, %)',
+      g2.result, g2.generation, g2.attestation_state, g2.ticket_ids;
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W1: a refresh allocates nothing (got %)', public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- W2: an unattested Pro installation: lease = verified entitlement expiry
+-- (3 days < 7); an attested installation of the same owner records 'attested'.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000082';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008201"}';
+do $$
+declare
+  r record; g record; ga record;
+  v_expires timestamptz := (select expires_at from public.billing_entitlements where user_id = (select auth.uid()));
+begin
+  select * into r from public.register_offline_device('walt-iphone', 'production', false);
+  if r.result <> 'accepted' or r.attestation_state <> 'unattested' then
+    raise exception 'W2: registration (got %, %)', r.result, r.attestation_state;
+  end if;
+  insert into w_state values ('walt-device', r.device_id);
+  select * into g from public.issue_offline_grant('walt-iphone', 0);
+  if g.result <> 'accepted' or g.entitlement_source <> 'verified_store' or g.generation <> 1
+     or g.expires_at <> v_expires or g.entitlement_expires_at <> v_expires
+     or g.expires_at > g.issued_at + interval '7 days'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 0
+     or g.attestation_state <> 'unattested' then
+    raise exception 'W2: an unattested Pro lease ends at the verified expiry, no tickets, recorded unattested (got %, %, %, %, %, %)',
+      g.result, g.entitlement_source, g.expires_at, g.entitlement_expires_at, g.ticket_ids, g.attestation_state;
+  end if;
+  if (select attestation_state from public.offline_grants where id = g.grant_id) <> 'unattested' then
+    raise exception 'W2: the stored Pro lease records unattested';
+  end if;
+
+  select * into r from public.register_offline_device('walt-attested', 'production', true);
+  if r.result <> 'accepted' or r.attestation_state <> 'attested' then
+    raise exception 'W2: a verified registration is recorded as attested (got %, %)', r.result, r.attestation_state;
+  end if;
+  insert into w_state values ('walt-attested-device', r.device_id);
+  select * into ga from public.issue_offline_grant('walt-attested', 0);
+  if ga.result <> 'accepted' or ga.attestation_state <> 'attested'
+     or (select attestation_state from public.offline_grants where id = ga.grant_id) <> 'attested' then
+    raise exception 'W2: an attested installation''s grant records attested (got %, %)', ga.result, ga.attestation_state;
+  end if;
+  insert into w_state values ('walt-attested-grant', ga.grant_id);
+end $$;
+reset role;
+
+-- W3: revocation and deletion. The owner revokes Wanda's phone and deletes
+-- Wes's; neither installation receives a grant again; nothing is reclaimed.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000083';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008301"}';
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('wes-iphone', 'production', false);
+  select * into g from public.issue_offline_grant('wes-iphone', 1);
+  if r.result <> 'accepted' or g.result <> 'accepted'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 or g.attestation_state <> 'unattested' then
+    raise exception 'W3 precondition: Wes holds one ticket (got %, %, %)', r.result, g.result, g.ticket_ids;
+  end if;
+  insert into w_state values ('wes-device', r.device_id), ('wes-t1', g.ticket_ids[1]);
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+update public.offline_devices set revoked_at = now()
+where id = (select id from w_state where key = 'wanda-device');
+delete from public.offline_devices where id = (select id from w_state where key = 'wes-device');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000081';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008101"}';
+do $$
+declare g record; r record; n integer;
+begin
+  select * into g from public.issue_offline_grant('wanda-iphone', 2);
+  if g.result <> 'offline.device_revoked' or g.grant_id is not null then
+    raise exception 'W3: a revoked installation is refused (got %, %)', g.result, g.grant_id;
+  end if;
+  select count(*) into n from public.offline_grants
+  where device_id = (select id from w_state where key = 'wanda-device');
+  if n <> 2 then
+    raise exception 'W3: a refusal writes no grant (got % grants)', n;
+  end if;
+  select * into r from public.register_offline_device('wanda-iphone', 'production', false);
+  if r.result <> 'accepted' or r.device_id <> (select id from w_state where key = 'wanda-device') then
+    raise exception 'W3: re-registration is idempotent (got %, %)', r.result, r.device_id;
+  end if;
+  if (select revoked_at from public.offline_devices where id = r.device_id) is null then
+    raise exception 'W3: re-registration never clears a revocation';
+  end if;
+  select * into g from public.issue_offline_grant('wanda-iphone', 2);
+  if g.result <> 'offline.device_revoked' then
+    raise exception 'W3: still refused after re-registration (got %)', g.result;
+  end if;
+  if public.offline_hold_count() <> 2 then
+    raise exception 'W3: revocation reclaims nothing — Wanda''s two tickets stay outstanding (got %)',
+      public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000083';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008301"}';
+do $$
+declare g record;
+begin
+  select * into g from public.issue_offline_grant('wes-iphone', 1);
+  if g.result <> 'offline.device_not_registered' then
+    raise exception 'W3: a deleted installation is not registered (got %)', g.result;
+  end if;
+  if public.offline_hold_count() <> 1 then
+    raise exception 'W3: deletion reclaims nothing — Wes''s ticket stays outstanding (got %)',
+      public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- W4: the table refuses what the RPC refuses, and records only the truth.
+set local request.jwt.claim.sub = '';
+do $$
+declare
+  wanda uuid := '00000000-0000-4000-8000-000000000081';
+  walt uuid := '00000000-0000-4000-8000-000000000082';
+  wanda_device uuid := (select id from w_state where key = 'wanda-device');
+  walt_device uuid := (select id from w_state where key = 'walt-device');
+  walt_attested uuid := (select id from w_state where key = 'walt-attested-device');
+  walt_expires timestamptz := (select expires_at from public.billing_entitlements where user_id = walt);
+  stamped record;
+begin
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, attestation_state)
+    values (wanda, wanda_device, 'identity_lifetime_free', 9, now() + interval '1 day', 'unattested');
+    raise exception 'W4: the table refuses a grant for a revoked device';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at, attestation_state)
+    values (walt, walt_device, 'verified_store', 9, now() + interval '1 day', walt_expires, 'attested');
+    raise exception 'W4: a grant never claims an attestation the device does not hold';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at, attestation_state)
+    values (walt, walt_attested, 'verified_store', 9, now() + interval '1 day', walt_expires, 'unattested');
+    raise exception 'W4: a grant for an attested device records attested, not unattested';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at, attestation_state)
+    values (walt, walt_attested, 'verified_store', 9, now() + interval '1 day', walt_expires, 'verified');
+    raise exception 'W4: attestation_state is attested | unattested only';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at, attestation_state)
+    values (wanda, walt_device, 'verified_store', 9, now() + interval '1 day', walt_expires, 'unattested');
+    raise exception 'W4: a grant for another owner''s device is refused';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.offline_grants set attestation_state = 'attested'
+    where id = (select id from w_state where key = 'wanda-grant');
+    raise exception 'W4: a grant''s recorded state is immutable';
+  exception when check_violation then null;
+  end;
+  insert into public.offline_grants (user_id, device_id, entitlement_source, generation, expires_at, entitlement_expires_at)
+  values (walt, walt_device, 'verified_store', 9, now() + interval '1 day', walt_expires)
+  returning * into stamped;
+  if stamped.attestation_state <> 'unattested' then
+    raise exception 'W4: a row without the column is stamped from the device (got %)', stamped.attestation_state;
+  end if;
+  if exists (select 1 from public.offline_grants where attestation_state is null
+             or attestation_state not in ('attested', 'unattested')) then
+    raise exception 'W4: every grant carries a recorded attestation state';
+  end if;
+end $$;
+
+-- W5: the client role cannot un-revoke or delete a device, reads only its
+-- own rows; anon and service_role cannot issue.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000081';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000008101"}';
+do $$
+declare n integer;
+begin
+  begin
+    update public.offline_devices set revoked_at = null where user_id = (select auth.uid());
+    raise exception 'W5: a client cannot clear its own revocation';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.offline_devices where user_id = (select auth.uid());
+    raise exception 'W5: a client cannot delete its device row';
+  exception when insufficient_privilege then null;
+  end;
+  select count(*) into n from public.offline_devices where revoked_at is not null;
+  if n <> 1 or (select count(*) from public.offline_devices) <> 1 then
+    raise exception 'W5: Wanda reads exactly her own (revoked) device (got %)', n;
+  end if;
+  if (select count(*) from public.offline_grants where user_id <> (select auth.uid())) <> 0 then
+    raise exception 'W5: no cross-user grant rows are readable';
+  end if;
+end $$;
+reset role;
+set local role anon;
+do $$
+begin
+  begin
+    perform public.issue_offline_grant('wanda-iphone', 1);
+    raise exception 'W5: anon cannot issue a grant';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local role service_role;
+do $$
+begin
+  begin
+    perform public.issue_offline_grant('wanda-iphone', 1);
+    raise exception 'W5: service_role cannot issue a grant';
   exception when insufficient_privilege then null;
   end;
 end $$;

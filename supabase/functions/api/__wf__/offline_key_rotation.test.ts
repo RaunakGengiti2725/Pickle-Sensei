@@ -1025,6 +1025,7 @@ interface GrantRow {
   expires_at: string | null;
   entitlement_expires_at: string | null;
   ticket_ids: string[] | null;
+  attestation_state: string | null;
 }
 
 function proRow(issuedAt: number, leaseSeconds: number): GrantRow {
@@ -1037,6 +1038,7 @@ function proRow(issuedAt: number, leaseSeconds: number): GrantRow {
     expires_at: iso(issuedAt + leaseSeconds),
     entitlement_expires_at: iso(issuedAt + 30 * DAY),
     ticket_ids: [],
+    attestation_state: "unattested",
   };
 }
 

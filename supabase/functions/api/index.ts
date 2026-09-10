@@ -4910,8 +4910,11 @@ const OFFLINE_GRANT_REFUSALS = new Map<string, { status: number; message: string
     { status: 409, message: "Register this installation before requesting an offline grant." },
   ],
   [
-    "offline.device_not_attested",
-    { status: 403, message: "Offline grants are issued only to attested installations." },
+    "offline.device_revoked",
+    {
+      status: 403,
+      message: "This installation has been revoked and cannot receive offline grants.",
+    },
   ],
   [
     "access.paywall_required",
@@ -4998,6 +5001,11 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
       typeof row.entitlement_source === "string" ? row.entitlement_source : undefined,
     keyId: signingKey.kid,
   };
+  const attestationState = row.attestation_state;
+  if (attestationState !== "attested" && attestationState !== "unattested") {
+    emitOfflineGrantAudit({ outcome: "refused", reason: "row_malformed", ...audited });
+    return serviceUnavailable("Offline grant issuance", { name: "UnexpectedRpcRow" });
+  }
   try {
     const claims = offlineGrantClaimsFromIssuance(row, {
       issuer: OFFLINE_GRANT_ISSUER,
@@ -5028,6 +5036,7 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
           : null,
       ticketIds:
         claims.entitlementSource === "identity_lifetime_free" ? claims.allocation.ticketIds : [],
+      attestationState,
       keyId: signingKey.kid,
       grant,
     });
