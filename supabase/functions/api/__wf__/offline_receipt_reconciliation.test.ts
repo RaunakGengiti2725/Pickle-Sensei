@@ -49,6 +49,17 @@
 // Against the round-6 BASE_SHA (d446dcdd), where the route demands the
 // full-evidence receipt and answers results[], the wire-contract and freeze
 // tests fail.
+//
+// Round 7 pins what the shipping device actually sends: the batch is EVERY
+// pending receipt (the app never chunks — a Pro week offline is more than 25),
+// so a well-formed batch of any size the 2 MB body admits is answered per
+// receipt; `output` is the frozen shot.sync payload minus analysisPermitId,
+// i.e. `timestamps: { startMs, contactMs, endMs }` NESTED and `source`, and a
+// receipt carrying it settles (ticket consumed, or the Pro lease shot written)
+// — never HELD as evidence_ambiguous for its shape; a Pro (no-ticket)
+// result_recorded means the rated shot IS in public.shots; and the offline
+// write applies the shot.sync ingress' millisecond-offset rule (non-negative,
+// int4-bounded) so a payload the online path refuses is HELD, never stored.
 
 import postgres from "postgres";
 import { assert, assertEquals, assertMatch } from "@std/assert";
@@ -298,9 +309,9 @@ async function sign(
   });
 }
 
-/** The flat output the device durably delivered (the consume_offline_ticket()
- * p_shot shape); `id` is the result id the receipt names. */
-function output(
+/** The PRE-CONTRACT flat shape consume_offline_ticket(uuid, jsonb) reads
+ * directly: startMs/contactMs/endMs at the top level, no `source`. */
+function flatOutput(
   resultId: string,
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
@@ -329,6 +340,23 @@ function output(
       },
     ],
     versionVector: VERSION_VECTOR,
+    ...overrides,
+  };
+}
+
+/** The FROZEN 1.0 wire `output`: apps/mobile/src/data/sync.ts toSyncPayload
+ * without analysisPermitId — timestamps NESTED under `timestamps` and
+ * `source: "real"` — the object whose canonical digest the device receipt
+ * names. `id` is the result id the receipt names. */
+function output(
+  resultId: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const { startMs, contactMs, endMs, ...flat } = flatOutput(resultId);
+  return {
+    ...flat,
+    timestamps: { startMs, contactMs, endMs },
+    source: "real",
     ...overrides,
   };
 }
@@ -1045,6 +1073,66 @@ Deno.test(
     assertEquals(params[0].p_receipt.ticket, null);
     assertEquals(params[1].p_receipt.billingDisposition, "not_chargeable");
     assertEquals(params[1].p_hold_reason, null);
+  },
+);
+
+Deno.test(
+  "the batch the shipping device drains — EVERY pending receipt, here 26 Pro ratings of a week offline — is answered per receipt (200), never refused whole for its length",
+  async () => {
+    reset();
+    const user = freshUser();
+    const claims = proClaims(user.sub);
+    const grant = await sign(claims);
+    const entries: {
+      receipt: OfflineDeviceReceipt;
+      grant: OfflineSignedExecutionGrant;
+      output: Record<string, unknown>;
+    }[] = [];
+    for (let i = 1; i <= 26; i++) {
+      const resultId = `70000100-0404-4000-8000-${String(i).padStart(12, "0")}`;
+      const out = output(resultId);
+      entries.push({
+        receipt: await receipt({
+          receiptId: `receipt-pro-${i}`,
+          ownerId: user.sub,
+          grant,
+          claims,
+          ticket: null,
+          lifecycleSequence: i,
+          operationId: `operation-pro-${i}`,
+          resultId,
+          fullOutputSha256: await digestCanonicalOfflineJson(out),
+        }),
+        grant,
+        output: out,
+      });
+    }
+    const submitted = entries.map((e) => e.receipt.receiptId);
+
+    const response = await post({ receipts: entries }, user.token);
+    const body = await readJson(response);
+    assertEquals(response.status, 200, JSON.stringify(body).slice(0, 200));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery, r.status, r.financialDisposition]),
+      submitted.map((id) => [id, "settled", "result_recorded", "not_applicable"]),
+    );
+    assertEquals(
+      mobileVerdicts(body, submitted)?.map((v) => v.verdict),
+      submitted.map(() => "accepted"),
+    );
+    // Every receipt reached settle_offline_receipt() as the caller, and the
+    // frozen output shape travelled to SQL untouched: the nested timestamps
+    // are the SQL's to read, not the route's to reshape.
+    const params = settleCalls();
+    assertEquals(params.length, 26);
+    assertEquals(
+      params.map((p) => p.p_receipt.receiptId),
+      submitted,
+    );
+    assertEquals(params[25].p_output, entries[25].output);
+    assertEquals(params[25].p_hold_reason, null);
   },
 );
 
@@ -3128,6 +3216,419 @@ Deno.test({
         abstention.receipt.receiptId,
       ]);
       assertEquals(await counters(sql, 7), { held: 1, scored: 1 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Round 7 — the receipt carries the rating (frozen 1.0 output shape): a Pro
+// lease result is STORED, a nested-timestamps output settles, and the offline
+// write applies the shot.sync ingress rules.
+// ---------------------------------------------------------------------------
+
+async function setPremium(sql: Sql, n: number, expiresAt: string | null): Promise<void> {
+  await sql.unsafe(
+    `insert into public.billing_entitlements (user_id, premium, expires_at)
+     values ('${U(n)}', true, ${expiresAt === null ? "null" : `'${expiresAt}'`})
+     on conflict (user_id) do update set premium = true, expires_at = excluded.expires_at`,
+  );
+}
+
+/** register_offline_device() + issue_offline_grant() for a premium account:
+ * the REAL verified_store lease row (no tickets) the edge would sign. */
+async function issueProLease(sql: Sql, n: number, key: string): Promise<LiveGrant> {
+  await registerDevice(sql, n, key);
+  const row = await inTx(sql, n, async (tx) => {
+    const rows = await tx.unsafe<{ row: unknown }[]>(
+      `select to_jsonb(g) as row from public.issue_offline_grant('${key}', 0) g`,
+    );
+    return rows[0].row;
+  });
+  const claims = offlineGrantClaimsFromIssuance(row, {
+    issuer: ISSUER,
+    ownerId: U(n),
+    installationKeyId: key,
+    release: RELEASE,
+  });
+  assert(
+    claims.entitlementSource === "verified_store",
+    `Pro lease expected: ${JSON.stringify(row)}`,
+  );
+  return { claims, grant: await sign(claims) };
+}
+
+/** A no-ticket (lease) device receipt beside the frozen mobile output. */
+async function leaseReceipt(
+  ownerId: string,
+  issued: LiveGrant,
+  tag: string,
+  overrides: Partial<ReceiptOptions> = {},
+  outputOverrides: Record<string, unknown> = {},
+): Promise<{ receipt: OfflineDeviceReceipt; output: Record<string, unknown> }> {
+  const resultId = crypto.randomUUID();
+  const out = output(resultId, outputOverrides);
+  const rec = await receipt({
+    receiptId: `receipt-${tag}-${RUN}`,
+    ownerId,
+    grant: issued.grant,
+    claims: issued.claims,
+    ticket: null,
+    lifecycleSequence: 1,
+    operationId: `operation-${tag}-${RUN}`,
+    resultId,
+    fullOutputSha256: await digestCanonicalOfflineJson(out),
+    ...overrides,
+  });
+  return { receipt: rec, output: out };
+}
+
+type StoredShot = {
+  user_id: string;
+  offline_ticket_id: string | null;
+  analysis_permit_id: string | null;
+  start_ms: number;
+  contact_ms: number | null;
+  end_ms: number;
+  result_kind: string;
+  overall_score: string | null;
+  phases: string;
+  checkpoints: string;
+};
+
+async function storedShot(sql: Sql, id: string): Promise<StoredShot | null> {
+  const rows = await sql.unsafe<StoredShot[]>(
+    `select s.user_id, s.offline_ticket_id, s.analysis_permit_id, s.start_ms, s.contact_ms, s.end_ms,
+            s.result_kind, s.overall_score::text as overall_score,
+            (select count(*)::text from public.shot_phases p where p.shot_id = s.id) as phases,
+            (select count(*)::text from public.shot_checkpoints c where c.shot_id = s.id) as checkpoints
+     from public.shots s where s.id = '${id}'`,
+  );
+  assert(rows.length <= 1);
+  return rows.length === 0 ? null : rows[0];
+}
+
+Deno.test({
+  name: "live DB: a Pro (no-ticket) receipt answered result_recorded has STORED the rating it carried — the frozen mobile output (nested timestamps) becomes the owner's public.shots row with its phases and checkpoints, once, with nothing financial",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 8);
+      await setPremium(sql, 8, null);
+      const issued = await issueProLease(sql, 8, KEY("pro-lease"));
+      const pro = await leaseReceipt(U(8), issued, "pro");
+
+      const first = await inTx(sql, 8, (tx) => settle(tx, pro.receipt, pro.output, null));
+      assertEquals(first, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "not_applicable",
+        result_id: pro.receipt.resultId,
+      });
+      assertEquals(await storedShot(sql, pro.receipt.resultId), {
+        user_id: U(8),
+        offline_ticket_id: null,
+        analysis_permit_id: null,
+        start_ms: 0,
+        contact_ms: 100,
+        end_ms: 200,
+        result_kind: "scored",
+        overall_score: "7.00",
+        phases: "1",
+        checkpoints: "1",
+      });
+
+      // Redelivery replays the durable verdict; the rating is stored once.
+      for (let i = 0; i < 2; i += 1) {
+        const again = await inTx(sql, 8, (tx) => settle(tx, pro.receipt, pro.output, null));
+        assertEquals(again, { ...first, delivery: "replayed" });
+      }
+      const [{ count }] = await sql.unsafe<{ count: string }[]>(
+        `select count(*)::text as count from public.shots where user_id = '${U(8)}'`,
+      );
+      assertEquals(count, "1");
+      assertEquals((await counters(sql, 8)).held, 0);
+
+      // A second lease receipt naming the SAME result is a conflicting_receipt
+      // HOLD: one result, one row.
+      const twin = await leaseReceipt(U(8), issued, "pro-twin", {
+        resultId: pro.receipt.resultId,
+        fullOutputSha256: pro.receipt.fullOutputSha256,
+        lifecycleSequence: 2,
+      });
+      const held = await inTx(sql, 8, (tx) => settle(tx, twin.receipt, pro.output, null));
+      assertEquals(
+        [held.delivery, held.reason_code, held.financial_disposition],
+        ["held", "conflicting_receipt", "not_applicable"],
+      );
+
+      // The lease outlives the entitlement it was verified against: a rating
+      // rendered under the lease and reported after the entitlement lapsed is
+      // still the lease's to record (the lease is the authority, ≤ 7 days and
+      // ≤ the entitlement expiry when it was issued).
+      await sql.unsafe(
+        `update public.billing_entitlements set expires_at = now() - interval '1 minute'
+         where user_id = '${U(8)}'`,
+      );
+      const late = await leaseReceipt(U(8), issued, "pro-late", { lifecycleSequence: 3 });
+      const lateVerdict = await inTx(sql, 8, (tx) => settle(tx, late.receipt, late.output, null));
+      assertEquals(
+        [lateVerdict.delivery, lateVerdict.status, lateVerdict.financial_disposition],
+        ["settled", "result_recorded", "not_applicable"],
+      );
+      assertEquals((await storedShot(sql, late.receipt.resultId))?.user_id, U(8));
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: a free-ticket receipt beside the frozen mobile output (timestamps nested, source real) consumes the ticket and stores the shot with the flat ms columns — never an evidence_ambiguous HOLD for the honest device",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 9);
+      const issued = await issueFreeGrant(sql, 9, KEY("nested"));
+      assert(issued.claims.allocation);
+      const [ticketA, ticketB] = issued.claims.allocation.ticketIds;
+      const resultId = crypto.randomUUID();
+      const out = output(resultId, { timestamps: { startMs: 10, contactMs: null, endMs: 900 } });
+      const rec = await receipt({
+        receiptId: `receipt-nested-${RUN}`,
+        ownerId: U(9),
+        grant: issued.grant,
+        claims: issued.claims,
+        ticket: ticketRef(ticketA, issued.claims),
+        lifecycleSequence: 1,
+        operationId: `operation-nested-${RUN}`,
+        resultId,
+        fullOutputSha256: await digestCanonicalOfflineJson(out),
+      });
+
+      const settled = await inTx(sql, 9, (tx) => settle(tx, rec, out, null));
+      assertEquals(settled, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "consumed",
+        result_id: resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await storedShot(sql, resultId), {
+        user_id: U(9),
+        offline_ticket_id: ticketA,
+        analysis_permit_id: null,
+        start_ms: 10,
+        contact_ms: null,
+        end_ms: 900,
+        result_kind: "scored",
+        overall_score: "7.00",
+        phases: "1",
+        checkpoints: "1",
+      });
+      const replay = await inTx(sql, 9, (tx) => settle(tx, rec, out, null));
+      assertEquals(replay, { ...settled, delivery: "replayed" });
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // The pre-contract flat shape (startMs/contactMs/endMs at the top level)
+      // still settles under ticket B.
+      const flatId = crypto.randomUUID();
+      const flat = flatOutput(flatId);
+      const flatReceipt = await receipt({
+        receiptId: `receipt-flat-${RUN}`,
+        ownerId: U(9),
+        grant: issued.grant,
+        claims: issued.claims,
+        ticket: ticketRef(ticketB, issued.claims),
+        lifecycleSequence: 2,
+        operationId: `operation-flat-${RUN}`,
+        resultId: flatId,
+        fullOutputSha256: await digestCanonicalOfflineJson(flat),
+      });
+      const flatVerdict = await inTx(sql, 9, (tx) => settle(tx, flatReceipt, flat, null));
+      assertEquals(
+        [flatVerdict.delivery, flatVerdict.financial_disposition],
+        ["settled", "consumed"],
+      );
+      assertEquals((await storedShot(sql, flatId))?.contact_ms, 100);
+      assertEquals(await counters(sql, 9), { held: 0, scored: 2 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: the offline write applies the shot.sync ingress rules — a scored output with negative or out-of-range ms offsets, a non-integer offset or a malformed phase is HELD evidence_ambiguous (ticket still allocated, nothing stored), never consumed",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 10);
+      const issued = await issueFreeGrant(sql, 10, KEY("parity"));
+      assert(issued.claims.allocation);
+      const [ticketA] = issued.claims.allocation.ticketIds;
+      const cases: { tag: string; output: (id: string) => Record<string, unknown> }[] = [
+        {
+          tag: "flat-negative",
+          output: (id) => flatOutput(id, { startMs: -2147483648, contactMs: -1, endMs: -2 }),
+        },
+        {
+          tag: "both-shapes",
+          output: (id) => output(id, { startMs: -1, contactMs: 100, endMs: 200 }),
+        },
+        {
+          tag: "nested-negative",
+          output: (id) => output(id, { timestamps: { startMs: -1, contactMs: null, endMs: 200 } }),
+        },
+        {
+          tag: "nested-overflow",
+          output: (id) =>
+            output(id, { timestamps: { startMs: 0, contactMs: 100, endMs: 2147483648 } }),
+        },
+        {
+          tag: "nested-fraction",
+          output: (id) => output(id, { timestamps: { startMs: 0, contactMs: 100.5, endMs: 200 } }),
+        },
+        {
+          tag: "nested-string",
+          output: (id) => output(id, { timestamps: { startMs: "0", contactMs: 100, endMs: 200 } }),
+        },
+        {
+          tag: "phase-negative",
+          output: (id) =>
+            output(id, {
+              phases: [
+                { key: "prep", startMs: -5, representativeMs: 50, endMs: 100, confidence: 0.8 },
+              ],
+            }),
+        },
+        { tag: "phases-not-array", output: (id) => output(id, { phases: { key: "prep" } }) },
+        { tag: "score-out-of-range", output: (id) => output(id, { overallScore: 11 }) },
+        { tag: "source-not-real", output: (id) => output(id, { source: "synthetic" }) },
+        {
+          tag: "permit-claimed",
+          output: (id) => output(id, { analysisPermitId: crypto.randomUUID() }),
+        },
+      ];
+      let sequence = 1;
+      for (const c of cases) {
+        const resultId = crypto.randomUUID();
+        const out = c.output(resultId);
+        const rec = await receipt({
+          receiptId: `receipt-${c.tag}-${RUN}`,
+          ownerId: U(10),
+          grant: issued.grant,
+          claims: issued.claims,
+          ticket: ticketRef(ticketA, issued.claims),
+          lifecycleSequence: sequence++,
+          operationId: `operation-${c.tag}-${RUN}`,
+          resultId,
+          fullOutputSha256: await digestCanonicalOfflineJson(out),
+        });
+        const verdict = await inTx(sql, 10, (tx) => settle(tx, rec, out, null));
+        assertEquals(
+          verdict,
+          {
+            result: "accepted",
+            delivery: "held",
+            status: "reconciliation_required",
+            reason_code: "evidence_ambiguous",
+            financial_disposition: "reserved",
+            result_id: null,
+          },
+          c.tag,
+        );
+        assertEquals(await storedShot(sql, resultId), null, c.tag);
+        assertEquals(await ledgerEvents(sql, ticketA), ["allocated"], c.tag);
+      }
+      // The HOLDs are durable and the ticket is still the device's to settle
+      // with admissible evidence.
+      const honest = await liveReceipt(U(10), issued, ticketA, "parity-honest", {
+        lifecycleSequence: sequence,
+      });
+      const settled = await inTx(sql, 10, (tx) => settle(tx, honest.receipt, honest.output, null));
+      assertEquals([settled.delivery, settled.financial_disposition], ["settled", "consumed"]);
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await counters(sql, 10), { held: 1, scored: 1 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: a lease receipt is recorded only under a verified_store lease this caller was issued for this installation — a free grant with the ticket omitted, or a grant never issued, is HELD evidence_ambiguous and stores nothing (no third free rating through the RPC)",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 11);
+      const free = await issueFreeGrant(sql, 11, KEY("lease-forged"));
+      assert(free.claims.allocation);
+
+      // The caller's own FREE grant, ticket omitted: not a lease.
+      const noTicket = await leaseReceipt(U(11), free, "free-as-lease");
+      const heldFree = await inTx(sql, 11, (tx) =>
+        settle(tx, noTicket.receipt, noTicket.output, null),
+      );
+      assertEquals(heldFree, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "evidence_ambiguous",
+        financial_disposition: "not_applicable",
+        result_id: null,
+      });
+      assertEquals(await storedShot(sql, noTicket.receipt.resultId), null);
+      const heldReplay = await inTx(sql, 11, (tx) =>
+        settle(tx, noTicket.receipt, noTicket.output, null),
+      );
+      assertEquals(heldReplay, { ...heldFree, delivery: "replayed" });
+
+      // A lease-shaped grant the server never issued.
+      const forgedClaims = proClaims(U(11));
+      const forged: LiveGrant = { claims: forgedClaims, grant: await sign(forgedClaims) };
+      const unissued = await leaseReceipt(U(11), forged, "unissued-lease", {
+        lifecycleSequence: 2,
+      });
+      const heldForged = await inTx(sql, 11, (tx) =>
+        settle(tx, unissued.receipt, unissued.output, null),
+      );
+      assertEquals(
+        [heldForged.delivery, heldForged.reason_code, heldForged.financial_disposition],
+        ["held", "evidence_ambiguous", "not_applicable"],
+      );
+      assertEquals(await storedShot(sql, unissued.receipt.resultId), null);
+
+      // Another premium account's REAL lease is not this caller's either.
+      await createUser(sql, 12);
+      await setPremium(sql, 12, null);
+      const theirs = await issueProLease(sql, 12, KEY("their-lease"));
+      const borrowed = await leaseReceipt(U(11), theirs, "borrowed-lease", {
+        lifecycleSequence: 3,
+      });
+      const heldBorrowed = await inTx(sql, 11, (tx) =>
+        settle(tx, borrowed.receipt, borrowed.output, null),
+      );
+      assertEquals(
+        [heldBorrowed.delivery, heldBorrowed.reason_code],
+        ["held", "evidence_ambiguous"],
+      );
+      assertEquals(await storedShot(sql, borrowed.receipt.resultId), null);
+
+      const [{ count }] = await sql.unsafe<{ count: string }[]>(
+        `select count(*)::text as count from public.shots where user_id = '${U(11)}'`,
+      );
+      assertEquals(count, "0");
+      assertEquals(await counters(sql, 11), { held: 2, scored: 0 });
     } finally {
       await sql.end();
     }
