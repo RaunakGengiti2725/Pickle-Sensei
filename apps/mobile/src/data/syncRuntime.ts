@@ -4,17 +4,28 @@ import {
   getApiSession,
   type ApiSession,
 } from '../account/apiSession';
+import type { CanonicalAccessState } from '../billing/types';
 import { canonicalDataOwner, getActiveDataOwner } from './accountScope';
 import {
+  ApiError,
   createAnalysisPermitClient,
   createOfflineGrantClient,
   createTransport,
+  type OfflineAttestationEnvironment,
+  type OfflineGrantClient,
 } from './api';
 import { recoverAnalysisJournals, runJournal } from '../analysis/runJournal';
-import { getDb } from './db';
+import { getDb, type LocalDb } from './db';
+import { installationKey } from './installationKey';
+import {
+  offlineGrantPullNeeded,
+  readOfflineAllocation,
+  requestOfflineGrant,
+} from './offlineCapabilities';
 import { reconcileOfflineWallet } from './offlineWallet';
 import { drainOutbox } from './sync';
-import { trustedTime } from './trustedTime';
+import { trustedTime, type TrustedTimeReading } from './trustedTime';
+import { useAccessStore } from '../state/accessStore';
 
 /** Cadence while the outbox is healthy or empty. */
 export const SYNC_RETRY_BASE_MS = 30_000;
@@ -39,11 +50,119 @@ export function nextSyncRetryDelayMs(
   return Math.round(base + jitter);
 }
 
+/** Tickets the app asks the server for: two for a free account (the lifetime
+ * allowance the server clamps against what is already scored, reserved or
+ * held), none for Pro (a lease authorizes without tickets). The app holds
+ * and displays only what the server actually issued. */
+export function offlineGrantRequestedTickets(
+  access: CanonicalAccessState | null,
+): 0 | 2 {
+  return access?.premium === true ? 0 : 2;
+}
+
+/** The access snapshot a refusal was given under. A refusal is recorded
+ * against this key and the pull is not retried until the server-authoritative
+ * access state reads differently (an upgrade, a settled reservation, a
+ * changed entitlement). */
+export function offlineGrantAccessKey(
+  access: CanonicalAccessState | null,
+): string {
+  if (!access) return 'unknown';
+  return [
+    access.premium ? 'pro' : 'free',
+    access.freeRatings.used,
+    access.freeRatings.reserved,
+    access.freeRatings.remaining,
+    access.freeRatings.availableToReserve,
+    ...access.entitlements,
+  ].join(':');
+}
+
+/** A verdict the route itself wrote about the request — paywall, entitlement,
+ * allowance exhausted, invalid input, a device the server will not register.
+ * 401 (sign in again), 408/429 (try later) and every 5xx or intermediary
+ * answer are transport-class and follow the sync backoff instead. */
+export function isOfflineGrantRefusal(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 401 &&
+    error.status !== 408 &&
+    error.status !== 429
+  );
+}
+
+export type OfflineGrantPullOutcome =
+  'idle' | 'held' | 'refused' | 'no_identity' | 'failed';
+
+function attestationEnvironment(): OfflineAttestationEnvironment {
+  return __DEV__ ? 'development' : 'production';
+}
+
+type AsyncMethod = (...args: never[]) => Promise<unknown>;
+
+/** How a request ended, as online evidence: `answered` — it reached the route
+ * and came back readable; `transport` — it left the device and ended in an
+ * HTTP-class transport failure (429, 5xx, a redirect or unreadable page the
+ * api maps to 502, a 408 awaiting the answer) that the sync back-off
+ * retries; `none` — a verdict the route wrote (recorded, not retried) or a
+ * request the network stack refused outright (radio gone, no route), which
+ * says nothing about the server. */
+export type RequestEvidence = 'answered' | 'transport' | 'none';
+
+export function requestEvidence(error: unknown): RequestEvidence {
+  if (!(error instanceof ApiError)) return 'none';
+  return error.status === 408 || error.status === 429 || error.status >= 500
+    ? 'transport'
+    : 'none';
+}
+
+/** Wraps every method of an API client so the runtime learns, per request,
+ * how it ended. Failures are re-thrown unchanged. */
+function observingServerAnswers<T extends object>(
+  client: T,
+  observe: (evidence: RequestEvidence) => void,
+): T {
+  const observed: Record<string, unknown> = {};
+  for (const key of Object.keys(client) as Array<keyof T & string>) {
+    const member: unknown = client[key];
+    if (typeof member !== 'function') {
+      observed[key] = member;
+      continue;
+    }
+    const method = member as AsyncMethod;
+    observed[key] = async (...args: never[]) => {
+      try {
+        const result = await method.apply(client, args);
+        observe('answered');
+        return result;
+      } catch (error) {
+        observe(requestEvidence(error));
+        throw error;
+      }
+    };
+  }
+  return observed as T;
+}
+
 let generation = 0;
 const runningGenerations = new Map<number, Promise<void>>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
+let removeAccessListener: (() => void) | null = null;
 let triggerForGeneration: (() => Promise<void>) | null = null;
+
+/** Owner → the access key a definitive grant refusal was recorded under.
+ * Process-wide on purpose: the memo outlives the runtime instance, so a
+ * relaunch, a re-sign-in or a re-installed api session under unchanged
+ * access does not ask again. */
+const refusedOfflineGrants = new Map<string, string>();
+
+/** Exported for tests: the memo is process-wide by design. */
+export function resetOfflineGrantRefusals(): void {
+  refusedOfflineGrants.clear();
+}
 
 /** Stops future work synchronously. An already-issued request remains bound to
  * its original owner: its bearer resolves only while that owner's session is
@@ -55,6 +174,8 @@ export function clearSyncRuntime(): void {
   timer = null;
   removeAppStateListener?.();
   removeAppStateListener = null;
+  removeAccessListener?.();
+  removeAccessListener = null;
 }
 
 export function configureSyncRuntime(session: ApiSession): void {
@@ -86,10 +207,77 @@ export function configureSyncRuntime(session: ApiSession): void {
       }
     },
   };
-  const transport = createTransport(apiConfig);
-  const permits = { ...scope, ...createAnalysisPermitClient(apiConfig) };
-  const offlineGrants = createOfflineGrantClient(apiConfig);
+  // Online evidence for the pass in progress: true only while the LAST
+  // request this pass made was answered by the server, when the pass was
+  // started by a server answer the billing lifecycle just received, or when
+  // the previous pass ended in an HTTP-class transport failure this one is
+  // the backed-off retry of. A pass with nothing to send and nothing to
+  // retry has none — an empty outbox draining cleanly and an anchored
+  // trusted-time reading are both indistinguishable from a device whose
+  // radio is gone.
+  let serverAnswered = false;
+  let retryPending = false;
+  let rerunAnswered = false;
+  const observe = (evidence: RequestEvidence) => {
+    serverAnswered = evidence === 'answered';
+    if (evidence === 'transport') retryPending = true;
+  };
+  const transport = observingServerAnswers(createTransport(apiConfig), observe);
+  const permits = {
+    ...scope,
+    ...observingServerAnswers(createAnalysisPermitClient(apiConfig), observe),
+  };
+  const offlineGrants: OfflineGrantClient = observingServerAnswers(
+    createOfflineGrantClient(apiConfig),
+    observe,
+  );
   let consecutiveFailures = 0;
+  const current = () =>
+    configuredGeneration === generation && getActiveDataOwner() === owner;
+
+  /** Asks the server for a grant when the wallet holds no executable one.
+   * Runs only at the end of a clean pass with online evidence, under an
+   * anchored trusted-time reading, for the configured and still-active
+   * owner, and never while a refusal stands for the current access state.
+   * Register (idempotent) then issue; the server-issued grant is held as-is.
+   * Nothing is spent, released or reclaimed here. */
+  const pullOfflineGrant = async (
+    db: LocalDb,
+    reading: TrustedTimeReading,
+  ): Promise<OfflineGrantPullOutcome> => {
+    if (!serverAnswered) return 'idle';
+    if (reading.authority !== 'anchored' || reading.rollbackDetected) {
+      return 'idle';
+    }
+    const access = useAccessStore.getState().canonicalAccess;
+    const accessKey = offlineGrantAccessKey(access);
+    if (refusedOfflineGrants.get(owner) === accessKey) return 'idle';
+    if (!offlineGrantPullNeeded(await readOfflineAllocation(db, reading))) {
+      return 'idle';
+    }
+    const installationKeyId = await installationKey.read();
+    if (!installationKeyId) return 'no_identity';
+    if (!current()) return 'idle';
+    try {
+      await offlineGrants.registerDevice({
+        installationKeyId,
+        attestationEnvironment: attestationEnvironment(),
+      });
+      if (!current()) return 'idle';
+      await requestOfflineGrant(db, offlineGrants, {
+        installationKeyId,
+        requestedTickets: offlineGrantRequestedTickets(access),
+      });
+      refusedOfflineGrants.delete(owner);
+      return 'held';
+    } catch (error) {
+      if (isOfflineGrantRefusal(error)) {
+        refusedOfflineGrants.set(owner, accessKey);
+        return 'refused';
+      }
+      return 'failed';
+    }
+  };
 
   const schedule = () => {
     if (configuredGeneration !== generation) return;
@@ -100,52 +288,63 @@ export function configureSyncRuntime(session: ApiSession): void {
     );
   };
 
-  const trigger = (): Promise<void> => {
+  const pass = async (answered: boolean): Promise<void> => {
+    serverAnswered = answered || retryPending;
+    retryPending = false;
+    try {
+      const db = getDb();
+      const recovered = await recoverAnalysisJournals(db, scope, permits, {
+        excludeOperationIds: runJournal.activeOperationIds(scope),
+      });
+      if (!current()) return;
+      const result = await drainOutbox(db, transport);
+      if (!current()) return;
+      // Offline consumption receipts are presented after the results they
+      // paid for. A verdict the server withholds keeps the receipt queued
+      // and this drain counts as unfinished, so the timer backs off.
+      const reading = await trustedTime.read();
+      const receipts = await reconcileOfflineWallet(db, offlineGrants, reading);
+      const pendingRecovery =
+        recovered.unknownStorage ||
+        recovered.items.some(
+          item => item.kind === 'pending' || item.kind === 'held',
+        );
+      const clean =
+        result.failed === 0 && !pendingRecovery && receipts.pending === 0;
+      const pull =
+        clean && current() ? await pullOfflineGrant(db, reading) : 'idle';
+      // A clean pass that never reached the server says nothing about an
+      // outage the previous pass hit: the back-off is kept, not reset.
+      if (!clean || pull === 'failed') consecutiveFailures += 1;
+      else if (serverAnswered || pull === 'refused') consecutiveFailures = 0;
+    } catch {
+      // Outbox rows remain durable with their attempt history. The foreground
+      // event or the backed-off timer retries without inventing a receipt.
+      consecutiveFailures += 1;
+    }
+  };
+
+  const trigger = (answered = false): Promise<void> => {
     if (configuredGeneration !== generation) return Promise.resolve();
     const running = runningGenerations.get(configuredGeneration);
-    if (running) return running;
+    if (running) {
+      if (answered) rerunAnswered = true;
+      return running;
+    }
     if (getActiveDataOwner() !== owner) {
       schedule();
       return Promise.resolve();
     }
     const operation = (async () => {
       try {
-        const db = getDb();
-        const recovered = await recoverAnalysisJournals(db, scope, permits, {
-          excludeOperationIds: runJournal.activeOperationIds(scope),
-        });
-        if (
-          configuredGeneration !== generation ||
-          getActiveDataOwner() !== owner
-        )
-          return;
-        const result = await drainOutbox(db, transport);
-        if (
-          configuredGeneration !== generation ||
-          getActiveDataOwner() !== owner
-        )
-          return;
-        // Offline consumption receipts are presented after the results they
-        // paid for. A verdict the server withholds keeps the receipt queued
-        // and this drain counts as unfinished, so the timer backs off.
-        const receipts = await reconcileOfflineWallet(
-          db,
-          offlineGrants,
-          await trustedTime.read(),
-        );
-        const pendingRecovery =
-          recovered.unknownStorage ||
-          recovered.items.some(
-            item => item.kind === 'pending' || item.kind === 'held',
-          );
-        consecutiveFailures =
-          result.failed > 0 || pendingRecovery || receipts.pending > 0
-            ? consecutiveFailures + 1
-            : 0;
-      } catch {
-        // Outbox rows remain durable with their attempt history. The foreground
-        // event or the backed-off timer retries without inventing a receipt.
-        consecutiveFailures += 1;
+        // A server answer that arrives mid-pass reached a pass that had
+        // already decided without it: run once more before settling.
+        let startAnswered = answered;
+        do {
+          rerunAnswered = false;
+          await pass(startAnswered);
+          startAnswered = true;
+        } while (rerunAnswered && current());
       } finally {
         runningGenerations.delete(configuredGeneration);
         schedule();
@@ -155,11 +354,25 @@ export function configureSyncRuntime(session: ApiSession): void {
     return operation;
   };
 
-  triggerForGeneration = trigger;
+  triggerForGeneration = () => trigger();
   const subscription = AppState.addEventListener('change', nextState => {
     if (nextState === 'active') void trigger();
   });
   removeAppStateListener = () => subscription.remove();
+  // The billing lifecycle publishes every server answer to the access check
+  // as a new canonical snapshot: the server was just reached, so a pass
+  // started by it carries online evidence of its own.
+  removeAccessListener = useAccessStore.subscribe((state, previous) => {
+    if (
+      state.canonicalAccess !== null &&
+      state.canonicalAccess !== previous.canonicalAccess &&
+      configuredGeneration === generation &&
+      getActiveDataOwner() === owner &&
+      apiConfig.token !== null
+    ) {
+      void trigger(true);
+    }
+  });
   void trigger();
 }
 
