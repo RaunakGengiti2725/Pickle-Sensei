@@ -49,6 +49,20 @@
 // Against the round-6 BASE_SHA (d446dcdd), where the route demands the
 // full-evidence receipt and answers results[], the wire-contract and freeze
 // tests fail.
+//
+// Round 7 pins what the shipping device actually sends and what the server
+// must do with it: `output` is the FROZEN 1.0 shape — the shot.sync payload
+// (nested `timestamps`, `source: "real"`) WITHOUT analysisPermitId — which the
+// route admits under the sync ingress's own rules (bounded non-negative ms
+// offsets, real source, no permit / settlement claims) and hands to the RPC
+// flattened to the row shape consume_offline_ticket() reads, the receipt's
+// digest still taken over the device's bytes; a batch is never refused for
+// its length (the device drains EVERY pending receipt in one POST — a Pro
+// week offline is more than 25), only for its byte size, with a CODED 413.
+//
+// Round 10 pins that the grant's `exp` bounds offline EXECUTION: a receipt
+// whose declared queuedAt is at or after the lease's exp is a durable HOLD
+// (nothing recorded, ticket reserved), however late it is uploaded.
 
 import postgres from "postgres";
 import { assert, assertEquals, assertMatch } from "@std/assert";
@@ -56,6 +70,9 @@ import { exportJWK, generateKeyPair } from "jose";
 import {
   OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
   OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
+  OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES,
+  OFFLINE_RECEIPT_BATCH_MAX_ENTRIES,
+  OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
   OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
   type OfflineDeviceReceipt,
   type OfflineExecutionGrantClaims,
@@ -265,8 +282,11 @@ function freeClaims(
   );
 }
 
-function proClaims(ownerId: string): OfflineExecutionGrantClaims {
-  const issuedAt = nowSeconds() - 60;
+function proClaims(
+  ownerId: string,
+  options: { issuedAt?: number } = {},
+): OfflineExecutionGrantClaims {
+  const issuedAt = options.issuedAt ?? nowSeconds() - 60;
   return offlineGrantClaimsFromIssuance(
     {
       result: "accepted",
@@ -298,8 +318,12 @@ async function sign(
   });
 }
 
-/** The flat output the device durably delivered (the consume_offline_ticket()
- * p_shot shape); `id` is the result id the receipt names. */
+/** The output the device durably delivered, in the FROZEN 1.0 wire shape
+ * (build_manifest.py, court-offline shipping path): the shot.sync outbox
+ * payload apps/mobile/src/data/sync.ts toSyncPayload builds — nested
+ * `timestamps`, `source: "real"` — WITHOUT analysisPermitId (no permit was
+ * reserved; the grant authorized the run). `id` is the result id the receipt
+ * names; the receipt's fullOutputSha256 digests exactly this object. */
 function output(
   resultId: string,
   overrides: Record<string, unknown> = {},
@@ -310,12 +334,11 @@ function output(
     shotType: "dink",
     cameraView: "side",
     capturedAt: "2026-09-01T10:00:00.000Z",
-    startMs: 0,
-    contactMs: 100,
-    endMs: 200,
+    timestamps: { startMs: 0, contactMs: 100, endMs: 200 },
     overallScore: 7,
     confidence: 0.9,
     resultKind: "scored",
+    source: "real",
     phases: [{ key: "prep", startMs: 0, representativeMs: 50, endMs: 100, confidence: 0.8 }],
     checkpoints: [
       {
@@ -333,6 +356,31 @@ function output(
   };
 }
 
+/** What the route hands settle_offline_receipt() as p_output for an admitted
+ * frozen-shape output: the row shape consume_offline_ticket() reads (flat
+ * startMs / contactMs / endMs, no `source` — the table writes 'real' itself),
+ * every other field as delivered. The digest the receipt is bound under is
+ * still the one over the device's object. */
+function sqlOutput(out: Record<string, unknown>): Record<string, unknown> {
+  const ts = out.timestamps as Record<string, unknown>;
+  return {
+    id: out.id,
+    sessionId: out.sessionId,
+    shotType: out.shotType,
+    cameraView: out.cameraView,
+    capturedAt: out.capturedAt,
+    startMs: ts.startMs,
+    contactMs: ts.contactMs,
+    endMs: ts.endMs,
+    overallScore: out.overallScore,
+    confidence: out.confidence,
+    resultKind: out.resultKind,
+    phases: out.phases,
+    checkpoints: out.checkpoints,
+    versionVector: out.versionVector,
+  };
+}
+
 interface ReceiptOptions {
   receiptId: string;
   ownerId: string;
@@ -346,6 +394,7 @@ interface ReceiptOptions {
   billingDisposition?: OfflineDeviceReceipt["billingDisposition"];
   installationKeyId?: string;
   grantJwsSha256?: string;
+  queuedAt?: string;
 }
 
 /** The DEVICE receipt exactly as apps/mobile/src/data/api.ts
@@ -364,7 +413,7 @@ async function receipt(options: ReceiptOptions): Promise<OfflineDeviceReceipt> {
     resultId: options.resultId,
     fullOutputSha256: options.fullOutputSha256,
     billingDisposition: options.billingDisposition ?? "joint_verification_required",
-    queuedAt: "2026-09-08T12:00:00.000Z",
+    queuedAt: options.queuedAt ?? iso(options.claims.iat + 60),
   };
 }
 
@@ -783,7 +832,7 @@ Deno.test(
     assertEquals(params[1].p_receipt.resultId, first.receipt.resultId);
     assertEquals(params[1].p_receipt.fullOutputSha256, first.receipt.fullOutputSha256);
     assertEquals(params[1].p_receipt_sha256, await digestCanonicalOfflineJson(first.receipt));
-    assertEquals(params[1].p_output, first.output);
+    assertEquals(params[1].p_output, sqlOutput(first.output));
     assertEquals(params[1].p_hold_reason, null);
     assertEquals(h.callsTo(CONSUME_RPC).length, 0);
     assertEquals(h.callsTo(RELEASE_RPC).length, 0);
@@ -1049,6 +1098,159 @@ Deno.test(
 );
 
 Deno.test(
+  "the lease `exp` bounds offline EXECUTION: a receipt whose declared queue instant is at or after the grant's exp is HELD evidence_ambiguous (Pro: not_applicable, no result recorded; free: ticket reserved), while a receipt executed inside the lease and delivered weeks after exp settles",
+  async () => {
+    const now = nowSeconds();
+    // A 3-day Pro lease issued 40 days ago; the entitlement it was issued
+    // under lapsed 10 days ago. The device comes online today.
+    const user = freshUser();
+    const claims = proClaims(user.sub, { issuedAt: now - 40 * DAY });
+    assert(claims.exp < now - 30 * DAY, "fixture: the lease expired long ago");
+    const grant = await sign(claims);
+    const lateOutput = output("70000031-0404-4000-8000-000000000031");
+    const late = await receipt({
+      receiptId: "receipt-pro-after-exp",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 2,
+      operationId: "operation-pro-after-exp",
+      resultId: "70000031-0404-4000-8000-000000000031",
+      fullOutputSha256: await digestCanonicalOfflineJson(lateOutput),
+      queuedAt: iso(now - DAY),
+    });
+    const atExpOutput = output("70000032-0404-4000-8000-000000000032");
+    const atExp = await receipt({
+      receiptId: "receipt-pro-at-exp",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 3,
+      operationId: "operation-pro-at-exp",
+      resultId: "70000032-0404-4000-8000-000000000032",
+      fullOutputSha256: await digestCanonicalOfflineJson(atExpOutput),
+      queuedAt: iso(claims.exp),
+    });
+    const inLeaseOutput = output("70000033-0404-4000-8000-000000000033");
+    const inLease = await receipt({
+      receiptId: "receipt-pro-in-lease",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 1,
+      operationId: "operation-pro-in-lease",
+      resultId: "70000033-0404-4000-8000-000000000033",
+      fullOutputSha256: await digestCanonicalOfflineJson(inLeaseOutput),
+      queuedAt: iso(claims.exp - 1),
+    });
+    // The same claim under a free ticket: the ledger holds the ticket, the
+    // clock says the rating happened after the lease ended — ambiguous, held
+    // with the ticket reserved (never consumed, never released here).
+    const freeUser = freshUser();
+    const free = freeClaims(freeUser.sub, { issuedAt: now - 40 * DAY });
+    const freeGrant = await sign(free);
+    const freeOutput = output("70000034-0404-4000-8000-000000000034");
+    const lateTicket = await receipt({
+      receiptId: "receipt-free-after-exp",
+      ownerId: freeUser.sub,
+      grant: freeGrant,
+      claims: free,
+      ticket: ticketRef(TICKET_A, free),
+      lifecycleSequence: 1,
+      operationId: "operation-free-after-exp",
+      resultId: "70000034-0404-4000-8000-000000000034",
+      fullOutputSha256: await digestCanonicalOfflineJson(freeOutput),
+      queuedAt: iso(free.exp + 3600),
+    });
+
+    reset();
+    const ids = [late.receiptId, atExp.receiptId, inLease.receiptId];
+    const body = await readJson(
+      await post(
+        {
+          receipts: [
+            { receipt: late, grant, output: lateOutput },
+            { receipt: atExp, grant, output: atExpOutput },
+            { receipt: inLease, grant, output: inLeaseOutput },
+          ],
+        },
+        user.token,
+      ),
+    );
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(
+      answer.receipts.map((r) => [
+        r.receiptId,
+        r.delivery,
+        r.status,
+        r.reasonCode,
+        r.financialDisposition,
+        r.resultId,
+      ]),
+      [
+        [
+          late.receiptId,
+          "held",
+          "reconciliation_required",
+          "evidence_ambiguous",
+          "not_applicable",
+          null,
+        ],
+        [
+          atExp.receiptId,
+          "held",
+          "reconciliation_required",
+          "evidence_ambiguous",
+          "not_applicable",
+          null,
+        ],
+        [inLease.receiptId, "settled", "result_recorded", null, "not_applicable", inLease.resultId],
+      ],
+    );
+    assertEquals(
+      mobileVerdicts(body, ids)?.map((v) => v.verdict),
+      ["held", "held", "accepted"],
+    );
+    // The HOLD is the edge's verdict on the evidence, carried to the RPC as
+    // its hold reason so it is durable — the same redelivery replays it.
+    const params = settleCalls();
+    assertEquals(params.length, 3);
+    assertEquals(params[0].p_hold_reason, "evidence_ambiguous");
+    assertEquals(params[1].p_hold_reason, "evidence_ambiguous");
+    assertEquals(params[2].p_hold_reason, null);
+    assertEquals(params[2].p_output, sqlOutput(inLeaseOutput));
+
+    h.reset();
+    h.respond = durableRespond;
+    const again = await results(
+      await post({ receipts: [{ receipt: late, grant, output: lateOutput }] }, user.token),
+    );
+    assertEquals(again[0].delivery, "replayed");
+    assertEquals(again[0].reconciliation?.status, "reconciliation_required");
+    assertEquals(again[0].reconciliation?.reasonCode, "evidence_ambiguous");
+    assertEquals(again[0].reconciliation?.resultId, null);
+
+    reset();
+    const freeOut = await results(
+      await post(
+        { receipts: [{ receipt: lateTicket, grant: freeGrant, output: freeOutput }] },
+        freeUser.token,
+      ),
+    );
+    assertEquals(freeOut[0].delivery, "held");
+    assertEquals(freeOut[0].reconciliation?.reasonCode, "evidence_ambiguous");
+    assertEquals(freeOut[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(settleCalls()[0].p_hold_reason, "evidence_ambiguous");
+    assertEquals(h.callsTo(CONSUME_RPC).length, 0);
+    assertEquals(h.callsTo(RELEASE_RPC).length, 0);
+  },
+);
+
+Deno.test(
   "malformed entries are rejected per receipt, by the receipt id they name, without reaching the database; an entry naming no receipt id, like a malformed batch, is 400",
   async () => {
     reset();
@@ -1194,7 +1396,7 @@ async function mobileSubmission(
 }
 
 Deno.test(
-  "the exact mobile OfflineReceiptSubmission entry settles, travels to the RPC byte for byte, and the answer is what parseOfflineReceiptVerdicts reads — every submitted id exactly once",
+  "the exact mobile OfflineReceiptSubmission entry settles, the receipt travels to the RPC byte for byte beside the frozen output in the shots row shape, and the answer is what parseOfflineReceiptVerdicts reads — every submitted id exactly once",
   async () => {
     reset();
     const user = freshUser();
@@ -1241,12 +1443,14 @@ Deno.test(
     ]);
 
     // The RPC received the device receipt exactly as posted (that is what its
-    // digest binds) and the freeze flag, false under an unfrozen release.
+    // digest binds), the frozen output re-shaped into the row the shots
+    // writers read (nested timestamps flattened; the digest was taken over
+    // the posted object) and the freeze flag, false under an unfrozen release.
     const params = settleCalls();
     assertEquals(params.length, 1);
     assertEquals(params[0].p_receipt, submission);
     assertEquals(params[0].p_receipt_sha256, await digestCanonicalOfflineJson(submission));
-    assertEquals(params[0].p_output, out);
+    assertEquals(params[0].p_output, sqlOutput(out));
     assertEquals(params[0].p_hold_reason, null);
     assertEquals(params[0].p_defer_new, false);
 
@@ -2198,6 +2402,351 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
+// Round 7: what the shipping device actually sends. apps/mobile drains EVERY
+// pending receipt in one POST (offlineWallet.ts / offlineCapabilities.ts
+// reconcileOfflineReceipts → pendingOfflineReceipts, no chunking) and its
+// `output` is the frozen shot.sync payload shape (nested `timestamps`,
+// `source`), which the shots writers read flat — the route must answer any
+// batch size per receipt and admit the output under the sync ingress's own
+// field rules before it reaches the database.
+// ---------------------------------------------------------------------------
+
+/** Entries decided per request (index.ts OFFLINE_RECEIPT_BATCH_SETTLE_MAX);
+ * the rest of a larger batch is answered pending and settles next drain. */
+const ROUTE_SETTLE_MAX = 250;
+const ROUTE_BODY_BYTES = 2_000_000;
+
+async function proBatch(
+  user: { sub: string; token: string },
+  count: number,
+  outputOverrides: (n: number) => Record<string, unknown> = () => ({}),
+): Promise<{
+  entries: { receipt: OfflineDeviceReceipt; grant: OfflineSignedExecutionGrant; output: unknown }[];
+  ids: string[];
+}> {
+  const claims = proClaims(user.sub);
+  const grant = await sign(claims);
+  const entries = [];
+  const ids: string[] = [];
+  for (let n = 1; n <= count; n += 1) {
+    const resultId = `7100${String(n).padStart(4, "0")}-0404-4000-8000-000000000000`;
+    const out = output(resultId, outputOverrides(n));
+    const rec = await receipt({
+      receiptId: `pro-receipt-${n}`,
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: n,
+      operationId: `pro-operation-${n}`,
+      resultId,
+      fullOutputSha256: await digestCanonicalOfflineJson(out),
+    });
+    entries.push({ receipt: rec, grant, output: out });
+    ids.push(rec.receiptId);
+  }
+  return { entries, ids };
+}
+
+Deno.test(
+  "a batch of 26 Pro receipts — a week offline — is answered per receipt, every one settled and named once; the batch size is never refused",
+  async () => {
+    reset();
+    const user = freshUser();
+    const { entries, ids } = await proBatch(user, 26, (n) =>
+      n % 2 === 0 ? { timestamps: { startMs: 10, contactMs: null, endMs: 400 } } : {},
+    );
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(answer.receipts.length, 26);
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery, r.status, r.financialDisposition]),
+      ids.map((id) => [id, "settled", "result_recorded", "not_applicable"]),
+    );
+    assertEquals(
+      mobileVerdicts(body, ids),
+      ids.map((receiptId) => ({ receiptId, verdict: "accepted", code: "result_recorded" })),
+    );
+    const params = settleCalls();
+    assertEquals(params.length, 26);
+    // The frozen output reaches the RPC in the row shape, an honest null
+    // contact included.
+    assertEquals(params[1].p_output, sqlOutput(entries[1].output as Record<string, unknown>));
+    assertEquals(params[1].p_output?.contactMs, null);
+    assertEquals(params[1].p_output?.startMs, 10);
+    assertEquals(durable.size, 26);
+  },
+);
+
+Deno.test(
+  "a batch beyond the per-request settlement cap decides the first entries and answers the rest pending — nothing durable for them, every id named once, the app keeps them queued for the next drain",
+  async () => {
+    reset();
+    const user = freshUser();
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 2);
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 2);
+    assertEquals(
+      answer.receipts.slice(0, ROUTE_SETTLE_MAX).every((r) => r.delivery === "settled"),
+      true,
+    );
+    assertEquals(answer.receipts.slice(ROUTE_SETTLE_MAX), [
+      {
+        receiptId: ids[ROUTE_SETTLE_MAX],
+        status: "pending",
+        reasonCode: null,
+        financialDisposition: "not_applicable",
+        resultId: null,
+        delivery: "pending",
+      },
+      {
+        receiptId: ids[ROUTE_SETTLE_MAX + 1],
+        status: "pending",
+        reasonCode: null,
+        financialDisposition: "not_applicable",
+        resultId: null,
+        delivery: "pending",
+      },
+    ]);
+    const verdicts = mobileVerdicts(body, ids);
+    assert(verdicts !== null);
+    assertEquals(
+      verdicts.slice(ROUTE_SETTLE_MAX).map((v) => v.verdict),
+      ["held", "held"],
+    );
+    assertEquals(settleCalls().length, ROUTE_SETTLE_MAX);
+    assertEquals(durable.size, ROUTE_SETTLE_MAX);
+
+    // The next drain: the app re-sends what is still queued (the two deferred
+    // ones — an accepted receipt leaves the queue; one redelivered anyway
+    // replays) and the deferred ones settle now.
+    h.reset();
+    h.respond = durableRespond;
+    const again = await results(
+      await post({ receipts: [entries[0], ...entries.slice(ROUTE_SETTLE_MAX)] }, user.token),
+    );
+    assertEquals(
+      again.map((r) => [r.receiptId, r.delivery]),
+      [
+        [ids[0], "replayed"],
+        [ids[ROUTE_SETTLE_MAX], "settled"],
+        [ids[ROUTE_SETTLE_MAX + 1], "settled"],
+      ],
+    );
+    assertEquals(durable.size, ROUTE_SETTLE_MAX + 2);
+  },
+);
+
+Deno.test(
+  "a queue of durable HOLDs never starves the fresh receipt behind it: replays do not spend the per-request decision budget",
+  async () => {
+    reset();
+    const user = freshUser();
+    // ROUTE_SETTLE_MAX chargeable Pro receipts delivered without their output
+    // become durable evidence_missing HOLDs; the app keeps re-presenting held
+    // receipts (they are not settled on the device) ahead of newer ones.
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 1);
+    const held = entries.slice(0, ROUTE_SETTLE_MAX).map((e) => ({ ...e, output: null }));
+    const first = wire(await readJson(await post({ receipts: held }, user.token)));
+    assertEquals(first.rejected, []);
+    assertEquals(
+      first.receipts.every((r) => r.delivery === "held" && r.reasonCode === "evidence_missing"),
+      true,
+    );
+    assertEquals(durable.size, ROUTE_SETTLE_MAX);
+
+    // Every later drain: the same durable HOLDs first, then the honest receipt
+    // queued after them. Its decision must not be deferred behind replays.
+    for (let drain = 0; drain < 3; drain += 1) {
+      h.reset();
+      h.respond = durableRespond;
+      const answer = wire(
+        await readJson(await post({ receipts: [...held, entries[ROUTE_SETTLE_MAX]] }, user.token)),
+      );
+      assertEquals(answer.rejected, []);
+      assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(
+        answer.receipts.slice(0, ROUTE_SETTLE_MAX).every((r) => r.delivery === "replayed"),
+        true,
+      );
+      const fresh = answer.receipts[ROUTE_SETTLE_MAX];
+      assertEquals(
+        [fresh.receiptId, fresh.delivery, fresh.status, fresh.financialDisposition],
+        [
+          ids[ROUTE_SETTLE_MAX],
+          drain === 0 ? "settled" : "replayed",
+          "result_recorded",
+          "not_applicable",
+        ],
+      );
+      assertEquals(settleCalls().length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
+    }
+  },
+);
+
+Deno.test(
+  "a queue whose one-POST body exceeds the batch byte cap is refused with the coded 413 the app can act on (offline.batch_too_large) — nothing decided; the same queue in smaller requests is accepted, every id named exactly once across them",
+  async () => {
+    reset();
+    const user = freshUser();
+    // The route's caps are the ones shared-types publishes to the device.
+    assertEquals(ROUTE_SETTLE_MAX, OFFLINE_RECEIPT_BATCH_MAX_ENTRIES);
+    assertEquals(ROUTE_BODY_BYTES, OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES);
+
+    // Grow the honest queue until the exact wire body crosses the cap.
+    const probe = await proBatch(user, 1);
+    const entryBytes = new TextEncoder().encode(JSON.stringify(probe.entries[0])).length + 1;
+    const count = Math.ceil(ROUTE_BODY_BYTES / entryBytes) + 1;
+    const { entries, ids } = await proBatch(user, count);
+    const bodyBytes = new TextEncoder().encode(JSON.stringify({ receipts: entries })).length;
+    assert(bodyBytes > ROUTE_BODY_BYTES, `${count} entries = ${bodyBytes} bytes`);
+
+    // One POST of the whole queue: a CODED refusal (an uncoded 4xx is what the
+    // app's request helper attributes to an intermediary and never acts on).
+    const refused = await post({ receipts: entries }, user.token);
+    const refusedBody = await readJson(refused);
+    assertEquals(refused.status, 413, JSON.stringify(refusedBody));
+    assertEquals(refusedBody, {
+      error: {
+        code: OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
+        message: `A receipt batch is at most ${ROUTE_BODY_BYTES} bytes of JSON. Deliver the queue in smaller batches.`,
+      },
+    });
+    assertEquals(settleCalls().length, 0);
+    assertEquals(durable.size, 0);
+
+    // The same queue in requests of at most the decision budget, each far
+    // inside the byte cap: every one accepted, the whole queue settled in
+    // order, every id named exactly once — the refusal was for bytes, never
+    // for the number of entries.
+    const chunks: (typeof entries)[] = [];
+    for (let at = 0; at < entries.length; at += ROUTE_SETTLE_MAX) {
+      chunks.push(entries.slice(at, at + ROUTE_SETTLE_MAX));
+    }
+    assert(chunks.length >= 2, `${chunks.length} chunks`);
+    const answered: string[] = [];
+    let settled = 0;
+    for (const batch of chunks) {
+      assert(batch.length <= ROUTE_SETTLE_MAX);
+      assert(
+        new TextEncoder().encode(JSON.stringify({ receipts: batch })).length <= ROUTE_BODY_BYTES,
+      );
+      h.reset();
+      h.respond = durableRespond;
+      const response = await post({ receipts: batch }, user.token);
+      assertEquals(response.status, 200);
+      const body = await readJson(response);
+      const answer = wire(body);
+      assertEquals(answer.rejected, []);
+      assertEquals(
+        answer.receipts.map((r) => [r.delivery, r.status, r.financialDisposition]),
+        batch.map(() => ["settled", "result_recorded", "not_applicable"]),
+      );
+      const batchIds = batch.map((e) => e.receipt.receiptId);
+      assertEquals(
+        mobileVerdicts(body, batchIds),
+        batchIds.map((receiptId) => ({ receiptId, verdict: "accepted", code: "result_recorded" })),
+      );
+      answered.push(...answer.receipts.map((r) => r.receiptId));
+      settled += settleCalls().length;
+    }
+    assertEquals(answered, ids);
+    assertEquals(settled, count);
+    assertEquals(durable.size, count);
+  },
+);
+
+Deno.test(
+  "an output the shot.sync ingress would refuse — negative or out-of-range ms offsets, a flat (non-frozen) shape, a non-real source, a malformed phase — is HELD evidence_ambiguous with no output for the database, whatever its digest says",
+  async () => {
+    reset();
+    const user = freshUser();
+    const bad: Record<string, Record<string, unknown>> = {
+      "negative-start": { timestamps: { startMs: -1, contactMs: 100, endMs: 200 } },
+      "int-min-contact": { timestamps: { startMs: 0, contactMs: -2147483648, endMs: 200 } },
+      "end-past-int": { timestamps: { startMs: 0, contactMs: 100, endMs: 2147483648 } },
+      "fractional-ms": { timestamps: { startMs: 0.5, contactMs: 100, endMs: 200 } },
+      "missing-contact": { timestamps: { startMs: 0, endMs: 200 } },
+      flat: { timestamps: undefined, startMs: 0, contactMs: 100, endMs: 200 },
+      "non-real-source": { source: "synthetic" },
+      "negative-phase": {
+        phases: [{ key: "prep", startMs: -5, representativeMs: 50, endMs: 100, confidence: 0.8 }],
+      },
+      "score-out-of-range": { overallScore: 10.5 },
+    };
+    const claims = proClaims(user.sub);
+    const grant = await sign(claims);
+    const entries = [];
+    const ids: string[] = [];
+    let n = 0;
+    for (const [tag, overrides] of Object.entries(bad)) {
+      n += 1;
+      const resultId = `7200${String(n).padStart(4, "0")}-0404-4000-8000-000000000000`;
+      const out = output(resultId, overrides);
+      if (overrides.timestamps === undefined && "timestamps" in overrides) delete out.timestamps;
+      const rec = await receipt({
+        receiptId: `bad-${tag}`,
+        ownerId: user.sub,
+        grant,
+        claims,
+        ticket: null,
+        lifecycleSequence: n,
+        operationId: `bad-operation-${tag}`,
+        resultId,
+        fullOutputSha256: await digestCanonicalOfflineJson(out),
+      });
+      entries.push({ receipt: rec, grant, output: out });
+      ids.push(rec.receiptId);
+    }
+    // A well-formed sibling in the same batch settles: the refusal is per
+    // receipt.
+    const goodOut = output("72009999-0404-4000-8000-000000000000");
+    const good = await receipt({
+      receiptId: "good-sibling",
+      ownerId: user.sub,
+      grant,
+      claims,
+      ticket: null,
+      lifecycleSequence: 99,
+      operationId: "good-operation",
+      resultId: "72009999-0404-4000-8000-000000000000",
+      fullOutputSha256: await digestCanonicalOfflineJson(goodOut),
+    });
+    entries.push({ receipt: good, grant, output: goodOut });
+    ids.push("good-sibling");
+
+    const body = await readJson(await post({ receipts: entries }, user.token));
+    const answer = wire(body);
+    assertEquals(answer.rejected, []);
+    assertEquals(
+      answer.receipts.map((r) => [r.receiptId, r.delivery, r.status, r.reasonCode]),
+      [
+        ...ids
+          .slice(0, -1)
+          .map((id) => [id, "held", "reconciliation_required", "evidence_ambiguous"]),
+        ["good-sibling", "settled", "result_recorded", null],
+      ],
+    );
+    const params = settleCalls();
+    assertEquals(params.length, ids.length);
+    for (const call of params.slice(0, -1)) {
+      assertEquals(call.p_hold_reason, "evidence_ambiguous");
+      assertEquals(call.p_output, null);
+    }
+    assertEquals(params.at(-1)?.p_hold_reason, null);
+    assertEquals(params.at(-1)?.p_output, sqlOutput(goodOut));
+    assertEquals(
+      mobileVerdicts(body, ids)?.map((v) => v.verdict),
+      [...ids.slice(0, -1).map(() => "held"), "accepted"],
+    );
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Live postgres half — the REAL settle_offline_receipt() on a disposable
 // postgres:16 with every migration applied.
 // ---------------------------------------------------------------------------
@@ -2258,7 +2807,7 @@ async function settle(
      from public.settle_offline_receipt(
        ${lit(rec)},
        '${await digestCanonicalOfflineJson(rec)}',
-       ${out === null ? "null::jsonb" : lit(out)},
+       ${out === null ? "null::jsonb" : lit(sqlOutput(out))},
        ${hold === null ? "null::text" : `'${hold}'`}${
          deferNew === null ? "" : `,\n       ${deferNew ? "true" : "false"}`
        }
