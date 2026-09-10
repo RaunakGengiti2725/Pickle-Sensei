@@ -27,6 +27,10 @@ const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
 const ANALYSIS_RELEASE_AUTHORITY = "20260908020000_analysis_release_authority.sql";
 const PERMIT_PARTIAL_OUTCOME = "20260908100000_permit_partial_terminal_outcome.sql";
 const OFFLINE_DEVICE_GRANTS = "20260908160000_offline_device_grants.sql";
+/** W04-06: the 1.0 app registers with p_attested=false, so a real phone is
+ * 'unattested' and must still be issued a grant; the grant row records the
+ * state it was issued under, and a revoked device stays refused. */
+const OFFLINE_UNATTESTED_GRANTS = "20260910140000_offline_grants_unattested_installations.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -2294,6 +2298,179 @@ Deno.test(
         }
       }
     }
+  },
+);
+
+Deno.test(
+  "offline grants (W04-06): a registered 'unattested' or 'attested' installation is issued a grant that records its attestation state; a revoked device stays refused; nothing security-relevant is loosened",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === OFFLINE_UNATTESTED_GRANTS);
+    ok(migration, `${OFFLINE_UNATTESTED_GRANTS} must exist (forward migration, never an edit)`);
+    const { raw, statements } = migration;
+    ok(
+      chain.indexOf(migration) === chain.length - 1 ||
+        chain.indexOf(migration) > chain.findIndex((m) => m.file === OFFLINE_DEVICE_GRANTS),
+      "the forward migration sorts after the offline grants migration",
+    );
+    const original = chain.find((m) => m.file === OFFLINE_DEVICE_GRANTS);
+    ok(original, `${OFFLINE_DEVICE_GRANTS} must exist`);
+    ok(
+      original.raw.includes("'offline.device_not_attested'") &&
+        !raw.includes("'offline.device_not_attested'"),
+      "the forward migration no longer refuses an unattested installation",
+    );
+
+    // The grant row records the state it was issued under; both device states
+    // are valid, nothing else is.
+    ok(
+      statements.includes(
+        "alter table public.offline_grants add column if not exists attestation_state text not null default 'attested'",
+      ) &&
+        statements.includes(
+          "alter table public.offline_grants alter column attestation_state drop default",
+        ),
+      "existing grants (issued only to attested devices) are backfilled truthfully and new rows must state their attestation explicitly",
+    );
+    ok(
+      statements.includes(
+        "alter table public.offline_grants add constraint offline_grants_attestation_state check (attestation_state in ('attested', 'unattested'))",
+      ),
+      "a grant's attestation state is one of the two device states",
+    );
+    ok(
+      statements.includes("alter table public.offline_devices add column if not exists revoked_at timestamptz"),
+      "a device carries an explicit revocation timestamp",
+    );
+
+    // Guard: owner + device bound, revoked refused, state stamped from the
+    // device (never a caller's word), Pro lease bounds and immutability kept.
+    const [guard] = functionBodies(raw, "guard_offline_grant");
+    ok(guard, `${OFFLINE_UNATTESTED_GRANTS} must redefine public.guard_offline_grant`);
+    ok(
+      guard.includes("security definer") && guard.includes("set search_path = ''"),
+      "the grant guard stays a pinned definer",
+    );
+    ok(
+      guard.includes("where d.id = new.device_id and d.user_id = new.user_id") &&
+        guard.includes("v_device.revoked_at is not null") &&
+        guard.includes("v_device.attestation_state not in ('attested', 'unattested')") &&
+        guard.includes("new.attestation_state := v_device.attestation_state") &&
+        guard.includes("new.attestation_state is distinct from v_device.attestation_state") &&
+        guard.includes("tg_op = 'update'") &&
+        guard.includes("b.premium and (b.expires_at is null or b.expires_at > now())") &&
+        guard.includes("new.entitlement_expires_at is distinct from") &&
+        guard.includes("errcode = 'check_violation'") &&
+        !guard.includes("d.attestation_state = 'attested'"),
+      "the grant guard binds owner + device, refuses a revoked device, records the device's actual state and keeps every Pro/immutability check",
+    );
+    ok(
+      !dropsTriggerWithoutRecreating(migration, "offline_grants_guard") &&
+        !statements.some((s) => s.startsWith("drop trigger")),
+      "the offline_grants_guard trigger (before insert or update) keeps firing the redefined guard",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.guard_offline_grant() from public, anon, authenticated",
+      ),
+      "the guard is not executable by clients",
+    );
+
+    // RPC: same session binding, lock, budget and lease bounds as before; a
+    // revoked device gets its own refusal; the row reports the recorded state.
+    const [issue] = functionBodies(raw, "issue_offline_grant");
+    ok(issue, `${OFFLINE_UNATTESTED_GRANTS} must redefine public.issue_offline_grant`);
+    ok(
+      statements.includes("drop function if exists public.issue_offline_grant(text, integer)"),
+      "the return table changes, so the function is dropped and recreated (not replaced in place)",
+    );
+    ok(
+      /returns table \([\s\S]*?attestation_state text[\s\S]*?\)/.test(issue),
+      "issue_offline_grant reports the attestation state the grant records",
+    );
+    ok(
+      issue.includes("security definer") &&
+        issue.includes("set search_path = ''") &&
+        issue.includes("api_private.is_active_session()") &&
+        issue.includes("errcode = 'insufficient_privilege'") &&
+        issue.includes("(select auth.uid())") &&
+        issue.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
+      "issue_offline_grant stays a session-bound, caller-scoped definer under the identity lock",
+    );
+    ok(
+      issue.includes("'offline.device_not_registered'") &&
+        issue.includes("v_device.revoked_at is not null") &&
+        issue.includes("'offline.device_revoked'") &&
+        issue.indexOf("'offline.device_revoked'") < issue.indexOf("pg_advisory_xact_lock"),
+      "a missing device is not registered and a revoked device is refused before any allocation work",
+    );
+    ok(
+      issue.includes("public.lifetime_scored_count()") &&
+        issue.includes("public.online_reservation_count()") &&
+        issue.includes("public.offline_hold_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(issue) &&
+        issue.includes("'access.paywall_required'"),
+      "free tickets are still budgeted through lifetime_scored_count() + online reservations + offline holds",
+    );
+    ok(
+      issue.includes("interval '7 days'") &&
+        issue.includes("least(") &&
+        issue.includes("b.premium and (b.expires_at is null or b.expires_at > now())"),
+      "a Pro lease is still min(issued + 7 days, verified entitlement expiry) for an effective entitlement only",
+    );
+    ok(
+      (issue.match(/v_device\.attestation_state/g) ?? []).length >= 2 &&
+        !issue.includes("'attested'::text") &&
+        !/attestation_state\s*:=\s*'attested'/.test(issue),
+      "every inserted grant records the device's actual attestation state — never a literal 'attested'",
+    );
+    ok(
+      issue.includes("a.installation_key_id = v_device.installation_key_id") &&
+        issue.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) &&
+        !issue.includes("a.device_id = v_device.id"),
+      "original-installation recovery is unchanged",
+    );
+    ok(
+      statements.some(
+        (s) =>
+          s.startsWith("revoke all on function public.issue_offline_grant(") &&
+          s.endsWith(" from public, anon, service_role"),
+      ) &&
+        statements.some(
+          (s) =>
+            s.startsWith("grant execute on function public.issue_offline_grant(") &&
+            s.endsWith(" to authenticated"),
+        ),
+      "issue_offline_grant is executable by authenticated only (never service_role)",
+    );
+
+    // Nothing is loosened: no new client write grant, no policy, no widened
+    // register path, and nobody can self-clear a revocation.
+    ok(
+      !statements.some((s) => s.startsWith("create policy")) &&
+        !statements.some((s) => s.startsWith("drop policy")) &&
+        !statements.some((s) => s.startsWith("alter table") && s.includes("disable row level security")),
+      "the forward migration touches no RLS policy",
+    );
+    ok(
+      !statements.some(
+        (s) =>
+          s.startsWith("grant ") &&
+          /\b(insert|update|delete|all)\b/.test(s.split(" on ")[0]) &&
+          /\b(anon|authenticated|public)\b/.test(s.split(" to ").pop() ?? ""),
+      ),
+      "the forward migration grants no client table write",
+    );
+    ok(
+      functionBodies(raw, "register_offline_device").length === 0,
+      "registration is unchanged — re-registering never clears a revocation",
+    );
+    ok(
+      !raw.toLowerCase().includes("revoked_at = null") && !raw.toLowerCase().includes("revoked_at := null"),
+      "nothing in the forward migration clears a revocation",
+    );
   },
 );
 
