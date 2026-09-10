@@ -7,6 +7,7 @@ import {
   isDeclaredTechniqueIntent,
   isAnalysisInputSelectionSnapshot,
   isConfirmationTimestamp,
+  isVerifiedCompletedCaptureRecord,
   evaluatePreAnalysisGate,
   type AnalysisInputSelectionSnapshot,
   type CaptureAnalysisRecord,
@@ -47,8 +48,15 @@ import {
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
+  saveOfflineAnalysis,
   updateCaptureClipPayload,
 } from '../data/repository';
+import {
+  consumeOfflineAllocation,
+  readOfflineAllocation,
+  readOfflineReceiptForOperation,
+} from '../data/offlineCapabilities';
+import { trustedTime, type TrustedTimeReading } from '../data/trustedTime';
 import { createFusionProviders } from '../vision/providers';
 import {
   ApiError,
@@ -57,7 +65,10 @@ import {
   type ApiConfigState,
   type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
-import { requireReleaseAuthority } from './releasePolicyClient';
+import {
+  readCachedReleasePolicy,
+  requireReleaseAuthority,
+} from './releasePolicyClient';
 import { makeUuid } from '../util/uuid';
 import {
   recordEvaluationTrial,
@@ -1108,6 +1119,111 @@ async function readPartialReplay(
   return { kind: 'replay', record };
 }
 
+/**
+ * The local authority for a court-offline rating: the trusted-time reading
+ * the grant was judged executable under and the exact grant to spend. Null
+ * whenever any link is missing — the run then ends on the honest no-score
+ * path exactly as before.
+ */
+interface OfflineRatingAuthority {
+  readonly grantId: string;
+  readonly reading: TrustedTimeReading;
+}
+
+/**
+ * Only a reservation the service never answered is a connectivity failure:
+ * the request failed to leave the device, timed out, was redirected or
+ * answered unreadably, or the service itself failed (5xx). Every typed
+ * verdict — paywall, allowance, rate limit, authentication, a settled
+ * release refusal, any coded 4xx — is the server's answer, never an offline
+ * case.
+ */
+function isReservationConnectivityFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof ApiError)) return false;
+  return (
+    error.code === 'network.timeout' ||
+    error.code === 'network.redirected' ||
+    error.code === 'network.invalid_response' ||
+    error.status === 408 ||
+    error.status >= 500
+  );
+}
+
+async function readOfflineRatingAuthority(
+  db: LocalDb,
+  scope: RunJournalScope,
+  error: unknown,
+): Promise<OfflineRatingAuthority | null> {
+  if (!isReservationConnectivityFailure(error)) return null;
+  let reading: TrustedTimeReading;
+  try {
+    reading = await trustedTime.read();
+  } catch {
+    return null;
+  }
+  const policy = await readCachedReleasePolicy(db, scope, reading).catch(
+    () => null,
+  );
+  if (policy?.status !== 'active') return null;
+  const allocation = await readOfflineAllocation(db, reading).catch(() => null);
+  const grant = allocation?.grants.find(
+    held =>
+      held.execution.kind === 'active' &&
+      (held.entitlementSource !== 'identity_lifetime_free' ||
+        held.remaining > 0),
+  );
+  return grant ? { grantId: grant.grantId, reading } : null;
+}
+
+/**
+ * A court-offline rating this same operation already paid for: its queued
+ * receipt names this run's result, and the durable record plus the exact
+ * scored shot payload the receipt hashed are still held. Null when the
+ * operation never spent an allocation; a receipt without its product is a
+ * conflict, never a fresh inference or a second spend.
+ */
+async function readOfflineScoredReplay(
+  db: LocalDb,
+  run: RunJournalEntry,
+): Promise<CaptureAnalysisRecord | null> {
+  const receipt = await readOfflineReceiptForOperation(db, run.operationId);
+  if (receipt === null) return null;
+  if (receipt.resultId !== run.analysisId)
+    throw new RunJournalError('identity_conflict');
+  const { rows } = await db.execute(
+    `SELECT r.id, r.capture_id, r.created_at, r.engine_version, r.scoring_model_version, r.record, s.payload AS shot_payload
+     FROM local_analysis_record r
+     JOIN local_shot s ON s.owner_key = r.owner_key AND s.id = r.id
+       AND s.source = 'real' AND s.result_kind = 'scored'
+     WHERE r.owner_key = ? AND r.id = ?`,
+    [run.ownerKey, run.analysisId],
+  );
+  const row = rows[0];
+  if (
+    !row ||
+    typeof row.record !== 'string' ||
+    typeof row.shot_payload !== 'string'
+  )
+    throw new RunJournalError('identity_conflict');
+  const record: unknown = JSON.parse(row.record);
+  if (
+    !isVerifiedCompletedCaptureRecord(record, {
+      id: row.id,
+      captureId: row.capture_id,
+      createdAtIso: row.created_at,
+      engineVersion: row.engine_version,
+      scoringModelVersion: row.scoring_model_version,
+    }) ||
+    record.captureId !== run.captureId ||
+    record.result.resultKind !== 'scored' ||
+    sha256Hex(originalCanonicalJson(JSON.parse(row.shot_payload))) !==
+      receipt.fullOutputSha256
+  )
+    throw new RunJournalError('identity_conflict');
+  return record;
+}
+
 class TechniqueConfirmationHeldError extends Error {}
 
 interface TechniqueConfirmationAdmission {
@@ -1541,6 +1657,18 @@ async function runCaptureAnalysisCore(
           record: settled.record,
           partialOutcome: settled.record.partialOutcome,
         };
+      if (settled === null) {
+        const rated = await readOfflineScoredReplay(request.db, existing);
+        assertCurrent();
+        if (rated)
+          return {
+            kind: 'scored',
+            replayed: true,
+            analysisId: existing.analysisId,
+            record: rated,
+            freeLimitReached: false,
+          };
+      }
       if (
         settled === null &&
         existing.state !== 'committed' &&
@@ -1650,7 +1778,19 @@ async function runCaptureAnalysisCore(
           partialOutcome: settled.record.partialOutcome,
         };
       if (settled?.kind === 'resume') resumedRefusal = settled.marker;
-      else return await readJournalOutcome(request, ownerContext, begun.run);
+      else {
+        const rated = await readOfflineScoredReplay(request.db, begun.run);
+        assertCurrent();
+        if (rated)
+          return {
+            kind: 'scored',
+            replayed: true,
+            analysisId: begun.run.analysisId,
+            record: rated,
+            freeLimitReached: false,
+          };
+        return await readJournalOutcome(request, ownerContext, begun.run);
+      }
     }
     // A typed 409 `access.release_not_authorized` is the authority's SETTLED
     // answer, not an outage: no permit exists, nothing is chargeable, and the
@@ -1658,6 +1798,12 @@ async function runCaptureAnalysisCore(
     // delivered — now or by a later run of this same operation.
     let withheld: PartialOutcomeMarker | null = resumedRefusal;
     let permitId: string | null = null;
+    // A court with no signal: the service never answered, and the device
+    // holds a validated release policy plus an executable grant. The plain
+    // run then rates on-device and its journal row keeps the recorded
+    // reservation failure; a scored result spends that grant locally and
+    // travels in its receipt instead of a `shot.sync` outbox row.
+    let offlineAuthority: OfflineRatingAuthority | null = null;
     if (withheld === null) {
       let reserved: ReservedAnalysisPermitWithAccess | null = null;
       try {
@@ -1712,18 +1858,24 @@ async function runCaptureAnalysisCore(
           if (!isDataOwnerContextCurrent(ownerContext))
             return accountChangedOutcome();
           if (request.signal?.aborted) return cancelledOutcome();
-          if (error instanceof ApiError && isPaywallRequired(error)) {
-            return {
-              kind: 'unavailable',
-              reason: error.message,
-              cause: 'paywall_required',
-            };
+          offlineAuthority = original
+            ? null
+            : await readOfflineRatingAuthority(request.db, scope, error);
+          assertCurrent();
+          if (offlineAuthority === null) {
+            if (error instanceof ApiError && isPaywallRequired(error)) {
+              return {
+                kind: 'unavailable',
+                reason: error.message,
+                cause: 'paywall_required',
+              };
+            }
+            const message =
+              error instanceof ApiError
+                ? error.message
+                : 'The rating service could not be reached. Your capture is saved and can be scored later.';
+            return { kind: 'unavailable', reason: message };
           }
-          const message =
-            error instanceof ApiError
-              ? error.message
-              : 'The rating service could not be reached. Your capture is saved and can be scored later.';
-          return { kind: 'unavailable', reason: message };
         }
       }
       if (reserved !== null) {
@@ -1741,7 +1893,8 @@ async function runCaptureAnalysisCore(
           reserved.access !== null &&
           !reserved.access.premium &&
           reserved.access.freeRatings.availableToReserve === 0;
-      } else if (withheld === null) return recoveryPendingOutcome();
+      } else if (withheld === null && offlineAuthority === null)
+        return recoveryPendingOutcome();
     }
     assertCurrent();
     // Imported clips carry no measured trigger: the analysis window is
@@ -1905,7 +2058,7 @@ async function runCaptureAnalysisCore(
         // item — the mechanics record is its whole durable outcome.
         if (partial !== null) return;
         if (record.result?.resultKind === 'scored') {
-          if (permitId === null)
+          if (offlineAuthority === null && permitId === null)
             throw new RunJournalError('invalid_transition');
           if (request.practiceSet) {
             if (request.practiceSet.sessionId !== record.result.sessionId) {
@@ -1914,10 +2067,42 @@ async function runCaptureAnalysisCore(
             await commitPracticeSet(db, request.practiceSet);
             assertCurrent();
           }
-          // Promote to the product rating; the sync transaction consumes the permit.
-          await saveAnalysis(db, record.result, permitId);
-          assertCurrent();
-          await runJournal.commit(rawTransaction, journalRun, record.result.id);
+          if (offlineAuthority !== null) {
+            // Spend the held grant on this exact output — hashed as the shot
+            // payload is persisted and later presented — then persist the
+            // rating the receipt names: one transaction, exactly once.
+            const shotPayload: unknown = JSON.parse(
+              JSON.stringify(record.result),
+            );
+            const consumed = await consumeOfflineAllocation(
+              rawTransaction,
+              {
+                operationId: journalRun.operationId,
+                resultId: record.result.id,
+                fullOutputSha256: sha256Hex(originalCanonicalJson(shotPayload)),
+                grantId: offlineAuthority.grantId,
+              },
+              offlineAuthority.reading,
+            );
+            assertCurrent();
+            if (consumed.replayed)
+              throw new RunJournalError('invalid_transition');
+            await saveOfflineAnalysis(
+              db,
+              record.result,
+              consumed.receipt.receiptId,
+            );
+            assertCurrent();
+          } else if (permitId !== null) {
+            // Promote to the product rating; the sync transaction consumes the permit.
+            await saveAnalysis(db, record.result, permitId);
+            assertCurrent();
+            await runJournal.commit(
+              rawTransaction,
+              journalRun,
+              record.result.id,
+            );
+          }
         } else {
           if (record.result) {
             // Local display only — abstentions are never synced as ratings.
