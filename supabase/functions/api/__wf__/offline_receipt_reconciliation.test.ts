@@ -2378,6 +2378,54 @@ Deno.test(
 );
 
 Deno.test(
+  "a queue of durable HOLDs never starves the fresh receipt behind it: replays do not spend the per-request decision budget",
+  async () => {
+    reset();
+    const user = freshUser();
+    // ROUTE_SETTLE_MAX chargeable Pro receipts delivered without their output
+    // become durable evidence_missing HOLDs; the app keeps re-presenting held
+    // receipts (they are not settled on the device) ahead of newer ones.
+    const { entries, ids } = await proBatch(user, ROUTE_SETTLE_MAX + 1);
+    const held = entries.slice(0, ROUTE_SETTLE_MAX).map((e) => ({ ...e, output: null }));
+    const first = wire(await readJson(await post({ receipts: held }, user.token)));
+    assertEquals(first.rejected, []);
+    assertEquals(
+      first.receipts.every((r) => r.delivery === "held" && r.reasonCode === "evidence_missing"),
+      true,
+    );
+    assertEquals(durable.size, ROUTE_SETTLE_MAX);
+
+    // Every later drain: the same durable HOLDs first, then the honest receipt
+    // queued after them. Its decision must not be deferred behind replays.
+    for (let drain = 0; drain < 3; drain += 1) {
+      h.reset();
+      h.respond = durableRespond;
+      const answer = wire(
+        await readJson(await post({ receipts: [...held, entries[ROUTE_SETTLE_MAX]] }, user.token)),
+      );
+      assertEquals(answer.rejected, []);
+      assertEquals(answer.receipts.length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(
+        answer.receipts.slice(0, ROUTE_SETTLE_MAX).every((r) => r.delivery === "replayed"),
+        true,
+      );
+      const fresh = answer.receipts[ROUTE_SETTLE_MAX];
+      assertEquals(
+        [fresh.receiptId, fresh.delivery, fresh.status, fresh.financialDisposition],
+        [
+          ids[ROUTE_SETTLE_MAX],
+          drain === 0 ? "settled" : "replayed",
+          "result_recorded",
+          "not_applicable",
+        ],
+      );
+      assertEquals(settleCalls().length, ROUTE_SETTLE_MAX + 1);
+      assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
+    }
+  },
+);
+
+Deno.test(
   "an output the shot.sync ingress would refuse — negative or out-of-range ms offsets, a flat (non-frozen) shape, a non-real source, a malformed phase — is HELD evidence_ambiguous with no output for the database, whatever its digest says",
   async () => {
     reset();
