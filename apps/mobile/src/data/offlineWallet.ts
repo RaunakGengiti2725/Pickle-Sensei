@@ -52,6 +52,7 @@ import {
   pendingOfflineReceipts,
   readHeldOfflineGrantJws,
   readOfflineReceiptForResult,
+  scanPendingOfflineReceipts,
   settleOfflineReceipt,
   type OfflineConsumptionReceipt,
   type OfflineReceiptReconciliation,
@@ -139,6 +140,9 @@ export interface OfflineWalletReconciliation extends OfflineReceiptReconciliatio
   /** Verdicts for receipts already settled terminally by the time the
    * answer arrived; the recorded settlement wins and is never rewritten. */
   readonly stale: number;
+  /** Pending receipt rows whose stored receipt is unreadable. They are never
+   * presented and never dropped; the other receipts drain around them. */
+  readonly unreadable: number;
 }
 
 function corrupt(detail: string): OfflineGrantError {
@@ -446,6 +450,8 @@ interface PresentationPlan {
   readonly opened: OpenedPresentation | null;
   /** Unanswered entries closed as superseded by this drain. */
   readonly recovered: number;
+  /** Pending rows skipped because their stored receipt is unreadable. */
+  readonly unreadable: number;
 }
 
 /** The longest prefix of `pending` whose wire entries fit the presentation
@@ -492,7 +498,8 @@ async function openPresentation(
   maxChars: number,
 ): Promise<PresentationPlan> {
   return withTransaction(db, async transaction => {
-    const pending = (await pendingOfflineReceipts(transaction)).filter(
+    const scan = await scanPendingOfflineReceipts(transaction);
+    const pending = scan.receipts.filter(
       receipt => !presented.has(receipt.receiptId),
     );
     const inFlight = await loadJournal(
@@ -512,7 +519,11 @@ async function openPresentation(
       }
     }
     if (pending.length === 0) {
-      return { opened: null, recovered: inFlight.length };
+      return {
+        opened: null,
+        recovered: inFlight.length,
+        unreadable: scan.unreadable.length,
+      };
     }
     const chunk = await chunkPresentation(
       transaction,
@@ -541,6 +552,7 @@ async function openPresentation(
         remaining: pending.length - chunk.receipts.length,
       },
       recovered: inFlight.length,
+      unreadable: scan.unreadable.length,
     };
   });
 }
@@ -665,6 +677,10 @@ export interface OfflineWalletReconcileOptions {
  * drain, not this one); a lost answer holds only that chunk's entry. Corrupt
  * grant or shot state fails the same way corrupt journal state does: before
  * anything is journalled or sent. */
+/* A pending row whose stored receipt is unreadable is skipped, not presented
+ * and not dropped: it is reported as `unreadable` and the owner's other
+ * receipts still drain, so one damaged row cannot hold every paid rating and
+ * the next grant pull hostage. */
 export async function reconcileOfflineWallet(
   rawDb: LocalDb,
   client: OfflineGrantClient,
@@ -681,6 +697,7 @@ export async function reconcileOfflineWallet(
     pending: 0,
     recovered: 0,
     stale: 0,
+    unreadable: 0,
   };
   if (!isSignedInOwner()) return idle;
   const context = captureDataOwnerContext();
@@ -689,6 +706,7 @@ export async function reconcileOfflineWallet(
     const totals = { submitted: 0, accepted: 0, held: 0, refused: 0, stale: 0 };
     const presented = new Set<string>();
     let recovered = 0;
+    let unreadable = 0;
     for (;;) {
       const plan = await openPresentation(
         db,
@@ -698,6 +716,7 @@ export async function reconcileOfflineWallet(
         maxChars,
       );
       recovered += plan.recovered;
+      unreadable = plan.unreadable;
       if (plan.opened === null) break;
       for (const receipt of plan.opened.receipts)
         presented.add(receipt.receiptId);
@@ -716,10 +735,12 @@ export async function reconcileOfflineWallet(
       totals.stale += applied.stale;
       if (plan.opened.remaining === 0) break;
     }
+    const remaining = await scanPendingOfflineReceipts(db);
     return {
       ...totals,
-      pending: (await pendingOfflineReceipts(db)).length,
+      pending: remaining.receipts.length,
       recovered,
+      unreadable: Math.max(unreadable, remaining.unreadable.length),
     };
   });
 }

@@ -326,6 +326,7 @@ describe('W05-03 wallet crash recovery', () => {
       pending: 0,
       recovered: 0,
       stale: 0,
+      unreadable: 0,
     });
     // The journal entry was durable (committed) while the request was in
     // flight: that is the write-ahead property a SIGKILL relies on.
@@ -412,6 +413,7 @@ describe('W05-03 wallet crash recovery', () => {
       pending: 0,
       recovered: 1,
       stale: 0,
+      unreadable: 0,
     });
     expect(route.calls.map(call => call.receiptIds)).toEqual([
       [receipt!.receiptId],
@@ -561,6 +563,7 @@ describe('W05-03 wallet crash recovery', () => {
       pending: 0,
       recovered: 0,
       stale: 1,
+      unreadable: 0,
     });
     const row = handle.native
       .prepare(
@@ -619,6 +622,7 @@ describe('W05-03 wallet crash recovery', () => {
       pending: 0,
       recovered: 0,
       stale: 0,
+      unreadable: 0,
     });
     expect(route.calls).toEqual([]);
 
