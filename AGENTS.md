@@ -1271,3 +1271,13 @@ scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
   disables other-device cleanup and fails instead of falling back when the
   chosen device is unavailable. The launch check reinstalls its selected app;
   never point it at a simulator whose app data should be kept.
+- iPhone clip storage (2026-09-10): `GuardedClipFile.withParent` opens the
+  OS-provided app home or process temp directory directly, then applies
+  `O_NOFOLLOW` to each child. Never walk from `/`: the simulator can permit
+  ancestor reads that the physical iPhone sandbox denies. Provider imports
+  copy into operation-owned Captures storage before guarded metadata checks;
+  file access, protected content, unsupported movies and missing video tracks
+  have distinct failures. `tools/macos-ci/test-clip-storage.py <new-output-dir>`
+  compiles the shipping storage code and tests it in a root-read-denied macOS
+  process with disposable home/temp directories. The canonical Mac
+  `swift-native` stage runs it; this is not physical-device acceptance.

@@ -124,7 +124,86 @@ describe('native import safety source contracts (not device execution)', () => {
     );
   });
 
-  it('preflights the provider file before private copying and guards the ephemeral callback by operation', () => {
+  it('anchors guarded traversal inside OS-provided home or temp storage, never at the filesystem root', () => {
+    const guarded = section(
+      store,
+      'final class GuardedClipFile',
+      'enum ClipVideoOrigin',
+    );
+    expect(guarded).toContain('NSHomeDirectory()');
+    expect(guarded).toContain('FileManager.default.temporaryDirectory');
+    expect(guarded).not.toMatch(/Darwin\.open\("\/"\s*,/);
+    expect(guarded).toContain('Darwin.open(root.path,');
+    expect(guarded).toContain('components.starts(with: rootComponents)');
+    expect(guarded).toContain('components.dropFirst(rootComponents.count)');
+    expect(guarded).toContain('O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW');
+    expect(guarded).toContain('O_NOFOLLOW | O_NONBLOCK');
+    expect(guarded).toContain('value.st_nlink == 1');
+    expect(guarded).toContain('AT_SYMLINK_NOFOLLOW');
+    expect(guarded).not.toContain('throw ClipMediaStoreError.invalidMedia');
+  });
+
+  it('copies the provider representation into owned private storage before guarded media validation', () => {
+    const preflight = section(
+      store,
+      'static func preflightImport(',
+      'static func persistImportedVideo(',
+    );
+    const copy = preflight.indexOf('copyProviderVideo(');
+    const guardPrivateCopy = preflight.indexOf('GuardedClipFile(url: source)');
+    expect(copy).toBeGreaterThan(0);
+    expect(copy).toBeLessThan(guardPrivateCopy);
+    expect(preflight).toContain(
+      'preflightImport(from: destination, operation: operation)',
+    );
+    const providerCopy = section(
+      store,
+      'private static func copyProviderVideo(',
+      'static func preflightImport(',
+    );
+    expect(providerCopy).toContain(
+      'FileManager.default.copyItem(at: source, to: stagingURL)',
+    );
+    expect(providerCopy).not.toContain('GuardedClipFile(url: source)');
+    expect(providerCopy.indexOf('requireImportDiskCapacity(')).toBeLessThan(
+      providerCopy.indexOf('FileManager.default.copyItem('),
+    );
+    expect(providerCopy).toContain(
+      'ProvisionalImportBudget.maximumSourceBytes',
+    );
+    expect(providerCopy).toContain('operation.makeOwnedExportURL(');
+    expect(providerCopy).toContain('operation.finishOwnedExport(');
+    expect(providerCopy).toContain('operation.checkActive()');
+  });
+
+  it('reports file access, unsupported movies, protected content and missing tracks as distinct failures', () => {
+    for (const code of [
+      'camera.file_access_failed',
+      'camera.import_file_unavailable',
+      'camera.import_not_movie',
+      'camera.import_protected_content',
+      'camera.import_no_video_track',
+      'camera.import_too_long',
+    ]) {
+      expect(store).toContain(code);
+    }
+    const invalidMedia = section(
+      store,
+      'case .invalidMedia:',
+      'case .invalidEvidence:',
+    );
+    expect(invalidMedia).not.toContain('does not contain a valid video track');
+    const finish = section(
+      bridge,
+      'private func finishMediaOperationIfReady(',
+      'private func emitMedia(',
+    );
+    expect(finish).toContain(
+      'ImportMediaFailure.classify(error, fallbackCode: fallbackCode)',
+    );
+  });
+
+  it('prepares the private import within the ephemeral callback and guards it by operation', () => {
     const picker = section(bridge, 'func picker(', 'private func begin(');
     const preflight = picker.indexOf('ClipMediaStore.preflightImport(');
     const copy = picker.indexOf('ClipMediaStore.persistImportedVideo(');

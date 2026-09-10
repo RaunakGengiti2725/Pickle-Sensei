@@ -726,10 +726,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       UTType($0)?.conforms(to: .movie) == true
     } ?? UTType.movie.identifier
     guard provider.hasItemConformingToTypeIdentifier(movieIdentifier) else {
-      finishMediaOperation(mediaOperation, result: .failure(ImportMediaFailure(
-        code: "camera.invalid_media",
-        message: "The selected item is not a supported video."
-      )))
+      finishMediaOperation(mediaOperation, result: .failure(ImportMediaFailure.notMovie))
       return
     }
 
@@ -752,8 +749,8 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         Result {
           try autoreleasepool {
             try mediaOperation.checkActive()
-            if let error { throw error }
-            guard let url else { throw ClipMediaStoreError.invalidMedia }
+            if let error { throw ImportMediaFailure.classify(error, fallbackCode: "camera.import_file_unavailable") }
+            guard let url else { throw ImportMediaFailure.fileUnavailable }
             // The provider URL is ephemeral and must be copied before this callback
             // returns. The destination uses data protection in Application Support.
             let metadata = try ClipMediaStore.preflightImport(from: url, operation: mediaOperation, copying: true)
@@ -855,10 +852,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       } else {
         fallbackCode = "camera.import_failed"
       }
-      let failure = error as? ImportMediaFailure ?? ImportMediaFailure(
-        code: error is ClipMediaStoreError ? "camera.invalid_media" : fallbackCode,
-        message: error.localizedDescription
-      )
+      let failure = ImportMediaFailure.classify(error, fallbackCode: fallbackCode)
       mediaOperation.cancel(failure)
       mediaOperation.cleanupOwnedOutputs()
       let callback = reject

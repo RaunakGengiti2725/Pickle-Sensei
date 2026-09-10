@@ -16,6 +16,12 @@ for helper in inspect-environment.sh simulator-launch-check.sh pod-install.sh \
   xcresult-summary.py check-swing-lab-extract.py describe-package.py; do
   printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/tools/macos-ci/$helper"
 done
+cat >"$WORK/repo/tools/macos-ci/test-clip-storage.py" <<'PY_CLIP'
+import os, sys
+with open(os.environ["NATIVE_TRACE"], "a", encoding="utf-8") as trace:
+    trace.write("clip-storage|" + sys.argv[1] + "\n")
+raise SystemExit(70 if os.environ.get("FAIL_CLIP_STORAGE") == "1" else 0)
+PY_CLIP
 cat >"$WORK/repo/tools/macos-ci/select-simulator.sh" <<'SH_SIM'
 #!/usr/bin/env bash
 printf 'simulator|%s|%s\n' "$PICKLE_CI_SIMULATOR_UDID" "$*" >>"$NATIVE_TRACE"
@@ -85,6 +91,7 @@ summary = json.load(open(sys.argv[2], encoding="utf-8"))
 cache = sys.argv[3]
 assert summary["ok"] is True and len(summary["stages"]) == 1, summary
 assert summary["stages"][0]["status"] == "passed", summary
+assert len([line for line in trace if line.startswith("clip-storage|")]) == 1, trace
 for package in ("vision-core", "managed-media"):
     for verb in ("build", "test"):
         command = next(line for line in trace if line.startswith(f"swift|{package}|{verb} "))
@@ -106,7 +113,7 @@ PY
 test -f "$WORK/repo/native/vision-core/.build/preserved"
 echo '[test_mac_full_verify_runtime] PASS: both packages run macOS/iOS tests; workers/cache/simulator pinned; checkout cache retained'
 
-for failure in FAIL_MANAGED_SWIFT FAIL_MANAGED_IOS; do
+for failure in FAIL_CLIP_STORAGE FAIL_MANAGED_SWIFT FAIL_MANAGED_IOS; do
   export "$failure=1"
   if "$BASH" "$WORK/repo/scripts/mac-full-verify.sh" --only swift-native >"$WORK/failure.log" 2>&1; then
     echo "[test_mac_full_verify_runtime] $failure unexpectedly passed" >&2; exit 1

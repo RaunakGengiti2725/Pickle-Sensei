@@ -214,6 +214,7 @@ stage_swift_native() {
       "$PICKLE_CI_CACHE/managed-media-swiftpm" "$PICKLE_CI_CACHE/managed-media-derived" \
       "$PICKLE_CI_CACHE/swing-lab-swiftpm"
   fi
+  python3 "$HELPERS/test-clip-storage.py" "$ARTIFACTS/clip-storage-$STAMP"
   verify_swift_package vision-core native/vision-core PickleVisionCore
   verify_swift_package managed-media native/managed-media PickleManagedMedia
 

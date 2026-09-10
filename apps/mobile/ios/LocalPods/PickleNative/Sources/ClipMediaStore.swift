@@ -6,6 +6,7 @@ import UIKit
 
 enum ClipMediaStoreError: LocalizedError {
   case invalidMedia
+  case fileAccessFailed
   case invalidEvidence
   case exportUnavailable
   case exportFailed(String)
@@ -13,13 +14,25 @@ enum ClipMediaStoreError: LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidMedia:
-      return "The selected video does not contain a valid video track."
+      return "This video could not be validated for analysis. Try recording or importing it again."
+    case .fileAccessFailed:
+      return "The private video file could not be accessed safely. Try recording or importing it again."
     case .invalidEvidence:
       return "The recording contains invalid native analysis evidence."
     case .exportUnavailable:
       return "A private clip could not be created from this recording."
     case .exportFailed(let message):
       return message
+    }
+  }
+
+  var code: String {
+    switch self {
+    case .invalidMedia: return "camera.invalid_media"
+    case .fileAccessFailed: return "camera.file_access_failed"
+    case .invalidEvidence: return "camera.invalid_evidence"
+    case .exportUnavailable: return "camera.export_unavailable"
+    case .exportFailed: return "camera.export_failed"
     }
   }
 }
@@ -39,6 +52,59 @@ struct ImportMediaFailure: LocalizedError {
     code: "camera.import_resource_limit",
     message: "This video exceeds the app's current import budget. Try a shorter or lower-resolution video."
   )
+  static let fileUnavailable = ImportMediaFailure(
+    code: "camera.import_file_unavailable",
+    message: "The selected video file could not be opened or copied. Select it again and retry."
+  )
+  static let notMovie = ImportMediaFailure(
+    code: "camera.import_not_movie", message: "The selected file is not a supported movie. Choose another video."
+  )
+  static let protectedContent = ImportMediaFailure(
+    code: "camera.import_protected_content", message: "This video is protected and cannot be analyzed. Choose an unprotected video."
+  )
+  static let noVideoTrack = ImportMediaFailure(
+    code: "camera.import_no_video_track", message: "The selected movie does not contain a video track. Choose another video."
+  )
+  static let lowStorage = ImportMediaFailure(
+    code: "camera.import_low_storage", message: "There is not enough free space to import and analyze this video."
+  )
+
+  static func classify(_ error: Error, fallbackCode: String) -> ImportMediaFailure {
+    if let failure = error as? ImportMediaFailure { return failure }
+    if let failure = error as? ClipMediaStoreError {
+      return ImportMediaFailure(code: failure.code, message: failure.localizedDescription)
+    }
+    let failure = error as NSError
+    if failure.domain == NSCocoaErrorDomain {
+      switch failure.code {
+      case NSFileReadNoSuchFileError, NSFileNoSuchFileError, NSFileReadNoPermissionError, NSFileWriteNoPermissionError:
+        return .fileUnavailable
+      case NSFileWriteOutOfSpaceError:
+        return .lowStorage
+      case NSUserCancelledError:
+        return .cancelled
+      default: break
+      }
+    }
+    if failure.domain == NSPOSIXErrorDomain {
+      if [Int(ENOENT), Int(EACCES), Int(EPERM)].contains(failure.code) { return .fileUnavailable }
+      if failure.code == Int(ENOSPC) { return .lowStorage }
+    }
+    if failure.domain == AVFoundationErrorDomain {
+      switch failure.code {
+      case AVError.fileFormatNotRecognized.rawValue, AVError.fileFailedToParse.rawValue: return .notMovie
+      case AVError.contentIsProtected.rawValue, AVError.contentIsNotAuthorized.rawValue: return .protectedContent
+      case AVError.diskFull.rawValue: return .lowStorage
+      default: break
+      }
+    }
+    return ImportMediaFailure(
+      code: fallbackCode,
+      message: fallbackCode == "camera.byte_comparison_unavailable"
+        ? "The saved video could not be checked. Try again."
+        : "The video could not be processed. Try selecting it again."
+    )
+  }
 }
 
 enum ProvisionalImportBudget {
@@ -103,28 +169,35 @@ final class GuardedClipFile {
     guard url.isFileURL, url.host == nil || url.host == "" || url.host == "localhost",
           !url.path.utf8.contains(0),
           !url.pathComponents.contains(".."), !url.pathComponents.contains("."),
-          url.pathComponents.count > 1 else { throw ClipMediaStoreError.invalidMedia }
-    var parents = Array(url.deletingLastPathComponent().pathComponents.dropFirst())
+          url.pathComponents.count > 1 else { throw ClipMediaStoreError.fileAccessFailed }
+    let components = storageComponents(url.deletingLastPathComponent())
+    let roots = [URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true), FileManager.default.temporaryDirectory]
+    for root in roots {
+      let rootComponents = storageComponents(root)
+      guard rootComponents.count > 1, components.starts(with: rootComponents) else { continue }
+      var descriptor = Darwin.open(root.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+      guard descriptor >= 0 else { throw ClipMediaStoreError.fileAccessFailed }
+      defer { Darwin.close(descriptor) }
+      for component in components.dropFirst(rootComponents.count) {
+        let next = Darwin.openat(descriptor, component, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        guard next >= 0 else { throw ClipMediaStoreError.fileAccessFailed }
+        Darwin.close(descriptor)
+        descriptor = next
+      }
+      return try body(descriptor, url.lastPathComponent)
+    }
+    throw ClipMediaStoreError.fileAccessFailed
+  }
+
+  private static func storageComponents(_ url: URL) -> [String] {
+    var components = url.pathComponents
     // Foundation shortens /private/var and /private/tmp back to the OS aliases
     // even after resolvingSymlinksInPath(). Canonicalize ONLY those two verified
     // system-root links; never resolve a provider/user-controlled intermediate.
-    if let first = parents.first, first == "var" || first == "tmp",
-       let target = try? FileManager.default.destinationOfSymbolicLink(atPath: "/" + first) {
-      guard target == "private/" + first || target == "/private/" + first else {
-        throw ClipMediaStoreError.invalidMedia
-      }
-      parents.insert("private", at: 0)
+    if components.count > 1, components[1] == "var" || components[1] == "tmp" {
+      components.insert("private", at: 1)
     }
-    var descriptor = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-    guard descriptor >= 0 else { throw ClipMediaStoreError.invalidMedia }
-    defer { Darwin.close(descriptor) }
-    for component in parents {
-      let next = Darwin.openat(descriptor, component, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
-      guard next >= 0 else { throw ClipMediaStoreError.invalidMedia }
-      Darwin.close(descriptor)
-      descriptor = next
-    }
-    return try body(descriptor, url.lastPathComponent)
+    return components
   }
 
   init(url: URL, writing: Bool = false, directory: Bool = false) throws {
@@ -133,7 +206,7 @@ final class GuardedClipFile {
     let descriptor = try Self.withParent(of: url) { parent, name in
       Darwin.openat(parent, name, (writing ? O_RDWR : O_RDONLY) | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (directory ? O_DIRECTORY : 0))
     }
-    guard descriptor >= 0 else { throw ClipMediaStoreError.invalidMedia }
+    guard descriptor >= 0 else { throw ClipMediaStoreError.fileAccessFailed }
     handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     _ = try snapshot()
   }
@@ -144,7 +217,7 @@ final class GuardedClipFile {
     var value = stat()
     guard Darwin.fstat(handle.fileDescriptor, &value) == 0,
           directory ? value.st_mode & S_IFMT == S_IFDIR : (value.st_mode & S_IFMT == S_IFREG && value.st_nlink == 1) else {
-      throw ClipMediaStoreError.invalidMedia
+      throw ClipMediaStoreError.fileAccessFailed
     }
     return ClipFileSnapshot(value)
   }
@@ -152,7 +225,7 @@ final class GuardedClipFile {
   func verifyUnchanged(_ expected: ClipFileSnapshot) throws {
     guard try snapshot().isUnchanged(from: expected),
           try ClipFileSnapshot.at(url, directory: directory).isUnchanged(from: expected) else {
-      throw ClipMediaStoreError.invalidMedia
+      throw ClipMediaStoreError.fileAccessFailed
     }
   }
 
@@ -294,15 +367,15 @@ final class ClipMediaOperation {
     return url
   }
 
-  func makeOwnedExportURL(in directory: URL) throws -> URL {
+  func makeOwnedExportURL(in directory: URL, prefix: String = "stroke", pathExtension: String = "mov") throws -> URL {
     try checkActive()
     let stagingDirectory = directory.appendingPathComponent(".export-\(UUID().uuidString.lowercased())", isDirectory: true)
-    guard ClipMediaStore.isPrivateCaptureURL(stagingDirectory) else { throw ClipMediaStoreError.invalidMedia }
+    guard ClipMediaStore.isPrivateCaptureURL(stagingDirectory) else { throw ClipMediaStoreError.fileAccessFailed }
     try GuardedClipFile.withParent(of: stagingDirectory) { parent, name in
-      guard Darwin.mkdirat(parent, name, 0o700) == 0 else { throw ClipMediaStoreError.invalidMedia }
+      guard Darwin.mkdirat(parent, name, 0o700) == 0 else { throw ClipMediaStoreError.fileAccessFailed }
     }
     let identity = try ClipFileSnapshot.at(stagingDirectory, directory: true)
-    let exportURL = stagingDirectory.appendingPathComponent("stroke-\(UUID().uuidString.lowercased()).mov")
+    let exportURL = stagingDirectory.appendingPathComponent("\(prefix)-\(UUID().uuidString.lowercased()).\(pathExtension)")
     lock.lock()
     ownedOutputs[stagingDirectory] = identity
     exportSlots[exportURL] = identity
@@ -346,17 +419,17 @@ final class ClipMediaOperation {
 
   func createOwnedOutput(at url: URL) throws {
     try checkActive()
-    guard ClipMediaStore.isPrivateCaptureURL(url) else { throw ClipMediaStoreError.invalidMedia }
+    guard ClipMediaStore.isPrivateCaptureURL(url) else { throw ClipMediaStoreError.fileAccessFailed }
     // Open the parent without following links BEFORE creating anything. An
     // empty exclusive inode is enrolled/protected before any media bytes enter
     // it; a late cancellation can therefore clean this exact new artifact.
     let descriptor = try GuardedClipFile.withParent(of: url) { parent, name in
       Darwin.openat(parent, name, O_CREAT | O_EXCL | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
     }
-    guard descriptor >= 0 else { throw ClipMediaStoreError.invalidMedia }
+    guard descriptor >= 0 else { throw ClipMediaStoreError.fileAccessFailed }
     defer { Darwin.close(descriptor) }
     var value = stat()
-    guard Darwin.fstat(descriptor, &value) == 0 else { throw ClipMediaStoreError.invalidMedia }
+    guard Darwin.fstat(descriptor, &value) == 0 else { throw ClipMediaStoreError.fileAccessFailed }
     let identity = ClipFileSnapshot(value)
     lock.lock()
     ownedOutputs[url] = identity
@@ -726,14 +799,14 @@ enum ClipMediaStore {
         appropriateFor: nil,
         create: true
       )
-      let directory = support.standardizedFileURL.resolvingSymlinksInPath()
+      let directory = support.standardizedFileURL
         .appendingPathComponent("PickleSensei/Captures", isDirectory: true)
       guard directory.resolvingSymlinksInPath().path == directory.path else {
-        throw ClipMediaStoreError.invalidMedia
+        throw ClipMediaStoreError.fileAccessFailed
       }
       var isDirectory: ObjCBool = false
       if FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory) {
-        guard isDirectory.boolValue else { throw ClipMediaStoreError.invalidMedia }
+        guard isDirectory.boolValue else { throw ClipMediaStoreError.fileAccessFailed }
         return directory
       }
       try FileManager.default.createDirectory(
@@ -845,13 +918,13 @@ enum ClipMediaStore {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("PickleSensei-Observation", isDirectory: true)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    let canonicalDirectory = directory.standardizedFileURL.resolvingSymlinksInPath()
+    let canonicalDirectory = directory.standardizedFileURL
     let url = canonicalDirectory.appendingPathComponent("observation-\(UUID().uuidString.lowercased()).mov")
     let parent = try ClipFileSnapshot.at(canonicalDirectory, directory: true)
     try GuardedClipFile.withParent(of: url) { descriptor, name in
       var value = stat()
       guard Darwin.fstatat(descriptor, name, &value, AT_SYMLINK_NOFOLLOW) == -1, errno == ENOENT else {
-        throw ClipMediaStoreError.invalidMedia
+        throw ClipMediaStoreError.fileAccessFailed
       }
     }
     observationLock.lock()
@@ -892,7 +965,7 @@ enum ClipMediaStore {
     for key in keys {
       var error: NSError?
       guard object.statusOfValue(forKey: key, error: &error) == .loaded else {
-        throw error ?? ClipMediaStoreError.invalidMedia as NSError
+        throw ImportMediaFailure.classify(error ?? ClipMediaStoreError.invalidMedia as NSError, fallbackCode: "camera.import_failed")
       }
     }
   }
@@ -908,8 +981,34 @@ enum ClipMediaStore {
     }
     let required = additionalBytes + ProvisionalImportBudget.diskReserveBytes
       + Int64(ProvisionalImportBudget.maximumSidecarBytes + ProvisionalImportBudget.maximumPosterBytes)
-    guard available >= required else {
-      throw ImportMediaFailure(code: "camera.import_low_storage", message: "There is not enough free space to import and analyze this video.")
+    guard available >= required else { throw ImportMediaFailure.lowStorage }
+  }
+
+  private static func copyProviderVideo(from source: URL, operation: ClipMediaOperation) throws -> URL {
+    do {
+      try operation.checkActive()
+      guard source.isFileURL, source.host == nil || source.host == "" || source.host == "localhost",
+            !source.path.utf8.contains(0) else { throw ImportMediaFailure.fileUnavailable }
+      let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+      guard values.isRegularFile == true, values.isSymbolicLink != true,
+            let size = values.fileSize, size > 0 else { throw ImportMediaFailure.notMovie }
+      let byteSize = Int64(size)
+      guard byteSize <= ProvisionalImportBudget.maximumSourceBytes else { throw ImportMediaFailure.resourceLimit }
+      try requireImportDiskCapacity(additionalBytes: byteSize)
+      let ext = source.pathExtension.lowercased()
+      let stagingURL = try operation.makeOwnedExportURL(
+        in: capturesDirectory, prefix: "import", pathExtension: ["mov", "mp4", "m4v"].contains(ext) ? ext : "mov"
+      )
+      try operation.checkActive()
+      try FileManager.default.copyItem(at: source, to: stagingURL)
+      try operation.checkActive()
+      let destination = try operation.finishOwnedExport(at: stagingURL, in: capturesDirectory)
+      let snapshot = try ClipFileSnapshot.at(destination)
+      guard snapshot.byteSize <= ProvisionalImportBudget.maximumSourceBytes else { throw ImportMediaFailure.resourceLimit }
+      guard snapshot.byteSize == byteSize else { throw ClipMediaStoreError.fileAccessFailed }
+      return destination
+    } catch {
+      throw ImportMediaFailure.classify(error, fallbackCode: "camera.import_file_unavailable")
     }
   }
 
@@ -919,12 +1018,16 @@ enum ClipMediaStore {
     copying: Bool = false
   ) throws -> ImportedVideoMetadata {
     try operation.checkActive()
+    if copying {
+      let destination = try copyProviderVideo(from: source, operation: operation)
+      return try preflightImport(from: destination, operation: operation)
+    }
     let sourceFile = try GuardedClipFile(url: source)
     let sourceSnapshot = try sourceFile.snapshot()
     let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
     guard values.isRegularFile == true, values.isSymbolicLink != true,
           let size = values.fileSize, size > 0 else {
-      throw ClipMediaStoreError.invalidMedia
+      throw ImportMediaFailure.notMovie
     }
     let byteSize = Int64(size)
     guard byteSize <= ProvisionalImportBudget.maximumSourceBytes else { throw ImportMediaFailure.resourceLimit }
@@ -934,14 +1037,17 @@ enum ClipMediaStore {
       asset.cancelLoading()
       operation.removeCancellationHandler(cancellation)
     }
-    try loadImportMetadata(asset, keys: ["duration", "tracks", "playable", "hasProtectedContent"], operation: operation)
-    guard asset.isPlayable, !asset.hasProtectedContent else { throw ClipMediaStoreError.invalidMedia }
+    try loadImportMetadata(asset, keys: ["hasProtectedContent"], operation: operation)
+    guard !asset.hasProtectedContent else { throw ImportMediaFailure.protectedContent }
+    try loadImportMetadata(asset, keys: ["duration", "tracks", "playable"], operation: operation)
+    let tracks = asset.tracks(withMediaType: .video)
+    guard !tracks.isEmpty else { throw ImportMediaFailure.noVideoTrack }
+    guard asset.isPlayable else { throw ClipMediaStoreError.invalidMedia }
     let durationSeconds = CMTimeGetSeconds(asset.duration)
     guard durationSeconds.isFinite, durationSeconds >= 0.001 else { throw ClipMediaStoreError.invalidMedia }
     guard durationSeconds <= ProvisionalImportBudget.maximumDurationSeconds else {
       throw ImportMediaFailure(code: "camera.import_too_long", message: "Trim this video to 60 seconds or less and import it again.")
     }
-    let tracks = asset.tracks(withMediaType: .video)
     guard tracks.count == 1, let track = tracks.first else { throw ClipMediaStoreError.invalidMedia }
     try loadImportMetadata(track, keys: ["naturalSize", "preferredTransform", "nominalFrameRate", "enabled", "timeRange", "formatDescriptions"], operation: operation)
     guard track.isEnabled else { throw ClipMediaStoreError.invalidMedia }
@@ -985,9 +1091,9 @@ enum ClipMediaStore {
           ceil(durationSeconds * fps) + 1 <= Double(ProvisionalImportBudget.maximumDecodedFrames) else {
       throw ImportMediaFailure.resourceLimit
     }
-    try requireImportDiskCapacity(additionalBytes: copying ? byteSize : 0)
+    try requireImportDiskCapacity(additionalBytes: 0)
     try sourceFile.verifyUnchanged(sourceSnapshot)
-    guard sourceSnapshot.byteSize == byteSize else { throw ClipMediaStoreError.invalidMedia }
+    guard sourceSnapshot.byteSize == byteSize else { throw ClipMediaStoreError.fileAccessFailed }
     try operation.checkActive()
     return ImportedVideoMetadata(
       asset: asset, track: track, durationSeconds: durationSeconds,
@@ -1002,13 +1108,21 @@ enum ClipMediaStore {
     operation: ClipMediaOperation
   ) throws -> URL {
     try operation.checkActive()
+    guard let expected = metadata.sourceSnapshot, expected.byteSize == metadata.byteSize else {
+      throw ClipMediaStoreError.fileAccessFailed
+    }
+    if metadata.asset.url != source {
+      let destination = metadata.asset.url
+      let input = try GuardedClipFile(url: destination)
+      try input.verifyUnchanged(expected)
+      _ = try operation.sealVideoOutput(at: destination, origin: .importCopy)
+      try input.verifyUnchanged(expected)
+      return destination
+    }
     let ext = source.pathExtension.lowercased()
     let destination = try operation.makeOwnedOutputURL(
       in: capturesDirectory, prefix: "import", pathExtension: ["mov", "mp4", "m4v"].contains(ext) ? ext : "mov"
     )
-    guard let expected = metadata.sourceSnapshot, expected.byteSize == metadata.byteSize else {
-      throw ClipMediaStoreError.invalidMedia
-    }
     try operation.copyVideoBytes(from: source, to: destination, expected: expected)
     return destination
   }
