@@ -1,0 +1,15 @@
+{
+  "agents": [],
+  "base_sha": "d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4",
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.10",
+  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-07",
+  "requeued_from": null,
+  "rounds": [],
+  "start_round": 1,
+  "status": "RUNNING",
+  "wave_id": "wave-27-offline-ship"
+}
