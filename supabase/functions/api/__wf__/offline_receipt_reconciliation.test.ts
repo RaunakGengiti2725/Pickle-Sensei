@@ -68,7 +68,11 @@ import { exportJWK, generateKeyPair } from "jose";
 import {
   OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
   OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
+  OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES,
+  OFFLINE_RECEIPT_BATCH_MAX_ENTRIES,
+  OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
   OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
+  planOfflineReceiptBatches,
   type OfflineDeviceReceipt,
   type OfflineExecutionGrantClaims,
   type OfflineFreeTicketReference,
@@ -2252,6 +2256,7 @@ Deno.test(
 /** Entries decided per request (index.ts OFFLINE_RECEIPT_BATCH_SETTLE_MAX);
  * the rest of a larger batch is answered pending and settles next drain. */
 const ROUTE_SETTLE_MAX = 250;
+const ROUTE_BODY_BYTES = 2_000_000;
 
 async function proBatch(
   user: { sub: string; token: string },
@@ -2422,6 +2427,74 @@ Deno.test(
       assertEquals(settleCalls().length, ROUTE_SETTLE_MAX + 1);
       assertEquals(durable.size, ROUTE_SETTLE_MAX + 1);
     }
+  },
+);
+
+Deno.test(
+  "a queue whose one-POST body exceeds the batch byte cap is refused with the coded 413 the app can act on (offline.batch_too_large) — nothing decided; the shared batch plan splits the same queue into requests the route accepts, every id named exactly once across them",
+  async () => {
+    reset();
+    const user = freshUser();
+    // The route's caps are the ones the shared plan publishes to the device.
+    assertEquals(ROUTE_SETTLE_MAX, OFFLINE_RECEIPT_BATCH_MAX_ENTRIES);
+    assertEquals(ROUTE_BODY_BYTES, OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES);
+
+    // Grow the honest queue until the exact wire body crosses the cap.
+    const probe = await proBatch(user, 1);
+    const entryBytes = new TextEncoder().encode(JSON.stringify(probe.entries[0])).length + 1;
+    const count = Math.ceil(ROUTE_BODY_BYTES / entryBytes) + 1;
+    const { entries, ids } = await proBatch(user, count);
+    const bodyBytes = new TextEncoder().encode(JSON.stringify({ receipts: entries })).length;
+    assert(bodyBytes > ROUTE_BODY_BYTES, `${count} entries = ${bodyBytes} bytes`);
+
+    // One POST of the whole queue: a CODED refusal (an uncoded 4xx is what the
+    // app's request helper attributes to an intermediary and never acts on).
+    const refused = await post({ receipts: entries }, user.token);
+    const refusedBody = await readJson(refused);
+    assertEquals(refused.status, 413, JSON.stringify(refusedBody));
+    assertEquals(refusedBody, {
+      error: {
+        code: OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE,
+        message: `A receipt batch is at most ${ROUTE_BODY_BYTES} bytes of JSON. Deliver the queue in smaller batches.`,
+      },
+    });
+    assertEquals(settleCalls().length, 0);
+    assertEquals(durable.size, 0);
+
+    // The same queue through the shared plan: every request within both caps,
+    // every one accepted, the whole queue settled in order, each id once.
+    const plan = planOfflineReceiptBatches(entries);
+    assertEquals(plan.oversized, []);
+    assert(plan.batches.length >= 2, `${plan.batches.length} batches`);
+    const answered: string[] = [];
+    let settled = 0;
+    for (const batch of plan.batches) {
+      assert(batch.length <= ROUTE_SETTLE_MAX);
+      assert(
+        new TextEncoder().encode(JSON.stringify({ receipts: batch })).length <= ROUTE_BODY_BYTES,
+      );
+      h.reset();
+      h.respond = durableRespond;
+      const response = await post({ receipts: batch }, user.token);
+      assertEquals(response.status, 200);
+      const body = await readJson(response);
+      const answer = wire(body);
+      assertEquals(answer.rejected, []);
+      assertEquals(
+        answer.receipts.map((r) => [r.delivery, r.status, r.financialDisposition]),
+        batch.map(() => ["settled", "result_recorded", "not_applicable"]),
+      );
+      const batchIds = batch.map((e) => e.receipt.receiptId);
+      assertEquals(
+        mobileVerdicts(body, batchIds),
+        batchIds.map((receiptId) => ({ receiptId, verdict: "accepted", code: "result_recorded" })),
+      );
+      answered.push(...answer.receipts.map((r) => r.receiptId));
+      settled += settleCalls().length;
+    }
+    assertEquals(answered, ids);
+    assertEquals(settled, count);
+    assertEquals(durable.size, count);
   },
 );
 
