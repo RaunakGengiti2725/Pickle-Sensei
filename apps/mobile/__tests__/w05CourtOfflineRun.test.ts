@@ -488,6 +488,7 @@ it('the drain presents { receipt, grant, output } and an accepted verdict marks 
   expect(presented[0]!.body).toEqual({
     receipts: [
       {
+        ...persisted,
         receipt: persisted,
         grant: {
           schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
