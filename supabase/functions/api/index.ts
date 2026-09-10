@@ -5052,8 +5052,10 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
 
 /** The app drains EVERY queued receipt in one POST (a Pro lease can hold a
  * week of ratings), so a batch is bounded by bytes, never refused for its
- * length. Entries past this many settlement round trips are answered pending
- * and settle on the next drain. */
+ * length. Entries past this many NEW decisions (settled / held / deferred) are
+ * answered pending and settle on the next drain. Replays of a durable verdict
+ * do not count: the app re-presents held receipts until they resolve, and a
+ * queue of durable HOLDs must never starve the fresh receipt queued behind it. */
 const OFFLINE_RECEIPT_BATCH_SETTLE_MAX = 250;
 const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
@@ -5536,7 +5538,6 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     // The freeze is the database's to apply, AFTER it has looked the receipt
     // up: only a genuinely new chargeable receipt is deferred. The edge never
     // answers pending on its own.
-    settlements += 1;
     const settled = await authed.db.rpc("settle_offline_receipt", {
       p_receipt: receipt,
       p_receipt_sha256: receiptSha256,
@@ -5586,6 +5587,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcRow" });
     }
     tally[delivery] += 1;
+    if (delivery !== "replayed") settlements += 1;
     if (delivery === "held" && typeof row.reason_code === "string") {
       holdReasons.push(row.reason_code);
     }
