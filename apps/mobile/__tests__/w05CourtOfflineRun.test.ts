@@ -17,6 +17,14 @@
  * offline is settled ONLY by its receipt: the reconnect recovery sweep never
  * reserves a live permit for it, and a commit whose acknowledgement is lost
  * still hands the durable scored read to the caller.
+ *
+ * Round 4 (adversary findings): the explicit Check of a paid attempt reserves
+ * nothing; a drain builds every wire entry before it journals (an unreadable
+ * payload is presented as `output: null`, never a phantom HOLD); a refused
+ * settlement is durably visible on the shot; the loser of a last-ticket race
+ * gets an honest no-score outcome; more than 100 paid receipts still fence
+ * every paid operation from live re-reservation; corrupt wallet rows fail
+ * typed, before anything is sent.
  */
 import {
   OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
@@ -25,6 +33,7 @@ import {
   OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
   OFFLINE_GRANT_AUDIENCE,
   OFFLINE_GRANT_JWS_TYPE,
+  OFFLINE_PRO_LEASE_SCHEMA_VERSION,
   OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
 } from '@pickle/shared-types';
 import { generateSwingSequence } from '@pickle/evaluation';
@@ -32,6 +41,7 @@ import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { CapturedClip } from '../src/camera/capture';
 import {
   prepareOriginalCaptureAnalysis,
+  reconcileOriginalCaptureAnalysis,
   runCaptureAnalysis,
   runOriginalCaptureAnalysis,
   type RunCaptureAnalysisOutcome,
@@ -58,12 +68,20 @@ import {
 } from '../src/data/api';
 import { getDb } from '../src/data/db';
 import {
+  consumeOfflineAllocation,
   holdOfflineGrant,
   pendingOfflineReceipts,
   readOfflineAllocation,
 } from '../src/data/offlineCapabilities';
-import { reconcileOfflineWallet } from '../src/data/offlineWallet';
-import { getAnalysis, hasShotSyncReceipt } from '../src/data/repository';
+import {
+  readOfflineWalletStatus,
+  reconcileOfflineWallet,
+} from '../src/data/offlineWallet';
+import {
+  getAnalysis,
+  getShotOutboxStatus,
+  hasShotSyncReceipt,
+} from '../src/data/repository';
 import {
   clearSyncRuntime,
   configureSyncRuntime,
@@ -114,6 +132,10 @@ jest.mock('../src/data/trustedTime', () => {
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const CAPTURE = '33333333-3333-4333-8333-333333333333';
 const OPERATION = '44444444-4444-4444-8444-444444444444';
+const CAPTURE_2 = '33333333-3333-4333-8333-333333333334';
+const OPERATION_2 = '44444444-4444-4444-8444-444444444445';
+const REFUSAL_CODE = 'grant_signature_invalid';
+const OTHER_OWNER = '22222222-2222-4222-8222-222222222222';
 const API_ORIGIN = 'https://api.example.test/functions/v1/api';
 const BEARER = 'fresh-owner-token';
 const INSTALLATION_KEY = 'ios-install-key-1';
@@ -149,7 +171,11 @@ function base64Url(text: string): string {
   return Buffer.from(text, 'utf8').toString('base64url');
 }
 
-function grantCompactJws(): string {
+/** `free`: the two-ticket lifetime-free allocation. `pro`: a verified-store
+ * lease — no tickets, every scored read spends the lease and queues a receipt. */
+type GrantKind = 'free' | 'pro';
+
+function grantCompactJws(kind: GrantKind = 'free'): string {
   const claims = {
     schemaVersion: OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
     protocolVersion: OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
@@ -166,15 +192,26 @@ function grantCompactJws(): string {
       mechanicsModel: ARTIFACT,
       benchmarkModel: ARTIFACT,
     },
-    entitlementSource: 'identity_lifetime_free',
-    allocation: {
-      schemaVersion: OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
-      allocationId: GRANT_ID,
-      generation: 1,
-      ticketIds: TICKETS,
-      budgetPolicy: OFFLINE_FREE_ALLOCATION_POLICY.id,
-      financialExpiry: 'reconciliation_only',
-    },
+    ...(kind === 'pro'
+      ? {
+          entitlementSource: 'verified_store',
+          lease: {
+            schemaVersion: OFFLINE_PRO_LEASE_SCHEMA_VERSION,
+            kind: 'subscription',
+            verifiedEntitlementExpiresAt: EXPIRES_AT + 3600,
+          },
+        }
+      : {
+          entitlementSource: 'identity_lifetime_free',
+          allocation: {
+            schemaVersion: OFFLINE_FREE_ALLOCATION_SCHEMA_VERSION,
+            allocationId: GRANT_ID,
+            generation: 1,
+            ticketIds: TICKETS,
+            budgetPolicy: OFFLINE_FREE_ALLOCATION_POLICY.id,
+            financialExpiry: 'reconciliation_only',
+          },
+        }),
   };
   const header = { alg: 'ES256', typ: OFFLINE_GRANT_JWS_TYPE, kid: KEY_ID };
   return `${base64Url(JSON.stringify(header))}.${base64Url(
@@ -182,36 +219,40 @@ function grantCompactJws(): string {
   )}.${'A'.repeat(86)}`;
 }
 
-function issuedGrant(): IssuedOfflineGrant {
+function issuedGrant(kind: GrantKind = 'free'): IssuedOfflineGrant {
   const parsed = parseIssuedOfflineGrant({
     grantId: GRANT_ID,
     generation: 1,
-    entitlementSource: 'identity_lifetime_free',
+    entitlementSource:
+      kind === 'pro' ? 'verified_store' : 'identity_lifetime_free',
     issuedAt: ISSUED_AT,
     expiresAt: EXPIRES_AT,
-    entitlementExpiresAt: null,
-    ticketIds: TICKETS,
+    entitlementExpiresAt: kind === 'pro' ? EXPIRES_AT + 3600 : null,
+    ticketIds: kind === 'pro' ? [] : TICKETS,
     keyId: KEY_ID,
     grant: {
       schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION,
-      compactJws: grantCompactJws(),
+      compactJws: grantCompactJws(kind),
     },
   });
   if (!parsed) throw new Error('fixture grant response must parse');
   return parsed;
 }
 
-function signIn() {
-  setActiveDataOwner(OWNER);
+function signIn(owner = OWNER) {
+  setActiveDataOwner(owner);
   establishApiSession({
-    canonicalAppUserId: OWNER,
+    canonicalAppUserId: owner,
     apiBaseUrl: API_ORIGIN,
     bearerToken: BEARER,
     provider: 'apple',
   });
 }
 
-function fixture(visibility: number | null = null) {
+function fixture(
+  visibility: number | null = null,
+  uri = 'file:///private/captures/court.mov',
+) {
   const { sequence, window } = generateSwingSequence();
   const dimmed =
     visibility === null
@@ -226,7 +267,7 @@ function fixture(visibility: number | null = null) {
         };
   const sidecar = serializePoseSequence(dimmed);
   const clip: CapturedClip = {
-    uri: 'file:///private/captures/court.mov',
+    uri,
     capturedAtIso: '2026-09-06T12:00:00.000Z',
     durationMs: window.endMs,
     width: 1080,
@@ -238,7 +279,7 @@ function fixture(visibility: number | null = null) {
     poseSequence: {
       schemaVersion: 1,
       format: 'pickle.pose-sequence.v1',
-      uri: 'file:///private/captures/court.pose.json',
+      uri: uri.replace(/\.mov$/, '.pose.json'),
       frameCount: dimmed.frames.length,
       sha256: sha256Hex(sidecar),
       coordinateSystem: 'normalized_image_top_left',
@@ -267,8 +308,13 @@ interface FetchCall {
 
 /** The court's network: `offline` never reaches the service (the request
  * fails to leave the device); `paywall` reaches it and is REFUSED; `online`
- * answers the receipt drain. */
-function court(signal: Signal, receiptStatus = 'result_recorded') {
+ * answers the receipt drain — every presented receipt with `receiptStatus`,
+ * or, when `refuseWith` is set, every one under `rejected` with that code. */
+function court(
+  signal: Signal,
+  receiptStatus = 'result_recorded',
+  refuseWith: string | null = null,
+) {
   const calls: FetchCall[] = [];
   const fetchPort = jest.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -293,13 +339,27 @@ function court(signal: Signal, receiptStatus = 'result_recorded') {
         const receipts = (body.receipts ?? []) as Array<
           Record<string, unknown>
         >;
-        return response(200, {
-          receipts: receipts.map(entry => ({
-            receiptId: (entry.receipt as Record<string, unknown>).receiptId,
-            status: receiptStatus,
-          })),
-          rejected: [],
-        });
+        const ids = receipts.map(
+          entry => (entry.receipt as Record<string, unknown>).receiptId,
+        );
+        return response(
+          200,
+          refuseWith === null
+            ? {
+                receipts: ids.map(receiptId => ({
+                  receiptId,
+                  status: receiptStatus,
+                })),
+                rejected: [],
+              }
+            : {
+                receipts: [],
+                rejected: ids.map(receiptId => ({
+                  receiptId,
+                  code: refuseWith,
+                })),
+              },
+        );
       }
       return response(404, { error: { code: 'not_found' } });
     },
@@ -311,7 +371,7 @@ function court(signal: Signal, receiptStatus = 'result_recorded') {
 async function setup(options: {
   signal: Signal;
   policy: boolean;
-  grant: boolean;
+  grant: boolean | GrantKind;
   visibility?: number | null;
 }) {
   const store = createSqliteTestDb();
@@ -330,7 +390,12 @@ async function setup(options: {
       ),
     ).toBe(true);
   }
-  if (options.grant) await holdOfflineGrant(store.db, issuedGrant(), BINDING);
+  if (options.grant)
+    await holdOfflineGrant(
+      store.db,
+      issuedGrant(options.grant === 'pro' ? 'pro' : 'free'),
+      BINDING,
+    );
   const network = court(options.signal);
   const request: RunCaptureAnalysisRequest = {
     db: store.db,
@@ -349,6 +414,53 @@ async function setup(options: {
 }
 
 type Store = ReturnType<typeof createSqliteTestDb>;
+
+/** A second capture of the same owner on the same court: its own capture,
+ * operation and movie. `mockReadArtifact` serves both sidecars. */
+function secondCapture(
+  store: Store,
+  request: RunCaptureAnalysisRequest,
+): RunCaptureAnalysisRequest {
+  const first = mockReadArtifact;
+  const { clip, sidecar } = fixture(
+    null,
+    'file:///private/captures/court-2.mov',
+  );
+  mockReadArtifact = async uri =>
+    uri === clip.poseSequence?.uri ? sidecar : first(uri);
+  seedSqliteCapture(store.db, OWNER, CAPTURE_2, clip);
+  return { ...request, operationId: OPERATION_2, captureId: CAPTURE_2, clip };
+}
+
+/** A plain-path run whose thrown error is recorded instead of propagated, so
+ * a race can assert that NO participant throws at the capture screen. */
+type Attempt = RunCaptureAnalysisOutcome | { kind: 'threw'; error: unknown };
+
+async function attempt(request: RunCaptureAnalysisRequest): Promise<Attempt> {
+  try {
+    return await runCaptureAnalysis(request);
+  } catch (error) {
+    return { kind: 'threw', error };
+  }
+}
+
+function receiptRows(store: Store) {
+  return store.native
+    .prepare(
+      `SELECT receipt_id, operation_id, settlement, receipt FROM offline_receipt
+       WHERE owner_key = ? ORDER BY queued_at ASC, receipt_id ASC`,
+    )
+    .all(OWNER);
+}
+
+function journalRow(store: Store, operationId: string) {
+  return store.native
+    .prepare(
+      `SELECT state, release_outcome, permit_id FROM analysis_run_journal
+       WHERE owner_key = ? AND operation_id = ?`,
+    )
+    .get(OWNER, operationId);
+}
 
 function outboxKinds(store: Store): string[] {
   return store.native
@@ -444,42 +556,59 @@ const leases: OriginalAnalysisExecution[] = [];
 
 /** The shipping entry point: AnalyzeScreen runs every signed-in, pose-backed
  * capture through prepareOriginalCaptureAnalysis + runOriginalCaptureAnalysis
- * with a camera clip that carries its native media identity. */
-async function setupOriginal(signal: Signal) {
-  const store = createSqliteTestDb();
-  const { clip: bare, sidecar } = fixture();
+ * with a camera clip that carries its native media identity. A `second`
+ * capture joins an existing store (same owner, policy and grant) under its
+ * own capture id, operation id and movie. */
+async function setupOriginal(signal: Signal, second?: { store: Store }) {
+  const store = second?.store ?? createSqliteTestDb();
+  const captureId = second ? CAPTURE_2 : CAPTURE;
+  const operationId = second ? OPERATION_2 : OPERATION;
+  const movie = second ? 'court-2.mov' : 'court.mov';
+  const { clip: bare, sidecar } = fixture(
+    null,
+    `file:///private/captures/${movie}`,
+  );
   const clip: CapturedClip = {
     ...bare,
     byteSize: 25,
     nativeMediaIdentity: {
       schemaVersion: 1,
       format: 'pickle.native-media-identity.v1',
-      receiptId: '66666666-6666-4666-8666-666666666666',
-      operationId: '77777777-7777-4777-8777-777777777777',
+      receiptId: second
+        ? '66666666-6666-4666-8666-666666666667'
+        : '66666666-6666-4666-8666-666666666666',
+      operationId: second
+        ? '77777777-7777-4777-8777-777777777778'
+        : '77777777-7777-4777-8777-777777777777',
       origin: 'native_export',
       algorithm: 'sha256',
-      videoFileName: 'court.mov',
+      videoFileName: movie,
       byteSize: 25,
-      sha256: sha256Hex('synthetic court movie bytes'),
+      sha256: sha256Hex(`synthetic ${movie} bytes`),
     },
   };
-  mockReadArtifact = async () => sidecar;
-  seedSqliteCapture(store.db, OWNER, CAPTURE, clip);
+  const previous = mockReadArtifact;
+  mockReadArtifact = second
+    ? async uri => (uri === clip.poseSequence?.uri ? sidecar : previous(uri))
+    : async () => sidecar;
+  seedSqliteCapture(store.db, OWNER, captureId, clip);
   await store.db.execute(
     'UPDATE local_capture SET declared_stroke = ? WHERE owner_key = ? AND id = ?',
-    ['forehand_drive', OWNER, CAPTURE],
+    ['forehand_drive', OWNER, captureId],
   );
   mockReading = reading();
-  const verified = verifyReleasePolicy(activeReleaseAuthority().policy);
-  if (!verified.ok) throw new Error('fixture policy must verify');
-  expect(
-    await writeCachedReleasePolicy(
-      store.db,
-      { ownerKey: OWNER, apiOrigin: API_ORIGIN },
-      { policy: verified.policy, serverTime: Math.floor(NOW_MS / 1000) },
-    ),
-  ).toBe(true);
-  await holdOfflineGrant(store.db, issuedGrant(), BINDING);
+  if (!second) {
+    const verified = verifyReleasePolicy(activeReleaseAuthority().policy);
+    if (!verified.ok) throw new Error('fixture policy must verify');
+    expect(
+      await writeCachedReleasePolicy(
+        store.db,
+        { ownerKey: OWNER, apiOrigin: API_ORIGIN },
+        { policy: verified.policy, serverTime: Math.floor(NOW_MS / 1000) },
+      ),
+    ).toBe(true);
+    await holdOfflineGrant(store.db, issuedGrant(), BINDING);
+  }
   const network = court(signal);
   const execution = new OriginalAnalysisExecution(
     captureDataOwnerContext(),
@@ -489,7 +618,7 @@ async function setupOriginal(signal: Signal) {
   const request: RunCaptureAnalysisRequest = {
     db: store.db,
     ownerContext: execution.ownerContext,
-    captureId: CAPTURE,
+    captureId,
     clip,
     declaredStroke: 'forehand_drive',
     declaredCanonical: 'FOREHAND_DRIVE',
@@ -502,7 +631,7 @@ async function setupOriginal(signal: Signal) {
     const operation = await prepareOriginalCaptureAnalysis(
       request,
       execution,
-      OPERATION,
+      operationId,
     );
     return runOriginalCaptureAnalysis({
       db: store.db,
@@ -510,7 +639,13 @@ async function setupOriginal(signal: Signal) {
       operationId: operation.operationId,
     });
   };
-  return { store, run, network };
+  const check = () =>
+    reconcileOriginalCaptureAnalysis({
+      db: store.db,
+      execution,
+      operationId,
+    });
+  return { store, run, check, network };
 }
 
 /** Signal comes back after the app restarted: nothing is executing, and the
@@ -814,6 +949,45 @@ describe('the shipping entry point (AnalyzeScreen → runOriginalCaptureAnalysis
     expect(store.count('local_shot', OWNER)).toBe(1);
   });
 
+  it.each([
+    ['unparseable', () => 'not json'],
+    [
+      're-pointed at another result',
+      (receipt: string) =>
+        JSON.stringify({
+          ...(JSON.parse(receipt) as Record<string, unknown>),
+          resultId: '77777777-7777-4777-8777-777777777777',
+        }),
+    ],
+  ])(
+    'a receipt row that is %s holds the paid operation: the replay is an honest HOLD, never a second inference, spend or fabricated rating',
+    async (_label, corrupt: (receipt: string) => string) => {
+      const { store, run, network } = await setupOriginal('offline');
+      const outcome = await run();
+      expect(outcome.kind).toBe('scored');
+      const [receipt] = receiptRows(store) as Array<{
+        receipt_id: string;
+        receipt: string;
+      }>;
+      store.native
+        .prepare(
+          `UPDATE offline_receipt SET receipt = ? WHERE owner_key = ? AND receipt_id = ?`,
+        )
+        .run(corrupt(receipt!.receipt), OWNER, receipt!.receipt_id);
+
+      const replay = await run();
+      expect(replay).toMatchObject({
+        kind: 'unavailable',
+        cause: 'recovery_pending',
+      });
+      expect(permitPosts(network.calls)).toHaveLength(1);
+      expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+      expect(store.count('offline_receipt', OWNER)).toBe(1);
+      expect(store.count('local_shot', OWNER)).toBe(1);
+      expect(outboxKinds(store)).toEqual([]);
+    },
+  );
+
   it('an explicit refusal on the original path is not offline: no score, nothing spent', async () => {
     const { store, run, network } = await setupOriginal('paywall');
     const outcome = await run();
@@ -953,5 +1127,373 @@ describe('reconnect: an operation paid offline is settled only by its receipt', 
     expect(permitPosts(online.calls)).toHaveLength(0);
     expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
     expect(store.count('local_shot', OWNER)).toBe(1);
+  });
+});
+
+function walletClient() {
+  return createOfflineGrantClient({ baseUrl: API_ORIGIN, token: BEARER });
+}
+
+/** Round 4: the explicit "Check" action (AnalyzeScreen `reconcile_saved`) of
+ * a paid attempt must obey the same rule as the sweep — a receipt settles the
+ * operation; no live permit is ever reserved for it. */
+describe('the explicit Check of an offline-paid original attempt', () => {
+  it('reserves no live permit and finalizes nothing; the attempt stays the offline-paid attempt and the replay is the same rating', async () => {
+    const { store, run, check } = await setupOriginal('offline');
+    const outcome = await run();
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored' || !outcome.record.result) return;
+    const analysis = outcome.record.result;
+    const attempt = attemptRows(store);
+    expect(attempt).toEqual([expect.objectContaining({ permit_id: null })]);
+
+    // Signal is back; the owner taps Check.
+    const online = reconnected();
+    await check();
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(finalizePosts(online.calls)).toHaveLength(0);
+    expect(attemptRows(store)).toEqual(attempt);
+    // An original attempt lives only in its attempt row; Check opens no run.
+    expect(journalRow(store, OPERATION)).toBeUndefined();
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(1);
+
+    const replay = await run();
+    expect(replay).toMatchObject({ kind: 'scored', replayed: true });
+    if (replay.kind === 'scored')
+      expect(replay.record.result?.id).toBe(analysis.id);
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+  });
+});
+
+describe('a drain never journals a presentation it did not send', () => {
+  it('one unreadable local shot payload: the healthy receipt is presented and settled, the unreadable output is presented as null, and no HOLD is fabricated', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const first = await runCaptureAnalysis(request);
+    expect(first.kind).toBe('scored');
+    if (first.kind !== 'scored' || !first.record.result) return;
+    const second = await runCaptureAnalysis(secondCapture(store, request));
+    expect(second.kind).toBe('scored');
+    if (second.kind !== 'scored' || !second.record.result) return;
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 2 });
+    const receipts = await pendingOfflineReceipts(store.db);
+    expect(receipts).toHaveLength(2);
+
+    // The first shot's persisted payload is no longer JSON.
+    store.native
+      .prepare(
+        `UPDATE local_shot SET payload = ? WHERE owner_key = ? AND id = ?`,
+      )
+      .run('not json', OWNER, first.record.result.id);
+
+    const online = court('online');
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      walletClient(),
+      reading(),
+    );
+    expect(drained).toMatchObject({
+      submitted: 2,
+      accepted: 2,
+      held: 0,
+      refused: 0,
+      pending: 0,
+    });
+    const presented = online.calls.filter(call => call.url === RECEIPTS_ROUTE);
+    expect(presented).toHaveLength(1);
+    const entries = (
+      presented[0]!.body as { receipts: Array<Record<string, unknown>> }
+    ).receipts;
+    const byResult = new Map(
+      entries.map(entry => [
+        (entry.receipt as { resultId: string }).resultId,
+        entry.output,
+      ]),
+    );
+    expect(byResult.get(first.record.result.id)).toBeNull();
+    expect(byResult.get(second.record.result.id)).toEqual(second.record.result);
+
+    const status = await readOfflineWalletStatus(store.db);
+    expect(status.hold).toBe(false);
+    expect(status.unansweredPresentations).toBe(0);
+    expect(status.pending).toEqual([]);
+    expect(await hasShotSyncReceipt(store.db, second.record.result.id)).toBe(
+      true,
+    );
+  });
+
+  it('an unreadable receipt row fails typed before anything is sent: no request, no journal, no HOLD, nothing settled', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const first = await runCaptureAnalysis(request);
+    expect(first.kind).toBe('scored');
+    if (first.kind !== 'scored' || !first.record.result) return;
+    const [receipt] = receiptRows(store) as Array<{ receipt_id: string }>;
+    store.native
+      .prepare(
+        `UPDATE offline_receipt SET receipt = ? WHERE owner_key = ? AND receipt_id = ?`,
+      )
+      .run('not json', OWNER, receipt!.receipt_id);
+
+    const online = court('online');
+    await expect(
+      reconcileOfflineWallet(store.db, walletClient(), reading()),
+    ).rejects.toMatchObject({
+      name: 'OfflineGrantError',
+      code: 'offline.wallet_corrupt',
+    });
+    expect(online.calls.filter(call => call.url === RECEIPTS_ROUTE)).toEqual(
+      [],
+    );
+    expect(store.count('offline_wallet_journal', OWNER)).toBe(0);
+    expect(await hasShotSyncReceipt(store.db, first.record.result.id)).toBe(
+      false,
+    );
+    expect(receiptRows(store)).toEqual([
+      expect.objectContaining({ settlement: null }),
+    ]);
+  });
+});
+
+describe('a refused settlement is durably visible to the owner', () => {
+  it('before the drain the shot reads as queued; after a refusal it reads as refused with the server code, and it is never marked synced', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored' || !outcome.record.result) return;
+    const analysis = outcome.record.result;
+    expect(outboxKinds(store)).toEqual([]);
+    expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
+
+    court('online', 'result_recorded', REFUSAL_CODE);
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      walletClient(),
+      reading(),
+    );
+    expect(drained).toMatchObject({
+      submitted: 1,
+      accepted: 0,
+      held: 0,
+      refused: 1,
+      pending: 0,
+    });
+
+    // Durable, owner-readable: the Result screen's evidence readers see a
+    // refused read, not an absent or pending one.
+    expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(false);
+    expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+      state: 'exhausted',
+      attempts: 1,
+      lastError: REFUSAL_CODE,
+    });
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+    expect(receiptRows(store)).toEqual([
+      expect.objectContaining({ settlement: 'refused' }),
+    ]);
+    // The rating itself stays on the device; the ticket stays spent.
+    expect(await getAnalysis(store.db, analysis.id)).toMatchObject({
+      resultKind: 'scored',
+      source: 'real',
+    });
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+
+    // Another owner sees none of it.
+    clearApiSession();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    signIn(OTHER_OWNER);
+    expect(await getShotOutboxStatus(store.db, analysis.id)).toEqual({
+      state: 'absent',
+    });
+  });
+
+  it('a held verdict keeps the shot queued, not refused', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored' || !outcome.record.result) return;
+    court('online', 'pending');
+    await reconcileOfflineWallet(store.db, walletClient(), reading());
+    expect(
+      await getShotOutboxStatus(store.db, outcome.record.result.id),
+    ).toEqual({ state: 'queued', attempts: 1, lastError: null });
+  });
+});
+
+describe('the last-ticket race between two distinct offline operations', () => {
+  async function spendOneTicket(store: Store) {
+    await consumeOfflineAllocation(
+      store.db,
+      {
+        operationId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        resultId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        fullOutputSha256: 'b'.repeat(64),
+      },
+      reading(NOW_MS - 60_000),
+    );
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+  }
+
+  it('plain path: exactly one scores; the loser receives an honest no-score outcome — no thrown OfflineGrantError, nothing spent, no shot, no recovery hold', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: true,
+    });
+    await spendOneTicket(store);
+    const second = secondCapture(store, request);
+
+    const outcomes = await Promise.all([attempt(request), attempt(second)]);
+    const scored = outcomes.filter(outcome => outcome.kind === 'scored');
+    const losers = outcomes.filter(outcome => outcome.kind !== 'scored');
+    expect(scored).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0]).toMatchObject({ kind: 'unavailable' });
+    expect(losers[0]).not.toHaveProperty('cause');
+    if (losers[0]!.kind === 'unavailable')
+      expect(losers[0]!.reason).toMatch(/offline|reached/i);
+
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 2 });
+    expect(store.count('local_shot', OWNER)).toBe(1);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(2);
+    expect(outboxKinds(store)).toEqual([]);
+    // The loser's operation spent nothing, so reconnect reconciles it exactly
+    // like any no-score run the service never answered (one reservation,
+    // finalized failed with no rating); the paid winner is never re-reserved,
+    // its receipt settles it.
+    const loserKey = store.native
+      .prepare(
+        `SELECT reservation_key FROM analysis_run_journal
+         WHERE owner_key = ? AND operation_id NOT IN (
+           SELECT operation_id FROM offline_receipt WHERE owner_key = ?)`,
+      )
+      .all(OWNER, OWNER)
+      .map(row => (row as { reservation_key: string }).reservation_key);
+    expect(loserKey).toHaveLength(1);
+    const { online } = await reconnectSweep(store);
+    expect(permitPosts(online.calls).map(call => call.body)).toEqual([
+      { idempotencyKey: loserKey[0] },
+    ]);
+    expect(finalizePosts(online.calls).map(call => call.body)).toEqual([
+      { outcome: 'failed', ratingId: null },
+    ]);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+  });
+
+  it('shipping path: the loser is told the allowance is gone, not left "awaiting recovery"; the winner replays as the same paid rating', async () => {
+    const first = await setupOriginal('offline');
+    const second = await setupOriginal('offline', { store: first.store });
+    const { store } = first;
+    await spendOneTicket(store);
+
+    const outcomes = await Promise.all([first.run(), second.run()]);
+    const scored = outcomes.filter(outcome => outcome.kind === 'scored');
+    const losers = outcomes.filter(outcome => outcome.kind !== 'scored');
+    expect(scored).toHaveLength(1);
+    expect(losers).toEqual([expect.objectContaining({ kind: 'unavailable' })]);
+    expect(losers[0]).not.toHaveProperty('cause');
+    if (losers[0]!.kind === 'unavailable')
+      expect(losers[0]!.reason).toMatch(/offline|reached/i);
+
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 2 });
+    expect(store.count('local_shot', OWNER)).toBe(1);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(2);
+    // The loser's attempt is released, never a live commitment.
+    expect(attemptRows(store)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ permit_id: null, result_id: null }),
+      ]),
+    );
+    expect(attemptRows(store)).toHaveLength(2);
+
+    const winner = scored[0]!.kind === 'scored' ? scored[0]! : null;
+    const replayOf = outcomes[0]!.kind === 'scored' ? first : second;
+    const replay = await replayOf.run();
+    expect(replay).toMatchObject({ kind: 'scored', replayed: true });
+    if (replay.kind === 'scored' && winner?.kind === 'scored')
+      expect(replay.record.result?.id).toBe(winner.record.result?.id);
+    expect(await tickets(store)).toEqual({ spendable: 0, consumed: 2 });
+  });
+});
+
+describe('reconnect with more than 100 paid receipts', () => {
+  it('a Pro lease with 100 older paid receipts: the 101st and 102nd paid operations are not re-reserved live or finalized; every receipt drains', async () => {
+    const { store, request } = await setup({
+      signal: 'offline',
+      policy: true,
+      grant: 'pro',
+    });
+    // 100 earlier court-day ratings already paid on this lease.
+    for (let index = 0; index < 100; index += 1) {
+      const suffix = String(index).padStart(12, '0');
+      await consumeOfflineAllocation(
+        store.db,
+        {
+          operationId: `aaaaaaaa-aaaa-4aaa-8aaa-${suffix}`,
+          resultId: `bbbbbbbb-bbbb-4bbb-8bbb-${suffix}`,
+          fullOutputSha256: 'c'.repeat(64),
+        },
+        reading(NOW_MS - (200 - index) * 1000),
+      );
+    }
+    const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored' || !outcome.record.result) return;
+    const analysis = outcome.record.result;
+    const second = await runCaptureAnalysis(secondCapture(store, request));
+    expect(second.kind).toBe('scored');
+    if (second.kind !== 'scored' || !second.record.result) return;
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(102);
+    const journals = [
+      journalRow(store, OPERATION),
+      journalRow(store, OPERATION_2),
+    ];
+    expect(journals).toEqual([
+      expect.objectContaining({ permit_id: null }),
+      expect.objectContaining({ permit_id: null }),
+    ]);
+
+    const { online } = await reconnectSweep(store);
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(finalizePosts(online.calls)).toHaveLength(0);
+    expect([
+      journalRow(store, OPERATION),
+      journalRow(store, OPERATION_2),
+    ]).toEqual(journals);
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(0);
+    expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(true);
+    expect(await hasShotSyncReceipt(store.db, second.record.result.id)).toBe(
+      true,
+    );
+    expect(
+      receiptRows(store).filter(row => row['settlement'] === 'accepted'),
+    ).toHaveLength(102);
+
+    const replay = await runCaptureAnalysis(request);
+    expect(replay.kind).toBe('scored');
+    if (replay.kind === 'scored')
+      expect(replay.record.result?.id).toBe(analysis.id);
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(store.count('local_shot', OWNER)).toBe(2);
   });
 });
