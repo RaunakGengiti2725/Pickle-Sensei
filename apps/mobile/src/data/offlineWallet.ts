@@ -30,6 +30,9 @@
  * and are never read across accounts; unreadable journal state is the typed
  * `offline.wallet_corrupt` failure, never an empty wallet.
  */
+import { OFFLINE_SIGNED_GRANT_SCHEMA_VERSION } from '@pickle/shared-types';
+import { sha256Hex } from '@pickle/swing-domain';
+import { originalCanonicalJson } from '../analysis/originalAnalysisSnapshot';
 import { makeUuid } from '../util/uuid';
 import {
   captureDataOwnerContext,
@@ -43,16 +46,19 @@ import type {
   OfflineReceiptSubmission,
   OfflineReceiptVerdict,
   OfflineReceiptVerdictKind,
+  OfflineReceiptWireEntry,
 } from './api';
 import type { LocalDb } from './db';
 import {
   OfflineGrantError,
   pendingOfflineReceipts,
+  readHeldOfflineGrantJws,
   settleOfflineReceipt,
   type OfflineConsumptionReceipt,
   type OfflineReceiptReconciliation,
   type OfflineReceiptSettlement,
 } from './offlineCapabilities';
+import { readScoredShotPayload, recordShotSyncReceipt } from './repository';
 import { forDataOwner, withTransaction } from './transactions';
 import type { TrustedTimeReading } from './trustedTime';
 
@@ -315,6 +321,45 @@ function submission(
   return body;
 }
 
+/** The exact output a receipt paid for, as the receipt hashed it: the shot
+ * payload without any live-permit binding. Null when this device no longer
+ * holds that exact payload — the server is told so rather than shown a
+ * substitute. */
+async function presentedOutput(
+  db: LocalDb,
+  context: DataOwnerContext,
+  receipt: OfflineConsumptionReceipt,
+): Promise<Record<string, unknown> | null> {
+  const payload = await readScoredShotPayload(
+    forDataOwner(db, context),
+    receipt.resultId,
+  );
+  if (payload === null) return null;
+  const { analysisPermitId: _analysisPermitId, ...output } = payload;
+  return sha256Hex(originalCanonicalJson(output)) === receipt.fullOutputSha256
+    ? output
+    : null;
+}
+
+/** The 1.0 wire entry: the persisted receipt (flat, as every reader of the
+ * pre-1.0 entry expects, and again under `receipt`), the held grant's exact
+ * compact JWS (the server re-verifies the signature) and the output. */
+async function wireEntry(
+  db: LocalDb,
+  context: DataOwnerContext,
+  receipt: OfflineConsumptionReceipt,
+): Promise<OfflineReceiptWireEntry> {
+  const compactJws = await readHeldOfflineGrantJws(db, receipt.grantId);
+  if (compactJws === null) throw corrupt(`receipt ${receipt.receiptId} grant`);
+  const presented = submission(receipt);
+  return {
+    ...presented,
+    receipt: presented,
+    grant: { schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION, compactJws },
+    output: await presentedOutput(db, context, receipt),
+  };
+}
+
 interface OpenedPresentation {
   readonly journalId: string;
   readonly receipts: readonly OfflineConsumptionReceipt[];
@@ -425,12 +470,19 @@ async function applyVerdicts(
         counts.stale += 1;
         continue;
       }
-      await settleOfflineReceipt(
+      const settled = await settleOfflineReceipt(
         transaction,
         verdict.receiptId,
         verdict.verdict,
         reading,
       );
+      // The server recorded the result the receipt carried: the local shot
+      // is delivered exactly as a successful `shot.sync` marks it.
+      if (verdict.verdict === 'accepted')
+        await recordShotSyncReceipt(
+          forDataOwner(transaction, context),
+          settled.resultId,
+        );
       counts[verdict.verdict] += 1;
     }
     const closed = await transaction.execute(
@@ -499,9 +551,10 @@ export async function reconcileOfflineWallet(
   return serializedPerOwner(context.ownerKey, async () => {
     const plan = await openPresentation(db, context, reading);
     if (plan.opened === null) return { ...idle, recovered: plan.recovered };
-    const verdicts = await client.submitReceipts(
-      plan.opened.receipts.map(submission),
-    );
+    const entries: OfflineReceiptWireEntry[] = [];
+    for (const receipt of plan.opened.receipts)
+      entries.push(await wireEntry(db, context, receipt));
+    const verdicts = await client.submitReceipts(entries);
     const applied = await applyVerdicts(
       db,
       context,

@@ -1330,6 +1330,45 @@ export async function pendingOfflineReceipts(
   return rows.map(parseReceiptRow);
 }
 
+/** The queued receipt a rated run's operation id already paid with, for the
+ * active owner only, or null when that operation never spent. Settled
+ * receipts are included: the operation stays paid after the server's
+ * verdict. */
+export async function readOfflineReceiptForOperation(
+  rawDb: LocalDb,
+  operationId: string,
+): Promise<OfflineConsumptionReceipt | null> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_receipt WHERE owner_key = ? AND operation_id = ?`,
+    [context.ownerKey, operationId],
+  );
+  const row = rows[0];
+  return row ? parseReceiptRow(row) : null;
+}
+
+/** The exact compact JWS of a grant the active owner holds, re-verified
+ * against its stored digest, for presenting a receipt. Another owner's grant
+ * and an unknown grant id are both absent. */
+export async function readHeldOfflineGrantJws(
+  rawDb: LocalDb,
+  grantId: string,
+): Promise<string | null> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_grant WHERE owner_key = ? AND grant_id = ?`,
+    [context.ownerKey, grantId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  parseGrantRow(row);
+  const compactJws = row['compact_jws'];
+  if (typeof compactJws !== 'string') throw corrupt(`grant ${grantId}`);
+  return compactJws;
+}
+
 /** Record the server's explicit verdict on a queued receipt. This is the only
  * path that changes what the device reports as pending; the receipt row stays
  * as history and the wallet's tickets are untouched. `held` keeps the receipt
