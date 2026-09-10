@@ -1,0 +1,85 @@
+{
+  "agents": [
+    {
+      "label": "implement-W05-07-r3",
+      "phase": "implement",
+      "prompt_sha256": "46966e83fb32ec4ca4257d94bac1d0654f7f60091bf5945d3e7a9dade4f09692",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W05-07-r3-c2",
+      "phase": "implement",
+      "prompt_sha256": "08452971082849aeb65ebfca688e95426a08323ffd67da224ae6d81e7ef82015",
+      "role": "implementer",
+      "status": "launched"
+    }
+  ],
+  "base_sha": "17377c5ae59eea49d9b831ec2cc7cf10d73f6860",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.10",
+  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-07",
+  "requeued_from": {
+    "branch": "devin/pp/w05-07/impl-r1",
+    "findings": {
+      "adversary_branch": "devin/pp/w05-07/attack-2e5b47e0",
+      "adversary_breaks": [
+        {
+          "expected": "Objective: 'a court with no signal can never produce a scored read ... Implement the offline branch'. The behaviour must be reachable from the shipping app: outcome.kind === 'scored', exactly one ticket consumed, one pending offline_receipt carrying grant identity + output hash, one local_shot, and no shot.sync outbox row. As implemented, only the plain runCaptureAnalysis() (not called by the signed-in camera flow) can score offline, so the user-visible objective is not met.",
+          "observed": "reserve_analysis_permit POST is attempted once and throws TypeError('Network request failed'); runOriginalCaptureAnalysis returns { kind: 'unavailable', reason: 'The rating service could not be reached. Your capture is saved and can be scored later.' }; 0 tickets consumed, 0 offline receipts, 0 local_shot rows. Root cause (INFERRED from code): src/analysis/runCaptureAnalysis.ts reservation catch block sets `offlineAuthority = original ? null : await readOfflineRatingAuthority(...)`, i.e. the offline branch is explicitly disabled for the original-operation path, which is the only path apps/mobile/src/screens/AnalyzeScreen.tsx uses for a signed-in capture. The implementer summary confirms 'only then does the plain (non-original) run continue'.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack.test.ts -t 'a signed-in camera capture on a court with no signal'  (test at __tests__/w05CourtOfflineRun.attack.test.ts:581; the sibling control test at :555 proves the same harness scores through the original path when the server answers)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+          "title": "The shipping entry point (AnalyzeScreen -> runOriginalCaptureAnalysis) never takes the offline branch: a signed-in court capture with no signal + cached active policy + executable held grant still returns `unavailable`"
+        },
+        {
+          "expected": "An operation whose offline allocation has been consumed and whose receipt is queued is settled ONLY through the receipt drain. Recovery must not open a second, contradictory live commitment for the same operation id (product invariant: ambiguous commitment => HOLD/recover, never retry under a new identity; 'nothing is invented server-side'). Expected: 0 permit POSTs, 0 finalize POSTs, receipt still pending, replay of the operation returns the paid rating.",
+          "observed": "After an offline scored read (1 ticket consumed, 1 receipt queued) the process 'restarts' and the sync-runtime recovery sweep runs with connectivity restored: it issues POST /v1/analysis-permits {idempotencyKey: <new uuid>} for the same operation, then POST finalize {outcome: 'failed', ratingId: null} against the freshly minted permit; the run journal ends release_pending/failed. Ticket count is unchanged (no double local spend) but the server is told the operation FAILED while the pending receipt (later drained) tells it the same operation was recorded with output.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack.test.ts -t 'does not reserve a LIVE permit for an operation already paid offline'  (test at __tests__/w05CourtOfflineRun.attack.test.ts:660)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+          "title": "Reconnect recovery sweep for an operation already PAID offline reserves a fresh LIVE permit and finalizes it `failed` (ratingId: null) while the queued receipt says the result was recorded"
+        },
+        {
+          "expected": "Parity with the live path, whose existing test (apps/mobile/__tests__/runCaptureJournalIntegration.test.ts) asserts that a lost commit acknowledgement still returns the durable scored outcome. Expected outcome.kind === 'scored' on the first attempt; no second spend.",
+          "observed": "With the SQLite harness set to commit the offline run transaction and then throw 'SQLite commit acknowledgement lost', runCaptureAnalysis throws (kind: 'threw'). The database is already durable: 1 ticket consumed, 1 pending offline_receipt, 1 local_shot exist, yet the caller/UI gets an exception. A later replay of the same operation id does return the paid rating without a second spend (that sibling test passes), so this is not money loss, but the first-attempt user sees a crash/failure for a read they were charged for.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack.test.ts -t 'a physical COMMIT that succeeds but loses its acknowledgement'  (test at __tests__/w05CourtOfflineRun.attack.test.ts:629)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+          "title": "Offline scored commit whose physical COMMIT succeeds but loses its acknowledgement propagates the error instead of returning the durable scored read (live path has this guarantee)"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Either (a) the pre-send lookup failure rolls the presentation journal back so status is 'pending, will retry' rather than 'in_flight', or (b) the recovery contract explicitly documents that pre-send in_flight rows are reconciled by the next sweep. Minor; no money/data loss demonstrated.",
+          "observed": "With the held grant row deleted after the receipt was queued (corrupt state; no production path deletes a grant row by itself), submission() throws before any POST (0 network calls — correct), but leaves an offline_wallet_journal row in state 'in_flight' with the receipt id; readOfflineWalletStatus reports the receipt as awaiting an answer although nothing was sent. The ticket is not spent again and the receipt is not lost. Whether the WAL-first write is intended pre-send behaviour is INFERRED; classified P3 because it is reachable only through corrupted persisted state and is self-healing on the next sweep.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack.test.ts -t 'a missing grant row never records a presentation that was never sent'  (test at __tests__/w05CourtOfflineRun.attack.test.ts:1181)",
+          "severity": "P3",
+          "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+          "title": "Drain with a corrupt/missing offline_grant row leaves a durable in_flight presentation journal for a request that was never sent (wallet stuck in hold until a later sweep recovers it)"
+        }
+      ],
+      "judge": [
+        "reviewer verdict 'request_changes'",
+        "reviewer blocking issues: 1",
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [
+        "apps/mobile/src/analysis/runCaptureAnalysis.ts:1866-1868 — `offlineAuthority = original ? null : await readOfflineRatingAuthority(...)` disables the new offline branch for every original-attempt run, and the shipping capture UI ALWAYS drives the original-attempt flow for a signed-in, scoring-capable capture: apps/mobile/src/screens/AnalyzeScreen.tsx:1701-1707 creates an OriginalAnalysisExecution whenever getApiSession() is non-null, and :1823-1866 then calls prepareOriginalCaptureAnalysis + runOriginalCaptureAnalysis and returns; the plain runCaptureAnalysis() fallback is reached only with no API session (where no owner-scoped grant can exist). The objective ('a court with no signal can never produce a scored read … implement the offline branch') is therefore NOT met as shipped behaviour — only the directly-callable plain function gained it. REPRODUCED (VERIFIED): reviewer probe https://la-hacks-rttothemoon.devinenterprise.com/attachments/e8e184cf-4a78-4975-8085-a2a554ffd651/zzReviewerProbeW0507.test.ts (the candidate's own w05CourtOfflineRun fixture — cached active policy + executable grant + TypeError('Network request failed') on the permit reservation — driven through prepareOriginalCaptureAnalysis/runOriginalCaptureAnalysis with a camera clip carrying nativeMediaIdentity and verified bytes). Result, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/ad7f06ff-3683-4f59-8b86-f9e9fdffc70a/probe-original-path.log: network calls = [release-policy, analysis-permits] (the permit request left and failed for connectivity), attempt row state=release_pending/release_outcome=failed/permit_id=null, outcome = {kind:'unavailable', reason:'The rating service could not be reached. Your capture is saved and can be scored later.'}, spendableTickets still 2, receipts 0, local_shot 0 — i.e. no scored read on the court. Fix: admit readOfflineRatingAuthority() on the original path too (or route the original attempt's connectivity failure into the offline branch with an equivalent attempt-journal transition), and add a regression in w05CourtOfflineRun.test.ts that goes through prepareOriginalCaptureAnalysis + runOriginalCaptureAnalysis (the implementer's own residual-risk note already flags this as UNKNOWN; it is now verified as a defect)."
+      ],
+      "review_invariants": []
+    },
+    "head_sha": "2e5b47e0b160c215b68a01f06a3c9c0eed2a42b9"
+  },
+  "rounds": [
+    {
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "RUNNING",
+  "wave_id": "wave-offline-finish"
+}
