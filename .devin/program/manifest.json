@@ -1,7 +1,7 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
+  "manifest_sha256": "a10e71b12a30336f312a3e034827e74194bd207f1685aea45f765fd59decce76",
   "manifest_version": "2026-09-08.4",
   "packages": [
     {
@@ -2888,7 +2888,7 @@
     {
       "acceptance": [
         {
-          "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts",
+          "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun*.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.tsx",
           "criterion": "court-offline run + wallet + partial-outcome suites pass",
           "id": "W05-07-AC1",
           "kind": "test"
@@ -2943,7 +2943,8 @@
       "parent": "W05",
       "plane": "cloud",
       "serial_groups": [
-        "mobile-data"
+        "mobile-data",
+        "mobile-analysis"
       ],
       "severity": "P0",
       "source_ids": [
@@ -2954,11 +2955,20 @@
       "title": "Mobile: court-offline scored read — no live permit + held grant → rate, consume locally, queue the receipt with grant+output, settle later",
       "write_paths": [
         "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+        "apps/mobile/src/analysis/originalAnalysisOperations.ts",
+        "apps/mobile/src/analysis/savedTechniqueConfirmation.ts",
+        "apps/mobile/src/analysis/runJournalSchema.ts",
         "apps/mobile/src/data/repository.ts",
         "apps/mobile/src/data/offlineWallet.ts",
         "apps/mobile/src/data/offlineCapabilities.ts",
-        "apps/mobile/__tests__/w05CourtOfflineRun.test.ts",
-        "apps/mobile/__tests__/offlineWallet*.test.ts"
+        "apps/mobile/src/data/sync.ts",
+        "apps/mobile/src/data/syncRuntime.ts",
+        "apps/mobile/src/screens/ResultScreen.tsx",
+        "apps/mobile/__tests__/w05CourtOfflineRun*.test.ts",
+        "apps/mobile/__tests__/w05WalletRecovery.test.ts",
+        "apps/mobile/__tests__/offlineWallet*.test.ts",
+        "apps/mobile/__tests__/wf/fix-12-result-outbox-status.test.tsx",
+        "supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts"
       ]
     },
     {
