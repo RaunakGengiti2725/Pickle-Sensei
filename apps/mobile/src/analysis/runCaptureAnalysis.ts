@@ -54,6 +54,7 @@ import {
 import {
   consumeOfflineAllocation,
   guardOfflinePaidReservations,
+  OfflineGrantError,
   readOfflineAllocation,
   readOfflineReceiptForOperation,
 } from '../data/offlineCapabilities';
@@ -660,6 +661,16 @@ function permitPort(scope: RunJournalScope) {
   };
 }
 
+/**
+ * The permit port every run and every recovery of this module reserves
+ * through: an operation a court-offline receipt already paid for is settled
+ * by that receipt and never re-reserved live — the same rule the sync
+ * runtime's sweep enforces.
+ */
+function paidGuardedPermitPort(db: LocalDb, scope: RunJournalScope) {
+  return guardOfflinePaidReservations(() => db, permitPort(scope));
+}
+
 /** Call immediately after saving capture/selection and planning its practice set,
  * BEFORE native extraction. No permit, model inference or profile lookup occurs.
  * UI adoption is explicit; legacy requests are never silently upgraded. */
@@ -794,7 +805,7 @@ export async function reconcileOriginalCaptureAnalysis(
   await analysisAttemptJournal.recover(
     db,
     execution.scope,
-    permitPort(execution.scope),
+    paidGuardedPermitPort(db, execution.scope),
     { operationId: attempt.run.operationId, limit: 1 },
   );
   execution.assertCurrent();
@@ -1161,6 +1172,24 @@ function isReservationConnectivityFailure(error: unknown): boolean {
     error.code === 'network.invalid_response' ||
     error.status === 408 ||
     error.status >= 500
+  );
+}
+
+/**
+ * The wallet's refusal to spend at commit time: the grant judged executable
+ * before inference is no longer spendable when this run reaches its
+ * transaction (another run of this device took the last ticket, the grant
+ * expired, trusted time lapsed). The transaction rolled back, nothing was
+ * spent, and the run ends on the same honest no-score path as a court
+ * without an executable grant. Conflicts and corruption stay errors.
+ */
+function isOfflineAllowanceRefusal(error: unknown): error is OfflineGrantError {
+  return (
+    error instanceof OfflineGrantError &&
+    (error.code === 'offline.allocation_exhausted' ||
+      error.code === 'offline.grant_not_held' ||
+      error.code === 'offline.grant_expired' ||
+      error.code === 'offline.time_reconcile_required')
   );
 }
 
@@ -1533,7 +1562,7 @@ async function runCaptureAnalysisCore(
       await journal.recover(
         request.db,
         original.execution.scope,
-        permitPort(original.execution.scope),
+        paidGuardedPermitPort(request.db, original.execution.scope),
         { operationId: original.run.operationId, limit: 1 },
       );
     }
@@ -1619,14 +1648,12 @@ async function runCaptureAnalysisCore(
       return recoveryPendingOutcome();
     throw error;
   }
-  const permits = guardOfflinePaidReservations(
-    () => request.db,
-    permitPort(scope),
-  );
+  const permits = paidGuardedPermitPort(request.db, scope);
   let run: RunJournalIdentity | null = null;
   let freeLimitReached = false;
   let technicalFailure: AnalysisTechnicalFailure | null = null;
   let phase: 'preflight' | 'inference' | 'commit' = 'preflight';
+  let offlineAuthority: OfflineRatingAuthority | null = null;
   const cleanup = async (outcome: RunJournalReleaseOutcome) => {
     if (!run) return;
     if (original)
@@ -1821,7 +1848,6 @@ async function runCaptureAnalysisCore(
     // keeps the recorded reservation failure; a scored result spends that
     // grant locally and travels in its receipt instead of a `shot.sync`
     // outbox row.
-    let offlineAuthority: OfflineRatingAuthority | null = null;
     if (withheld === null) {
       let reserved: ReservedAnalysisPermitWithAccess | null = null;
       try {
@@ -2236,11 +2262,16 @@ async function runCaptureAnalysisCore(
       ).catch(() => recoveryPendingOutcome());
     }
     if (durable.kind === 'not_committed') {
+      const allowanceRefused =
+        phase === 'commit' &&
+        offlineAuthority !== null &&
+        isOfflineAllowanceRefusal(error);
       if (
         original &&
         phase === 'commit' &&
         !ownerChanged &&
         !cancelled &&
+        !allowanceRefused &&
         !(error instanceof RunJournalError) &&
         !(error instanceof OriginalAnalysisHeldError) &&
         error instanceof Error &&
@@ -2255,6 +2286,8 @@ async function runCaptureAnalysisCore(
       if (cancelled || request.signal?.aborted) return cancelledOutcome();
       if (error instanceof TechniqueConfirmationHeldError)
         return { ...recoveryPendingOutcome(), reason: error.message };
+      if (allowanceRefused)
+        return { kind: 'unavailable', reason: error.message };
       throw error;
     }
     if (ownerChanged) return accountChangedOutcome();
