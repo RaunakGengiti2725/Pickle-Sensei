@@ -434,7 +434,7 @@ async function tickets(store: Store) {
 function attemptRows(store: Store) {
   return store.native
     .prepare(
-      `SELECT state, release_outcome, permit_id, result_id
+      `SELECT operation_id, state, release_outcome, permit_id, result_id
        FROM analysis_execution_attempts WHERE owner_key = ?`,
     )
     .all(OWNER);
@@ -783,10 +783,16 @@ describe('the shipping entry point (AnalyzeScreen → runOriginalCaptureAnalysis
     if (outcome.kind !== 'scored' || !outcome.record.result) return;
     const analysis = outcome.record.result;
     expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+    // The original attempt keeps its identity and never claims a permit; the
+    // receipt is keyed by that attempt's run and names the ORIGINAL analysis.
+    const attempts = attemptRows(store);
+    expect(attempts).toEqual([
+      expect.objectContaining({ permit_id: null, result_id: null }),
+    ]);
     const receipts = await pendingOfflineReceipts(store.db);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({
-      operationId: OPERATION,
+      operationId: attempts[0]?.operation_id,
       resultId: analysis.id,
       grantId: GRANT_ID,
       fullOutputSha256: sha256Hex(originalCanonicalJson(analysis)),
@@ -795,10 +801,6 @@ describe('the shipping entry point (AnalyzeScreen → runOriginalCaptureAnalysis
     expect(await getAnalysis(store.db, analysis.id)).toEqual(analysis);
     expect(store.count('local_shot', OWNER)).toBe(1);
     expect(outboxKinds(store)).toEqual([]);
-    // The original attempt keeps its identity and never claims a permit.
-    expect(attemptRows(store)).toEqual([
-      expect.objectContaining({ permit_id: null }),
-    ]);
 
     // The same operation (screen re-entry, app relaunch) replays the paid
     // rating: no second inference, ticket, receipt or reservation.
