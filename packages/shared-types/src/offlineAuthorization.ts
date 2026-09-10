@@ -1132,3 +1132,15 @@ function immutableCopy<T>(value: T): T {
 function invalid(code: string, message: string): Result<never> {
   return fail(failure("permanent", `offline_authorization.invalid_${code}`, message));
 }
+
+// ---------------------------------------------------------------------------
+// Delayed reconciliation batches (POST /v1/offline/receipts, 1.0 wire contract)
+// ---------------------------------------------------------------------------
+
+/** The route reads at most this many bytes of request JSON per POST and
+ * answers 413 `OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE` above it. */
+export const OFFLINE_RECEIPT_BATCH_MAX_BODY_BYTES = 2_000_000;
+/** The route decides at most this many NEW receipts per POST; entries past
+ * the budget are answered `pending` and must be presented again. */
+export const OFFLINE_RECEIPT_BATCH_MAX_ENTRIES = 250;
+export const OFFLINE_RECEIPT_BATCH_TOO_LARGE_CODE = "offline.batch_too_large" as const;
