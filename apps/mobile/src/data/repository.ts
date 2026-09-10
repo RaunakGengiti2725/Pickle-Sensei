@@ -194,6 +194,105 @@ export async function saveAnalysis(
 }
 
 /**
+ * Persists a scored analysis rated on the court without a live permit. The
+ * local allocation the run consumed has already queued `receiptId` for this
+ * exact result (offline_receipt, same owner, same result id, hash of this
+ * exact payload); that receipt — not a `shot.sync` outbox row — carries the
+ * output to the server, so nothing is queued here. The parent session row
+ * still syncs through its own outbox entry.
+ */
+export async function saveOfflineAnalysis(
+  db: LocalDb,
+  analysis: ShotAnalysis,
+  receiptId: string,
+): Promise<void> {
+  if (analysis.source !== 'real') {
+    throw new Error('Only real analyses may be persisted by the app runtime.');
+  }
+  if (analysis.resultKind !== 'scored') {
+    throw new Error(
+      'Only a scored analysis spends an offline allocation; abstentions are persisted via saveLocalOnlyAnalysis.',
+    );
+  }
+  if (!receiptId.trim()) {
+    throw new Error(
+      'A queued offline consumption receipt is required before persisting an offline rating.',
+    );
+  }
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
+    const { rows } = await db.execute(
+      `SELECT receipt FROM offline_receipt
+       WHERE owner_key = ? AND receipt_id = ?`,
+      [owner, receiptId],
+    );
+    const raw = rows[0]?.['receipt'];
+    const receipt =
+      typeof raw === 'string'
+        ? (JSON.parse(raw) as { resultId?: unknown })
+        : null;
+    if (receipt === null || receipt.resultId !== analysis.id) {
+      throw new Error(
+        'The offline receipt does not name this analysis; the rating is not persisted.',
+      );
+    }
+    await db.execute(
+      `INSERT OR REPLACE INTO local_shot
+       (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        owner,
+        analysis.id,
+        analysis.sessionId,
+        analysis.shotType,
+        analysis.capturedAtIso,
+        analysis.overallScore,
+        analysis.analysisConfidence,
+        analysis.resultKind,
+        analysis.source,
+        JSON.stringify(analysis),
+      ],
+    );
+  });
+}
+
+/** The exact persisted payload of one of this owner's real scored shots, as
+ * an offline receipt presents it (`output`), or null when the device no
+ * longer holds it. */
+export async function readScoredShotPayload(
+  db: LocalDb,
+  shotId: string,
+): Promise<Record<string, unknown> | null> {
+  const owner = writeOwner(db);
+  const { rows } = await db.execute(
+    `SELECT payload FROM local_shot
+     WHERE owner_key = ? AND id = ? AND source = 'real' AND result_kind = 'scored'`,
+    [owner, shotId],
+  );
+  const payload = rows[0]?.['payload'];
+  if (typeof payload !== 'string') return null;
+  const parsed: unknown = JSON.parse(payload);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null;
+  return parsed as Record<string, unknown>;
+}
+
+/** Mark a shot delivered to the server outside the `shot.sync` outbox — an
+ * offline receipt the server accepted (`result_recorded`) — exactly as a
+ * successful shot.sync marks it. */
+export async function recordShotSyncReceipt(
+  db: LocalDb,
+  shotId: string,
+): Promise<void> {
+  const owner = writeOwner(db);
+  await db.execute(
+    `INSERT OR REPLACE INTO sync_receipt (owner_key, kind, entity_id)
+     VALUES (?, 'shot.sync', ?)`,
+    [owner, shotId],
+  );
+}
+
+/**
  * Persists a low-confidence (unscored) analysis for local display only. It
  * never enters the sync outbox: abstentions are not ratings, consume no
  * permit, and must not masquerade as scored shots anywhere downstream.

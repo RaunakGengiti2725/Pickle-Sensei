@@ -551,6 +551,20 @@ export interface OfflineReceiptSubmission {
   readonly queuedAt: string;
 }
 
+/** The 1.0 wire entry for one queued receipt — the submission extended, never
+ * reshaped: the flat receipt fields stay at the top level for readers of the
+ * pre-1.0 entry, beside `receipt` (the device receipt exactly as persisted),
+ * `grant` (the exact signed grant it spent from — the server re-verifies the
+ * signature; nothing about the grant is restated in the clear) and `output`
+ * (the exact shot payload the receipt's `fullOutputSha256` hashes, or null
+ * when the device no longer holds it). The server records the result from
+ * `output`; it never invents one. */
+export interface OfflineReceiptWireEntry extends OfflineReceiptSubmission {
+  readonly receipt: OfflineReceiptSubmission;
+  readonly grant: OfflineSignedExecutionGrant;
+  readonly output: Record<string, unknown> | null;
+}
+
 /** The device-side reading of one server verdict on a submitted receipt.
  * `held` mirrors the reconciliation states that keep the financial
  * disposition reserved (pending, reconciliation_required,
