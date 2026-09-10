@@ -1,7 +1,7 @@
 {
   "continuation_branch": "codex/production-continuation-20260907",
   "handoff_sha": "c23d16013b9872cdba7541329c9151d23045090b",
-  "manifest_sha256": "41b0879fcebc3fc65eabac1c110b967c6459b7272ad02b1e41e334201b9a9465",
+  "manifest_sha256": "7a5c14e5547c1704af2129f11a668b9bf8180f70dd094fe6b7b93502cdc3c033",
   "manifest_version": "2026-09-08.4",
   "packages": [
     {
@@ -2453,7 +2453,7 @@
       "id": "W04-04",
       "invariants": [],
       "mode": null,
-      "objective": "Add POST /v1/offline/receipts accepting batches of signed consumption receipts; each settles at most once (bound to grant/ticket/operation/digest), out-of-order and duplicate batches are safe, and ambiguous receipts HOLD rather than refund/retry.",
+      "objective": "Add POST /v1/offline/receipts accepting batches of signed consumption receipts; each settles at most once (bound to grant/ticket/operation/digest), out-of-order and duplicate batches are safe, and ambiguous receipts HOLD rather than refund/retry. 1.0 WIRE CONTRACT (frozen 2026-09-08, see the 'Court-offline shipping path' block in build_manifest.py): each batch entry is { receipt, grant, output } where `receipt` is the DEVICE receipt exactly as apps/mobile/src/data/api.ts OfflineReceiptSubmission persists it (receiptId, ownerId, installationKeyId, grantId, grantJwsSha256, lifecycleSequence, ticket|null, operationId, resultId, fullOutputSha256, billingDisposition, queuedAt — NO nativeTime/attestation; add `validateOfflineDeviceReceiptShape` to packages/shared-types/src/offlineAuthorization.ts and keep the v1 result-receipt validator intact for the full-evidence form), `grant` is the signed grant envelope and `output` is the rated shot payload object (its `id` = resultId, canonical-JSON sha256 = fullOutputSha256) or null. The route answers 200 { receipts: [{ receiptId, status, reasonCode, financialDisposition, resultId, delivery }], rejected: [{ receiptId, code, message }] } — exactly what apps/mobile parseOfflineReceiptVerdicts consumes; every submitted receiptId appears exactly once. ORDERING: durable replay (same id+digest → replayed with the durable status), durable HOLD replay, and same-id/different-digest → offline.receipt_conflict are decided INSIDE settle_offline_receipt under the owner lock BEFORE any reversible deny_new_authorizations freeze short-circuit; only a genuinely new chargeable receipt under a reversible freeze answers pending (nothing durable written, ticket stays reserved) — pass the freeze to SQL (new forward migration adding a defaulted parameter, e.g. p_defer_new boolean default false; drop/recreate the old signature and re-apply the exact grants/revokes) rather than deciding pending in the Edge before the RPC. Terminal (consumed/released) tickets → durable conflicting_receipt HOLD even for not_chargeable; Pro/no-ticket paths keep financial_disposition = 'not_applicable'. Add a route test that posts the exact mobile OfflineReceiptSubmission entry and asserts the mobile parser shape.",
       "parent": "W04",
       "plane": "cloud",
       "serial_groups": [
@@ -2470,7 +2470,11 @@
         "supabase/functions/api/index.ts",
         "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts",
         "supabase/migrations/20260908130000_offline_receipt_settlement.sql",
-        "supabase/tests/security_regression.sql"
+        "supabase/migrations/20260910130000_offline_receipt_freeze_defer.sql",
+        "supabase/tests/security_regression.sql",
+        "packages/shared-types/src/offlineAuthorization.ts",
+        "packages/shared-types/src/offlineAuthorization.test.ts",
+        "packages/shared-types/src/index.ts"
       ]
     },
     {
