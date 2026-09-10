@@ -1350,6 +1350,73 @@ export async function pendingOfflineReceipts(
   return rows.map(parseReceiptRow);
 }
 
+/** The receipt a run's operation id already paid with, for the active owner
+ * only, or null when that operation never spent. Settled receipts are
+ * included: the operation stays paid after the server's verdict. */
+export async function readOfflineReceiptForOperation(
+  rawDb: LocalDb,
+  operationId: string,
+): Promise<OfflineConsumptionReceipt | null> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_receipt WHERE owner_key = ? AND operation_id = ?`,
+    [context.ownerKey, operationId],
+  );
+  const row = rows[0];
+  return row ? parseReceiptRow(row) : null;
+}
+
+/** The run journal's operation-id shape (RFC 4122 UUID); a receipt whose
+ * operation id is not one can name no journal row. */
+const JOURNAL_OPERATION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Most operation ids a single recovery sweep accepts as exclusions. */
+export const PAID_OFFLINE_OPERATION_EXCLUSION_LIMIT = 100;
+
+/** Operation ids the active owner has paid for offline (a receipt exists,
+ * settled or not), oldest queued first. A reconnect recovery sweep must
+ * leave these alone: their settlement is the receipt drain, never a fresh
+ * live permit. Capped at what one sweep accepts; the sweep visits its rows
+ * oldest first, so the oldest paid operations are the ones covered. */
+export async function paidOfflineOperationIds(
+  rawDb: LocalDb,
+): Promise<string[]> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_receipt
+     WHERE owner_key = ?
+     ORDER BY queued_at ASC, grant_id ASC, lifecycle_sequence ASC`,
+    [context.ownerKey],
+  );
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const { operationId } = parseReceiptRow(row);
+    if (!JOURNAL_OPERATION_ID_PATTERN.test(operationId)) continue;
+    ids.add(operationId.toLowerCase());
+    if (ids.size === PAID_OFFLINE_OPERATION_EXCLUSION_LIMIT) break;
+  }
+  return [...ids];
+}
+
+/** The exact compact JWS of a grant the active owner holds, re-verified
+ * against its stored digest, for presenting a receipt. Another owner's grant
+ * and an unknown grant id are both absent. */
+export async function readHeldOfflineGrantJws(
+  rawDb: LocalDb,
+  grantId: string,
+): Promise<string | null> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_grant WHERE owner_key = ? AND grant_id = ?`,
+    [context.ownerKey, grantId],
+  );
+  const row = rows[0];
+  return row ? parseGrantRow(row).compactJws : null;
+}
+
 /** Record the server's explicit verdict on a queued receipt. This is the only
  * path that changes what the device reports as pending; the receipt row stays
  * as history and the wallet's tickets are untouched. `held` keeps the receipt

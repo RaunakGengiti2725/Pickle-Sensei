@@ -30,6 +30,9 @@
  * and are never read across accounts; unreadable journal state is the typed
  * `offline.wallet_corrupt` failure, never an empty wallet.
  */
+import { OFFLINE_SIGNED_GRANT_SCHEMA_VERSION } from '@pickle/shared-types';
+import { sha256Hex } from '@pickle/swing-domain';
+import { originalCanonicalJson } from '../analysis/originalAnalysisSnapshot';
 import { makeUuid } from '../util/uuid';
 import {
   captureDataOwnerContext,
@@ -43,16 +46,19 @@ import type {
   OfflineReceiptSubmission,
   OfflineReceiptVerdict,
   OfflineReceiptVerdictKind,
+  OfflineReceiptWireEntry,
 } from './api';
 import type { LocalDb } from './db';
 import {
   OfflineGrantError,
   pendingOfflineReceipts,
+  readHeldOfflineGrantJws,
   settleOfflineReceipt,
   type OfflineConsumptionReceipt,
   type OfflineReceiptReconciliation,
   type OfflineReceiptSettlement,
 } from './offlineCapabilities';
+import { readScoredShotPayload, recordShotSyncReceipt } from './repository';
 import { forDataOwner, withTransaction } from './transactions';
 import type { TrustedTimeReading } from './trustedTime';
 
@@ -315,9 +321,58 @@ function submission(
   return body;
 }
 
+/** The exact shot payload a receipt digests, read back from the owner's
+ * `local_shot` row with the live-permit field removed (an offline rating
+ * never had one; the server records the result from the receipt's grant).
+ * Null when the device no longer holds the output the receipt digests — the
+ * shot is gone, or its stored payload is not the one the receipt signed — so
+ * the server holds the receipt on its own evidence; a payload the receipt
+ * did not digest is never presented as its output. */
+async function receiptOutput(
+  db: LocalDb,
+  receipt: OfflineConsumptionReceipt,
+): Promise<Record<string, unknown> | null> {
+  const stored = await readScoredShotPayload(db, receipt.resultId);
+  if (stored === null) return null;
+  const { analysisPermitId: _permit, ...output } = stored;
+  if (
+    output['id'] !== receipt.resultId ||
+    sha256Hex(originalCanonicalJson(output)) !== receipt.fullOutputSha256
+  ) {
+    return null;
+  }
+  return output;
+}
+
+/** One frozen 1.0 wire entry: the receipt as persisted, the exact held grant
+ * it spent from, and the output it hashes. A receipt whose grant this owner
+ * no longer holds cannot be presented honestly and fails before anything is
+ * sent — the server would only hold it, and the device must not record a
+ * presentation of evidence it does not have. */
+async function wireEntry(
+  db: LocalDb,
+  receipt: OfflineConsumptionReceipt,
+): Promise<OfflineReceiptWireEntry> {
+  const compactJws = await readHeldOfflineGrantJws(db, receipt.grantId);
+  if (compactJws === null) {
+    throw corrupt(`receipt ${receipt.receiptId} grant ${receipt.grantId}`);
+  }
+  if (sha256Hex(compactJws) !== receipt.grantJwsSha256) {
+    throw corrupt(`receipt ${receipt.receiptId} grant digest`);
+  }
+  const body = submission(receipt);
+  return {
+    ...body,
+    receipt: body,
+    grant: { schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION, compactJws },
+    output: await receiptOutput(db, receipt),
+  };
+}
+
 interface OpenedPresentation {
   readonly journalId: string;
   readonly receipts: readonly OfflineConsumptionReceipt[];
+  readonly entries: readonly OfflineReceiptWireEntry[];
 }
 
 interface PresentationPlan {
@@ -358,6 +413,13 @@ async function openPresentation(
     if (pending.length === 0) {
       return { opened: null, recovered: inFlight.length };
     }
+    // Evidence is assembled before the entry is journalled: a receipt that
+    // cannot be presented (its grant or output is gone or corrupt) leaves no
+    // in-flight record of a request that never left the device.
+    const entries: OfflineReceiptWireEntry[] = [];
+    for (const receipt of pending) {
+      entries.push(await wireEntry(transaction, receipt));
+    }
     const journalId = makeUuid();
     await transaction.execute(
       `INSERT INTO offline_wallet_journal (
@@ -372,7 +434,7 @@ async function openPresentation(
       ],
     );
     return {
-      opened: { journalId, receipts: pending },
+      opened: { journalId, receipts: pending, entries },
       recovered: inFlight.length,
     };
   });
@@ -431,6 +493,15 @@ async function applyVerdicts(
         verdict.verdict,
         reading,
       );
+      if (verdict.verdict === 'accepted') {
+        // The server recorded the result from the receipt's output: the shot
+        // is synced exactly as an accepted `shot.sync` outbox row would be.
+        const receipt = opened.receipts.find(
+          held => held.receiptId === verdict.receiptId,
+        );
+        if (!receipt) throw corrupt(`receipt ${verdict.receiptId} presented`);
+        await recordShotSyncReceipt(transaction, receipt.resultId);
+      }
       counts[verdict.verdict] += 1;
     }
     const closed = await transaction.execute(
@@ -499,9 +570,7 @@ export async function reconcileOfflineWallet(
   return serializedPerOwner(context.ownerKey, async () => {
     const plan = await openPresentation(db, context, reading);
     if (plan.opened === null) return { ...idle, recovered: plan.recovered };
-    const verdicts = await client.submitReceipts(
-      plan.opened.receipts.map(submission),
-    );
+    const verdicts = await client.submitReceipts(plan.opened.entries);
     const applied = await applyVerdicts(
       db,
       context,

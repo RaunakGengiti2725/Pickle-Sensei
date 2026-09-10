@@ -19,6 +19,7 @@ import { getDb, type LocalDb } from './db';
 import { installationKey } from './installationKey';
 import {
   offlineGrantPullNeeded,
+  paidOfflineOperationIds,
   readOfflineAllocation,
   requestOfflineGrant,
 } from './offlineCapabilities';
@@ -293,9 +294,23 @@ export function configureSyncRuntime(session: ApiSession): void {
     retryPending = false;
     try {
       const db = getDb();
-      const recovered = await recoverAnalysisJournals(db, scope, permits, {
-        excludeOperationIds: runJournal.activeOperationIds(scope),
-      });
+      // An operation already paid offline is settled by its receipt; the
+      // sweep never reserves a live permit for it. When the receipts cannot
+      // be read, no journal is recovered this pass: storage is unknown, the
+      // outbox still drains and the timer backs off.
+      const paid = await paidOfflineOperationIds(db).then(
+        ids => ids,
+        () => null,
+      );
+      const recovered =
+        paid === null
+          ? { items: [], unknownStorage: true }
+          : await recoverAnalysisJournals(db, scope, permits, {
+              excludeOperationIds: [
+                ...runJournal.activeOperationIds(scope),
+                ...paid,
+              ],
+            });
       if (!current()) return;
       const result = await drainOutbox(db, transport);
       if (!current()) return;

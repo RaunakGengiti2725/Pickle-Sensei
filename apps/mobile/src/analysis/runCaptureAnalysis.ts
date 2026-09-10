@@ -7,6 +7,7 @@ import {
   isDeclaredTechniqueIntent,
   isAnalysisInputSelectionSnapshot,
   isConfirmationTimestamp,
+  isVerifiedCompletedCaptureRecord,
   evaluatePreAnalysisGate,
   type AnalysisInputSelectionSnapshot,
   type CaptureAnalysisRecord,
@@ -47,8 +48,15 @@ import {
   saveAnalysis,
   saveAnalysisRecord,
   saveLocalOnlyAnalysis,
+  saveOfflineAnalysis,
   updateCaptureClipPayload,
 } from '../data/repository';
+import {
+  consumeOfflineAllocation,
+  readOfflineAllocation,
+  readOfflineReceiptForOperation,
+} from '../data/offlineCapabilities';
+import { trustedTime, type TrustedTimeReading } from '../data/trustedTime';
 import { createFusionProviders } from '../vision/providers';
 import {
   ApiError,
@@ -57,7 +65,10 @@ import {
   type ApiConfigState,
   type ReservedAnalysisPermitWithAccess,
 } from '../data/api';
-import { requireReleaseAuthority } from './releasePolicyClient';
+import {
+  readCachedReleasePolicy,
+  requireReleaseAuthority,
+} from './releasePolicyClient';
 import { makeUuid } from '../util/uuid';
 import {
   recordEvaluationTrial,
@@ -831,6 +842,17 @@ export async function runOriginalCaptureAnalysis(
           .includes(previous.run.operationId)
       )
         return recoveryPendingOutcome();
+      const paid = await readOfflineScoredReplay(db, previous.run);
+      execution.assertCurrent();
+      if (paid?.kind === 'scored')
+        return {
+          kind: 'scored',
+          replayed: true,
+          analysisId: previous.run.analysisId,
+          record: paid.record,
+          freeLimitReached: false,
+        };
+      if (paid?.kind === 'held') return recoveryPendingOutcome();
       const refusal = await readReservationRefusal(db, previous.run);
       execution.assertCurrent();
       if (refusal) {
@@ -1106,6 +1128,126 @@ async function readPartialReplay(
   )
     throw new RunJournalError('identity_conflict');
   return { kind: 'replay', record };
+}
+
+/**
+ * Only the transport itself failing — the request never reached the
+ * authority, or no answer came back — is a court without signal. A typed
+ * server decision (paywall, allowance, authentication, rate limit, refusal)
+ * is an answer and never authorizes an offline read.
+ */
+function isReservationConnectivityFailure(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof ApiError)) return false;
+  return (
+    error.code === 'network.timeout' ||
+    error.code === 'network.redirected' ||
+    error.code === 'network.invalid_response' ||
+    error.status === 408 ||
+    error.status >= 500
+  );
+}
+
+interface OfflineRatingAuthority {
+  readonly grantId: string;
+  readonly reading: TrustedTimeReading;
+}
+
+/**
+ * What lets a run rate without a live permit: the reservation failed for
+ * connectivity, the cached release policy is active under trusted time and
+ * the wallet holds a grant executable now (a lease, or a free grant with an
+ * unspent ticket). Anything less is `null` — the existing honest no-score
+ * answer, never a fabricated authorization.
+ */
+async function readOfflineRatingAuthority(
+  db: LocalDb,
+  scope: RunJournalScope,
+  error: unknown,
+): Promise<OfflineRatingAuthority | null> {
+  if (!isReservationConnectivityFailure(error)) return null;
+  try {
+    const reading = await trustedTime.read();
+    const policy = await readCachedReleasePolicy(db, scope, reading);
+    if (policy.status !== 'active') return null;
+    const allocation = await readOfflineAllocation(db, reading);
+    const grant = allocation.grants.find(
+      held =>
+        held.execution.kind === 'active' &&
+        (held.entitlementSource !== 'identity_lifetime_free' ||
+          held.remaining > 0),
+    );
+    return grant ? { grantId: grant.grantId, reading } : null;
+  } catch (error) {
+    if (error instanceof DataOwnerChangedError) throw error;
+    return null;
+  }
+}
+
+/**
+ * The durable outcome of a run paid from the local allocation: its receipt
+ * names this operation and result, and the persisted record + shot are the
+ * exact output the receipt's digest binds. `held` is a receipt whose product
+ * cannot be verified — never a second inference or spend.
+ */
+async function readOfflineScoredReplay(
+  db: LocalDb,
+  run: RunJournalIdentity,
+): Promise<
+  { kind: 'scored'; record: CaptureAnalysisRecord } | { kind: 'held' } | null
+> {
+  let receipt;
+  try {
+    receipt = await readOfflineReceiptForOperation(db, run.operationId);
+  } catch (error) {
+    if (error instanceof DataOwnerChangedError) throw error;
+    return { kind: 'held' };
+  }
+  if (receipt === null) return null;
+  if (receipt.resultId !== run.analysisId) return { kind: 'held' };
+  const { rows } = await db.execute(
+    `SELECT r.id, r.capture_id, r.created_at, r.engine_version, r.scoring_model_version, r.record,
+            s.payload AS shot_payload, s.result_kind AS shot_kind, s.source AS shot_source
+     FROM local_analysis_record r JOIN local_shot s ON s.owner_key = r.owner_key AND s.id = r.id
+     WHERE r.owner_key = ? AND r.id = ?`,
+    [run.ownerKey, run.analysisId],
+  );
+  const row = rows[0];
+  if (
+    !row ||
+    typeof row.record !== 'string' ||
+    typeof row.shot_payload !== 'string'
+  )
+    return { kind: 'held' };
+  let value: unknown;
+  let shot: unknown;
+  try {
+    value = JSON.parse(row.record);
+    shot = JSON.parse(row.shot_payload);
+  } catch {
+    return { kind: 'held' };
+  }
+  if (
+    !isVerifiedCompletedCaptureRecord(value, {
+      id: row.id,
+      captureId: row.capture_id,
+      createdAtIso: row.created_at,
+      engineVersion: row.engine_version,
+      scoringModelVersion: row.scoring_model_version,
+    })
+  )
+    return { kind: 'held' };
+  const result = value.result;
+  if (
+    value.captureId !== run.captureId ||
+    result.resultKind !== 'scored' ||
+    row.shot_kind !== 'scored' ||
+    row.shot_source !== 'real' ||
+    originalCanonicalJson(shot) !== originalCanonicalJson(result) ||
+    sha256Hex(originalCanonicalJson(result)) !== receipt.fullOutputSha256
+  )
+    return { kind: 'held' };
+  return { kind: 'scored', record: value };
 }
 
 class TechniqueConfirmationHeldError extends Error {}
@@ -1493,6 +1635,7 @@ async function runCaptureAnalysisCore(
   let run: RunJournalIdentity | null = null;
   let freeLimitReached = false;
   let technicalFailure: AnalysisTechnicalFailure | null = null;
+  let offlineAuthority: OfflineRatingAuthority | null = null;
   let phase: 'preflight' | 'inference' | 'commit' = 'preflight';
   const cleanup = async (outcome: RunJournalReleaseOutcome) => {
     if (!run) return;
@@ -1541,6 +1684,19 @@ async function runCaptureAnalysisCore(
           record: settled.record,
           partialOutcome: settled.record.partialOutcome,
         };
+      if (settled === null) {
+        const paid = await readOfflineScoredReplay(request.db, existing);
+        assertCurrent();
+        if (paid?.kind === 'scored')
+          return {
+            kind: 'scored',
+            replayed: true,
+            analysisId: existing.analysisId,
+            record: paid.record,
+            freeLimitReached: false,
+          };
+        if (paid?.kind === 'held') return recoveryPendingOutcome();
+      }
       if (
         settled === null &&
         existing.state !== 'committed' &&
@@ -1650,7 +1806,20 @@ async function runCaptureAnalysisCore(
           partialOutcome: settled.record.partialOutcome,
         };
       if (settled?.kind === 'resume') resumedRefusal = settled.marker;
-      else return await readJournalOutcome(request, ownerContext, begun.run);
+      else {
+        const paid = await readOfflineScoredReplay(request.db, begun.run);
+        assertCurrent();
+        if (paid?.kind === 'scored')
+          return {
+            kind: 'scored',
+            replayed: true,
+            analysisId: begun.run.analysisId,
+            record: paid.record,
+            freeLimitReached: false,
+          };
+        if (paid?.kind === 'held') return recoveryPendingOutcome();
+        return await readJournalOutcome(request, ownerContext, begun.run);
+      }
     }
     // A typed 409 `access.release_not_authorized` is the authority's SETTLED
     // answer, not an outage: no permit exists, nothing is chargeable, and the
@@ -1669,7 +1838,19 @@ async function runCaptureAnalysisCore(
         reserved = await permits.reserve(run.reservationKey);
       } catch (error) {
         const refused = isReleaseNotAuthorized(error);
-        if (original && !refused) {
+        if (!refused && !request.signal?.aborted) {
+          offlineAuthority = await readOfflineRatingAuthority(
+            request.db,
+            scope,
+            error,
+          );
+          assertCurrent();
+        }
+        // With no signal, an active cached policy and a grant executable by
+        // trusted time, the run stays reserve_pending — no live permit ever
+        // existed — and a scored result is paid from the local allocation at
+        // commit; every other failure keeps its existing answer.
+        if (original && !refused && offlineAuthority === null) {
           technicalFailure =
             error instanceof TypeError ||
             (error instanceof ApiError &&
@@ -1705,7 +1886,7 @@ async function runCaptureAnalysisCore(
           )
             return recoveryPendingOutcome();
           withheld = marker;
-        } else {
+        } else if (offlineAuthority === null) {
           await journal
             .reservationFailed(request.db, run, error)
             .catch(() => {});
@@ -1741,7 +1922,8 @@ async function runCaptureAnalysisCore(
           reserved.access !== null &&
           !reserved.access.premium &&
           reserved.access.freeRatings.availableToReserve === 0;
-      } else if (withheld === null) return recoveryPendingOutcome();
+      } else if (withheld === null && offlineAuthority === null)
+        return recoveryPendingOutcome();
     }
     assertCurrent();
     // Imported clips carry no measured trigger: the analysis window is
@@ -1872,7 +2054,98 @@ async function runCaptureAnalysisCore(
     const journalRun = run;
     // Every run is durably recorded, scored or not — reprocessing history.
     phase = 'commit';
-    if (original) {
+    if (offlineAuthority !== null) {
+      const authority = offlineAuthority;
+      await withTransaction(request.db, async rawTransaction => {
+        const db = forDataOwner(rawTransaction, ownerContext);
+        if (original) {
+          await originalAnalysisOperations.assertCurrentAttempt(
+            rawTransaction,
+            original.execution,
+            original.operation.operationId,
+            journalRun,
+          );
+        }
+        const pending = await journal.read(rawTransaction, reference);
+        if (
+          !pending ||
+          pending.state !== 'reserve_pending' ||
+          pending.permitId !== null ||
+          pending.analysisId !== journalRun.analysisId
+        )
+          throw new RunJournalError('invalid_transition');
+        await saveAnalysisRecord(db, record);
+        assertCurrent();
+        if (record.kind !== 'needs_technique_confirmation') {
+          await markCaptureAnalyzed(db, request.captureId);
+          assertCurrent();
+        }
+        if (record.result?.resultKind === 'scored') {
+          if (request.practiceSet) {
+            if (
+              !original &&
+              request.practiceSet.sessionId !== record.result.sessionId
+            ) {
+              throw new Error('The practice set does not match this analysis.');
+            }
+            await commitPracticeSet(db, request.practiceSet);
+            assertCurrent();
+          }
+          // Spend exactly one local allocation on this exact output; the
+          // queued receipt (grant identity + output hash) is what settles the
+          // rating with the server, so no shot.sync row is written.
+          const consumption = await consumeOfflineAllocation(
+            rawTransaction,
+            {
+              operationId: journalRun.operationId,
+              resultId: record.result.id,
+              fullOutputSha256: sha256Hex(originalCanonicalJson(record.result)),
+              grantId: authority.grantId,
+            },
+            authority.reading,
+          );
+          assertCurrent();
+          if (
+            consumption.replayed ||
+            consumption.receipt.resultId !== record.result.id
+          )
+            throw new RunJournalError('invalid_transition');
+          await saveOfflineAnalysis(
+            db,
+            record.result,
+            consumption.receipt.receiptId,
+          );
+          assertCurrent();
+        } else {
+          if (record.result) {
+            await saveLocalOnlyAnalysis(db, record.result);
+            assertCurrent();
+          }
+          await journal.requestRelease(
+            rawTransaction,
+            journalRun,
+            'low_confidence',
+          );
+          if (original) {
+            await rawTransaction.execute(
+              `UPDATE analysis_logical_operations SET final_record_id = ?, winning_attempt_id = ?, completion_kind = ?, updated_at_ms = ?
+              WHERE owner_key = ? AND operation_id = ? AND final_record_id IS NULL`,
+              [
+                record.id,
+                journalRun.operationId,
+                record.kind === 'needs_technique_confirmation'
+                  ? 'needs_technique_confirmation'
+                  : 'low_confidence',
+                Date.now(),
+                journalRun.ownerKey,
+                original.operation.operationId,
+              ],
+            );
+          }
+        }
+        assertCurrent();
+      });
+    } else if (original) {
       await originalAnalysisOperations.commit(
         request.db,
         original.execution,
@@ -1988,6 +2261,20 @@ async function runCaptureAnalysisCore(
       } catch {
         return recoveryPendingOutcome();
       }
+    }
+    // A run paid from the local allocation commits without a permit: when
+    // the commit's acknowledgement is lost, the durable receipt + shot are
+    // the outcome, exactly as a committed live run is.
+    if (offlineAuthority !== null && !ownerChanged && !cancelled) {
+      const paid = await readOfflineScoredReplay(request.db, run);
+      if (paid?.kind === 'scored')
+        return {
+          kind: 'scored',
+          analysisId: run.analysisId,
+          record: paid.record,
+          freeLimitReached,
+        };
+      if (paid?.kind === 'held') return recoveryPendingOutcome();
     }
     const durable = await journal.readCommitStatus(request.db, run);
     ownerChanged ||= !isDataOwnerContextCurrent(ownerContext);
