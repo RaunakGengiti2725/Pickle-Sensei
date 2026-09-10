@@ -2249,9 +2249,10 @@ const lit = (value: unknown): string => `'${JSON.stringify(value).replaceAll("'"
 
 async function settle(
   tx: Tx,
-  rec: OfflineResultReceipt,
+  rec: OfflineDeviceReceipt,
   out: Record<string, unknown> | null,
   hold: string | null,
+  deferNew: boolean | null = null,
 ): Promise<SettleRow> {
   const rows = await tx.unsafe<SettleRow[]>(
     `select r.result, r.delivery, r.status, r.reason_code, r.financial_disposition, r.result_id
@@ -2259,7 +2260,9 @@ async function settle(
        ${lit(rec)},
        '${await digestCanonicalOfflineJson(rec)}',
        ${out === null ? "null::jsonb" : lit(out)},
-       ${hold === null ? "null::text" : `'${hold}'`}
+       ${hold === null ? "null::text" : `'${hold}'`}${
+         deferNew === null ? "" : `,\n       ${deferNew ? "true" : "false"}`
+       }
      ) r`,
   );
   assertEquals(rows.length, 1);
@@ -2325,7 +2328,7 @@ async function liveReceipt(
   tag: string,
   overrides: Partial<ReceiptOptions> = {},
   outputOverrides: Record<string, unknown> = {},
-): Promise<{ receipt: OfflineResultReceipt; output: Record<string, unknown> }> {
+): Promise<{ receipt: OfflineDeviceReceipt; output: Record<string, unknown> }> {
   const resultId = crypto.randomUUID();
   const out = output(resultId, outputOverrides);
   const rec = await receipt({
@@ -2956,6 +2959,176 @@ Deno.test({
       });
       assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
       assertEquals(await counters(sql, 6), { held: 2, scored: 0 });
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: "live DB: settle_offline_receipt(p_defer_new) decides the durable verdict before the freeze — replay, HOLD replay and receipt_conflict answer as they stand, a terminal ticket HOLDs even a not_chargeable receipt, and only a genuinely new chargeable receipt is pending with nothing written",
+  ignore,
+  async fn() {
+    const sql = postgres(PG_URL, { max: 2, onnotice: () => {} });
+    try {
+      await createUser(sql, 7);
+      const issued = await issueFreeGrant(sql, 7, KEY("freeze"));
+      assert(issued.claims.allocation);
+      const [ticketA, ticketB] = issued.claims.allocation.ticketIds;
+      const settlements = async (): Promise<string[]> =>
+        (
+          await sql.unsafe<{ receipt_id: string }[]>(
+            `select receipt_id from public.offline_receipt_settlements
+             where user_id = '${U(7)}' order by id`,
+          )
+        ).map((row) => row.receipt_id);
+
+      // A genuinely new chargeable receipt under the freeze: pending, nothing
+      // durable, the ticket still reserved (never consumed, never released).
+      const fresh = await liveReceipt(U(7), issued, ticketA, "freeze-new");
+      const deferred = await inTx(sql, 7, (tx) =>
+        settle(tx, fresh.receipt, fresh.output, null, true),
+      );
+      assertEquals(deferred, {
+        result: "accepted",
+        delivery: "pending",
+        status: "pending",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      assertEquals(await settlements(), []);
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated"]);
+      assertEquals(await shotCount(sql, ticketA), 0);
+      assertEquals(await counters(sql, 7), { held: 2, scored: 0 });
+
+      // The freeze lifts: the identical redelivery settles once (the 4-argument
+      // call resolves to the defaulted parameter).
+      const settled = await inTx(sql, 7, (tx) => settle(tx, fresh.receipt, fresh.output, null));
+      assertEquals(settled, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "consumed",
+        result_id: fresh.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+
+      // Frozen again: the durable verdict replays as consumed — the freeze
+      // never masks the ledger — and nothing is consumed twice.
+      for (let i = 0; i < 2; i += 1) {
+        const replay = await inTx(sql, 7, (tx) =>
+          settle(tx, fresh.receipt, fresh.output, null, true),
+        );
+        assertEquals(replay, { ...settled, delivery: "replayed" });
+      }
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // Same receipt id, other body, under the freeze: the conflict is
+      // reported, not deferred.
+      const forged = { ...fresh.receipt, resultId: crypto.randomUUID() };
+      const conflict = await inTx(sql, 7, (tx) => settle(tx, forged, fresh.output, null, true));
+      assertEquals([conflict.result, conflict.delivery], ["offline.receipt_conflict", null]);
+
+      // Contradictory evidence under the freeze is a durable HOLD (never
+      // pending, never refunded) and replays as that HOLD while still frozen.
+      const ambiguous = await liveReceipt(
+        U(7),
+        issued,
+        ticketB,
+        "freeze-ambiguous",
+        {},
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const held = await inTx(sql, 7, (tx) =>
+        settle(tx, ambiguous.receipt, ambiguous.output, null, true),
+      );
+      assertEquals(held, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "evidence_ambiguous",
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      const heldReplay = await inTx(sql, 7, (tx) =>
+        settle(tx, ambiguous.receipt, ambiguous.output, null, true),
+      );
+      assertEquals(heldReplay, { ...held, delivery: "replayed" });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+
+      // An edge-derived HOLD (unverifiable evidence) stays durable under the
+      // freeze too: p_hold_reason wins over p_defer_new.
+      const unverifiable = await liveReceipt(U(7), issued, ticketB, "freeze-unverifiable", {
+        lifecycleSequence: 2,
+      });
+      const heldByEdge = await inTx(sql, 7, (tx) =>
+        settle(tx, unverifiable.receipt, null, "evidence_ambiguous", true),
+      );
+      assertEquals([heldByEdge.delivery, heldByEdge.reason_code], ["held", "evidence_ambiguous"]);
+
+      // Ticket A is terminal (consumed): a not_chargeable receipt under it is
+      // a conflicting_receipt HOLD — frozen or not — and the ledger stands.
+      const afterConsumed = await liveReceipt(
+        U(7),
+        issued,
+        ticketA,
+        "freeze-terminal",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 3 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const terminal = await inTx(sql, 7, (tx) =>
+        settle(tx, afterConsumed.receipt, afterConsumed.output, null, true),
+      );
+      assertEquals(terminal, {
+        result: "accepted",
+        delivery: "held",
+        status: "reconciliation_required",
+        reason_code: "conflicting_receipt",
+        financial_disposition: "reserved",
+        result_id: null,
+      });
+      const terminalReplay = await inTx(sql, 7, (tx) =>
+        settle(tx, afterConsumed.receipt, afterConsumed.output, null, false),
+      );
+      assertEquals(terminalReplay, { ...terminal, delivery: "replayed" });
+      assertEquals(await ledgerEvents(sql, ticketA), ["allocated", "consumed"]);
+      assertEquals(await shotCount(sql, ticketA), 1);
+
+      // A not_chargeable abstention under the still-outstanding ticket B is
+      // recorded even while frozen: there is nothing to charge, so nothing to
+      // defer; the ticket stays outstanding.
+      const abstention = await liveReceipt(
+        U(7),
+        issued,
+        ticketB,
+        "freeze-abstain",
+        { billingDisposition: "not_chargeable", lifecycleSequence: 4 },
+        { resultKind: "low_confidence", overallScore: null },
+      );
+      const recorded = await inTx(sql, 7, (tx) =>
+        settle(tx, abstention.receipt, abstention.output, null, true),
+      );
+      assertEquals(recorded, {
+        result: "accepted",
+        delivery: "settled",
+        status: "result_recorded",
+        reason_code: null,
+        financial_disposition: "reserved",
+        result_id: abstention.receipt.resultId,
+      });
+      assertEquals(await ledgerEvents(sql, ticketB), ["allocated"]);
+
+      assertEquals(await settlements(), [
+        fresh.receipt.receiptId,
+        ambiguous.receipt.receiptId,
+        unverifiable.receipt.receiptId,
+        afterConsumed.receipt.receiptId,
+        abstention.receipt.receiptId,
+      ]);
+      assertEquals(await counters(sql, 7), { held: 1, scored: 1 });
     } finally {
       await sql.end();
     }
