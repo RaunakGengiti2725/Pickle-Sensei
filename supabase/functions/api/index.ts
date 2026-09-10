@@ -107,11 +107,11 @@ import {
 } from "./offlineSignature.ts";
 import {
   OFFLINE_RECONCILIATION_SCHEMA_VERSION,
+  validateOfflineDeviceReceiptShape,
   validateOfflineReconciliationStatus,
-  validateOfflineResultReceiptShape,
   validateOfflineSignedGrantShape,
+  type OfflineDeviceReceipt,
   type OfflineReleasedArtifacts,
-  type OfflineResultReceipt,
   type OfflineSignedExecutionGrant,
 } from "../../../packages/shared-types/src/offlineAuthorization.ts";
 import {
@@ -5053,6 +5053,7 @@ async function issueOfflineGrant(authed: AuthedUser, request: Request): Promise<
 const OFFLINE_RECEIPT_BATCH_MAX = 25;
 const OFFLINE_RECEIPT_BATCH_BODY_BYTES = 2_000_000;
 const OFFLINE_RECEIPT_CONFLICT_CODE = "offline.receipt_conflict";
+const OFFLINE_RECEIPT_DUPLICATE_CODE = "offline.receipt_duplicate";
 
 type OfflineReceiptHoldReason =
   | "evidence_missing"
@@ -5062,19 +5063,29 @@ type OfflineReceiptHoldReason =
   | "account_deleted"
   | "grant_revoked";
 
-type OfflineReceiptDelivery = "settled" | "replayed" | "held" | "pending" | "rejected";
+type OfflineReceiptDelivery = "settled" | "replayed" | "held" | "pending";
 
 interface OfflineReceiptEntry {
-  readonly receipt: OfflineResultReceipt;
+  readonly receipt: OfflineDeviceReceipt;
   readonly grant: OfflineSignedExecutionGrant;
   readonly output: Record<string, unknown> | null;
 }
 
-interface OfflineReceiptResult {
-  readonly receiptId: string | null;
+/** One answered receipt — the flat verdict apps/mobile parseOfflineReceiptVerdicts
+ * reads (`status` decides accepted / held / refused; the rest is evidence). */
+interface OfflineReceiptVerdict {
+  readonly receiptId: string;
+  readonly status: string;
+  readonly reasonCode: string | null;
+  readonly financialDisposition: string;
+  readonly resultId: string | null;
   readonly delivery: OfflineReceiptDelivery;
-  readonly reconciliation: Record<string, unknown> | null;
-  readonly error: { code: string; message: string } | null;
+}
+
+interface OfflineReceiptRejection {
+  readonly receiptId: string;
+  readonly code: string;
+  readonly message: string;
 }
 
 function emitOfflineReceiptAudit(entry: {
@@ -5090,41 +5101,51 @@ function emitOfflineReceiptAudit(entry: {
 }
 
 const rejectedOfflineReceipt = (
-  receiptId: string | null,
+  receiptId: string,
   message: string,
-): OfflineReceiptResult => ({
-  receiptId,
-  delivery: "rejected",
-  reconciliation: null,
-  error: { code: OFFLINE_INVALID_INPUT_CODE, message },
-});
+  code: string = OFFLINE_INVALID_INPUT_CODE,
+): OfflineReceiptRejection => ({ receiptId, code, message });
 
-/** One batch entry: `{ receipt, grant, output }`. Shape failures are rejected
- * PER ENTRY (one malformed entry never poisons the batch) and never reach the
- * database — there is nothing durable to bind a malformed receipt to. */
-function parseOfflineReceiptEntry(value: unknown): OfflineReceiptEntry | OfflineReceiptResult {
-  if (!isRecord(value)) return rejectedOfflineReceipt(null, "Each entry must be an object.");
-  const receiptId =
-    isRecord(value.receipt) && typeof value.receipt.receiptId === "string"
-      ? sanitizeUserText(value.receipt.receiptId, 128)
-      : null;
+/** The receipt id a batch entry names, or null when the entry does not even
+ * carry one — the identity every verdict, held or rejected, is keyed by. */
+function offlineReceiptEntryId(value: unknown): string | null {
+  if (!isRecord(value) || !isRecord(value.receipt)) return null;
+  const receiptId = value.receipt.receiptId;
+  return typeof receiptId === "string" && /^[A-Za-z0-9._:/+=-]{1,128}$/.test(receiptId)
+    ? receiptId
+    : null;
+}
+
+/** One batch entry: `{ receipt, grant, output }` where `receipt` is the
+ * device receipt exactly as the app persists it (OfflineReceiptSubmission:
+ * identity, bindings, digests and the instant it was queued — no native time
+ * or attestation evidence). Shape failures are rejected PER ENTRY under the
+ * receipt id (one malformed entry never poisons the batch) and never reach
+ * the database — there is nothing durable to bind a malformed receipt to. */
+function parseOfflineReceiptEntry(
+  receiptId: string,
+  value: Record<string, unknown>,
+): OfflineReceiptEntry | OfflineReceiptRejection {
   if (!("receipt" in value) || !("grant" in value) || !("output" in value)) {
     return rejectedOfflineReceipt(receiptId, "Each entry needs receipt, grant and output.");
   }
-  const receipt = validateOfflineResultReceiptShape(value.receipt);
+  const receipt = validateOfflineDeviceReceiptShape(value.receipt);
   if (!receipt.ok) {
-    return rejectedOfflineReceipt(receiptId, "receipt must be an offline-result-receipt-v1.");
+    return rejectedOfflineReceipt(
+      receiptId,
+      "receipt must be the device's offline receipt: owner, installation, grant, ticket, operation, result, output digest, billing disposition and queuedAt.",
+    );
   }
   const grant = validateOfflineSignedGrantShape(value.grant);
   if (!grant.ok) {
     return rejectedOfflineReceipt(
-      receipt.value.receiptId,
+      receiptId,
       "grant must be the signed offline execution grant the receipt names.",
     );
   }
   if (value.output !== null && !isRecord(value.output)) {
     return rejectedOfflineReceipt(
-      receipt.value.receiptId,
+      receiptId,
       "output must be the delivered analysis outcome object or null.",
     );
   }
@@ -5203,8 +5224,12 @@ function offlineReceiptVerificationView(
 }
 
 type OfflineReceiptReleaseLineage =
-  | { readonly release: OfflineReleasedArtifacts; readonly hold: null | "grant_revoked" }
-  | { readonly release: null; readonly hold: "evidence_ambiguous" };
+  | {
+      readonly release: OfflineReleasedArtifacts;
+      readonly hold: null | "grant_revoked";
+      readonly deferNew: boolean;
+    }
+  | { readonly release: null; readonly hold: "evidence_ambiguous"; readonly deferNew: false };
 
 /** The release a delayed receipt's grant must verify against: the artifacts
  * of the policy the grant was issued under (`release.policy.sha256` in its
@@ -5221,7 +5246,12 @@ type OfflineReceiptReleaseLineage =
  * and is answered 503: corrupt server state decides nothing durable. The
  * digest is taken from the still-unverified payload: it merely selects
  * which installed authority the signature is then verified against, and a
- * grant that names a release it was not signed over fails that check. */
+ * grant that names a release it was not signed over fails that check.
+ * A release that is not withdrawn but currently denies new authorizations
+ * (a REVERSIBLE freeze the operator may lift or turn into a withdrawal) is
+ * `deferNew`: nothing about it is decided here — the durable settlement
+ * replays, conflicts and holds first and only a genuinely new chargeable
+ * receipt under it is answered pending, nothing written. */
 async function offlineReceiptReleaseLineage(
   grant: OfflineSignedExecutionGrant,
   policies: Map<string, VerifiedReleasePolicy | null>,
@@ -5231,7 +5261,7 @@ async function offlineReceiptReleaseLineage(
   const release = payload === null ? null : payload.release;
   const named = isRecord(release) && isRecord(release.policy) ? release.policy.sha256 : null;
   if (typeof named !== "string" || !/^[0-9a-f]{64}$/.test(named)) {
-    return { release: null, hold: "evidence_ambiguous" };
+    return { release: null, hold: "evidence_ambiguous", deferNew: false };
   }
   let policy = policies.get(named);
   if (policy === undefined) {
@@ -5242,13 +5272,16 @@ async function offlineReceiptReleaseLineage(
     );
     policies.set(named, policy);
   }
-  if (!policy) return { release: null, hold: "evidence_ambiguous" };
+  if (!policy) return { release: null, hold: "evidence_ambiguous", deferNew: false };
   const artifacts = offlineReleaseArtifacts(policy);
-  const revoked =
-    policy.approval.denyNewAuthorizations ||
-    (typeof policy.approval.withdrawnAt === "number" &&
-      policy.approval.withdrawnAt <= nowEpochSeconds);
-  return { release: artifacts, hold: revoked ? "grant_revoked" : null };
+  const withdrawn =
+    typeof policy.approval.withdrawnAt === "number" &&
+    policy.approval.withdrawnAt <= nowEpochSeconds;
+  return {
+    release: artifacts,
+    hold: withdrawn ? "grant_revoked" : null,
+    deferNew: !withdrawn && policy.approval.denyNewAuthorizations,
+  };
 }
 
 /** Why this receipt must be HELD instead of settled, or null when its
@@ -5327,7 +5360,7 @@ async function offlineReceiptHoldReason(
  * (a settled result names the receipt's resultId; anything held keeps its
  * ticket reserved). null when the row does not describe a valid status. */
 function offlineReconciliationFromRow(
-  receipt: OfflineResultReceipt,
+  receipt: OfflineDeviceReceipt,
   row: Record<string, unknown>,
 ): Record<string, unknown> | null {
   const base = {
@@ -5348,17 +5381,26 @@ function offlineReconciliationFromRow(
 }
 
 /** POST /v1/offline/receipts — body { receipts: [{ receipt, grant, output }] }.
- * Answers one result per entry, in order:
+ * Answers 200 { receipts: [verdict], rejected: [rejection] } — the shape
+ * apps/mobile parseOfflineReceiptVerdicts reads — with EVERY submitted
+ * receipt id named exactly once across the two arrays, each in batch order.
+ * A verdict's `delivery` says how the durable status was reached:
  *   settled  — the ticket is consumed (or the no-ticket result recorded) now
- *   replayed — this exact receipt was settled earlier; the same verdict again
+ *   replayed — this exact receipt was settled or held earlier; the same
+ *              durable verdict again
  *   held     — recorded as reconciliation_required, ticket still reserved
  *   pending  — nothing recorded: the session the rating names has not synced
- *              yet; the ticket stays reserved and the same receipt is redelivered
- *   rejected — malformed, or a DIFFERENT receipt already holds this id
+ *              yet, or the release is under a reversible freeze; the ticket
+ *              stays reserved and the same receipt is redelivered
+ * A rejection is a malformed entry, or a DIFFERENT receipt already holding
+ * this id (offline.receipt_conflict). A batch that cannot name every entry
+ * (an entry without a receipt id, or one id presented twice — the app itself
+ * refuses both before sending) is 400 as a whole, nothing settled.
  * The route is idempotent under redelivery and order-independent because
  * every entry is decided inside settle_offline_receipt() under the owner's
- * access lock. A database failure answers a generic 503 for the batch —
- * entries already decided stay decided and simply replay next time. */
+ * access lock — replay, conflict and hold before any freeze deferral. A
+ * database failure answers a generic 503 for the batch — entries already
+ * decided stay decided and simply replay next time. */
 async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request, OFFLINE_RECEIPT_BATCH_BODY_BYTES);
   const receipts = body.receipts;
@@ -5371,6 +5413,25 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       400,
       OFFLINE_INVALID_INPUT_CODE,
       `receipts must be an array of 1-${OFFLINE_RECEIPT_BATCH_MAX} entries.`,
+    );
+  }
+  const receiptIds: string[] = [];
+  for (const raw of receipts) {
+    const receiptId = offlineReceiptEntryId(raw);
+    if (receiptId === null) {
+      return codedError(
+        400,
+        OFFLINE_INVALID_INPUT_CODE,
+        "Every entry must be { receipt, grant, output } with receipt.receiptId naming it.",
+      );
+    }
+    receiptIds.push(receiptId);
+  }
+  if (new Set(receiptIds).size !== receiptIds.length) {
+    return codedError(
+      400,
+      OFFLINE_RECEIPT_DUPLICATE_CODE,
+      "The same receipt cannot be presented twice in one batch.",
     );
   }
 
@@ -5397,27 +5458,34 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
   }
   const nowEpochSeconds = Math.floor(Date.now() / 1000);
 
-  const results: OfflineReceiptResult[] = [];
+  const verdicts: OfflineReceiptVerdict[] = [];
+  const rejected: OfflineReceiptRejection[] = [];
   const tally = { settled: 0, replayed: 0, held: 0, pending: 0, rejected: 0 };
   const holdReasons: string[] = [];
-  for (const raw of receipts) {
-    const parsed = parseOfflineReceiptEntry(raw);
-    if ("delivery" in parsed) {
+  for (const [index, raw] of receipts.entries()) {
+    const receiptId = receiptIds[index];
+    const parsed = isRecord(raw)
+      ? parseOfflineReceiptEntry(receiptId, raw)
+      : rejectedOfflineReceipt(receiptId, "Each entry must be an object.");
+    if ("code" in parsed) {
       tally.rejected += 1;
-      results.push(parsed);
+      rejected.push(parsed);
       continue;
     }
     const { receipt, output } = parsed;
     let holdReason: OfflineReceiptHoldReason | null;
+    let deferNew: boolean;
     let receiptSha256: string;
     try {
+      const lineage = await offlineReceiptReleaseLineage(parsed.grant, policies, nowEpochSeconds);
       holdReason = await offlineReceiptHoldReason(
         authed,
         keyRing,
-        await offlineReceiptReleaseLineage(parsed.grant, policies, nowEpochSeconds),
+        lineage,
         nowEpochSeconds,
         parsed,
       );
+      deferNew = lineage.deferNew;
       receiptSha256 = await digestCanonicalOfflineJson(receipt);
     } catch (error) {
       return serviceUnavailable("Offline receipt settlement", error);
@@ -5428,6 +5496,7 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
       p_receipt_sha256: receiptSha256,
       p_output: output,
       p_hold_reason: holdReason,
+      p_defer_new: deferNew,
     });
     if (settled.error) {
       return serviceUnavailable("Offline receipt settlement", settled.error, {
@@ -5440,22 +5509,20 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     }
     if (row.result === OFFLINE_INVALID_INPUT_CODE) {
       tally.rejected += 1;
-      results.push(
+      rejected.push(
         rejectedOfflineReceipt(receipt.receiptId, "receipt could not be bound to this account."),
       );
       continue;
     }
     if (row.result === OFFLINE_RECEIPT_CONFLICT_CODE) {
       tally.rejected += 1;
-      results.push({
-        receiptId: receipt.receiptId,
-        delivery: "rejected",
-        reconciliation: null,
-        error: {
-          code: OFFLINE_RECEIPT_CONFLICT_CODE,
-          message: "A different receipt with this id was already delivered.",
-        },
-      });
+      rejected.push(
+        rejectedOfflineReceipt(
+          receipt.receiptId,
+          "A different receipt with this id was already delivered.",
+          OFFLINE_RECEIPT_CONFLICT_CODE,
+        ),
+      );
       continue;
     }
     const delivery = row.delivery;
@@ -5468,18 +5535,32 @@ async function reconcileOfflineReceipts(authed: AuthedUser, request: Request): P
     ) {
       return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcResult" });
     }
+    // The row must describe a status the shared contract accepts for THIS
+    // receipt (a consumed verdict only for a chargeable ticket receipt, a
+    // recorded result naming its resultId, …) before it is answered.
     const reconciliation = offlineReconciliationFromRow(receipt, row);
-    if (!reconciliation) {
+    if (
+      !reconciliation ||
+      typeof reconciliation.status !== "string" ||
+      typeof reconciliation.financialDisposition !== "string"
+    ) {
       return serviceUnavailable("Offline receipt settlement", { name: "UnexpectedRpcRow" });
     }
     tally[delivery] += 1;
     if (delivery === "held" && typeof row.reason_code === "string") {
       holdReasons.push(row.reason_code);
     }
-    results.push({ receiptId: receipt.receiptId, delivery, reconciliation, error: null });
+    verdicts.push({
+      receiptId: receipt.receiptId,
+      status: reconciliation.status,
+      reasonCode: typeof reconciliation.reasonCode === "string" ? reconciliation.reasonCode : null,
+      financialDisposition: reconciliation.financialDisposition,
+      resultId: typeof reconciliation.resultId === "string" ? reconciliation.resultId : null,
+      delivery,
+    });
   }
   emitOfflineReceiptAudit({ batch: receipts.length, ...tally, holdReasons });
-  return json(200, { results });
+  return json(200, { receipts: verdicts, rejected });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

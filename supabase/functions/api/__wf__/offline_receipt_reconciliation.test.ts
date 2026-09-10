@@ -33,21 +33,22 @@
 // withdrawn lineage is HELD as grant_revoked; lifecycleSequence beyond int4 is
 // a durable verdict.
 //
-// Runs unchanged against BASE_SHA, where the route answers 404 and the RPC
-// does not exist, so every test fails there.
+// Round 6 (1.0 wire contract): each batch entry is { receipt, grant, output }
+// where `receipt` is the DEVICE receipt exactly as apps/mobile persists it
+// (OfflineReceiptSubmission — no native time, no attestation, plus queuedAt)
+// and the answer is { receipts: [flat verdict], rejected: [refusal] } — what
+// apps/mobile parseOfflineReceiptVerdicts reads, every submitted receipt id
+// named exactly once. The reversible deny-new freeze travels to the RPC as
+// p_defer_new and is decided there AFTER replay / conflict / hold.
 
 import postgres from "postgres";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { exportJWK, generateKeyPair } from "jose";
 import {
-  OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
-  OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
-  OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-  OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
+  type OfflineDeviceReceipt,
   type OfflineExecutionGrantClaims,
   type OfflineFreeTicketReference,
   type OfflineReleasedArtifacts,
-  type OfflineResultReceipt,
   type OfflineSignedExecutionGrant,
 } from "../../../../packages/shared-types/src/offlineAuthorization.ts";
 import type { AnalysisReleasePolicyDocument } from "../../../../packages/shared-types/src/analysisReleasePolicy.ts";
@@ -330,39 +331,28 @@ interface ReceiptOptions {
   operationId: string;
   resultId: string;
   fullOutputSha256: string;
-  billingDisposition?: OfflineResultReceipt["billingDisposition"];
+  billingDisposition?: OfflineDeviceReceipt["billingDisposition"];
   installationKeyId?: string;
   grantJwsSha256?: string;
 }
 
-async function receipt(options: ReceiptOptions): Promise<OfflineResultReceipt> {
+/** The DEVICE receipt exactly as apps/mobile OfflineReceiptSubmission persists
+ * it: identity, bindings, digests and the instant it was queued — no native
+ * time, no attestation evidence. */
+async function receipt(options: ReceiptOptions): Promise<OfflineDeviceReceipt> {
   return {
-    schemaVersion: OFFLINE_RESULT_RECEIPT_SCHEMA_VERSION,
     receiptId: options.receiptId,
     ownerId: options.ownerId,
     installationKeyId: options.installationKeyId ?? options.claims.installationKeyId,
     grantId: options.claims.jti,
     grantJwsSha256: options.grantJwsSha256 ?? (await digestOfflineGrantTransport(options.grant)),
-    ticket: options.ticket,
     lifecycleSequence: options.lifecycleSequence,
-    nativeTime: {
-      schemaVersion: OFFLINE_NATIVE_TIME_SCHEMA_VERSION,
-      clock: "ios_mach_continuous_time",
-      anchorId: "anchor-w04-04",
-      elapsedMs: 120_000 * options.lifecycleSequence,
-    },
-    attestation: {
-      schemaVersion: OFFLINE_APP_ATTEST_EVIDENCE_SCHEMA_VERSION,
-      format: "apple_app_attest",
-      kind: "assertion",
-      environment: "production",
-      dataBase64Url: "QUJDRA",
-      clientDataSha256: "c".repeat(64),
-    },
+    ticket: options.ticket,
     operationId: options.operationId,
     resultId: options.resultId,
     fullOutputSha256: options.fullOutputSha256,
     billingDisposition: options.billingDisposition ?? "joint_verification_required",
+    queuedAt: "2026-09-08T10:00:00.000Z",
   };
 }
 
@@ -387,7 +377,7 @@ async function settledFixture(
 ): Promise<{
   claims: OfflineExecutionGrantClaims;
   grant: OfflineSignedExecutionGrant;
-  receipt: OfflineResultReceipt;
+  receipt: OfflineDeviceReceipt;
   output: Record<string, unknown>;
 }> {
   const claims = options.claims ?? freeClaims(ownerId);
@@ -429,6 +419,7 @@ interface SettleParams {
   p_receipt_sha256: string;
   p_output: Record<string, unknown> | null;
   p_hold_reason: string | null;
+  p_defer_new: boolean;
 }
 
 const durable = new Map<string, { sha256: string; row: SettleRow }>();
@@ -477,6 +468,20 @@ function durableRespond(call: RecordedCall): Response | null {
       result_id: null,
     };
     durable.set(key, { sha256: params.p_receipt_sha256, row });
+  } else if (
+    params.p_defer_new === true &&
+    params.p_receipt.billingDisposition === "joint_verification_required"
+  ) {
+    // A genuinely new chargeable receipt under a reversible deny-new freeze:
+    // the migration answers pending with nothing durable written.
+    row = {
+      result: "accepted",
+      delivery: "pending",
+      status: "pending",
+      reason_code: null,
+      financial_disposition: params.p_receipt.ticket === null ? "not_applicable" : "reserved",
+      result_id: null,
+    };
   } else if (
     params.p_receipt.ticket !== null &&
     params.p_output !== null &&
@@ -531,18 +536,47 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
-interface RouteResult {
+/** One answered receipt, flat — the wire shape apps/mobile
+ * parseOfflineReceiptVerdicts reads (`status` decides accepted/held/refused). */
+interface RouteVerdict {
   receiptId: string;
-  delivery: "settled" | "replayed" | "held" | "pending" | "rejected";
-  reconciliation: Record<string, unknown> | null;
-  error: { code: string; message: string } | null;
+  status: string;
+  reasonCode: string | null;
+  financialDisposition: string;
+  resultId: string | null;
+  delivery: "settled" | "replayed" | "held" | "pending";
 }
 
-async function results(response: Response): Promise<RouteResult[]> {
-  assertEquals(response.status, 200);
+interface RouteRejection {
+  receiptId: string;
+  code: string;
+  message: string;
+}
+
+interface RouteAnswer {
+  receipts: RouteVerdict[];
+  rejected: RouteRejection[];
+}
+
+/** The 200 answer, checked the way the app checks it: `receipts` and
+ * `rejected` arrays whose receipt ids are disjoint and unique. */
+async function answer(response: Response): Promise<RouteAnswer> {
   const body = await readJson(response);
-  assert(Array.isArray(body.results), "results[] expected");
-  return body.results as RouteResult[];
+  assertEquals(response.status, 200, JSON.stringify(body));
+  assert(Array.isArray(body.receipts), "receipts[] expected");
+  assert(Array.isArray(body.rejected), "rejected[] expected");
+  const receipts = body.receipts as RouteVerdict[];
+  const rejected = body.rejected as RouteRejection[];
+  const ids = [...receipts.map((r) => r.receiptId), ...rejected.map((r) => r.receiptId)];
+  assertEquals(new Set(ids).size, ids.length, "every receipt id answered once");
+  return { receipts, rejected };
+}
+
+/** An answer with nothing rejected: the verdicts, in batch order. */
+async function results(response: Response): Promise<RouteVerdict[]> {
+  const { receipts, rejected } = await answer(response);
+  assertEquals(rejected, []);
+  return receipts;
 }
 
 function settleCalls(): SettleParams[] {
@@ -572,19 +606,19 @@ Deno.test(
     const out = await results(await post({ receipts: entries }, user.token));
     assertEquals(out.length, 2);
     assertEquals(
-      out.map((r) => [r.receiptId, r.delivery, r.error]),
+      out.map((r) => [r.receiptId, r.delivery]),
       [
-        ["receipt-2", "settled", null],
-        ["receipt-1", "settled", null],
+        ["receipt-2", "settled"],
+        ["receipt-1", "settled"],
       ],
     );
-    assertEquals(out[1].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
+    assertEquals(out[1], {
       receiptId: "receipt-1",
       status: "result_recorded",
-      resultId: first.receipt.resultId,
+      reasonCode: null,
       financialDisposition: "consumed",
+      resultId: first.receipt.resultId,
+      delivery: "settled",
     });
 
     const calls = h.callsTo(SETTLE_RPC);
@@ -614,7 +648,7 @@ Deno.test(
 );
 
 Deno.test(
-  "a duplicate batch (and a duplicate inside a batch) replays the durable verdict — the receipt settles once",
+  "a duplicate batch replays the durable verdict — the receipt settles once; the same receipt twice INSIDE a batch is refused before the database",
   async () => {
     reset();
     const user = freshUser();
@@ -624,14 +658,10 @@ Deno.test(
     const first = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(first[0].delivery, "settled");
 
-    const again = await results(await post({ receipts: [entry, entry] }, user.token));
-    assertEquals(
-      again.map((r) => r.delivery),
-      ["replayed", "replayed"],
-    );
-    assertEquals(again[0].reconciliation, first[0].reconciliation);
-    assertEquals(again[1].reconciliation, first[0].reconciliation);
-    assertEquals(again[0].error, null);
+    const again = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(again, [{ ...first[0], delivery: "replayed" }]);
+    const third = await results(await post({ receipts: [entry] }, user.token));
+    assertEquals(third, again);
 
     // Three deliveries, three durable RPC calls with the SAME identity — the
     // RPC (not the edge) is the idempotency point, and it settled exactly once.
@@ -640,6 +670,17 @@ Deno.test(
     assertEquals(new Set(params.map((p) => p.p_receipt_sha256)).size, 1);
     assertEquals(durable.size, 1);
     assertEquals([...durable.values()][0].row.delivery, "settled");
+
+    // One receipt presented twice in ONE batch cannot be answered "exactly
+    // once" per id (the app refuses such a batch locally as well): 400 as a
+    // whole, no further RPC call.
+    const twice = await post({ receipts: [entry, entry] }, user.token);
+    assertEquals(twice.status, 400);
+    assertEquals(
+      ((await readJson(twice)).error as { code?: string }).code,
+      "offline.receipt_duplicate",
+    );
+    assertEquals(settleCalls().length, 3);
   },
 );
 
@@ -656,15 +697,13 @@ Deno.test(
         user.token,
       ),
     );
-    assertEquals(out[0].delivery, "held");
-    assertEquals(out[0].error, null);
-    assertEquals(out[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
+    assertEquals(out[0], {
       receiptId: "receipt-1",
       status: "reconciliation_required",
       reasonCode: "evidence_ambiguous",
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "held",
     });
 
     const params = settleCalls();
@@ -683,8 +722,7 @@ Deno.test(
         user.token,
       ),
     );
-    assertEquals(again[0].delivery, "replayed");
-    assertEquals(again[0].reconciliation, out[0].reconciliation);
+    assertEquals(again[0], { ...out[0], delivery: "replayed" });
     assertEquals(h.callsTo(RELEASE_RPC).length, 0);
   },
 );
@@ -774,7 +812,7 @@ Deno.test(
       ),
     );
     assertEquals(
-      out.map((r) => [r.receiptId, r.delivery, r.reconciliation?.reasonCode ?? null]),
+      out.map((r) => [r.receiptId, r.delivery, r.reasonCode]),
       [
         ["receipt-2", "held", "owner_mismatch"],
         ["receipt-3", "held", "evidence_ambiguous"],
@@ -785,8 +823,8 @@ Deno.test(
       ],
     );
     for (const held of out.slice(0, 5)) {
-      assertEquals(held.reconciliation?.status, "reconciliation_required");
-      assertEquals(held.reconciliation?.financialDisposition, "reserved");
+      assertEquals(held.status, "reconciliation_required");
+      assertEquals(held.financialDisposition, "reserved");
     }
     const params = settleCalls();
     assertEquals(
@@ -859,9 +897,9 @@ Deno.test(
       ),
     );
     assertEquals(out[0].delivery, "settled");
-    assertEquals(out[0].reconciliation?.financialDisposition, "not_applicable");
+    assertEquals(out[0].financialDisposition, "not_applicable");
     assertEquals(out[1].delivery, "settled");
-    assertEquals(out[1].reconciliation?.financialDisposition, "reserved");
+    assertEquals(out[1].financialDisposition, "reserved");
     const params = settleCalls();
     assertEquals(params.length, 2);
     assertEquals(params[0].p_receipt.ticket, null);
@@ -871,50 +909,71 @@ Deno.test(
 );
 
 Deno.test(
-  "malformed entries are rejected per receipt without reaching the database; a malformed batch is 400",
+  "malformed entries are rejected per receipt without reaching the database, beside the good one's verdict; a batch that cannot name every entry is 400",
   async () => {
     reset();
     const user = freshUser();
     const fixture = await settledFixture(user.sub, TICKET_A, 1);
+    const second = await settledFixture(user.sub, TICKET_B, 2, { claims: fixture.claims });
 
-    const out = await results(
+    const { receipts, rejected } = await answer(
       await post(
         {
           receipts: [
             {
-              receipt: { ...fixture.receipt, receiptId: 42 },
+              receipt: { ...fixture.receipt, receiptId: "receipt-bad-grant" },
+              grant: { compactJws: "not.a.jws" },
+              output: fixture.output,
+            },
+            {
+              receipt: { ...fixture.receipt, receiptId: "receipt-bad-output" },
+              grant: fixture.grant,
+              output: "not-an-object",
+            },
+            {
+              receipt: { ...fixture.receipt, receiptId: "receipt-extra-field", settledAt: null },
               grant: fixture.grant,
               output: fixture.output,
             },
             {
-              receipt: fixture.receipt,
-              grant: { compactJws: "not.a.jws" },
+              receipt: { ...fixture.receipt, receiptId: "receipt-no-queued-at", queuedAt: 7 },
+              grant: fixture.grant,
               output: fixture.output,
             },
-            { receipt: fixture.receipt, grant: fixture.grant, output: "not-an-object" },
-            "not-an-entry",
+            { receipt: second.receipt, grant: second.grant, output: second.output },
           ],
         },
         user.token,
       ),
     );
     assertEquals(
-      out.map((r) => [r.delivery, r.error?.code]),
+      rejected.map((r) => [r.receiptId, r.code]),
       [
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
-        ["rejected", "offline.invalid_input"],
+        ["receipt-bad-grant", "offline.invalid_input"],
+        ["receipt-bad-output", "offline.invalid_input"],
+        ["receipt-extra-field", "offline.invalid_input"],
+        ["receipt-no-queued-at", "offline.invalid_input"],
       ],
     );
-    assertEquals(out[1].receiptId, "receipt-1");
-    assertEquals(settleCalls().length, 0);
+    for (const r of rejected) assertEquals(typeof r.message, "string");
+    assertEquals(
+      receipts.map((r) => [r.receiptId, r.delivery, r.status]),
+      [["receipt-2", "settled", "result_recorded"]],
+    );
+    assertEquals(settleCalls().length, 1);
+    assertEquals(settleCalls()[0].p_receipt.receiptId, "receipt-2");
 
     for (const bad of [
       {},
       { receipts: [] },
       { receipts: "x" },
       { receipts: new Array(26).fill(null) },
+      { receipts: ["not-an-entry"] },
+      {
+        receipts: [
+          { receipt: { ...fixture.receipt, receiptId: 42 }, grant: fixture.grant, output: null },
+        ],
+      },
     ]) {
       const response = await post(bad, user.token);
       assertEquals(response.status, 400);
@@ -923,7 +982,7 @@ Deno.test(
         "offline.invalid_input",
       );
     }
-    assertEquals(settleCalls().length, 0);
+    assertEquals(settleCalls().length, 1);
   },
 );
 
@@ -1042,10 +1101,10 @@ Deno.test(
       ),
     );
     assertEquals(
-      out.map((r) => [r.receiptId, r.delivery, r.error]),
+      out.map((r) => [r.receiptId, r.delivery]),
       [
-        ["receipt-2", "settled", null],
-        ["receipt-1", "settled", null],
+        ["receipt-2", "settled"],
+        ["receipt-1", "settled"],
       ],
     );
     const params = settleCalls();
@@ -1135,14 +1194,13 @@ Deno.test(
     };
     h.respond = lineageRespond({ [RELEASE.policy.sha256]: withdrawnRow });
     const withdrawn = await results(await post({ receipts: [entry] }, user.token));
-    assertEquals(withdrawn[0].delivery, "held");
-    assertEquals(withdrawn[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
+    assertEquals(withdrawn[0], {
       receiptId: "receipt-1",
       status: "reconciliation_required",
       reasonCode: "grant_revoked",
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "held",
     });
     assertEquals(settleCalls()[0].p_hold_reason, "grant_revoked");
 
@@ -1151,8 +1209,8 @@ Deno.test(
     h.respond = lineageRespond({});
     const unknown = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(unknown[0].delivery, "held");
-    assertEquals(unknown[0].reconciliation?.reasonCode, "evidence_ambiguous");
-    assertEquals(unknown[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(unknown[0].reasonCode, "evidence_ambiguous");
+    assertEquals(unknown[0].financialDisposition, "reserved");
     assertEquals(settleCalls()[0].p_hold_reason, "evidence_ambiguous");
 
     reset();
@@ -1197,14 +1255,13 @@ Deno.test(
     const entry = { receipt: rec, grant, output: out };
 
     const early = await results(await post({ receipts: [entry] }, user.token));
-    assertEquals(early[0].delivery, "pending");
-    assertEquals(early[0].error, null);
-    assertEquals(early[0].reconciliation, {
-      schemaVersion: OFFLINE_RECONCILIATION_SCHEMA_VERSION,
-      ownerId: user.sub,
+    assertEquals(early[0], {
       receiptId: "receipt-early",
       status: "pending",
+      reasonCode: null,
       financialDisposition: "reserved",
+      resultId: null,
+      delivery: "pending",
     });
     assertEquals(durable.size, 0);
 
@@ -1214,8 +1271,8 @@ Deno.test(
     syncedSessions.add(sessionId);
     const late = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(late[0].delivery, "settled");
-    assertEquals(late[0].reconciliation?.status, "result_recorded");
-    assertEquals(late[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(late[0].status, "result_recorded");
+    assertEquals(late[0].financialDisposition, "consumed");
     const params = settleCalls();
     assertEquals(params.length, 3);
     assertEquals(new Set(params.map((p) => p.p_receipt_sha256)).size, 1);
@@ -1255,7 +1312,7 @@ Deno.test(
     const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
     const first = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(first[0].delivery, "settled");
-    assertEquals(first[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(first[0].financialDisposition, "consumed");
     assertEquals(durable.size, 1);
 
     // The operator withdraws the active release; the device redelivers the
@@ -1269,10 +1326,10 @@ Deno.test(
       200,
       `a consumed receipt must replay its verdict, got ${redelivered.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = body.receipts as RouteVerdict[];
     assertEquals(out[0].delivery, "replayed");
-    assertEquals(out[0].reconciliation?.status, "result_recorded");
-    assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(out[0].status, "result_recorded");
+    assertEquals(out[0].financialDisposition, "consumed");
     assertEquals(durable.size, 1);
   },
 );
@@ -1304,9 +1361,9 @@ Deno.test(
       200,
       `expected a per-receipt verdict from the named lineage, got ${response.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = body.receipts as RouteVerdict[];
     assertEquals(out[0].delivery, "settled");
-    assertEquals(out[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(out[0].financialDisposition, "consumed");
     assertEquals(h.callsTo(LINEAGE_RPC).length, 1);
     assertEquals(lineageParams(h.callsTo(LINEAGE_RPC)[0]).p_policy_sha256, RELEASE.policy.sha256);
   },
@@ -1364,13 +1421,13 @@ Deno.test(
       200,
       `an abstention has nothing to charge and must be recorded, got ${response.status} ${JSON.stringify(body)}`,
     );
-    const out = body.results as RouteResult[];
+    const out = body.receipts as RouteVerdict[];
     assertEquals(out[0].delivery, "settled");
-    assertEquals(out[0].reconciliation?.status, "result_recorded");
-    assertEquals(out[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(out[0].status, "result_recorded");
+    assertEquals(out[0].financialDisposition, "reserved");
     assertEquals(out[1].delivery, "held");
-    assertEquals(out[1].reconciliation?.reasonCode, "grant_revoked");
-    assertEquals(out[1].reconciliation?.financialDisposition, "reserved");
+    assertEquals(out[1].reasonCode, "grant_revoked");
+    assertEquals(out[1].financialDisposition, "reserved");
     const params = settleCalls();
     assertEquals(params.length, 2);
     assertEquals(params[0].p_hold_reason, null);
@@ -1401,7 +1458,7 @@ Deno.test(
     h.respond = lineageRespond({ [RELEASE.policy.sha256]: releasePolicyRow });
     const repaired = await results(await post({ receipts: [entry] }, user.token));
     assertEquals(repaired[0].delivery, "settled");
-    assertEquals(repaired[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(repaired[0].financialDisposition, "consumed");
   },
 );
 
@@ -1465,9 +1522,9 @@ Deno.test(
     assertEquals(
       after[0].delivery,
       "settled",
-      `old-key grant inside the overlap window was ${after[0].delivery}: ${JSON.stringify(after[0].reconciliation)}`,
+      `old-key grant inside the overlap window was ${after[0].delivery}: ${JSON.stringify(after[0])}`,
     );
-    assertEquals(after[0].reconciliation?.financialDisposition, "consumed");
+    assertEquals(after[0].financialDisposition, "consumed");
     assertEquals(settleCalls()[0].p_hold_reason, null);
 
     // An old-key grant still inside its lease settles during the overlap too.
@@ -1528,7 +1585,7 @@ Deno.test(
     assertEquals(
       graceOut[0].delivery,
       "settled",
-      `grace-window grant was ${graceOut[0].delivery}: ${JSON.stringify(graceOut[0].reconciliation)}`,
+      `grace-window grant was ${graceOut[0].delivery}: ${JSON.stringify(graceOut[0])}`,
     );
 
     // Signed by the previous key one second AFTER the grace: not an issuer any
@@ -1552,8 +1609,8 @@ Deno.test(
       ),
     );
     assertEquals(lateOut[0].delivery, "held");
-    assertEquals(lateOut[0].reconciliation?.reasonCode, "evidence_ambiguous");
-    assertEquals(lateOut[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(lateOut[0].reasonCode, "evidence_ambiguous");
+    assertEquals(lateOut[0].financialDisposition, "reserved");
 
     // Once the ring drops the previous key, an old-key receipt is ambiguous.
     reset();
@@ -1573,8 +1630,8 @@ Deno.test(
       ),
     );
     assertEquals(dropped[0].delivery, "held");
-    assertEquals(dropped[0].reconciliation?.reasonCode, "evidence_ambiguous");
-    assertEquals(dropped[0].reconciliation?.financialDisposition, "reserved");
+    assertEquals(dropped[0].reasonCode, "evidence_ambiguous");
+    assertEquals(dropped[0].financialDisposition, "reserved");
     assertEquals(
       [...durable.values()].filter((v) => v.row.financial_disposition === "consumed").length,
       0,
@@ -1633,9 +1690,10 @@ const lit = (value: unknown): string => `'${JSON.stringify(value).replaceAll("'"
 
 async function settle(
   tx: Tx,
-  rec: OfflineResultReceipt,
+  rec: OfflineDeviceReceipt,
   out: Record<string, unknown> | null,
   hold: string | null,
+  deferNew = false,
 ): Promise<SettleRow> {
   const rows = await tx.unsafe<SettleRow[]>(
     `select r.result, r.delivery, r.status, r.reason_code, r.financial_disposition, r.result_id
@@ -1643,7 +1701,8 @@ async function settle(
        ${lit(rec)},
        '${await digestCanonicalOfflineJson(rec)}',
        ${out === null ? "null::jsonb" : lit(out)},
-       ${hold === null ? "null::text" : `'${hold}'`}
+       ${hold === null ? "null::text" : `'${hold}'`},
+       ${deferNew ? "true" : "false"}
      ) r`,
   );
   assertEquals(rows.length, 1);
@@ -1709,7 +1768,7 @@ async function liveReceipt(
   tag: string,
   overrides: Partial<ReceiptOptions> = {},
   outputOverrides: Record<string, unknown> = {},
-): Promise<{ receipt: OfflineResultReceipt; output: Record<string, unknown> }> {
+): Promise<{ receipt: OfflineDeviceReceipt; output: Record<string, unknown> }> {
   const resultId = crypto.randomUUID();
   const out = output(resultId, outputOverrides);
   const rec = await receipt({

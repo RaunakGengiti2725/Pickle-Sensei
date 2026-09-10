@@ -10261,6 +10261,24 @@ begin
     raise exception 'U3: the held ticket was never reclaimed and settles once with verified evidence (got %, %, %)',
       v.delivery, u_probe.events(uri), public.lifetime_scored_count();
   end if;
+  -- an abstention claimed under the ticket the ledger just CONSUMED is
+  -- contradictory evidence (the mirror of rcpt-2): a conflicting_receipt
+  -- HOLD, never a result_recorded verdict asserting a reserved ticket
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-11b', uri, 'uri-key-1', g, t2, 1, 'op-11b', '00000000-0000-4000-8000-00000000482a', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt'
+     or v.financial_disposition <> 'reserved' or v.result_id is not null
+     or u_probe.events(uri) <> 'allocated:2,consumed:2' then
+    raise exception 'U3: a not_chargeable receipt under a consumed ticket is held as conflicting_receipt (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, u_probe.events(uri);
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-11b', uri, 'uri-key-1', g, t2, 1, 'op-11b', '00000000-0000-4000-8000-00000000482a', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt' then
+    raise exception 'U3: the conflicting abstention replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
   -- and a Pro (no-ticket) receipt records its result with no financial disposition
   select * into v from u_probe.settle(
     u_probe.receipt('rcpt-12', uri, 'uri-key-1', g, null, null, 'op-12', '00000000-0000-4000-8000-000000004819', 'joint_verification_required'),
@@ -10269,6 +10287,66 @@ begin
      or u_probe.events(uri) <> 'allocated:2,consumed:2' then
     raise exception 'U3: a no-ticket receipt is recorded without touching the ledger (got %, %, %, %)',
       v.delivery, v.status, v.financial_disposition, u_probe.events(uri);
+  end if;
+  -- a Pro (no-ticket) receipt is judged against its output exactly like a
+  -- ticketed one: contradictory evidence HOLDs, it is never recorded
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12b', uri, 'uri-key-1', g, null, null, 'op-12b', '00000000-0000-4000-8000-000000004823', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004823', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket not_chargeable receipt beside a scored output is held (got %, %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition, v.result_id;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12b', uri, 'uri-key-1', g, null, null, 'op-12b', '00000000-0000-4000-8000-000000004823', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004823', null, 'scored'), null);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous' then
+    raise exception 'U3: the held no-ticket receipt replays its hold (got %, %, %)', v.delivery, v.status, v.reason_code;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12c', uri, 'uri-key-1', g, null, null, 'op-12c', '00000000-0000-4000-8000-000000004824', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004824', null, 'abstained'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket chargeable receipt beside an abstention is held (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12d', uri, 'uri-key-1', g, null, null, 'op-12d', '00000000-0000-4000-8000-000000004825', 'joint_verification_required'),
+    null, null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_missing'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket chargeable receipt without its output is held as evidence_missing (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12e', uri, 'uri-key-1', g, null, null, 'op-12e', '00000000-0000-4000-8000-000000004826', 'joint_verification_required'),
+    u_probe.shot('00000000-0000-4000-8000-000000004827', null, 'scored'), null);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_ambiguous'
+     or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U3: a no-ticket receipt whose output names another result is held (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  -- and consistent lease evidence is still recorded, with nothing financial
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12f', uri, 'uri-key-1', g, null, null, 'op-12f', '00000000-0000-4000-8000-000000004828', 'not_chargeable'),
+    null, null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004828' then
+    raise exception 'U3: a no-ticket not_chargeable receipt without an output is recorded (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, v.result_id;
+  end if;
+  select * into v from u_probe.settle(
+    u_probe.receipt('rcpt-12g', uri, 'uri-key-1', g, null, null, 'op-12g', '00000000-0000-4000-8000-000000004829', 'not_chargeable'),
+    u_probe.shot('00000000-0000-4000-8000-000000004829', null, 'abstained'), null);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-000000004829' then
+    raise exception 'U3: a no-ticket not_chargeable receipt beside its abstention is recorded (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, v.result_id;
+  end if;
+  if u_probe.events(uri) <> 'allocated:2,consumed:2' then
+    raise exception 'U3: lease receipts never touch the allocation ledger (got %)', u_probe.events(uri);
   end if;
 end $$;
 
@@ -10322,7 +10400,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   perform set_config('request.jwt.claims', claims, true);
-  if u_probe.recorded(uri) <> 16 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
+  if u_probe.recorded(uri) <> 23 or u_probe.settlements(uri) like '%forged%' or u_probe.settlements(uri) like '%rcpt-13%' then
     raise exception 'U4: refused calls persist nothing (got %)', u_probe.settlements(uri);
   end if;
 end $$;
@@ -10386,7 +10464,7 @@ begin
     raise exception 'U5: a hold can never be recorded as consumed';
   exception when check_violation then null;
   end;
-  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 16
+  if (select count(*) from public.offline_receipt_settlements where user_id = uri) <> 23
      or (select status || '/' || financial_disposition from public.offline_receipt_settlements
          where user_id = uri and receipt_id = 'rcpt-3') <> 'reconciliation_required/reserved' then
     raise exception 'U5: the refused writes leave every settlement intact';
@@ -10739,6 +10817,32 @@ begin
     raise exception 'U8: three durable verdicts, one rating, the refused receipt persisted nothing (got %, %, %)',
       u2_probe.recorded(uma), u2_probe.events(uma), public.lifetime_scored_count();
   end if;
+  -- the device returns t2; an abstention that then arrives claiming the
+  -- RELEASED ticket contradicts the ledger: a conflicting_receipt HOLD, not a
+  -- result_recorded verdict asserting the ticket is still reserved
+  if public.release_offline_ticket(t2, 'unused_ticket_returned') <> 'accepted'
+     or u2_probe.events(uma) <> 'allocated:2,consumed:1,released:1' then
+    raise exception 'U8 precondition: the outstanding ticket is released (got %)', u2_probe.events(uma);
+  end if;
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-released', uma, 'uma-key-1', g, t2, 1, 'op3-released', '00000000-0000-4000-8000-000000004925', 'not_chargeable'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004925', 'low_confidence'), null);
+  if v.result <> 'accepted' or v.delivery <> 'held' or v.status <> 'reconciliation_required'
+     or v.reason_code <> 'conflicting_receipt' or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U8: a not_chargeable receipt under a released ticket is held as conflicting_receipt (got %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u2_probe.settle(
+    u2_probe.receipt('r3-released', uma, 'uma-key-1', g, t2, 1, 'op3-released', '00000000-0000-4000-8000-000000004925', 'not_chargeable'),
+    u2_probe.shot('00000000-0000-4000-8000-000000004925', 'low_confidence'), null);
+  if v.delivery <> 'replayed' or v.reason_code <> 'conflicting_receipt' then
+    raise exception 'U8: the conflicting abstention replays its hold (got %, %)', v.delivery, v.reason_code;
+  end if;
+  if u2_probe.recorded(uma) <> 4 or u2_probe.events(uma) <> 'allocated:2,consumed:1,released:1'
+     or exists (select 1 from public.shots where id = '00000000-0000-4000-8000-000000004925') then
+    raise exception 'U8: the hold is durable, writes no rating and moves no ticket (got %, %)',
+      u2_probe.recorded(uma), u2_probe.events(uma);
+  end if;
 end $$;
 reset role;
 set local request.jwt.claim.sub = '';
@@ -10847,6 +10951,346 @@ begin
   begin
     perform public.read_analysis_release_policy_lineage(repeat('f', 64));
     raise exception 'U9: anon must not read the release lineage';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+rollback;
+
+-- ============================================================================
+-- U10–U12. (W04-04 round 6, 20260910130000_offline_receipt_freeze_defer) the
+-- reversible release freeze is a parameter of settle_offline_receipt()
+-- (p_defer_new boolean default false) decided AFTER the durable verdicts,
+-- never before them: under a freeze a settled receipt replays consumed, a
+-- held receipt replays its hold, a same-id/other-body receipt is
+-- offline.receipt_conflict, a terminal (consumed) ticket is a durable
+-- conflicting_receipt HOLD, an abstention is recorded, an edge hold is
+-- recorded — and ONLY a genuinely new, fully evidenced chargeable receipt is
+-- answered pending with nothing written and its ticket still reserved, then
+-- settles under the same operation once the freeze lifts. The receipt is the
+-- DEVICE receipt exactly as the app persists it (queuedAt, no schemaVersion /
+-- nativeTime / attestation). The function has exactly one signature, the old
+-- four-argument one is gone (the four-argument CALL still resolves through the
+-- default), a null freeze is refused, and the execute privilege is
+-- authenticated-only on the new signature.
+-- ============================================================================
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-0000000004a1', 'ute@example.com',
+   '{"full_name":"Ute"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('apple', 'apple-sub-ute', '00000000-0000-4000-8000-0000000004a1',
+   '{"sub":"apple-sub-ute","email":"ute@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000004a01', '00000000-0000-4000-8000-0000000004a1');
+
+create temporary table u3_state (key text primary key, id uuid);
+grant select, insert on u3_state to authenticated;
+create schema u3_probe;
+create function u3_probe.shot(p_id uuid, p_kind text) returns jsonb
+language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', null,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-10T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 else null end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+-- the DEVICE receipt (apps/mobile OfflineReceiptSubmission): no schemaVersion,
+-- no nativeTime, no attestation; queuedAt is the instant it entered the outbox
+create function u3_probe.receipt(
+  p_receipt_id text, p_owner uuid, p_key text, p_grant uuid, p_ticket uuid, p_generation bigint,
+  p_operation text, p_result uuid, p_billing text
+) returns jsonb language sql immutable set search_path = '' as $$
+  select jsonb_build_object(
+    'receiptId', p_receipt_id,
+    'ownerId', p_owner,
+    'installationKeyId', p_key,
+    'grantId', p_grant,
+    'grantJwsSha256', repeat('a', 64),
+    'lifecycleSequence', 1,
+    'ticket', case when p_ticket is null then 'null'::jsonb else jsonb_build_object(
+      'allocationId', p_grant, 'generation', p_generation, 'ticketId', p_ticket) end,
+    'operationId', p_operation,
+    'resultId', p_result,
+    'fullOutputSha256', repeat('c', 64),
+    'billingDisposition', p_billing,
+    'queuedAt', '2026-09-10T10:00:00.000Z')
+$$;
+create function u3_probe.digest(p_receipt jsonb)
+returns text language sql immutable set search_path = '' as $$
+  select encode(pg_catalog.sha256(convert_to(p_receipt::text, 'UTF8')), 'hex')
+$$;
+create function u3_probe.settle(p_receipt jsonb, p_output jsonb, p_hold text, p_defer boolean)
+returns table (result text, delivery text, status text, reason_code text, financial_disposition text, result_id text)
+language sql set search_path = '' as $$
+  select * from public.settle_offline_receipt(p_receipt, u3_probe.digest(p_receipt), p_output, p_hold, p_defer)
+$$;
+create function u3_probe.events(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(e.event || ':' || e.n, ',' order by e.event)
+     from (select event, count(*) n from public.offline_allocation_ledger
+           where user_id = p_uid group by event) e), '');
+$$;
+create function u3_probe.settlements(p_uid uuid) returns text
+language sql security definer set search_path = '' as $$
+  select coalesce(
+    (select string_agg(s.receipt_id || '=' || s.status || '/' || coalesce(s.reason_code, '-') || '/' || s.financial_disposition,
+                       ',' order by s.receipt_id)
+     from public.offline_receipt_settlements s where s.user_id = p_uid), '');
+$$;
+create function u3_probe.shots_on(p_uid uuid, p_ticket uuid) returns integer
+language sql security definer set search_path = '' as $$
+  select count(*)::int from public.shots s where s.user_id = p_uid and s.offline_ticket_id = p_ticket;
+$$;
+grant usage on schema u3_probe to authenticated;
+grant execute on all functions in schema u3_probe to authenticated;
+
+-- U10: exactly one settle_offline_receipt() — (jsonb, text, jsonb, text,
+-- boolean), SECURITY DEFINER with an empty search_path, p_defer_new defaulted
+-- — executable by authenticated alone; the four-argument signature is gone.
+do $$
+declare
+  sigs text[];
+begin
+  select array_agg(pg_get_function_identity_arguments(p.oid) order by 1) into sigs
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'settle_offline_receipt';
+  if sigs <> array['p_receipt jsonb, p_receipt_sha256 text, p_output jsonb, p_hold_reason text, p_defer_new boolean'] then
+    raise exception 'U10: settle_offline_receipt must have exactly the five-argument signature (got %)', sigs;
+  end if;
+  if not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'settle_offline_receipt'
+      and p.prosecdef and p.pronargdefaults = 1
+      and p.proconfig @> array['search_path=""']
+  ) then
+    raise exception 'U10: settle_offline_receipt must stay SECURITY DEFINER with search_path = '''' and one defaulted parameter';
+  end if;
+  if not has_function_privilege('authenticated', 'public.settle_offline_receipt(jsonb, text, jsonb, text, boolean)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.settle_offline_receipt(jsonb, text, jsonb, text, boolean)', 'EXECUTE')
+     or has_function_privilege('service_role', 'public.settle_offline_receipt(jsonb, text, jsonb, text, boolean)', 'EXECUTE') then
+    raise exception 'U10: settle_offline_receipt(…, boolean) must be executable by authenticated alone';
+  end if;
+  if exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'settle_offline_receipt'
+      and has_function_privilege(0::oid, p.oid, 'EXECUTE')
+  ) then
+    raise exception 'U10: PUBLIC must not execute settle_offline_receipt';
+  end if;
+end $$;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-0000000004a1';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000004a01"}';
+
+-- U11: as Ute — the two free tickets; the freeze defers exactly the new charge.
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('ute-key-1', 'production', true);
+  if r.result <> 'accepted' then
+    raise exception 'U11 precondition: registration is accepted (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('ute-key-1', 2);
+  if g.result <> 'accepted' or g.generation <> 1 or coalesce(array_length(g.ticket_ids, 1), 0) <> 2 then
+    raise exception 'U11 precondition: two free tickets are allocated (got %, %, %)', g.result, g.generation, g.ticket_ids;
+  end if;
+  insert into u3_state values ('grant', g.grant_id), ('t1', g.ticket_ids[1]), ('t2', g.ticket_ids[2]);
+end $$;
+
+do $$
+declare
+  ute uuid := (select auth.uid());
+  g uuid := (select id from u3_state where key = 'grant');
+  t1 uuid := (select id from u3_state where key = 't1');
+  t2 uuid := (select id from u3_state where key = 't2');
+  r1 jsonb := u3_probe.receipt('d-1', ute, 'ute-key-1', g, t1, 1, 'dop-1',
+    '00000000-0000-4000-8000-00000000a411', 'joint_verification_required');
+  r1_other jsonb := u3_probe.receipt('d-1', ute, 'ute-key-1', g, t1, 1, 'dop-1',
+    '00000000-0000-4000-8000-00000000a412', 'joint_verification_required');
+  o1 jsonb := u3_probe.shot('00000000-0000-4000-8000-00000000a411', 'scored');
+  r_missing jsonb := u3_probe.receipt('d-2', ute, 'ute-key-1', g, t2, 1, 'dop-2',
+    '00000000-0000-4000-8000-00000000a413', 'joint_verification_required');
+  r_abstain jsonb := u3_probe.receipt('d-3', ute, 'ute-key-1', g, t2, 1, 'dop-3',
+    '00000000-0000-4000-8000-00000000a414', 'not_chargeable');
+  r_terminal jsonb := u3_probe.receipt('d-4', ute, 'ute-key-1', g, t1, 1, 'dop-4',
+    '00000000-0000-4000-8000-00000000a415', 'not_chargeable');
+  r_terminal_charge jsonb := u3_probe.receipt('d-4b', ute, 'ute-key-1', g, t1, 1, 'dop-4b',
+    '00000000-0000-4000-8000-00000000a41b', 'joint_verification_required');
+  r_edge_hold jsonb := u3_probe.receipt('d-5', ute, 'ute-key-1', g, t2, 1, 'dop-5',
+    '00000000-0000-4000-8000-00000000a416', 'joint_verification_required');
+  r_pro jsonb := u3_probe.receipt('d-6', ute, 'ute-key-1', g, null, null, 'dop-6',
+    '00000000-0000-4000-8000-00000000a417', 'joint_verification_required');
+  r_pro_abstain jsonb := u3_probe.receipt('d-7', ute, 'ute-key-1', g, null, null, 'dop-7',
+    '00000000-0000-4000-8000-00000000a418', 'not_chargeable');
+  r_wait jsonb := u3_probe.receipt('d-8', ute, 'ute-key-1', g, t2, 1, 'dop-8',
+    '00000000-0000-4000-8000-00000000a419', 'joint_verification_required');
+  o_wait jsonb := u3_probe.shot('00000000-0000-4000-8000-00000000a419', 'scored');
+  v record;
+begin
+  -- a genuinely new chargeable receipt under the freeze: pending, nothing
+  -- written, the ticket reserved (never released, never consumed)
+  select * into v from u3_probe.settle(r1, o1, null, true);
+  if v.result <> 'accepted' or v.delivery <> 'pending' or v.status <> 'pending' or v.reason_code is not null
+     or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U11: a new chargeable receipt under the freeze is pending (got %, %, %, %, %, %)',
+      v.result, v.delivery, v.status, v.reason_code, v.financial_disposition, v.result_id;
+  end if;
+  select * into v from u3_probe.settle(r1, o1, null, true);
+  if v.delivery <> 'pending' then
+    raise exception 'U11: redelivery under the freeze stays pending (got %)', v.delivery;
+  end if;
+  if u3_probe.settlements(ute) <> '' or u3_probe.events(ute) <> 'allocated:2' or u3_probe.shots_on(ute, t1) <> 0
+     or public.offline_hold_count() <> 2 then
+    raise exception 'U11: the deferred receipt writes nothing and moves no ticket (got %, %, %)',
+      u3_probe.settlements(ute), u3_probe.events(ute), public.offline_hold_count();
+  end if;
+  -- the freeze lifts: the identical receipt settles under the same operation
+  select * into v from u3_probe.settle(r1, o1, null, false);
+  if v.result <> 'accepted' or v.delivery <> 'settled' or v.status <> 'result_recorded'
+     or v.financial_disposition <> 'consumed' or v.result_id <> '00000000-0000-4000-8000-00000000a411' then
+    raise exception 'U11: once the freeze lifts the same receipt settles (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  if u3_probe.shots_on(ute, t1) <> 1 or u3_probe.events(ute) <> 'allocated:2,consumed:1' or public.lifetime_scored_count() <> 1 then
+    raise exception 'U11: one rating, one consumed event (got %, %)', u3_probe.events(ute), public.lifetime_scored_count();
+  end if;
+  -- frozen again: the settled receipt replays its durable verdict — never pending
+  select * into v from u3_probe.settle(r1, o1, null, true);
+  if v.result <> 'accepted' or v.delivery <> 'replayed' or v.status <> 'result_recorded'
+     or v.financial_disposition <> 'consumed' or v.result_id <> '00000000-0000-4000-8000-00000000a411' then
+    raise exception 'U11: a settled receipt redelivered under the freeze replays consumed (got %, %, %, %)',
+      v.result, v.delivery, v.status, v.financial_disposition;
+  end if;
+  -- the same id with another body under the freeze is the conflict, not pending
+  select * into v from u3_probe.settle(r1_other, u3_probe.shot('00000000-0000-4000-8000-00000000a412', 'scored'), null, true);
+  if v.result <> 'offline.receipt_conflict' or v.delivery is not null then
+    raise exception 'U11: same id / other body under the freeze is offline.receipt_conflict (got %, %)', v.result, v.delivery;
+  end if;
+  -- contradictory evidence under the freeze is HELD durably, and replays its hold
+  select * into v from u3_probe.settle(r_missing, null, null, true);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_missing'
+     or v.financial_disposition <> 'reserved' then
+    raise exception 'U11: a chargeable receipt without its output is held under the freeze (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u3_probe.settle(r_missing, null, null, true);
+  if v.delivery <> 'replayed' or v.status <> 'reconciliation_required' or v.reason_code <> 'evidence_missing' then
+    raise exception 'U11: a durable hold redelivered under the freeze replays the hold (got %, %, %)',
+      v.delivery, v.status, v.reason_code;
+  end if;
+  -- an abstention has nothing to charge: recorded under the freeze, ticket outstanding
+  select * into v from u3_probe.settle(r_abstain, u3_probe.shot('00000000-0000-4000-8000-00000000a414', 'low_confidence'), null, true);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'reserved'
+     or v.result_id <> '00000000-0000-4000-8000-00000000a414' then
+    raise exception 'U11: a not_chargeable receipt is recorded under the freeze (got %, %, %, %)',
+      v.delivery, v.status, v.financial_disposition, v.result_id;
+  end if;
+  -- a terminal (consumed) ticket: durable conflicting_receipt for both
+  -- dispositions, freeze or not
+  select * into v from u3_probe.settle(r_terminal, null, null, true);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt'
+     or v.financial_disposition <> 'reserved' or v.result_id is not null then
+    raise exception 'U11: an abstention under a consumed ticket is held as conflicting_receipt (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  select * into v from u3_probe.settle(r_terminal_charge, u3_probe.shot('00000000-0000-4000-8000-00000000a41b', 'scored'), null, true);
+  if v.delivery <> 'held' or v.status <> 'reconciliation_required' or v.reason_code <> 'conflicting_receipt'
+     or v.financial_disposition <> 'reserved' then
+    raise exception 'U11: a charge under a consumed ticket is held as conflicting_receipt, never deferred (got %, %, %, %)',
+      v.delivery, v.status, v.reason_code, v.financial_disposition;
+  end if;
+  -- an edge hold reason is recorded under the freeze
+  select * into v from u3_probe.settle(r_edge_hold, u3_probe.shot('00000000-0000-4000-8000-00000000a416', 'scored'), 'grant_revoked', true);
+  if v.delivery <> 'held' or v.reason_code <> 'grant_revoked' or v.financial_disposition <> 'reserved' then
+    raise exception 'U11: an edge hold is recorded under the freeze (got %, %, %)', v.delivery, v.reason_code, v.financial_disposition;
+  end if;
+  -- Pro (no ticket): a chargeable lease result is deferred with nothing
+  -- financial, then recorded once the freeze lifts; an abstention is recorded
+  select * into v from u3_probe.settle(r_pro, u3_probe.shot('00000000-0000-4000-8000-00000000a417', 'scored'), null, true);
+  if v.delivery <> 'pending' or v.status <> 'pending' or v.financial_disposition <> 'not_applicable' or v.result_id is not null then
+    raise exception 'U11: a new chargeable lease receipt under the freeze is pending / not_applicable (got %, %, %)',
+      v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u3_probe.settle(r_pro, u3_probe.shot('00000000-0000-4000-8000-00000000a417', 'scored'), null, false);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable'
+     or v.result_id <> '00000000-0000-4000-8000-00000000a417' then
+    raise exception 'U11: the lease receipt is recorded once the freeze lifts (got %, %, %)',
+      v.delivery, v.status, v.financial_disposition;
+  end if;
+  select * into v from u3_probe.settle(r_pro, u3_probe.shot('00000000-0000-4000-8000-00000000a417', 'scored'), null, true);
+  if v.delivery <> 'replayed' or v.financial_disposition <> 'not_applicable' then
+    raise exception 'U11: the recorded lease receipt replays under the freeze (got %, %)', v.delivery, v.financial_disposition;
+  end if;
+  select * into v from u3_probe.settle(r_pro_abstain, null, null, true);
+  if v.delivery <> 'settled' or v.status <> 'result_recorded' or v.financial_disposition <> 'not_applicable' then
+    raise exception 'U11: a not_chargeable lease receipt is recorded under the freeze (got %, %, %)',
+      v.delivery, v.status, v.financial_disposition;
+  end if;
+  -- a null freeze is a malformed call: refused, nothing recorded
+  select * into v from u3_probe.settle(r_wait, o_wait, null, null);
+  if v.result <> 'offline.invalid_input' or v.delivery is not null then
+    raise exception 'U11: a null p_defer_new is refused (got %, %)', v.result, v.delivery;
+  end if;
+  -- the four-argument call still resolves (the default is no freeze)
+  select * into v from public.settle_offline_receipt(r_wait, u3_probe.digest(r_wait), o_wait, null);
+  if v.delivery <> 'settled' or v.financial_disposition <> 'consumed' then
+    raise exception 'U11: the four-argument call settles through the default (got %, %)', v.delivery, v.financial_disposition;
+  end if;
+  if u3_probe.settlements(ute) <> 'd-1=result_recorded/-/consumed,'
+       || 'd-2=reconciliation_required/evidence_missing/reserved,'
+       || 'd-3=result_recorded/-/reserved,'
+       || 'd-4=reconciliation_required/conflicting_receipt/reserved,'
+       || 'd-4b=reconciliation_required/conflicting_receipt/reserved,'
+       || 'd-5=reconciliation_required/grant_revoked/reserved,'
+       || 'd-6=result_recorded/-/not_applicable,'
+       || 'd-7=result_recorded/-/not_applicable,'
+       || 'd-8=result_recorded/-/consumed'
+     or u3_probe.events(ute) <> 'allocated:2,consumed:2'
+     or public.lifetime_scored_count() <> 2 then
+    raise exception 'U11: one durable row per decided receipt, the deferred and refused calls persisted nothing (got %, %, %)',
+      u3_probe.settlements(ute), u3_probe.events(ute), public.lifetime_scored_count();
+  end if;
+end $$;
+reset role;
+set local request.jwt.claim.sub = '';
+
+-- U12: anon and service_role cannot execute the new signature.
+set local role anon;
+do $$
+begin
+  begin
+    perform public.settle_offline_receipt('{}'::jsonb, repeat('a', 64), null, null, true);
+    raise exception 'U12: anon must not execute the settlement RPC';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+set local role service_role;
+do $$
+begin
+  begin
+    perform public.settle_offline_receipt('{}'::jsonb, repeat('a', 64), null, null, true);
+    raise exception 'U12: service_role must not execute the settlement RPC';
   exception when insufficient_privilege then null;
   end;
 end $$;
