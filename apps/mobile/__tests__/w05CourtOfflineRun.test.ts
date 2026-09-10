@@ -362,6 +362,23 @@ function settleAll(status = 'result_recorded') {
   };
 }
 
+/** The route's refusal of every presented receipt: a `rejected` entry naming
+ * the receipt and a code, never a `receipts` status. */
+function rejectAll(code = 'offline.invalid_input') {
+  return (call: FetchCall) => {
+    const receipts = (call.body.receipts ?? []) as Array<
+      Record<string, unknown>
+    >;
+    return response(200, {
+      receipts: [],
+      rejected: receipts.map(entry => ({
+        receiptId: (entry.receipt as Record<string, unknown>).receiptId,
+        code,
+      })),
+    });
+  };
+}
+
 type Store = ReturnType<typeof createSqliteTestDb>;
 
 async function cachePolicy(store: Store) {
@@ -797,6 +814,48 @@ describe('reconnect: the paid operation is settled by its receipt only', () => {
     expect((await replay()).kind).toBe('scored');
     expect(permitPosts(online.calls)).toHaveLength(0);
   });
+
+  it('when the receipts cannot be read the sweep recovers no journal (no LIVE permit) but still drains the outbox', async () => {
+    const { store, request } = await setup({});
+    network({ reserve: OFFLINE });
+    expect((await runCaptureAnalysis(request)).kind).toBe('scored');
+    store.native
+      .prepare(`INSERT INTO outbox (owner_key, kind, payload) VALUES (?, ?, ?)`)
+      .run(
+        OWNER,
+        'session.create',
+        JSON.stringify({
+          id: '66666666-6666-4666-8666-666666666666',
+          mode: 'quick',
+          shotType: 'forehand_drive',
+          focusCheckpoint: null,
+          startedAt: new Date(NOW_MS).toISOString(),
+        }),
+      );
+    const online = network({
+      reserve: reservedPermit(LIVE_PERMIT),
+      finalize: finalizedPermit,
+      receipts: settleAll(),
+      policy: 'online',
+    });
+    const unreadable: typeof store.db = {
+      ...store.db,
+      execute: (sql, params) =>
+        /FROM offline_receipt/.test(sql)
+          ? Promise.reject(new Error('disk I/O error'))
+          : store.db.execute(sql, params),
+    };
+    (getDb as jest.Mock).mockReturnValue(unreadable);
+    configureSyncRuntime(SESSION);
+    await triggerOutboxSync();
+
+    expect(permitPosts(online.calls)).toHaveLength(0);
+    expect(finalizePosts(online.calls)).toHaveLength(0);
+    expect(
+      online.calls.filter(call => call.url === `${API_ORIGIN}/v1/sessions`),
+    ).toHaveLength(1);
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+  });
 });
 
 describe('receipt drain', () => {
@@ -874,13 +933,58 @@ describe('receipt drain', () => {
     );
   });
 
+  it('a stored payload the receipt did not digest is presented as output: null, never as the rating', async () => {
+    const { store, request } = await setup({});
+    network({ reserve: OFFLINE });
+    const outcome = await runCaptureAnalysis(request);
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored' || !outcome.record.result) return;
+    const analysis = outcome.record.result;
+    store.native
+      .prepare(
+        `UPDATE local_shot SET payload = ?, overall_score = 99
+         WHERE owner_key = ? AND id = ?`,
+      )
+      .run(
+        JSON.stringify({ ...analysis, overallScore: 99 }),
+        OWNER,
+        analysis.id,
+      );
+
+    const replay = await runCaptureAnalysis(request).catch(
+      (error: unknown) => ({ kind: 'threw', error: String(error) }),
+    );
+    expect(replay).not.toMatchObject({ kind: 'scored' });
+    expect(await tickets(store)).toEqual({ spendable: 1, consumed: 1 });
+
+    const online = network({
+      reserve: OFFLINE,
+      receipts: settleAll('pending'),
+    });
+    const drained = await reconcileOfflineWallet(
+      store.db,
+      offlineClient(),
+      reading(),
+    );
+    expect(drained).toMatchObject({ submitted: 1, accepted: 0, held: 1 });
+    const [post] = receiptPosts(online.calls);
+    const entries = post!.body.receipts as Array<Record<string, unknown>>;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.output).toBeNull();
+    expect((entries[0]!.receipt as Record<string, unknown>).resultId).toBe(
+      analysis.id,
+    );
+    expect(await pendingOfflineReceipts(store.db)).toHaveLength(1);
+    expect(await hasShotSyncReceipt(store.db, analysis.id)).toBe(false);
+  });
+
   it('a refused verdict is surfaced honestly: the shot is never marked synced', async () => {
     const { store, request } = await setup({});
     network({ reserve: OFFLINE });
     const outcome = await runCaptureAnalysis(request);
     expect(outcome.kind).toBe('scored');
     if (outcome.kind !== 'scored' || !outcome.record.result) return;
-    network({ reserve: OFFLINE, receipts: settleAll('refused') });
+    network({ reserve: OFFLINE, receipts: rejectAll() });
     const drained = await reconcileOfflineWallet(
       store.db,
       offlineClient(),
