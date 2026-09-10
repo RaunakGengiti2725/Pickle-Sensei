@@ -58,6 +58,7 @@ import {
 import {
   consumeOfflineAllocation,
   guardOfflinePaidReservations,
+  OfflineGrantError,
   readOfflineAllocation,
   readOfflineReceiptForOperation,
 } from '../data/offlineCapabilities';
@@ -1641,6 +1642,7 @@ async function runCaptureAnalysisCore(
   let freeLimitReached = false;
   let technicalFailure: AnalysisTechnicalFailure | null = null;
   let phase: 'preflight' | 'inference' | 'commit' = 'preflight';
+  let offlineAuthority: OfflineRatingAuthority | null = null;
   const cleanup = async (outcome: RunJournalReleaseOutcome) => {
     if (!run) return;
     if (original)
@@ -1835,7 +1837,6 @@ async function runCaptureAnalysisCore(
     // keeps the recorded reservation failure; a scored result spends that
     // grant locally and travels in its receipt instead of a `shot.sync`
     // outbox row.
-    let offlineAuthority: OfflineRatingAuthority | null = null;
     if (withheld === null) {
       let reserved: ReservedAnalysisPermitWithAccess | null = null;
       try {
@@ -2131,6 +2132,11 @@ async function runCaptureAnalysisCore(
             assertCurrent();
             if (consumed.replayed)
               throw new RunJournalError('invalid_transition');
+            // The free limit is reached the moment the last free ticket is
+            // spent, exactly as the live path reports it for the last permit.
+            freeLimitReached =
+              consumed.grant.entitlementSource === 'identity_lifetime_free' &&
+              consumed.grant.remaining === 0;
             await saveOfflineAnalysis(
               db,
               record.result,
@@ -2267,6 +2273,19 @@ async function runCaptureAnalysisCore(
       if (cancelled || request.signal?.aborted) return cancelledOutcome();
       if (error instanceof TechniqueConfirmationHeldError)
         return { ...recoveryPendingOutcome(), reason: error.message };
+      // The held grant could not pay for this run after all (a concurrent
+      // run spent the last ticket, or the lease ended between the read and
+      // the commit): nothing was persisted or spent, so this is the same
+      // honest no-score outcome a sequential capture gets, not an error.
+      if (
+        phase === 'commit' &&
+        offlineAuthority !== null &&
+        error instanceof OfflineGrantError &&
+        (error.code === 'offline.allocation_exhausted' ||
+          error.code === 'offline.grant_expired' ||
+          error.code === 'offline.grant_not_held')
+      )
+        return { kind: 'unavailable', reason: error.message };
       throw error;
     }
     if (ownerChanged) return accountChangedOutcome();

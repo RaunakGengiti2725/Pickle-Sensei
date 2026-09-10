@@ -1352,6 +1352,48 @@ export async function pendingOfflineReceipts(
   return rows.map(parseReceiptRow);
 }
 
+export interface PendingOfflineReceiptScan {
+  /** Readable pending receipts, oldest first. */
+  readonly receipts: readonly OfflineConsumptionReceipt[];
+  /** `receipt_id` of pending rows whose stored receipt is unreadable. Such a
+   * row is never presented (its contents cannot be trusted) and never
+   * treated as absent; it stays on file for reconciliation. */
+  readonly unreadable: readonly string[];
+}
+
+/** `pendingOfflineReceipts` that isolates unreadable rows instead of failing
+ * the whole read, so one damaged row cannot keep every other paid receipt of
+ * the owner from being presented. */
+export async function scanPendingOfflineReceipts(
+  rawDb: LocalDb,
+): Promise<PendingOfflineReceiptScan> {
+  const context = captureDataOwnerContext();
+  const db = forDataOwner(rawDb, context);
+  const { rows } = await db.execute(
+    `SELECT * FROM offline_receipt
+     WHERE owner_key = ? AND settled_at IS NULL
+     ORDER BY queued_at ASC, grant_id ASC, lifecycle_sequence ASC`,
+    [context.ownerKey],
+  );
+  const receipts: OfflineConsumptionReceipt[] = [];
+  const unreadable: string[] = [];
+  for (const row of rows) {
+    try {
+      receipts.push(parseReceiptRow(row));
+    } catch (error) {
+      if (
+        !(error instanceof OfflineGrantError) ||
+        error.code !== 'offline.wallet_corrupt'
+      ) {
+        throw error;
+      }
+      const receiptId = row['receipt_id'];
+      unreadable.push(typeof receiptId === 'string' ? receiptId : '');
+    }
+  }
+  return { receipts, unreadable };
+}
+
 /** Of the given operation ids, those the owner already paid for with an
  * offline allocation — a receipt exists, pending or settled. Such an
  * operation is settled only by presenting that receipt; it is never
