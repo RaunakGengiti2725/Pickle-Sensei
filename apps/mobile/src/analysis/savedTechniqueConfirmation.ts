@@ -327,6 +327,14 @@ async function completed(
     return unavailable('corrupt');
   const receiptPaid =
     journal.permitId === null && (await receiptPaidRun(db, journal, result));
+  // A court-offline abstention spent nothing and holds no permit: its run
+  // keeps the unanswered reservation and the low-confidence record is final.
+  const offlineAbstention =
+    journal.permitId === null &&
+    journal.state === 'release_pending' &&
+    journal.releaseOutcome === 'low_confidence' &&
+    journal.resultId === null &&
+    result.resultKind === 'low_confidence';
   if (
     snapshot.status !== 'analyzed' ||
     journal.analysisId !== record.id ||
@@ -335,7 +343,7 @@ async function completed(
     selection.ownerKey !== journal.ownerKey ||
     selection.ownerGeneration !== journal.ownerGeneration ||
     selection.apiOrigin !== journal.apiOrigin ||
-    (journal.permitId === null && !receiptPaid) ||
+    (journal.permitId === null && !receiptPaid && !offlineAbstention) ||
     result.resultKind !== snapshot.resultKind ||
     result.source !== snapshot.resultSource ||
     result.id !== snapshot.resultId ||

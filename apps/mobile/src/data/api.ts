@@ -574,8 +574,21 @@ export type OfflineReceiptVerdictKind = 'accepted' | 'held' | 'refused';
 export interface OfflineReceiptVerdict {
   readonly receiptId: string;
   readonly verdict: OfflineReceiptVerdictKind;
-  /** The server's own status or refusal code, kept for diagnostics. */
+  /** The server's own status or refusal code, kept for diagnostics. Always
+   * code-shaped (`isOfflineReceiptCode`); prose the server sent instead of
+   * a code is replaced by `OFFLINE_RECEIPT_REFUSED_CODE`. */
   readonly code: string;
+}
+
+/** Neutral refusal code recorded when the server's `code` is not a code. */
+export const OFFLINE_RECEIPT_REFUSED_CODE = 'offline.receipt_refused';
+
+const OFFLINE_RECEIPT_CODE_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
+/** A protocol code: short and drawn from the identifier alphabet, so it can
+ * be stored, compared and shown without ever echoing server prose. */
+export function isOfflineReceiptCode(value: unknown): value is string {
+  return typeof value === 'string' && OFFLINE_RECEIPT_CODE_PATTERN.test(value);
 }
 
 export interface OfflineGrantClient {
@@ -731,7 +744,14 @@ function parseOfflineReceiptVerdicts(
     if (!isJsonObject(entry)) return null;
     const { receiptId, code } = entry;
     if (!isNonEmptyString(receiptId) || !isNonEmptyString(code)) return null;
-    if (!record({ receiptId, verdict: 'refused', code })) return null;
+    if (
+      !record({
+        receiptId,
+        verdict: 'refused',
+        code: isOfflineReceiptCode(code) ? code : OFFLINE_RECEIPT_REFUSED_CODE,
+      })
+    )
+      return null;
   }
   if (verdicts.size !== submittedIds.length) return null;
   const ordered: OfflineReceiptVerdict[] = [];

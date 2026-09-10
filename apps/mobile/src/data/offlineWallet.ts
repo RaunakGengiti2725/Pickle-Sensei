@@ -39,12 +39,14 @@ import {
   SIGNED_OUT_DATA_OWNER,
   type DataOwnerContext,
 } from './accountScope';
-import type {
-  OfflineGrantClient,
-  OfflineReceiptSubmission,
-  OfflineReceiptVerdict,
-  OfflineReceiptVerdictKind,
-  OfflineReceiptWireEntry,
+import {
+  isOfflineReceiptCode,
+  OFFLINE_RECEIPT_REFUSED_CODE,
+  type OfflineGrantClient,
+  type OfflineReceiptSubmission,
+  type OfflineReceiptVerdict,
+  type OfflineReceiptVerdictKind,
+  type OfflineReceiptWireEntry,
 } from './api';
 import type { LocalDb } from './db';
 import {
@@ -362,7 +364,9 @@ export async function readOfflineReceiptEvidence(
               verdict.receiptId === receipt.receiptId &&
               verdict.verdict === 'refused'
             ) {
-              code = verdict.code;
+              code = isOfflineReceiptCode(verdict.code)
+                ? verdict.code
+                : OFFLINE_RECEIPT_REFUSED_CODE;
             }
           }
         }
@@ -612,6 +616,13 @@ async function applyVerdicts(
       'The server answered for receipts this device did not present; nothing was settled.',
     );
   }
+  // Only protocol codes are journalled; server prose never reaches storage
+  // or the Result copy.
+  verdicts = verdicts.map(verdict =>
+    isOfflineReceiptCode(verdict.code)
+      ? verdict
+      : { ...verdict, code: OFFLINE_RECEIPT_REFUSED_CODE },
+  );
   return withTransaction(db, async transaction => {
     const { rows } = await transaction.execute(
       `SELECT state FROM offline_wallet_journal WHERE owner_key = ? AND journal_id = ?`,
