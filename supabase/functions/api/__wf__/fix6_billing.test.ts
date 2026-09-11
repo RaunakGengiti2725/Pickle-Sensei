@@ -116,7 +116,7 @@ Deno.test(
       );
       assertEquals(body.access.premium, false, "access.premium follows the same rule");
       assertEquals(body.access.entitlements, [], "no entitlement is reported as active");
-      assertEquals(body.access.paywallRequired, false, "two free ratings remain; not premium");
+      assertEquals(body.access.paywallRequired, false, "the free rating remains; not premium");
       assertEquals(
         body.billing.expiresAt,
         null,

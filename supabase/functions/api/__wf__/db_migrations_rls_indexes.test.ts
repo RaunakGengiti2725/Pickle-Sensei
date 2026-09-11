@@ -2513,3 +2513,141 @@ Deno.test(
     }
   },
 );
+
+// ─── The lifetime free-rating allowance is ONE, defined once ─────────────────
+
+/** Product decision 2026-09-10: one lifetime free rating per sign-in identity
+ * (two before). The allowance is public.free_rating_limit(), read by every
+ * decision point; the Edge Function mirrors it as FREE_RATING_LIMIT. */
+const FREE_RATING_LIMIT_ONE = "20260910170000_free_rating_limit_one.sql";
+const ALLOWANCE_READERS = [
+  "reserve_analysis_permit",
+  "apply_synced_shot",
+  "enforce_scored_shot_permit",
+  "issue_offline_grant",
+] as const;
+/** The literal the allowance used to be, in every shape the bodies spelled it. */
+const OLD_LITERAL_ALLOWANCE = /(>=\s*2\b|least\(v_scored,\s*2\)|\b2\s*-\s*least\()/;
+
+Deno.test(
+  "free-rating allowance: ONE lifetime rating, defined by public.free_rating_limit() and read by every decision point; the Edge constant matches; no later migration reintroduces the literal",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === FREE_RATING_LIMIT_ONE);
+    ok(migration, `${FREE_RATING_LIMIT_ONE} must exist in the migration chain`);
+    const raw = stripSqlComments(migration.raw);
+
+    const [constant] = functionBodies(raw, "free_rating_limit");
+    ok(constant, `${FREE_RATING_LIMIT_ONE} must define public.free_rating_limit()`);
+    const value = /as \$\$\s*select\s+(\d+)\s*\$\$;/.exec(constant)?.[1];
+    ok(value === "1", `free_rating_limit() must be the constant 1 (got ${value ?? "no constant"})`);
+    ok(
+      constant.includes("immutable") &&
+        !/security\s+definer/.test(constant) &&
+        constant.includes("set search_path = ''"),
+      "free_rating_limit() is an immutable SECURITY INVOKER constant with a pinned search_path",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke all on function public.free_rating_limit() from public, anon, service_role",
+      ) &&
+        migration.statements.includes(
+          "grant execute on function public.free_rating_limit() to authenticated",
+        ),
+      "free_rating_limit() is executable by authenticated only (the invoker RPCs and the shots gate read it as the caller)",
+    );
+
+    for (const name of ALLOWANCE_READERS) {
+      const [body] = functionBodies(raw, name);
+      ok(body, `${FREE_RATING_LIMIT_ONE} must recreate public.${name}`);
+      ok(
+        body.includes("public.free_rating_limit()"),
+        `public.${name} must read the allowance through free_rating_limit()`,
+      );
+      ok(
+        !OLD_LITERAL_ALLOWANCE.test(body),
+        `public.${name} must not embed the old literal allowance`,
+      );
+      ok(
+        body.includes("public.lifetime_scored_count()"),
+        `public.${name} still counts through the identity-aware lifetime_scored_count()`,
+      );
+    }
+    // The bodies are the previous definitions with only the constant swapped:
+    // the invariants the earlier pins establish must still read verbatim.
+    const [reserve] = functionBodies(raw, "reserve_analysis_permit");
+    ok(
+      reserve.includes("public.online_reservation_count()") &&
+        reserve.includes("public.offline_hold_count()") &&
+        reserve.includes("pg_advisory_xact_lock(public.access_lock_key(v_uid))") &&
+        !/security\s+definer/.test(reserve.slice(0, reserve.indexOf("$$"))),
+      "reserve_analysis_permit keeps its counters, its lock and stays invoker",
+    );
+    const [sync] = functionBodies(raw, "apply_synced_shot");
+    ok(
+      sync.includes(
+        "public.lifetime_scored_count() + public.offline_hold_count() >= public.free_rating_limit()",
+      ) &&
+        sync.includes("public.permit_backs_sync(") &&
+        sync.includes("set_config('pickle.sync_permit_id', v_permit_id::text, true)") &&
+        sync.includes("outcome = 'free_limit_exceeded'") &&
+        !/security\s+definer/.test(sync.slice(0, sync.indexOf("$$"))),
+      "apply_synced_shot's backstop counts lifetime scored + offline holds against the allowance, honours permit_backs_sync and vouches for its permit",
+    );
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(
+      gate.includes(
+        "public.lifetime_scored_count() + public.offline_hold_count() >= public.free_rating_limit()",
+      ) &&
+        gate.includes("+ (public.online_reservation_count() - 1)") &&
+        /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(gate) &&
+        migration.statements.includes(
+          "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+        ),
+      "the shots gate keeps both budgets (permit vouch, direct INSERT) against the allowance and stays non-executable by clients",
+    );
+    const [issue] = functionBodies(raw, "issue_offline_grant");
+    ok(
+      issue.includes("p_requested_tickets > 2") &&
+        issue.includes("v_capacity := greatest(v_remaining - v_reserved - v_held, 0)") &&
+        /security\s+definer/.test(issue.slice(0, issue.indexOf("$$"))) &&
+        migration.statements.includes(
+          "grant execute on function public.issue_offline_grant(text, integer) to authenticated",
+        ),
+      "issue_offline_grant keeps its 0..2 request-shape cap (apps in the field ask for two; the allowance clamps) and its definer grant",
+    );
+
+    // Forward sweep: no later migration may recreate a reader on a literal.
+    for (const later of after(chain, FREE_RATING_LIMIT_ONE)) {
+      const laterRaw = stripSqlComments(later.raw);
+      for (const name of ALLOWANCE_READERS) {
+        for (const body of functionBodies(laterRaw, name)) {
+          ok(
+            body.includes("public.free_rating_limit()") && !OLD_LITERAL_ALLOWANCE.test(body),
+            `${later.file}: public.${name} must keep reading free_rating_limit()`,
+          );
+        }
+      }
+      for (const body of functionBodies(laterRaw, "free_rating_limit")) {
+        ok(
+          /as \$\$\s*select\s+\d+\s*\$\$;/.test(body),
+          `${later.file}: free_rating_limit() must stay a plain integer constant`,
+        );
+      }
+    }
+
+    // The Edge Function derives used/remaining/limit from the same number.
+    const edge = await Deno.readTextFile(new URL("index.ts", FUNCTION_DIR));
+    const edgeLimit = /const FREE_RATING_LIMIT = (\d+);/.exec(edge)?.[1];
+    ok(
+      edgeLimit === value,
+      `index.ts FREE_RATING_LIMIT (${edgeLimit ?? "missing"}) must equal free_rating_limit() (${value})`,
+    );
+    ok(
+      edge.includes("limit: FREE_RATING_LIMIT,") &&
+        edge.includes("Math.min(FREE_RATING_LIMIT, state.scored_count ?? 0)") &&
+        !/limit: 2,/.test(edge),
+      "accessPayload must derive limit/used/remaining from FREE_RATING_LIMIT, never a literal",
+    );
+  },
+);

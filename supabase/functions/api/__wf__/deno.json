@@ -8,6 +8,8 @@
   "imports": {
     "postgres": "npm:postgres@3.4.5",
     "@std/assert": "jsr:@std/assert@1.0.19",
+    "canonicalize": "npm:canonicalize@4.0.0",
+    "jose": "npm:jose@6.2.10",
     "../../../../packages/shared-types/src/analysisOutcome.js": "../../../../packages/shared-types/src/analysisOutcome.ts",
     "../../../../packages/shared-types/src/chargeability.js": "../../../../packages/shared-types/src/chargeability.ts",
     "../../../../packages/shared-types/src/domain.js": "../../../../packages/shared-types/src/domain.ts",

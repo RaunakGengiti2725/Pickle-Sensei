@@ -24,6 +24,7 @@ import {
   bootstrap,
   edgeRequest,
   fakeGoogleIdToken,
+  FREE_RATING_LIMIT,
   histogram,
   type Invariant,
   loadXcHarness,
@@ -873,7 +874,7 @@ Deno.test(
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test(
-  "xc S4: concurrent permit reservation — same key idempotent, different keys never exceed two free reservations, premium unlimited",
+  "xc S4: concurrent permit reservation — same key idempotent, different keys never exceed the free allowance, premium unlimited",
   async () => {
     const report = await scenario(
       "s4_double_permit_reservation",
@@ -950,19 +951,19 @@ Deno.test(
           const fr = (accessRow.body.freeRatings ?? {}) as Record<string, number>;
           inv(
             invariants,
-            `round ${r}: different keys ×${XC_BURST} → exactly 2×200 + ${
-              XC_BURST - 2
+            `round ${r}: different keys ×${XC_BURST} → exactly ${FREE_RATING_LIMIT}×200 + ${
+              XC_BURST - FREE_RATING_LIMIT
             }×402 access.paywall_required`,
-            okB.length === 2 && paywall.length === XC_BURST - 2,
+            okB.length === FREE_RATING_LIMIT && paywall.length === XC_BURST - FREE_RATING_LIMIT,
             `${okB.length} ok, ${paywall.length} paywall, other=${
               diff.length - okB.length - paywall.length
             }`,
           );
           inv(
             invariants,
-            `round ${r}: exactly two reserved permit rows; access reports reserved=2 availableToReserve=0 canStartRating=false`,
-            permitsB.length === 2 &&
-              fr.reserved === 2 &&
+            `round ${r}: exactly ${FREE_RATING_LIMIT} reserved permit row(s); access reports reserved=${FREE_RATING_LIMIT} availableToReserve=0 canStartRating=false`,
+            permitsB.length === FREE_RATING_LIMIT &&
+              fr.reserved === FREE_RATING_LIMIT &&
               fr.availableToReserve === 0 &&
               accessRow.body.canStartRating === false,
             `rows=${permitsB.length} access=${JSON.stringify(
@@ -1240,19 +1241,19 @@ Deno.test(
 );
 
 Deno.test(
-  "xc S5c: free-limit backstop under concurrency — three reserved permits, three concurrent scored shots → exactly two ratings spent",
+  "xc S5c: free-limit backstop under concurrency — the allowance plus one reserved permits, that many concurrent scored shots → exactly the allowance spent",
   async () => {
     const report = await scenario(
       "s5c_free_limit_backstop_concurrent",
       "xc S5c",
-      { burst: 3, rounds: XC_ROUNDS },
+      { burst: FREE_RATING_LIMIT + 1, rounds: XC_ROUNDS },
       async (h, prng, rows, invariants, inputs, _observations) => {
         const users: Array<Record<string, unknown>> = [];
         for (let r = 0; r < XC_ROUNDS; r++) {
           const sub = prng.uuid();
           const boot = await bootstrap(h, sub, ip(r, 0));
           const permits: string[] = [];
-          for (let i = 0; i < 2; i++) {
+          for (let i = 0; i < FREE_RATING_LIMIT; i++) {
             const res = await timed(rows, r, i, "permit.reserve", () =>
               h.handler(
                 edgeRequest("POST", "/v1/analysis-permits", {
@@ -1264,7 +1265,7 @@ Deno.test(
             );
             permits.push(String((res.body.permit as Record<string, unknown>).id));
           }
-          // an over-issued third permit (as any pre-RPC build could have produced)
+          // an over-issued permit past the allowance (as any pre-RPC build could have produced)
           const forged = prng.uuid();
           h.fake.tables.analysis_permits.push({
             id: forged,
@@ -1322,11 +1323,11 @@ Deno.test(
           });
           inv(
             invariants,
-            `round ${r}: exactly 2 accepted, 1 access.paywall_required, 2 scored rows, forged permit released free_limit_exceeded`,
-            acceptedTotal === 2 &&
+            `round ${r}: exactly ${FREE_RATING_LIMIT} accepted, 1 access.paywall_required, ${FREE_RATING_LIMIT} scored row(s), forged permit released free_limit_exceeded`,
+            acceptedTotal === FREE_RATING_LIMIT &&
               codes.length === 1 &&
               codes[0] === "access.paywall_required" &&
-              scored === 2 &&
+              scored === FREE_RATING_LIMIT &&
               released === 1,
             `accepted=${acceptedTotal} codes=${JSON.stringify(
               histogram(codes),
@@ -1334,8 +1335,10 @@ Deno.test(
           );
           inv(
             invariants,
-            `round ${r}: access after the burst: used=2 remaining=0 canStartRating=false`,
-            fr.used === 2 && fr.remaining === 0 && access.body.canStartRating === false,
+            `round ${r}: access after the burst: used=${FREE_RATING_LIMIT} remaining=0 canStartRating=false`,
+            fr.used === FREE_RATING_LIMIT &&
+              fr.remaining === 0 &&
+              access.body.canStartRating === false,
             JSON.stringify(fr),
           );
         }
@@ -1365,18 +1368,21 @@ Deno.test(
           const sub = prng.uuid();
           const boot = await bootstrap(h, sub, ip(r, 0));
           const hoursAgo = (hrs: number) => new Date(Date.now() - hrs * 3600 * 1000).toISOString();
-          const late = prng.uuid();
+          // One 25h-old reserved permit per free rating of the allowance — each
+          // backs a scored shot captured against it a day ago.
+          const lates = Array.from({ length: FREE_RATING_LIMIT }, () => prng.uuid());
+          const late = lates[0]!;
           const swept = prng.uuid();
           const consumed = prng.uuid();
           h.fake.tables.analysis_permits.push(
-            {
-              id: late,
+            ...lates.map((id, i) => ({
+              id,
               user_id: sub,
-              idempotency_key: `late-${r}`,
+              idempotency_key: `late-${r}-${i}`,
               status: "reserved",
               outcome: null,
               created_at: hoursAgo(25),
-            },
+            })),
             {
               id: swept,
               user_id: sub,
@@ -1394,13 +1400,18 @@ Deno.test(
               created_at: hoursAgo(1),
             },
           );
-          const sync = (shotId: string, permitId: string, lane: number) =>
+          const sync = (
+            shotId: string,
+            permitId: string,
+            lane: number,
+            overrides: Record<string, unknown> = {},
+          ) =>
             timed(rows, r, lane, "shots.sync.scored", () =>
               h.handler(
                 edgeRequest("POST", "/v1/shots:sync", {
                   token: boot.accessToken,
                   ip: ip(r, 2),
-                  body: { shots: [syncShotPayload(shotId, permitId)] },
+                  body: { shots: [syncShotPayload(shotId, permitId, overrides)] },
                 }),
               ),
             );
@@ -1408,23 +1419,35 @@ Deno.test(
             ((x.body.rejected ?? []) as Array<{ code: string }>).map((y) => y.code).join(",") ||
             (((x.body.acceptedIds ?? []) as string[]).length === 1 ? "accepted" : "none");
 
-          // Stale holds hand their slot back: the user sees 2 remaining …
+          // Stale holds hand their slot back: the user sees the whole allowance …
           const before = await timed(rows, r, 0, "me.access", () =>
             h.handler(
               edgeRequest("GET", "/v1/me/access", { token: boot.accessToken, ip: ip(r, 3) }),
             ),
           );
           const frBefore = (before.body.freeRatings ?? {}) as Record<string, number>;
-          // … but the ratings captured against them are not lost.
+          // … but the ratings captured against them are not lost: every late
+          // permit backs its scored shot, at 25h as at 25s.
           const lateShot = prng.uuid();
+          const lateResults = [codeOf(await sync(lateShot, late, 1))];
+          for (const [i, id] of lates.slice(1).entries()) {
+            lateResults.push(codeOf(await sync(prng.uuid(), id, 8 + i)));
+          }
+          const lateResult = lateResults.every((x) => x === "accepted")
+            ? "accepted"
+            : lateResults.join(",");
+          // The swept (released/expired) permit backs its late shot too — an
+          // abstention here, which is free at any point of the allowance, so
+          // the age rule is proven independently of the budget.
           const sweptShot = prng.uuid();
-          const lateResult = codeOf(await sync(lateShot, late, 1));
-          const sweptResult = codeOf(await sync(sweptShot, swept, 2));
+          const sweptResult = codeOf(
+            await sync(sweptShot, swept, 2, { resultKind: "low_confidence", overallScore: null }),
+          );
           // One late permit backs one shot; a consumed permit backs none.
           const secondOnLate = codeOf(await sync(prng.uuid(), late, 3));
           const onConsumed = codeOf(await sync(prng.uuid(), consumed, 4));
-          // Both lifetime ratings are now spent, so a further (fresh-looking,
-          // over-issued) permit hits the backstop, not a third free rating.
+          // The lifetime allowance is now spent, so a further (fresh-looking,
+          // over-issued) permit hits the backstop, not a free rating past it.
           const extra = prng.uuid();
           h.fake.tables.analysis_permits.push({
             id: extra,
@@ -1466,32 +1489,32 @@ Deno.test(
           });
           inv(
             invariants,
-            `round ${r}: stale holds do not count — before any sync used=0 remaining=2`,
-            frBefore.used === 0 && frBefore.remaining === 2,
+            `round ${r}: stale holds do not count — before any sync used=0 remaining=${FREE_RATING_LIMIT}`,
+            frBefore.used === 0 && frBefore.remaining === FREE_RATING_LIMIT,
             JSON.stringify(frBefore),
           );
           inv(
             invariants,
-            `round ${r}: 25h reserved permit and swept released/expired permit both back their shot`,
-            lateResult === "accepted" && sweptResult === "accepted" && scored === 2,
+            `round ${r}: 25h reserved permit(s) and the swept released/expired permit all back their shot`,
+            lateResult === "accepted" && sweptResult === "accepted" && scored === FREE_RATING_LIMIT,
             `late=${lateResult} swept=${sweptResult} scored=${scored}`,
           );
           inv(
             invariants,
-            `round ${r}: accepted late permits are finalized/scored (one shot each); consumed permit refused`,
-            stateOf(late) === "finalized/scored" &&
-              stateOf(swept) === "finalized/scored" &&
+            `round ${r}: accepted late permits are finalized/scored (one shot each), the swept abstention released/low_confidence; consumed permit refused`,
+            lates.every((id) => stateOf(id) === "finalized/scored") &&
+              stateOf(swept) === "released/low_confidence" &&
               secondOnLate === "access.permit_not_reserved" &&
               onConsumed === "access.permit_not_reserved",
             `late=${stateOf(late)} swept=${stateOf(swept)} second=${secondOnLate} consumed=${onConsumed}`,
           );
           inv(
             invariants,
-            `round ${r}: the lifetime backstop still caps at two — extra permit → access.paywall_required, released free_limit_exceeded; replay accepted`,
+            `round ${r}: the lifetime backstop still caps at ${FREE_RATING_LIMIT} — extra permit → access.paywall_required, released free_limit_exceeded; replay accepted`,
             overLimit === "access.paywall_required" &&
               stateOf(extra) === "released/free_limit_exceeded" &&
               replay === "accepted" &&
-              frAfter.used === 2 &&
+              frAfter.used === FREE_RATING_LIMIT &&
               frAfter.remaining === 0,
             `over=${overLimit} extra=${stateOf(extra)} replay=${replay} after=${JSON.stringify(frAfter)}`,
           );

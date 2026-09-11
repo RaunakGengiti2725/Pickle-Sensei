@@ -31,7 +31,7 @@
  *          refused, no second shot.
  *   ADV-13 client-minted `reserved` rows via the column grant: they inflate
  *          access_state().reserved_count and are consumable by the RPC, but
- *          the lifetime backstop still stops the third free scored shot and
+ *          the lifetime backstop still stops the scored shot past the allowance and
  *          reserve_analysis_permit() refuses to mint more.
  *   ADV-14 shots.analysis_permit_id: a direct client INSERT naming a live
  *          permit → 42501 + access.permit_not_reserved (scored and
@@ -347,7 +347,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ADV-13: client-minted reserved rows via the column grant — five direct INSERTs inflate access_state().reserved_count and are RPC-consumable, but only two free scored shots land (third → access.paywall_required) and reserve_analysis_permit() refuses to mint",
+  name: "ADV-13: client-minted reserved rows via the column grant — five direct INSERTs inflate access_state().reserved_count and are RPC-consumable, but only the one free scored shot lands (the next → access.paywall_required) and reserve_analysis_permit() refuses to mint",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 4 });
@@ -378,22 +378,23 @@ Deno.test({
       assertEquals(Number(access[0].reserved_count), 5, "minted rows count as live reservations");
       assertEquals((await reserveRow(sql, U1, "adv13-legit")).result, "access.paywall_required");
 
+      // public.free_rating_limit() = 1: the first minted permit settles the one
+      // free rating, the next hits the backstop.
       assertEquals(await syncAs(sql, U1, shotPayload(shotId(), minted[0])), "accepted");
-      assertEquals(await syncAs(sql, U1, shotPayload(shotId(), minted[1])), "accepted");
       assertEquals(
-        await syncAs(sql, U1, shotPayload(shotId(), minted[2])),
+        await syncAs(sql, U1, shotPayload(shotId(), minted[1])),
         "access.paywall_required",
       );
       assertEquals(await permitState(sql, minted[0]), "finalized/scored");
-      assertEquals(await permitState(sql, minted[1]), "finalized/scored");
-      assertEquals(await permitState(sql, minted[2]), "released/free_limit_exceeded");
-      assertEquals(await shotCount(sql, U1), 2);
+      assertEquals(await permitState(sql, minted[1]), "released/free_limit_exceeded");
+      assertEquals(await permitState(sql, minted[2]), "reserved/NULL");
+      assertEquals(await shotCount(sql, U1), 1);
       // A minted live permit does not unlock a direct client scored INSERT past the cap either.
       assertEquals(
         await attempt(sql, U1, directShotInsert(shotId(), U1, "scored", null)),
         "42501:access.paywall_required",
       );
-      assertEquals(await shotCount(sql, U1), 2);
+      assertEquals(await shotCount(sql, U1), 1);
     } finally {
       await sql.end();
     }
@@ -408,7 +409,20 @@ Deno.test({
     try {
       await resetUsers(sql);
       const p1 = await reserve(sql, U1, "adv14-1");
-      const p2 = await reserve(sql, U1, "adv14-2");
+      // The allowance is one, so a second RPC reservation is refused; the
+      // column grant still lets the client mint a reserved row (ADV-13).
+      const p2 = String(
+        (
+          await inTx(
+            sql,
+            U1,
+            async (tx) =>
+              await tx.unsafe(
+                `insert into public.analysis_permits (user_id, idempotency_key) values ('${U1}', 'adv14-2') returning id::text as id`,
+              ),
+          )
+        )[0].id,
+      );
 
       assertEquals(
         await attempt(sql, U1, directShotInsert(shotId(), U1, "scored", p1)),
@@ -446,7 +460,17 @@ Deno.test({
       assertEquals(row[0].shot_type, "dink");
       assertEquals(Number(row[0].s), 7);
       assertEquals(await permitState(sql, p2), "reserved/NULL");
-      assertEquals(await syncAs(sql, U1, shotPayload(shotId(), p2)), "accepted");
+      // Usable — for an abstention (free past the allowance); a scored rating
+      // under it would hit the backstop (ADV-13).
+      assertEquals(
+        await syncAs(
+          sql,
+          U1,
+          shotPayload(shotId(), p2, { resultKind: "low_confidence", overallScore: null }),
+        ),
+        "accepted",
+      );
+      assertEquals(await permitState(sql, p2), "released/low_confidence");
       assertEquals(await shotCount(sql, U1), 2);
 
       // Cross-user / garbage permit values are contract verdicts, never SQL errors.
@@ -584,9 +608,9 @@ Deno.test({
         "access.permit_not_reserved",
       );
 
-      const p1 = await reserve(sql, U1, "adv16-1");
+      // The allowance is one: the abstention goes first (its permit is
+      // released, nothing spent), then the one scored rating.
       const p2 = await reserve(sql, U1, "adv16-2");
-      assertEquals(await syncAs(sql, U1, shotPayload(shotId(), p1)), "accepted");
       assertEquals(
         await syncAs(
           sql,
@@ -596,6 +620,8 @@ Deno.test({
         "accepted",
       );
       assertEquals(await permitState(sql, p2), "released/low_confidence");
+      const p1 = await reserve(sql, U1, "adv16-1");
+      assertEquals(await syncAs(sql, U1, shotPayload(shotId(), p1)), "accepted");
       assertEquals(await shotCount(sql, U1), 2);
       assertEquals(
         await attempt(sql, null, `delete from auth.users where id = '${U1}'`),

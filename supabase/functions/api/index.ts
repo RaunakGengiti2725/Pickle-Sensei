@@ -1498,7 +1498,7 @@ interface VerifiedBilling {
  * — counted per SIGN-IN IDENTITY, not per account row (migration
  * 20260902150000: public.free_rating_ledger survives account deletion, so
  * deleting and re-creating the account with the same Apple ID / Google
- * account does not mint two new free ratings); `reserved` from
+ * account does not mint a fresh free-rating allowance); `reserved` from
  * still-reserved, unexpired permits — never invented client state.
  * reserved is clamped to `remaining` so the client invariants
  * (reserved <= remaining, availableToReserve = remaining - reserved) hold
@@ -1508,6 +1508,19 @@ interface VerifiedBilling {
  * free-rating ledger: canStartRating true, paywallRequired false, and
  * entitlements always includes 'premium' (parseAccess requires
  * premium === entitlements.includes('premium')). */
+/** The lifetime free-rating allowance per sign-in identity — ONE since
+ * 2026-09-10 (two before). MUST equal the database's
+ * public.free_rating_limit() (migration 20260910170000), the constant every
+ * database decision point reads; the static pin in
+ * __wf__/db_migrations_rls_indexes.test.ts ties the two together. The
+ * database enforces, this only derives used/remaining for the client. */
+const FREE_RATING_LIMIT = 1;
+
+/** The refusal every free-rating decision point renders once the allowance
+ * is spent or reserved. */
+const FREE_RATINGS_SPENT_MESSAGE =
+  "Your lifetime free rating has been used or reserved. Membership is required for another rating.";
+
 async function accessPayload(
   user: AuthedUser,
   verifiedBilling?: VerifiedBilling,
@@ -1533,8 +1546,8 @@ async function accessPayload(
     premium: Boolean(state.premium),
     activeEntitlements: [],
   };
-  const used = Math.min(2, state.scored_count ?? 0);
-  const remaining = 2 - used;
+  const used = Math.min(FREE_RATING_LIMIT, state.scored_count ?? 0);
+  const remaining = FREE_RATING_LIMIT - used;
   const reserved = Math.min(state.reserved_count ?? 0, remaining);
   const availableToReserve = remaining - reserved;
   const premium = billing.premium;
@@ -1546,7 +1559,7 @@ async function accessPayload(
     premium,
     entitlements,
     freeRatings: {
-      limit: 2,
+      limit: FREE_RATING_LIMIT,
       used,
       reserved,
       remaining,
@@ -1623,7 +1636,7 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
   // 20260901000000). This replaces a read-then-insert whose two statements
   // nothing serialized: concurrent reserves carrying DIFFERENT idempotency
   // keys could each observe canStartRating and both insert, taking an account
-  // past its two lifetime free ratings. The old 23505 branch only ever
+  // past its lifetime free-rating allowance. The old 23505 branch only ever
   // covered the same-key retry, which the RPC now handles internally.
   const reserved = await authed.db.rpc("reserve_analysis_permit", {
     p_idempotency_key: idempotencyKey,
@@ -1646,11 +1659,7 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     );
   }
   if (row.result === "access.paywall_required") {
-    return codedError(
-      402,
-      "access.paywall_required",
-      "Both lifetime free ratings have been used or reserved. Membership is required for another rating.",
-    );
+    return codedError(402, "access.paywall_required", FREE_RATINGS_SPENT_MESSAGE);
   }
   if (row.result !== "accepted" || !row.permit_id) {
     return serviceUnavailable(
@@ -2285,10 +2294,10 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
   // old RPC's verdict instead of collapsing it into shot.write_failed.
   "access.permit_expired": "Analysis permit expired.",
   // Free-limit backstop in apply_synced_shot: the permit was valid but the
-  // account is already at its two lifetime scored ratings, so the scored shot
-  // is refused rather than recorded as a third free rating.
+  // identity is already at its lifetime free-rating allowance, so the scored
+  // shot is refused rather than recorded as a rating past it.
   "access.paywall_required":
-    "Both lifetime free ratings have been used. Membership is required for another rating.",
+    "Your lifetime free rating has been used. Membership is required for another rating.",
   "shot.session_not_found": "Session not found or not yours.",
   "shot.id_conflict": "Shot id is already bound to a different user.",
   // Receipt binding (migration 20260908110000): the same shot id was already
@@ -4357,7 +4366,7 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
 // → anonymized, kept) and the free-rating identity ledger
 // (free_rating_ledger: SHA-256 of the provider sign-in identifier → lifetime
 // scored count, no FK by design, migration 20260902150000), which is what
-// stops delete-and-recreate from re-earning the two free ratings. The new
+// stops delete-and-recreate from re-earning the free rating. The new
 // private operation/receipt has a DRAFT 24-hour capability / 7-day retention
 // window. That policy is not legally approved and this is not deployment approval.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4921,7 +4930,7 @@ const OFFLINE_GRANT_REFUSALS = new Map<string, { status: number; message: string
     {
       status: 402,
       message:
-        "Both lifetime free ratings have been used or reserved. Membership is required for offline ratings.",
+        "Your lifetime free rating has been used or reserved. Membership is required for offline ratings.",
     },
   ],
   [

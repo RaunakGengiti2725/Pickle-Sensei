@@ -235,9 +235,10 @@ Deno.test(
   () => {
     // Mirrors migration 20260902150000_free_rating_identity_ledger.sql:
     // public.free_rating_ledger keeps SHA-256(provider:sub) → scored count
-    // with no FK, so the two free ratings cannot be re-earned by deleting
-    // and re-creating the account. Retaining anything past deletion must be
-    // stated, with its basis, in §7 (retention) and its effect in §8.
+    // with no FK, so the free rating (one since 20260910170000) cannot be
+    // re-earned by deleting and re-creating the account. Retaining anything
+    // past deletion must be stated, with its basis, in §7 (retention) and its
+    // effect in §8.
     const privacy = flat(PRIVACY_POLICY_TEXT);
     for (const needle of [
       "one-way hash (SHA-256) of your sign-in provider's account identifier",
@@ -245,9 +246,9 @@ Deno.test(
       "contains no email address, name, or Pickle Sensei account identifier",
       "legitimate-interest basis of preventing free-tier abuse",
       "survives account deletion for that reason",
-      "Free ratings you have already used are not restored by deleting the account",
+      "A free rating you have already used is not restored by deleting the account",
       "sign in again with the same Apple or Google account",
-      "two free ratings are not offered a second time",
+      "free rating is not offered a second time",
     ]) {
       assertStringIncludes(privacy, needle);
     }

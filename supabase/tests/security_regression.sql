@@ -66,10 +66,40 @@
 --      an invalid receipt persists nothing, and the receipt table is owner-
 --      readable through the API gate only, client-unwritable, append-only
 --      for every role and removed only by the shot/account cascade
+--   X. (20260910170000_free_rating_limit_one) the SHIPPING allowance is ONE
+--      lifetime free rating: the constant, reserve, the sync backstop, the
+--      shots gate, offline ticket issuance and the premium bypass are pinned
+--      at one — sections A–W above run the same mechanism at the historical
+--      two under a test-only override (see just below)
 -- ============================================================================
 
 \set ON_ERROR_STOP on
 \set QUIET on
+
+-- ----------------------------------------------------------------------------
+-- ALLOWANCE UNDER TEST. Migration 20260910170000 made the lifetime free-rating
+-- allowance ONE and gave it a single definition, public.free_rating_limit().
+-- Sections A–W were written against the original allowance of TWO and
+-- exercise the MECHANISM — advisory locks, identity-aware counters, the sync
+-- backstop, the shots gate, ticket conservation, the identity ledger — through
+-- scenarios such as "the third scored shot is refused" and "two tickets are
+-- held"; the value itself is arithmetic. They run under a TEST-ONLY override
+-- of the constant back to two, applied here by the database owner (no client
+-- role can do this: CREATE on public is revoked from clients, K13; the
+-- function keeps its grants). Section X restores the migration's definition
+-- and pins every decision point at the shipping value of ONE. Nothing else in
+-- the schema is touched.
+-- ----------------------------------------------------------------------------
+create or replace function public.free_rating_limit()
+returns integer
+language sql
+immutable
+parallel safe
+security invoker
+set search_path = ''
+as $$
+  select 2
+$$;
 
 begin;
 
@@ -7087,7 +7117,7 @@ begin
   where n.nspname = 'public' and has_function_privilege('authenticated', p.oid, 'EXECUTE');
   if functions <> array[
     'access_lock_key','access_state','apply_synced_shot','complete_onboarding',
-    'consume_offline_ticket','identity_scored_count','is_api_session_active',
+    'consume_offline_ticket','free_rating_limit','identity_scored_count','is_api_session_active',
     'issue_offline_grant','lifetime_scored_count','offline_hold_count',
     'online_reservation_count','permit_backs_sync','permit_tombstoned','register_offline_device',
     'release_offline_ticket','reserve_analysis_permit','settle_offline_receipt'
@@ -12285,6 +12315,368 @@ begin
 end $$;
 reset role;
 rollback;
+
+-- ============================================================================
+-- X. (20260910170000_free_rating_limit_one) the SHIPPING allowance is ONE
+-- lifetime free rating per sign-in identity. Sections A–W ran the mechanism
+-- at the historical two (see the override at the top of this file); the
+-- migration's definition is restored here — committed, so the concurrency
+-- matrix below, account_deletion_operations.sql and analysis_release_policy.sql
+-- all run at the shipping value — and every decision point is pinned at one.
+-- Users: Xena (free, Google), Xavier (Pro, expires in 3 days), Xiomara (free,
+-- Google, offline installation).
+-- X1  the constant: free_rating_limit() = 1, immutable, invoker, search_path
+--     pinned, EXECUTE for authenticated only; every decision point's body
+--     reads it and none embeds the old literal
+-- X2  reserve: a fresh identity reserves ONE permit; a second distinct key is
+--     refused (access.paywall_required) while it is live; access_state()
+--     reports scored 0 / reserved 1; the held key replays idempotently
+-- X3  sync: the one scored settlement is accepted and finalizes its permit
+--     (scored 1 / reserved 0; reserve refused from now on); an over-issued
+--     reservation's scored sync hits the backstop — access.paywall_required,
+--     permit released/free_limit_exceeded, still exactly one scored row; an
+--     abstention under another reservation is still free (accepted, permit
+--     released/low_confidence, lifetime scored unchanged)
+-- X4  gate: a direct client INSERT of a scored row is refused (42501) past the
+--     one rating even beside a live reserved permit; nothing is written
+-- X5  offline: a fresh free identity asking for two tickets is issued exactly
+--     ONE (hold count 1; the online reserve is refused — conservation); a
+--     refresh re-issues that same ticket and allocates nothing; the spent
+--     identity is refused outright (access.paywall_required, no grant row)
+-- X6  premium bypasses the allowance exactly as before: two distinct reserves
+--     and two scored settlements are accepted
+-- ============================================================================
+create or replace function public.free_rating_limit()
+returns integer
+language sql
+immutable
+parallel safe
+security invoker
+set search_path = ''
+as $$
+  select 1
+$$;
+
+begin;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values
+  ('00000000-0000-4000-8000-000000000091', 'xena@example.com',
+   '{"full_name":"Xena"}', '{"provider":"google"}'),
+  ('00000000-0000-4000-8000-000000000092', 'xavier@example.com',
+   '{"full_name":"Xavier"}', '{"provider":"apple"}'),
+  ('00000000-0000-4000-8000-000000000093', 'xiomara@example.com',
+   '{"full_name":"Xiomara"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-xena', '00000000-0000-4000-8000-000000000091',
+   '{"sub":"google-sub-xena","email":"xena@example.com"}'),
+  ('apple', 'apple-sub-xavier', '00000000-0000-4000-8000-000000000092',
+   '{"sub":"apple-sub-xavier","email":"xavier@example.com"}'),
+  ('google', 'google-sub-xiomara', '00000000-0000-4000-8000-000000000093',
+   '{"sub":"google-sub-xiomara","email":"xiomara@example.com"}');
+insert into auth.sessions (id, user_id) values
+  ('00000000-0000-4000-8000-000000009101', '00000000-0000-4000-8000-000000000091'),
+  ('00000000-0000-4000-8000-000000009201', '00000000-0000-4000-8000-000000000092'),
+  ('00000000-0000-4000-8000-000000009301', '00000000-0000-4000-8000-000000000093');
+insert into public.billing_entitlements (user_id, premium, expires_at)
+values ('00000000-0000-4000-8000-000000000092', true, now() + interval '3 days');
+
+create temporary table x_state (key text primary key, id uuid);
+grant select, insert, update on x_state to authenticated;
+
+-- The sync payload every X case settles: a scored drive, or an abstention
+-- (no score — shots_low_confidence_unscored), under the permit it names.
+create function pg_temp.x_shot(p_id uuid, p_permit uuid, p_kind text)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'id', p_id,
+    'analysisPermitId', p_permit,
+    'resultKind', p_kind,
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-09-10T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', case when p_kind = 'scored' then 7.1 end,
+    'confidence', case when p_kind = 'scored' then 0.9 else 0.2 end,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1'))
+$$;
+grant execute on function pg_temp.x_shot(uuid, uuid, text) to authenticated;
+
+do $$
+begin
+  perform set_config('request.headers', jsonb_build_object(
+    'x-pickle-api-key', public.get_api_request_key()
+  )::text, true);
+end $$;
+
+-- X1: the constant and the bodies that read it.
+do $$
+declare f record; body text; fn text;
+begin
+  if public.free_rating_limit() <> 1 then
+    raise exception 'X1: the shipping allowance is one (got %)', public.free_rating_limit();
+  end if;
+  select p.oid, p.provolatile, p.prosecdef, p.proconfig into f
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public' and p.proname = 'free_rating_limit'
+    and pg_get_function_identity_arguments(p.oid) = '';
+  if f.oid is null or f.provolatile <> 'i' or f.prosecdef then
+    raise exception 'X1: free_rating_limit() must be an immutable SECURITY INVOKER constant';
+  end if;
+  if not exists (select 1 from unnest(f.proconfig) c where c like 'search_path=%') then
+    raise exception 'X1: free_rating_limit() must pin its search_path';
+  end if;
+  if not has_function_privilege('authenticated', f.oid, 'EXECUTE')
+     or has_function_privilege('anon', f.oid, 'EXECUTE')
+     or has_function_privilege('service_role', f.oid, 'EXECUTE') then
+    raise exception 'X1: free_rating_limit() is executable by authenticated only';
+  end if;
+  if exists (select 1 from pg_proc p, lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+    where p.oid = f.oid and a.grantee = 0 and a.privilege_type = 'EXECUTE') then
+    raise exception 'X1: PUBLIC must not execute free_rating_limit()';
+  end if;
+  foreach fn in array array[
+    'reserve_analysis_permit', 'apply_synced_shot',
+    'enforce_scored_shot_permit', 'issue_offline_grant'
+  ] loop
+    select p.prosrc into body
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = fn;
+    if body is null or position('public.free_rating_limit()' in body) = 0 then
+      raise exception 'X1: public.% must read the allowance through free_rating_limit()', fn;
+    end if;
+    if body ~ '>= 2\M' or body ~ 'least\(v_scored, 2\)' then
+      raise exception 'X1: public.% still embeds the old literal allowance', fn;
+    end if;
+  end loop;
+end $$;
+
+-- X2: one reservation, then refusal; access_state reports the hold.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000091';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000009101"}';
+do $$
+declare r record; s record; first_id uuid;
+begin
+  select * into r from public.reserve_analysis_permit('xena-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'X2: the one free reserve is accepted (got %)', r.result;
+  end if;
+  first_id := r.permit_id;
+  insert into x_state values ('xena-p1', first_id);
+  select * into r from public.reserve_analysis_permit('xena-key-2');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'X2: a second distinct key is refused while the one reservation is live (got %)', r.result;
+  end if;
+  if (select count(*) from public.analysis_permits where user_id = (select auth.uid())) <> 1 then
+    raise exception 'X2: exactly one permit may exist for a free account';
+  end if;
+  select * into s from public.access_state();
+  if s.premium or s.scored_count <> 0 or s.reserved_count <> 1 then
+    raise exception 'X2: access_state = free, scored 0, reserved 1 (got %, %, %)',
+      s.premium, s.scored_count, s.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('xena-key-1');
+  if r.result <> 'accepted' or r.permit_id <> first_id then
+    raise exception 'X2: the held key replays idempotently (got %, %)', r.result, r.permit_id;
+  end if;
+end $$;
+
+-- X3: the one rating settles; the backstop refuses a second; abstention is free.
+do $$
+declare v text; p uuid; raced uuid; abst uuid; s record; r record;
+begin
+  p := (select id from x_state where key = 'xena-p1');
+  v := public.apply_synced_shot(pg_temp.x_shot('00000000-0000-4000-8000-0000000091a1', p, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'X3: the one free rating is accepted (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = p and status = 'finalized' and outcome = 'scored') then
+    raise exception 'X3: the consumed permit is finalized/scored';
+  end if;
+  select * into s from public.access_state();
+  if s.scored_count <> 1 or s.reserved_count <> 0 then
+    raise exception 'X3: access_state = scored 1, reserved 0 (got %, %)', s.scored_count, s.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('xena-key-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'X3: no reservation after the one rating (got %)', r.result;
+  end if;
+
+  -- The over-issued reservation a lost race or an older build leaves behind.
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ((select auth.uid()), 'xena-raced')
+  returning id into raced;
+  v := public.apply_synced_shot(pg_temp.x_shot('00000000-0000-4000-8000-0000000091a2', raced, 'scored'));
+  if v <> 'access.paywall_required' then
+    raise exception 'X3: the backstop refuses a second scored rating even with a valid permit (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = raced and status = 'released' and outcome = 'free_limit_exceeded') then
+    raise exception 'X3: the refused permit is released/free_limit_exceeded, not left reserved';
+  end if;
+  if (select count(*) from public.shots
+      where user_id = (select auth.uid()) and result_kind = 'scored') <> 1 then
+    raise exception 'X3: a free account never exceeds one scored shot';
+  end if;
+
+  -- Unscored attempts stay free past the allowance.
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ((select auth.uid()), 'xena-abstain')
+  returning id into abst;
+  v := public.apply_synced_shot(pg_temp.x_shot('00000000-0000-4000-8000-0000000091a3', abst, 'low_confidence'));
+  if v <> 'accepted' then
+    raise exception 'X3: an abstention past the allowance is still free (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = abst and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'X3: the abstention releases its permit, never consumes it';
+  end if;
+  if public.lifetime_scored_count() <> 1 then
+    raise exception 'X3: lifetime scored stays at one (got %)', public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- X4: the shots gate refuses a direct scored INSERT past the one rating even
+-- beside a live reserved permit.
+do $$
+declare live uuid;
+begin
+  insert into public.analysis_permits (user_id, idempotency_key)
+  values ((select auth.uid()), 'xena-direct')
+  returning id into live;
+  if public.online_reservation_count() <> 1 then
+    raise exception 'X4 precondition: one live reservation (got %)', public.online_reservation_count();
+  end if;
+  begin
+    insert into public.shots (
+      id, user_id, shot_type, captured_at, start_ms, end_ms,
+      overall_score, analysis_confidence, result_kind,
+      app_version, model_bundle_version, pose_model_version, paddle_model_version,
+      stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version
+    ) values (
+      '00000000-0000-4000-8000-0000000091a4', (select auth.uid()), 'drive', now(), 0, 1000,
+      8, 0.9, 'scored', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1', 'v1'
+    );
+    raise exception 'X4: a direct scored INSERT past the one rating must be refused';
+  exception when insufficient_privilege then null;
+  end;
+  if exists (select 1 from public.shots where id = '00000000-0000-4000-8000-0000000091a4') then
+    raise exception 'X4: a refused direct INSERT writes nothing';
+  end if;
+  if not exists (select 1 from public.analysis_permits where id = live and status = 'reserved') then
+    raise exception 'X4: the live permit is untouched by the refused INSERT';
+  end if;
+end $$;
+reset role;
+
+-- X5: offline issuance hands a fresh free identity exactly one ticket …
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000093';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000009301"}';
+do $$
+declare r record; g record; g2 record; p record; s record;
+begin
+  select * into r from public.register_offline_device('xiomara-iphone', 'production', false);
+  if r.result <> 'accepted' then
+    raise exception 'X5: registration is accepted (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('xiomara-iphone', 2);
+  if g.result <> 'accepted' or g.entitlement_source <> 'identity_lifetime_free'
+     or coalesce(array_length(g.ticket_ids, 1), 0) <> 1 then
+    raise exception 'X5: a fresh free identity asking for two tickets is issued exactly one (got %, %, %)',
+      g.result, g.entitlement_source, g.ticket_ids;
+  end if;
+  if public.offline_hold_count() <> 1 then
+    raise exception 'X5: one outstanding hold (got %)', public.offline_hold_count();
+  end if;
+  select * into s from public.access_state();
+  if s.premium or s.scored_count <> 0 or s.reserved_count <> 1 then
+    raise exception 'X5: the hold counts against the allowance online (got %, %, %)',
+      s.premium, s.scored_count, s.reserved_count;
+  end if;
+  select * into p from public.reserve_analysis_permit('xiomara-online');
+  if p.result <> 'access.paywall_required' then
+    raise exception 'X5: conservation — no online rating beside the held ticket (got %)', p.result;
+  end if;
+  select * into g2 from public.issue_offline_grant('xiomara-iphone', 2);
+  if g2.result <> 'accepted' or g2.generation <> 2 or g2.ticket_ids <> g.ticket_ids then
+    raise exception 'X5: a refresh re-issues the same single ticket under generation 2 (got %, %, %)',
+      g2.result, g2.generation, g2.ticket_ids;
+  end if;
+  if public.offline_hold_count() <> 1 then
+    raise exception 'X5: a refresh allocates nothing (got %)', public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- … and refuses the spent identity outright.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000091';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000009101"}';
+do $$
+declare r record; g record;
+begin
+  select * into r from public.register_offline_device('xena-iphone', 'production', false);
+  if r.result <> 'accepted' then
+    raise exception 'X5: registration is accepted for a spent identity (got %)', r.result;
+  end if;
+  select * into g from public.issue_offline_grant('xena-iphone', 2);
+  if g.result <> 'access.paywall_required' then
+    raise exception 'X5: a spent identity receives no offline grant (got %)', g.result;
+  end if;
+  if exists (select 1 from public.offline_grants where user_id = (select auth.uid())) then
+    raise exception 'X5: a refusal writes no grant row';
+  end if;
+  if public.offline_hold_count() <> 0 then
+    raise exception 'X5: a refusal allocates nothing (got %)', public.offline_hold_count();
+  end if;
+end $$;
+reset role;
+
+-- X6: premium bypasses the allowance exactly as before.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000092';
+set local request.jwt.claims = '{"session_id":"00000000-0000-4000-8000-000000009201"}';
+do $$
+declare r record; v text; p1 uuid; p2 uuid; s record;
+begin
+  select * into r from public.reserve_analysis_permit('xavier-1');
+  if r.result <> 'accepted' then
+    raise exception 'X6: premium reserves (got %)', r.result;
+  end if;
+  p1 := r.permit_id;
+  select * into r from public.reserve_analysis_permit('xavier-2');
+  if r.result <> 'accepted' then
+    raise exception 'X6: premium reserves past the allowance (got %)', r.result;
+  end if;
+  p2 := r.permit_id;
+  v := public.apply_synced_shot(pg_temp.x_shot('00000000-0000-4000-8000-0000000092a1', p1, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'X6: premium settles a scored rating (got %)', v;
+  end if;
+  v := public.apply_synced_shot(pg_temp.x_shot('00000000-0000-4000-8000-0000000092a2', p2, 'scored'));
+  if v <> 'accepted' then
+    raise exception 'X6: premium settles a second scored rating past the allowance (got %)', v;
+  end if;
+  select * into s from public.access_state();
+  if not s.premium or s.scored_count <> 2 or s.reserved_count <> 0 then
+    raise exception 'X6: access_state = premium, scored 2, reserved 0 (got %, %, %)',
+      s.premium, s.scored_count, s.reserved_count;
+  end if;
+end $$;
+reset role;
+rollback;
+
+\echo X FREE-RATING ALLOWANCE (ONE): ALL CASES PASSED
 
 create schema w07_probe;
 create extension dblink with schema w07_probe;

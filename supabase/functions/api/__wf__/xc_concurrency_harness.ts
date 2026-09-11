@@ -21,7 +21,9 @@
 
 import { billingRpcResponse } from "./routesHarness.ts";
 import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
+import { FREE_RATING_LIMIT } from "./freeRatingLimit.ts";
 
+export { FREE_RATING_LIMIT };
 export const SUPABASE_URL = "http://supabase.xc.test";
 export const WEBHOOK_SECRET = "xc-webhook-secret";
 export const RC_URL = "https://api.revenuecat.com/v1/subscribers/";
@@ -408,7 +410,7 @@ export class FakeSupabase {
       const premium = this.premium(userId);
       const scored = this.lifetimeScoredCount(userId);
       const reserved = this.reservedCount(userId);
-      const remaining = 2 - Math.min(scored, 2);
+      const remaining = FREE_RATING_LIMIT - Math.min(scored, FREE_RATING_LIMIT);
       if (!premium && remaining <= reserved) {
         this.log("rpc.reserve", `user=${userId} key=${key} → paywall_required`);
         return [{ result: "access.paywall_required" }];
@@ -464,7 +466,7 @@ export class FakeSupabase {
         return "access.permit_not_reserved";
       }
       if (resultKind === "scored") {
-        if (!this.premium(userId) && this.lifetimeScoredCount(userId) >= 2) {
+        if (!this.premium(userId) && this.lifetimeScoredCount(userId) >= FREE_RATING_LIMIT) {
           permit.status = "released";
           permit.outcome = "free_limit_exceeded";
           this.log("rpc.apply", `user=${userId} shot=${id} → paywall_required`);

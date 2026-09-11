@@ -225,6 +225,8 @@ Deno.test({
       await t.step(
         "FIXED (high): authenticated has no DELETE on public.shots -> lifetime free-rating counter is not client-resettable",
         async () => {
+          // The lifetime allowance is ONE (public.free_rating_limit(),
+          // 20260910170000): one reserve + one scored sync spends it.
           const consumeBothRatings = `
             ${provision(USER_A, "a@x.test")}
             ${asUser(USER_A)}
@@ -232,11 +234,6 @@ Deno.test({
             select public.apply_synced_shot(${scoredShotJson(
               "00000000-0000-4000-8000-0000000000e1",
               "k1",
-            )});
-            select result from public.reserve_analysis_permit('k2');
-            select public.apply_synced_shot(${scoredShotJson(
-              "00000000-0000-4000-8000-0000000000e2",
-              "k2",
             )});
           `;
           const r = await psql(`
@@ -257,7 +254,11 @@ Deno.test({
           // 20260902130000_shots_delete_revoke.sql revokes DELETE and drops shots_delete_own.
           assert(!grants.includes("DELETE"), `DELETE must be revoked, grants: ${grants}`);
           const before = out.slice(out.indexOf("BEFORE") + 1, out.indexOf("END"));
-          assertEquals(before, ["2", "access.paywall_required"], "both lifetime ratings consumed");
+          assertEquals(
+            before,
+            ["1", "access.paywall_required"],
+            "the lifetime allowance is consumed",
+          );
 
           // The owner DELETE is rejected outright (42501) — ON_ERROR_STOP aborts
           // the script there, so the denial is probed in its own transaction.
@@ -287,7 +288,7 @@ Deno.test({
           const afterOut = lines(after.stdout);
           assertEquals(
             afterOut.slice(afterOut.indexOf("AFTER") + 1),
-            ["2", "access.paywall_required"],
+            ["1", "access.paywall_required"],
             "counter must not reset",
           );
         },

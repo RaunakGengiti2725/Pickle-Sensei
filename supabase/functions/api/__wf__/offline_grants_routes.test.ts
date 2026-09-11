@@ -37,6 +37,7 @@ import {
   type OfflineGrantVerificationContext,
 } from "../offlineSignature.ts";
 import { activeReleasePolicyRow, HARNESS_RELEASE_POLICY } from "./releasePolicyFixture.ts";
+import { FREE_RATING_LIMIT } from "./freeRatingLimit.ts";
 import {
   captureConsole,
   fakeGoogleIdToken,
@@ -1101,7 +1102,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "live DB: a free allocation from issue_offline_grant() carries its two tickets and signs into a verifiable grant",
+  name: "live DB: a free allocation from issue_offline_grant() carries the allowance's ticket(s) and signs into a verifiable grant",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 2 });
@@ -1122,7 +1123,7 @@ Deno.test({
         release: RELEASE,
       });
       assertEquals(claims.entitlementSource, "identity_lifetime_free");
-      assertEquals(claims.allocation?.ticketIds.length, 2);
+      assertEquals(claims.allocation?.ticketIds.length, FREE_RATING_LIMIT);
       assertEquals(claims.allocation?.allocationId, claims.jti);
       assertEquals(claims.exp - claims.iat, OFFLINE_PRO_LEASE_MAX_SECONDS);
       const verified = await signAndVerify(claims, U(3), key);
@@ -1214,7 +1215,7 @@ Deno.test({
         release: RELEASE,
       });
       assertEquals(claims.entitlementSource, "identity_lifetime_free");
-      assertEquals(claims.allocation?.ticketIds.length, 2);
+      assertEquals(claims.allocation?.ticketIds.length, FREE_RATING_LIMIT);
       assertEquals(claims.exp - claims.iat, OFFLINE_PRO_LEASE_MAX_SECONDS);
       assertEquals(
         Object.keys(claims).filter((k) => /attest/i.test(k)),
@@ -1238,7 +1239,7 @@ Deno.test({
       assertEquals(stored[0].installation_key_id, key);
       assertEquals(stored[0].lease, "7 days");
 
-      // Conservation: two tickets held, no third rating online or offline.
+      // Conservation: the allowance is held as tickets, no rating past it online or offline.
       const held = await inTx(sql, 4, async (tx) => {
         const holds = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
         const online = await tx.unsafe<{ result: string }[]>(
@@ -1246,7 +1247,7 @@ Deno.test({
         );
         return { n: holds[0].n, online: online[0].result };
       });
-      assertEquals(held.n, 2);
+      assertEquals(Number(held.n), FREE_RATING_LIMIT);
       assertEquals(held.online, "access.paywall_required");
     } finally {
       await sql.end();
@@ -1385,12 +1386,12 @@ Deno.test({
       );
       assertEquals(after[0].n, before[0].n);
 
-      // Revocation reclaims nothing: both tickets are still held.
+      // Revocation reclaims nothing: every issued ticket is still held.
       const heldAfterRevoke = await inTx(sql, 4, async (tx) => {
         const rows = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
         return rows[0].n;
       });
-      assertEquals(heldAfterRevoke, 2);
+      assertEquals(Number(heldAfterRevoke), FREE_RATING_LIMIT);
 
       // Deletion (reinstall / key replacement): not registered, hold stays.
       await sql.unsafe(`delete from public.offline_devices where id = '${device[0].id}'`);
@@ -1400,7 +1401,7 @@ Deno.test({
         const rows = await tx.unsafe<{ n: number }[]>(`select public.offline_hold_count() as n`);
         return rows[0].n;
       });
-      assertEquals(heldAfterDelete, 2);
+      assertEquals(Number(heldAfterDelete), FREE_RATING_LIMIT);
     } finally {
       await sql.end();
     }

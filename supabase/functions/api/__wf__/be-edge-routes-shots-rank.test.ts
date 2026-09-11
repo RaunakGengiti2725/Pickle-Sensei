@@ -211,28 +211,24 @@ Deno.test({
 });
 
 Deno.test({
-  name: "free limit: after two scored analyses the third permit is refused (access.paywall_required)",
+  name: "free limit: after the one scored analysis the next permit is refused (access.paywall_required)",
   ignore,
   async fn() {
     const sql = postgres(PG_URL);
     try {
       await withUserTx(sql, ALICE, async (tx) => {
+        // public.free_rating_limit() = 1 (20260910170000): a second distinct
+        // key is refused while the first reservation is live, and again once
+        // its scored shot has landed.
         const p1 = await reserve(tx, "free-1");
+        const held = await tx.unsafe(`select result from public.reserve_analysis_permit('free-2')`);
+        assertEquals(held[0].result, "access.paywall_required");
         assertEquals(await apply(tx, shotPayload({ analysisPermitId: p1 })), "accepted");
-        // Reserve the 2nd permit BEFORE the 2nd sync lands, then a 3rd permit
-        // must be refused once two scored shots exist.
-        const p2 = await reserve(tx, "free-2");
-        assertEquals(
-          await apply(tx, shotPayload({ analysisPermitId: p2, shotType: "serve" })),
-          "accepted",
-        );
-        const third = await tx.unsafe(
-          `select result from public.reserve_analysis_permit('free-3')`,
-        );
-        assertEquals(third[0].result, "access.paywall_required");
+        const next = await tx.unsafe(`select result from public.reserve_analysis_permit('free-3')`);
+        assertEquals(next[0].result, "access.paywall_required");
         const access = await tx.unsafe(`select * from public.access_state()`);
         assertEquals(access[0].premium, false);
-        assertEquals(access[0].scored_count, 2);
+        assertEquals(access[0].scored_count, 1);
         assertEquals(access[0].reserved_count, 0);
       });
     } finally {
