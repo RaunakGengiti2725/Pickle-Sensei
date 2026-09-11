@@ -54,7 +54,7 @@ Hard rules for the agent filling this in:
 | Platform                     | iOS, iPhone only (`TARGETED_DEVICE_FAMILY = 1`), portrait only                                                                                                                                                                                                                                                                                 | `project.pbxproj`, `Info.plist`                                     |
 | Minimum iOS                  | 15.1                                                                                                                                                                                                                                                                                                                                           | `IPHONEOS_DEPLOYMENT_TARGET`, RN 0.87 `min_ios_version_supported`   |
 | Marketing version            | 1.0                                                                                                                                                                                                                                                                                                                                            | `MARKETING_VERSION`, `runtimeConfig.ts` `APP_VERSION`               |
-| Build number                 | Assigned by fastlane (`latest_testflight_build_number + 1`). Build 3 was validated and attached to version 1.0 on 2026-09-03.                                                                                                                                                                                                                  | `ios/fastlane/Fastfile`, `docs/DISTRIBUTION.md`                     |
+| Build number                 | 4, selected by the owner on 2026-09-11 and committed before verification. Fastlane verifies this identity and refuses reused numbers; it does not increment them. Build 3 remains the latest uploaded build until build 4 is uploaded and attached.                                                                                            | `ios/fastlane/Fastfile`, `docs/DISTRIBUTION.md`                     |
 | Primary language             | English (U.S.)                                                                                                                                                                                                                                                                                                                                 | `CFBundleDevelopmentRegion = en`; the app ships English copy only   |
 | Capabilities / entitlements  | Sign in with Apple (`com.apple.developer.applesignin`), In-App Purchase. No push notifications entitlement (reminders are local only).                                                                                                                                                                                                         | `PickleSensei.entitlements`, `docs/DISTRIBUTION.md`                 |
 | Permission strings           | Camera (used), Photo Library (used, system picker), Microphone (declared, never requested: the capture session is video only)                                                                                                                                                                                                                  | `Info.plist`, `PickleAudioCoach.swift` line 17                      |
@@ -323,8 +323,10 @@ Path: sidebar → **App Privacy** → Get Started / Edit.
 
 ### 5.1 What actually leaves the device (audit summary)
 
-The name-disclosure clarification in this dossier and `legal.ts` is a local
-draft; it has not been published to the legal pages or App Store Connect.
+The public privacy page was checked on 2026-09-11 and includes the
+name-disclosure clarification below. Build 4 also adds the app-owned offline
+installation identifier to its privacy manifest and policy; verify the final
+public page and App Store Connect answers before submission.
 Onboarding requires a name for account personalization. A preferred name or
 nickname is accepted, without legal-name verification. The questionnaire
 remains required. Users may choose "Prefer not to say" for gender. Settings
@@ -339,6 +341,7 @@ Read from `apps/mobile/src/account/*.ts`, `src/evaluation/trialCapture.ts`,
 | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Email address and display name from Apple/Google sign-in, when provided                                                                | Supabase Auth + `public.profiles` (`email`, `display_name`, `avatar_url`)     | Yes (it is the account)                                 | Authentication, account                                                            |
 | Account ID (Supabase UUID). Also used as the RevenueCat `appUserID`.                                                                   | Supabase, RevenueCat                                                          | Yes                                                     | Account, entitlement verification                                                  |
+| Random installation identifier, server-issued device identifier, offline allocations and settlement receipts                           | Supabase offline-device and authorization records                             | Yes                                                     | Offline ratings, settlement, and double-spend prevention                           |
 | Coaching profile: skill level, dominant hand, goal, biggest problem, name or nickname (required), gender (can decline)                 | `public.profiles` via `PUT /v1/me/onboarding`                                 | Yes                                                     | Personalizing coaching                                                             |
 | Analysis results: stroke type, technique score, checkpoint scores, phases, confidence, timestamps, model/config versions, session id   | `public.shots`, `public.sessions` via `POST /v1/shots:sync`                   | Yes                                                     | Progress history, rank, free-rating accounting                                     |
 | Purchase/entitlement state: premium yes/no, product key, expiry, verified_at; RevenueCat holds the StoreKit transaction history        | `public.billing_entitlements`, RevenueCat                                     | Yes                                                     | Unlocking Pro, fraud prevention                                                    |
@@ -384,22 +387,22 @@ shipping binary's behavior changes.
 **Step 3: per data type.** For every type below, answer the "tracking" question
 `SELECT:` **No, we do not use this data for tracking purposes**.
 
-| Data type           | Usage purposes to tick                                                         | Linked to identity? | What it covers                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
-| Name                | Product Personalization; App Functionality                                     | Yes                 | Provider display name, if available, and required onboarding name or nickname                  |
-| Email Address       | App Functionality                                                              | Yes                 | Apple/Google account identity                                                                  |
-| Phone Number        | App Functionality                                                              | Yes                 | Google Sign-In SDK declaration                                                                 |
-| Fitness             | Product Personalization; Analytics; App Functionality                          | Yes                 | Structured stroke, technique, session, and evaluation records                                  |
-| Coarse Location     | App Functionality                                                              | Yes                 | Google Sign-In and network-derived coarse location declarations; no device location permission |
-| Other User Content  | Analytics                                                                      | Yes                 | Optional free-form feedback and exit-survey content while associated with the account          |
-| Browsing History    | Third-Party Advertising; Analytics; App Functionality                          | Yes                 | Externally hosted video/page viewed in the drill WebView                                       |
-| User ID             | Analytics; App Functionality                                                   | Yes                 | Supabase UUID and RevenueCat app user ID                                                       |
-| Device ID           | Analytics                                                                      | Yes                 | Google Sign-In and embedded-provider SDK declaration                                           |
-| Purchase History    | App Functionality; Analytics                                                   | Yes                 | RevenueCat purchase and entitlement history tied to the account                                |
-| Product Interaction | App Functionality; Product Personalization; Analytics; Third-Party Advertising | Yes                 | Drill/video interactions and app feature interactions                                          |
-| Advertising Data    | Third-Party Advertising; Analytics                                             | Yes                 | Ads that an external video provider may display; no Pickle Sensei ad SDK                       |
-| Other Usage Data    | Analytics; App Functionality                                                   | Yes                 | Evaluation telemetry, feedback, consent, and SDK usage data                                    |
-| Other Data Types    | Product Personalization; Analytics; App Functionality                          | Yes                 | Coaching profile and other authentication/provider data                                        |
+| Data type           | Usage purposes to tick                                                         | Linked to identity? | What it covers                                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Name                | Product Personalization; App Functionality                                     | Yes                 | Provider display name, if available, and required onboarding name or nickname                                       |
+| Email Address       | App Functionality                                                              | Yes                 | Apple/Google account identity                                                                                       |
+| Phone Number        | App Functionality                                                              | Yes                 | Google Sign-In SDK declaration                                                                                      |
+| Fitness             | Product Personalization; Analytics; App Functionality                          | Yes                 | Structured stroke, technique, session, and evaluation records                                                       |
+| Coarse Location     | App Functionality                                                              | Yes                 | Google Sign-In and network-derived coarse location declarations; no device location permission                      |
+| Other User Content  | Analytics                                                                      | Yes                 | Optional free-form feedback and exit-survey content while associated with the account                               |
+| Browsing History    | Third-Party Advertising; Analytics; App Functionality                          | Yes                 | Externally hosted video/page viewed in the drill WebView                                                            |
+| User ID             | Analytics; App Functionality                                                   | Yes                 | Supabase UUID and RevenueCat app user ID                                                                            |
+| Device ID           | App Functionality; Analytics                                                   | Yes                 | Offline installation/device registration and fraud prevention; Google Sign-In and embedded-provider SDK declaration |
+| Purchase History    | App Functionality; Analytics                                                   | Yes                 | RevenueCat purchase and entitlement history tied to the account                                                     |
+| Product Interaction | App Functionality; Product Personalization; Analytics; Third-Party Advertising | Yes                 | Drill/video interactions and app feature interactions                                                               |
+| Advertising Data    | Third-Party Advertising; Analytics                                             | Yes                 | Ads that an external video provider may display; no Pickle Sensei ad SDK                                            |
+| Other Usage Data    | Analytics; App Functionality                                                   | Yes                 | Evaluation telemetry, feedback, consent, and SDK usage data                                                         |
+| Other Data Types    | Product Personalization; Analytics; App Functionality                          | Yes                 | Coaching profile and other authentication/provider data                                                             |
 
 **Step 4: Publish.** The published label currently shows Data Linked to You for
 Usage Data, Other Data, Health & Fitness, Contact Info, Browsing History, User
@@ -426,8 +429,11 @@ Update these answers whenever the binary, providers, or data flows change.
   Data, and Browsing History** account for Google Sign-In and the constrained
   external-video WebView. Pickle Sensei does not request device location, use
   IDFA, or run its own advertising SDK.
-- Bootstrap device context is not stored server-side, so it is not
-  "collected".
+- Bootstrap device context is not stored server-side. The separate offline
+  installation registration IS collected and account-linked: a random
+  Keychain/Keystore installation identifier and server device identifier enable
+  offline grants, settlement, and double-spend prevention. Declare Device ID
+  for App Functionality as well as the SDK Analytics purpose.
 
 ## 6. App Store → Trust & Safety → App Accessibility (Accessibility Nutrition Labels)
 
@@ -501,21 +507,21 @@ Portugal, Romania, Slovakia, Slovenia, Spain, Sweden.
 
 Path: sidebar → **In-App Purchases** → **+**.
 
-| Field                           | Value                                                                                                                                                                                                                                                                                              |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Type                            | `SELECT:` Non-Consumable                                                                                                                                                                                                                                                                           |
-| Reference Name (internal)       | `ENTER:` `Pickle Sensei Pro Lifetime`                                                                                                                                                                                                                                                              |
-| Product ID                      | `ENTER:` `pickle_sensei_pro_lifetime` (must match RevenueCat exactly; cannot be changed or reused after deletion)                                                                                                                                                                                  |
-| Availability                    | `SELECT:` all countries/regions where the app is available                                                                                                                                                                                                                                         |
-| Price Schedule → Price          | `SELECT:` USD **159.99** (base United States); accept Apple's automatically generated prices for other storefronts                                                                                                                                                                                 |
-| Tax Category                    | `SELECT:` App Store software (default)                                                                                                                                                                                                                                                             |
-| Family Sharing                  | `SELECT:` **Off**. Enabling is irreversible and the entitlement/RevenueCat setup was not designed around shared purchases.                                                                                                                                                                         |
-| Content Hosting                 | `SELECT:` No (no Apple-hosted content)                                                                                                                                                                                                                                                             |
-| Localization (English U.S.)     | Display Name (30 max) `ENTER:` `Pro Lifetime` · Description (45 max) `ENTER:` `Unlimited validated ratings, pay once`                                                                                                                                                                              |
-| Image (promotional)             | `SKIP:`                                                                                                                                                                                                                                                                                            |
-| Review Information → Screenshot | `UPLOAD:` the paywall pricing-page screenshot (≥ 640 × 920 px, PNG/JPG) showing the Lifetime column.                                                                                                                                                                                               |
-| Review Information → Notes      | `ENTER:` `Lifetime option on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the free rating is used). Unlocks unlimited validated stroke ratings permanently. Purchases are processed by StoreKit via RevenueCat; prices shown come from the App Store.` |
-| Submission                      | On the version page (§11.6) add this product under **In-App Purchases and Subscriptions** so it is reviewed with the 1.0 binary. First-time IAPs must ride along with a version.                                                                                                                   |
+| Field                           | Value                                                                                                                                                                                                                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Type                            | `SELECT:` Non-Consumable                                                                                                                                                                                                                                                                              |
+| Reference Name (internal)       | `ENTER:` `Pickle Sensei Pro Lifetime`                                                                                                                                                                                                                                                                 |
+| Product ID                      | `ENTER:` `pickle_sensei_pro_lifetime` (must match RevenueCat exactly; cannot be changed or reused after deletion)                                                                                                                                                                                     |
+| Availability                    | `SELECT:` all countries/regions where the app is available                                                                                                                                                                                                                                            |
+| Price Schedule → Price          | `SELECT:` USD **159.99** (base United States); accept Apple's automatically generated prices for other storefronts                                                                                                                                                                                    |
+| Tax Category                    | `SELECT:` App Store software (default)                                                                                                                                                                                                                                                                |
+| Family Sharing                  | `SELECT:` **Off**. Enabling is irreversible and the entitlement/RevenueCat setup was not designed around shared purchases.                                                                                                                                                                            |
+| Content Hosting                 | `SELECT:` No (no Apple-hosted content)                                                                                                                                                                                                                                                                |
+| Localization (English U.S.)     | Display Name (30 max) `ENTER:` `Pro Lifetime` · Description (45 max) `ENTER:` `Unlimited stroke ratings, pay once`                                                                                                                                                                                    |
+| Image (promotional)             | `SKIP:`                                                                                                                                                                                                                                                                                               |
+| Review Information → Screenshot | `UPLOAD:` the paywall pricing-page screenshot (≥ 640 × 920 px, PNG/JPG) showing the Lifetime column.                                                                                                                                                                                                  |
+| Review Information → Notes      | `ENTER:` `Lifetime option on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the one lifetime free rating is used). Unlocks unlimited stroke ratings permanently. Purchases are processed by StoreKit via RevenueCat; prices shown come from the App Store.` |
+| Submission                      | On the version page (§11.6) add this product under **In-App Purchases and Subscriptions** so it is reviewed with the 1.0 binary. First-time IAPs must ride along with a version.                                                                                                                      |
 
 ## 10. Monetization → Subscriptions (auto-renewable)
 
@@ -533,21 +539,21 @@ Path: sidebar → **Subscriptions** → **Create** (group first, then products).
 
 ### 10.2 Monthly subscription
 
-| Field                                | Value                                                                                                                                                                                                                                                                          |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Reference Name                       | `ENTER:` `Pickle Sensei Pro Monthly`                                                                                                                                                                                                                                           |
-| Product ID                           | `ENTER:` `pickle_sensei_pro_monthly`                                                                                                                                                                                                                                           |
-| Subscription Duration                | `SELECT:` 1 month                                                                                                                                                                                                                                                              |
-| Group level                          | `SELECT:` Level 1                                                                                                                                                                                                                                                              |
-| Availability                         | `SELECT:` all countries/regions where the app is available                                                                                                                                                                                                                     |
-| Subscription Price                   | `SELECT:` USD **7.99**, base United States, auto-generate other storefronts                                                                                                                                                                                                    |
-| Introductory Offer                   | `SKIP:` for launch. (If added later, the paywall automatically shows "Start free trial" and the eligibility copy; nothing else to change.)                                                                                                                                     |
-| Promotional / Win-back / Offer Codes | `SKIP:`                                                                                                                                                                                                                                                                        |
-| Family Sharing                       | `SELECT:` Off                                                                                                                                                                                                                                                                  |
-| Localization (English U.S.)          | Display Name (30 max) `ENTER:` `Pro Monthly` · Description (45 max) `ENTER:` `Unlimited validated ratings, billed monthly`                                                                                                                                                     |
-| Image                                | `SKIP:`                                                                                                                                                                                                                                                                        |
-| Review Screenshot                    | `UPLOAD:` paywall pricing-page screenshot (≥ 640 × 920) with the Monthly column visible                                                                                                                                                                                        |
-| Review Notes                         | `ENTER:` `Monthly plan on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the free rating). Auto-renews monthly; price, duration, Restore purchases, Terms, and Privacy links are shown on the same screen. StoreKit via RevenueCat.` |
+| Field                                | Value                                                                                                                                                                                                                                                                                               |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reference Name                       | `ENTER:` `Pickle Sensei Pro Monthly`                                                                                                                                                                                                                                                                |
+| Product ID                           | `ENTER:` `pickle_sensei_pro_monthly`                                                                                                                                                                                                                                                                |
+| Subscription Duration                | `SELECT:` 1 month                                                                                                                                                                                                                                                                                   |
+| Group level                          | `SELECT:` Level 1                                                                                                                                                                                                                                                                                   |
+| Availability                         | `SELECT:` all countries/regions where the app is available                                                                                                                                                                                                                                          |
+| Subscription Price                   | `SELECT:` USD **7.99**, base United States, auto-generate other storefronts                                                                                                                                                                                                                         |
+| Introductory Offer                   | `SKIP:` for launch. (If added later, the paywall automatically shows "Start free trial" and the eligibility copy; nothing else to change.)                                                                                                                                                          |
+| Promotional / Win-back / Offer Codes | `SKIP:`                                                                                                                                                                                                                                                                                             |
+| Family Sharing                       | `SELECT:` Off                                                                                                                                                                                                                                                                                       |
+| Localization (English U.S.)          | Display Name (30 max) `ENTER:` `Pro Monthly` · Description (45 max) `ENTER:` `Unlimited stroke ratings, billed monthly`                                                                                                                                                                             |
+| Image                                | `SKIP:`                                                                                                                                                                                                                                                                                             |
+| Review Screenshot                    | `UPLOAD:` paywall pricing-page screenshot (≥ 640 × 920) with the Monthly column visible                                                                                                                                                                                                             |
+| Review Notes                         | `ENTER:` `Monthly plan on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the one lifetime free rating is used). Auto-renews monthly; price, duration, Restore purchases, Terms, and Privacy links are shown on the same screen. StoreKit via RevenueCat.` |
 
 ### 10.3 Yearly subscription
 
@@ -561,9 +567,9 @@ Path: sidebar → **Subscriptions** → **Create** (group first, then products).
 | Subscription Price          | `SELECT:` USD **59.99**, base United States, auto-generate other storefronts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Introductory / promo offers | `SKIP:`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Family Sharing              | `SELECT:` Off                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Localization (English U.S.) | Display Name `ENTER:` `Pro Yearly` · Description `ENTER:` `Unlimited validated ratings, billed yearly`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Review Screenshot           | `UPLOAD:` paywall pricing-page screenshot with the Yearly ("RECOMMENDED") column visible                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Review Notes                | `ENTER:` `Yearly plan on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the free rating). Auto-renews yearly; the paywall shows the per-month equivalent, Restore purchases, Terms, and Privacy links. StoreKit via RevenueCat.`                                                                                                                                                                                                                                                                                                                                                             |
+| Localization (English U.S.) | Display Name `ENTER:` `Pro Yearly` · Description `ENTER:` `Unlimited stroke ratings, billed yearly`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Review Screenshot           | `UPLOAD:` paywall pricing-page screenshot with the Yearly row visible; Monthly is the recommended plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Review Notes                | `ENTER:` `Yearly plan on the in-app paywall (Settings > Membership > Pickle Sensei Pro, or the Coach button after the one lifetime free rating is used). Auto-renews yearly; the paywall shows the annual price and duration, Restore purchases, Terms, and Privacy links. StoreKit via RevenueCat.`                                                                                                                                                                                                                                                                                                                                   |
 
 ### 10.4 Group-level settings
 
@@ -599,15 +605,15 @@ Path: sidebar → iOS App → **1.0 Prepare for Submission**.
 
 ### 11.2 Promotional Text (170 max, editable any time without a new build)
 
-`ENTER:` (164 chars)
+`ENTER:` (159 characters; verified in App Store Connect on 2026-09-11)
 
 ```
-Prop up your iPhone, hit one stroke, and get a scored form review with one clear fix. Your first validated rating is free, and unscored attempts never count against you.
+Prop up your iPhone, hit one stroke, and get a scored form review with one clear fix. Your first rating is free, and unscored attempts never count against you.
 ```
 
 ### 11.3 Keywords (100 max, comma-separated, no spaces)
 
-`ENTER:` (100 bytes, every keyword longer than two characters)
+`ENTER:` (100 characters; verified in App Store Connect on 2026-09-11)
 
 ```
 stroke,swing,analysis,form,drills,serve,dink,drive,drop,volley,video,training,paddle,lesson,ball,fix
@@ -623,15 +629,15 @@ aren't allowed."
 
 ### 11.4 Description (4000 max)
 
-`ENTER:` (3476 chars; paste verbatim, including the blank lines)
+`ENTER:` (3565 characters; verified in App Store Connect on 2026-09-11)
 
 ```
-Pickle Sensei is a private pickleball technique coach that lives on your iPhone. Prop the phone up at the court, hit one stroke, and get an honest, evidence-backed read of your form with one clear thing to fix next.
+Pickle Sensei is a private pickleball technique coach that lives on your iPhone. Prop the phone up at the court, hit one stroke, and get an honest read of your form with one clear thing to fix next.
 
 HOW IT WORKS
 1. Set the phone. Prop it side-on at waist height. A translucent outline on the live camera shows where to stand.
-2. Tap record and swing. Body-pose tracking runs on the phone, catches your stroke wherever you stand, and stops the clip on its own. No shot picker, no timer.
-3. Get the read. A validated analysis returns a technique score out of 10, checkpoint scores from 0 to 100, and coaching that follows the evidence.
+2. Tap record and swing. Body-pose tracking runs on the phone, detects a visible stroke, and stops the clip on its own. No shot picker, no timer.
+3. Get the read. A scored analysis returns an estimated player rating, a secondary technique score out of 10, checkpoint scores from 0 to 100, and coaching cues.
 
 WHAT YOU GET
 • Auto Analyze: guided automatic capture with a live skeleton overlay and a motion heat map.
@@ -645,18 +651,18 @@ WHAT YOU GET
 • Import video: analyze a stroke clip you already have on this phone.
 • Reminders: optional practice reminders that never show names or scores on your lock screen.
 
-Strokes covered: serve, return, forehand and backhand drives, dinks, third-shot drops, volleys, resets, speedups, and overheads.
+Strokes covered: serve, return, forehand and backhand drives, dinks, third-shot drops, volleys, and overheads.
 
 HONEST BY DESIGN
-Pickle Sensei never invents a score. If the camera did not see enough of the stroke, the app says so and the attempt does not count against you. Technique scores are computer-generated coaching estimates, not an official player rating.
+Ratings are computer-generated coaching estimates, not official player ratings. If an attempt cannot be scored, the app explains the issue and it does not use your free rating.
 
 PRIVATE BY DEFAULT
-Video and pose tracking are processed on your device. Clips stay in the app's private storage on your phone and are never uploaded. Only your account, coaching profile, analysis results, and membership status sync to your account so your rank and history follow you. You can permanently delete your account and all synced data from Settings at any time.
+Video and pose tracking are processed on your device. Clips stay in the app's private storage on your phone and are never uploaded. Your account, coaching profile, analysis results, membership status and device-bound offline rating records sync to support your experience. Delete your account from Settings at any time. Limited records are retained as explained in the Privacy Policy.
 
 FREE AND PRO
-Every account includes one free validated rating. Only a successful score uses it.
+Each sign-in identity includes one lifetime free rating. Only a successful score uses it. Used free ratings remain used after account deletion.
 
-Pickle Sensei Pro unlocks unlimited validated ratings:
+Pickle Sensei Pro unlocks unlimited ratings:
 • Monthly: $7.99 per month, auto-renews
 • Yearly: $59.99 per year, auto-renews
 • Lifetime: $159.99 one-time purchase, no renewal
@@ -664,6 +670,7 @@ US pricing. Your local price is shown in the app before you buy.
 
 Subscription payment is charged to your Apple Account at confirmation of purchase. Subscriptions renew automatically unless canceled at least 24 hours before the end of the current period. Manage or cancel any time in your Apple Account settings.
 
+Apple Standard EULA: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Terms of Use: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/terms
 Privacy Policy: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy
 
@@ -781,7 +788,7 @@ Account.
 | 2.3.7 Keywords                             | No competitor names or trademarks                                                                                                                                               | §11.3                                                                                                                                                                                                                                    |
 | 2.5.4 Background modes                     | None declared                                                                                                                                                                   | n/a                                                                                                                                                                                                                                      |
 | 3.1.1 IAP                                  | All digital unlocks go through StoreKit                                                                                                                                         | No external purchase links anywhere.                                                                                                                                                                                                     |
-| 3.1.2(a) Subscription value                | Ongoing value = unlimited validated ratings, progress, drills                                                                                                                   | Paywall benefits list is verbatim shipping capability.                                                                                                                                                                                   |
+| 3.1.2(a) Subscription value                | Ongoing value = unlimited stroke ratings, progress, drills                                                                                                                      | Paywall benefits list is verbatim shipping capability.                                                                                                                                                                                   |
 | 3.1.2(c) Subscription info + legal links   | Title, duration, price, auto-renew sentence, Restore, Terms, Privacy on the paywall; Terms + Privacy URLs in the description; Privacy URL in App Information                    | Already in place; do not remove the URLs from §11.4.                                                                                                                                                                                     |
 | 4.0 Design / 4.2 Minimum functionality     | Native camera, on-device ML, full product loop                                                                                                                                  | n/a                                                                                                                                                                                                                                      |
 | 4.8 Login Services                         | Google Sign-In is offered, so Sign in with Apple is mandatory. It is offered, and the entitlement is declared.                                                                  | Verify the Supabase Apple provider is ON (§2.4) so it works in the review build.                                                                                                                                                         |
@@ -814,24 +821,24 @@ Account.
 
 ## Appendix A. Character counts (verified 2026-09-02)
 
-| Field                   | Limit | Text                                        | Count  |
-| ----------------------- | ----- | ------------------------------------------- | ------ |
-| Name                    | 30    | Pickle Sensei                               | 13     |
-| Name (alternative)      | 30    | Pickle Sensei: Stroke Coach                 | 27     |
-| Subtitle                | 30    | Pickleball technique coach                  | 26     |
-| Subtitle (alt 1)        | 30    | Private pickleball form coach               | 29     |
-| Subtitle (alt 2)        | 30    | Film a stroke. Get the fix.                 | 27     |
-| Keywords                | 100   | §11.3                                       | 100    |
-| Promotional text        | 170   | §11.2                                       | 164    |
-| Description             | 4000  | §11.4                                       | 3476   |
-| Subscription group name | 30    | Pickle Sensei Pro                           | 17     |
-| Monthly display name    | 30    | Pro Monthly                                 | 11     |
-| Monthly description     | 45    | Unlimited validated ratings, billed monthly | 43     |
-| Yearly display name     | 30    | Pro Yearly                                  | 10     |
-| Yearly description      | 45    | Unlimited validated ratings, billed yearly  | 42     |
-| Lifetime display name   | 30    | Pro Lifetime                                | 12     |
-| Lifetime description    | 45    | Unlimited validated ratings, pay once       | 37     |
-| Review notes            | 4000  | Appendix D                                  | < 4000 |
+| Field                   | Limit | Text                                     | Count  |
+| ----------------------- | ----- | ---------------------------------------- | ------ |
+| Name                    | 30    | Pickle Sensei                            | 13     |
+| Name (alternative)      | 30    | Pickle Sensei: Stroke Coach              | 27     |
+| Subtitle                | 30    | Pickleball technique coach               | 26     |
+| Subtitle (alt 1)        | 30    | Private pickleball form coach            | 29     |
+| Subtitle (alt 2)        | 30    | Film a stroke. Get the fix.              | 27     |
+| Keywords                | 100   | §11.3                                    | 100    |
+| Promotional text        | 170   | §11.2                                    | 159    |
+| Description             | 4000  | §11.4                                    | 3565   |
+| Subscription group name | 30    | Pickle Sensei Pro                        | 17     |
+| Monthly display name    | 30    | Pro Monthly                              | 11     |
+| Monthly description     | 45    | Unlimited stroke ratings, billed monthly | 40     |
+| Yearly display name     | 30    | Pro Yearly                               | 10     |
+| Yearly description      | 45    | Unlimited stroke ratings, billed yearly  | 39     |
+| Lifetime display name   | 30    | Pro Lifetime                             | 12     |
+| Lifetime description    | 45    | Unlimited stroke ratings, pay once       | 34     |
+| Review notes            | 4000  | Appendix D                               | < 4000 |
 
 ## Appendix B. `PrivacyInfo.xcprivacy` mirror of §5
 
@@ -841,8 +848,11 @@ by Pickle Sensei and WebView partners that do not ship a separate manifest,
 keeps `NSPrivacyTracking` false, and retains the required-reason API
 declarations. Google Sign-In and RevenueCat supply their own manifests; Apple
 combines all manifests into the archive privacy report. Do not duplicate their
-provider-only Phone Number, Coarse Location, or Device ID entries in the app
-target. The combined report and App Store Connect answers cover all fourteen
+provider-only Phone Number or Coarse Location entries in the app target.
+Device ID is also collected by the app for offline rating authorization, so
+the app declares it as linked, not tracking, for App Functionality; SDK
+Analytics remains part of the combined App Store Connect answer. The combined
+report and App Store Connect answers cover all fourteen
 types in §5. Validate changes with `plutil -lint` and
 `npm run check:distribution`.
 
@@ -871,33 +881,29 @@ overlays, or the Metro banner (Release scheme only).
 ## Appendix D. App Review notes (paste into §11.8 Notes; replace `SAMPLE_CLIP_URL`)
 
 ```
-Thank you for reviewing Pickle Sensei, a pickleball technique coach for iPhone. Everything below applies to build 1.0.
+Pickle Sensei is a pickleball technique coaching app for iPhone.
 
-SIGN-IN
-There is no username/password login. Accounts are created with Sign in with Apple or Sign in with Google. The fastest path is "Continue with Apple" with any Apple ID; an account is created instantly. The Google account in the Sign-In fields above also works. Launch flow: Welcome > "Start your first read" > six short coaching-profile questions > a reminders step ("Not now" skips the notification prompt) > sign-in > Home.
+SIGN IN
+The app uses Sign in with Apple and Sign in with Google. Reviewers may choose Continue with Apple and create an account with an Apple test account. There is no separate username and password login.
 
-FREE TIER AND PURCHASES
-Every account includes 1 free validated rating. Only a successfully scored analysis uses it; unscored attempts are returned. After it is used, the Coach button opens the paywall. Pickle Sensei Pro is sold as an auto-renewable monthly ($7.99) or yearly ($59.99) subscription, or a non-consumable lifetime purchase ($159.99), through StoreKit via RevenueCat. The paywall shows the plan title, duration, price, an auto-renewal sentence, Restore purchases, and Terms and Privacy links. Direct path to the paywall: Settings > Membership > Pickle Sensei Pro. Purchases during review run in Apple's sandbox.
+ONBOARDING
+From Welcome, choose Start your first read. Complete the six coaching profile questions. On the reminders screen, choosing Not now avoids the notification permission prompt. Sign in, then the Home screen opens.
 
-HOW TO TEST STROKE ANALYSIS
-Option A, Import Video (no swinging needed): on the test iPhone, open SAMPLE_CLIP_URL in Safari and save the clip to Photos. In the app tap the center Coach button > Import Video > choose the clip. Analysis runs on the device and opens the Result screen (technique score, checkpoints, What to fix, Form Review replay, recommended drills).
-Option B, live camera: Coach > Auto Analyze > Open automatic camera. Allow camera access. Prop the phone in portrait about 8 to 12 feet away, side-on, at waist height. Tap the record button, step back until your whole body fits the translucent outline, and swing a paddle or mimic a forehand. The camera stops itself when a stroke is detected. You can also tap the stop button at any time: the strongest swing in the recording is analyzed (if there was none, the camera returns to the live preview with a notice; tap record to try again). While recording, the file rolls over silently every 50 seconds; nothing needs to be re-tapped.
+PURCHASES
+Each sign-in identity includes one lifetime free rating. Only an analysis that returns a score uses it. Used free ratings remain used after account deletion. Open the paywall from Settings, Membership, Pickle Sensei Pro. Monthly is $7.99, yearly is $59.99, and lifetime is $159.99 in the United States. Prices shown in the app come from StoreKit. Restore Purchases, Terms of Use, and Privacy Policy are available on the paywall.
 
-CAMERA, PHOTOS, MICROPHONE
-Capture is video only. Body-pose tracking uses Apple's Vision framework on the device. Clips are stored in the app's private container and are never uploaded; there is no cloud video feature. Photo access uses the system picker (PHPicker), so no library permission prompt appears. A microphone usage string is declared for a possible future court-audio option, but the 1.0 capture session adds no audio input and never requests microphone access.
+CAMERA TEST
+Open Coach, Auto Analyze, then Open automatic camera. Allow camera access. Place the iPhone in portrait at waist height about 8 to 12 feet from the player. Tap record. Step into the guide and perform or mimic one pickleball stroke. Pose analysis runs on the device and the app captures the detected stroke. The reviewer may tap Stop and Analyze after the stroke.
 
-ACCOUNT DELETION (Guideline 5.1.1(v))
-Settings > Account > Manage account > Delete account. An optional one-question exit survey (Skip is always available) is followed by a two-step confirmation; the final button enables after a short pause. Deletion permanently removes the account and all server-side data.
+IMPORT VIDEO
+Open Coach, then Import Video. Select a short video showing one visible pickleball stroke. Analysis runs on the device. Video and pose data are not uploaded.
 
-DEVICE
-Designed for iPhone in portrait. It installs on iPad in iPhone compatibility mode; the camera guide is tuned for iPhone rear cameras.
+ACCOUNT DELETION
+Open Settings, Account, Manage account, Delete account. The exit survey may be skipped. Confirm the two step deletion. The backend removes synced account data, deletes the RevenueCat customer record, and revokes Sign in with Apple authorization when a revocation credential is available.
 
-THIRD-PARTY CONTENT
-The Drill Library shows attributed instructional videos from pickleball creators, played with the official YouTube embedded player; creator names appear with each video.
-
-LEGAL
-Privacy policy: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy
-Terms of use: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/terms
+PRIVACY
+Camera video and pose processing remain on the device. Account, coaching profile, analysis results, membership status, and device-bound offline rating records are synced. A random installation identifier supports offline rating access and security. Limited security, billing and legal records may be retained after deletion as disclosed in the Privacy Policy. Privacy Policy: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy
+Terms of Use: https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/terms
 Support: picklesenseidev@gmail.com
 ```
 

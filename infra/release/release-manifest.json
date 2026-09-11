@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "versionScheme": {
     "marketingVersion": "1.0",
-    "buildNumber": 1,
+    "buildNumber": 4,
     "rules": {
       "marketingVersion": "MAJOR.MINOR.PATCH; MUST equal iOS MARKETING_VERSION, Android versionName, and APP_VERSION in apps/mobile/src/config/runtimeConfig.ts",
       "buildNumber": "monotonically increasing integer across all releases; MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode; never reused or reset",

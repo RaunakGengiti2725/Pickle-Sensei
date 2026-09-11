@@ -86,14 +86,14 @@ When a refusal fires, the owner commits a new coherent identity (manifest +
 the gates from the start against that commit. No lane, script or check
 increments, bumps or picks a version or build number.
 
-Historical uploads (App Store Connect read-only inspection, recorded in
-`docs/RELEASE_READINESS_2026-09-07.md`): builds 1, 2 and 3 of version 1.0
-are valid uploads, build 3 is the newest, and no further page of builds was
-found. The committed identity in this revision is still 1.0 (1), so the
-release lanes refuse to upload it. The next identity must be a build number
-greater than 3; choosing it is the owner's decision and has NOT been made
-here — this repository does not select it. No upload or submission was
-performed while introducing this gate.
+App Store Connect was inspected again on 2026-09-11: builds 1, 2 and 3 of
+version 1.0 are valid uploads, build 3 is the newest, and no further page of
+builds was found. The owner selected **1.0 (4)**, greater than 3, for the next candidate. The
+manifest, iOS project and Android version code now agree on build 4; fastlane
+uploads that committed identity only after its verification gates pass. It
+does not assign or increment build numbers. Build 4 has not been uploaded by
+the preparation change. Re-read App Store Connect immediately before upload
+so a concurrent upload cannot reuse the selected number.
 
 ## Signing model
 
