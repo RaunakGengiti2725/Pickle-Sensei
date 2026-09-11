@@ -107,6 +107,9 @@ export default tseslint.config(
       "packages/swing-lab/src/engine/**/*.ts",
       // release-manifest generator CLI prints its summary.
       "packages/release-ops/src/generateManifestCli.ts",
+      // release-policy builder/verifier are operator CLIs (Deno) that print the
+      // document, its digest and the authority verdicts.
+      "tools/release-policy/**/*.ts",
     ],
     rules: {
       "no-console": "off",

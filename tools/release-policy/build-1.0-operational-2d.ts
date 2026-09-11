@@ -10,10 +10,7 @@
 // Every sha256 below is the SHA-256 of a real artifact at the commit named in
 // `RELEASE_COMMIT`: `blob` = raw file bytes (`git show <commit>:<path>`),
 // `tree` = the deterministic `git ls-tree -r <commit> -- <path>` listing.
-import {
-  CAMERA_VIEWS,
-  SHOT_TYPES,
-} from "../../packages/shared-types/src/domain.ts";
+import { CAMERA_VIEWS, SHOT_TYPES } from "../../packages/shared-types/src/domain.ts";
 import {
   type AnalysisReleaseInputDomain,
   type AnalysisReleasePolicyDocument,
@@ -92,12 +89,7 @@ const supportedInputs: AnalysisReleaseInputDomain[] = [];
 for (const shotType of SHOT_TYPES) {
   for (const cameraView of SHIPPING_CAMERA_VIEWS) {
     for (const handedness of ["right", "left", "ambidextrous"] as const) {
-      for (
-        const captureMode of [
-          "automatic_pose_trigger",
-          "imported_video",
-        ] as const
-      ) {
+      for (const captureMode of ["automatic_pose_trigger", "imported_video"] as const) {
         supportedInputs.push({ shotType, cameraView, handedness, captureMode });
       }
     }
@@ -134,18 +126,10 @@ if (import.meta.main) {
   const sha256 = await digestCanonicalOfflineJson(document);
   const outDir = "docs/release-policy";
   await Deno.mkdir(outDir, { recursive: true });
-  await Deno.writeTextFile(
-    `${outDir}/1.0-operational-2d.canonical.json`,
-    canonical,
-  );
-  await Deno.writeTextFile(
-    `${outDir}/1.0-operational-2d.sha256`,
-    `${sha256}\n`,
-  );
+  await Deno.writeTextFile(`${outDir}/1.0-operational-2d.canonical.json`, canonical);
+  await Deno.writeTextFile(`${outDir}/1.0-operational-2d.sha256`, `${sha256}\n`);
   console.log(JSON.stringify(document, null, 2));
   console.log(`\nsupportedInputs: ${supportedInputs.length}`);
-  console.log(
-    `canonical bytes: ${new TextEncoder().encode(canonical).byteLength}`,
-  );
+  console.log(`canonical bytes: ${new TextEncoder().encode(canonical).byteLength}`);
   console.log(`sha256: ${sha256}`);
 }

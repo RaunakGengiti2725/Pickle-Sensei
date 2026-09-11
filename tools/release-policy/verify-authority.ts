@@ -19,13 +19,11 @@ if (!path) {
   console.error("usage: verify-authority.ts <authority.json>");
   Deno.exit(2);
 }
-const rows = JSON.parse(await Deno.readTextFile(path)) as Array<
-  { authority: unknown }
->;
+const rows = JSON.parse(await Deno.readTextFile(path)) as Array<{ authority: unknown }>;
 const authority = rows[0]?.authority;
 const now = Math.floor(Date.now() / 1000);
 const policy = await readVerifiedReleasePolicy(() =>
-  Promise.resolve({ data: authority, error: null })
+  Promise.resolve({ data: authority, error: null }),
 );
 const admission = admitChargeableRelease(policy, now);
 console.log("verified policy:", policy ? policy.approval.policy : null);
@@ -71,9 +69,7 @@ for (const probe of probes) {
   );
   console.log(
     `${probe.shotType}/${probe.cameraView}/${probe.handedness}/${probe.captureMode}:`,
-    eligibility.status === "eligible"
-      ? "eligible"
-      : `ineligible (${eligibility.reasonCode})`,
+    eligibility.status === "eligible" ? "eligible" : `ineligible (${eligibility.reasonCode})`,
   );
 }
 const fixture = eligibilityForVerifiedRelease(
@@ -83,7 +79,5 @@ const fixture = eligibilityForVerifiedRelease(
 );
 console.log(
   "fixture input:",
-  fixture.status === "eligible"
-    ? "eligible"
-    : `ineligible (${fixture.reasonCode})`,
+  fixture.status === "eligible" ? "eligible" : `ineligible (${fixture.reasonCode})`,
 );

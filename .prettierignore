@@ -35,3 +35,7 @@ supabase/.temp/
 tools/mac-bench/results/
 # Local Ruby gems for fastlane (git-ignored; never present in CI checkouts)
 apps/mobile/vendor/
+# Release-policy documents are RFC 8785 canonical bytes written by
+# tools/release-policy/build-*.ts with their sha256 recorded beside them
+# (*.sha256); reformatting them breaks the digest.
+docs/release-policy/*.canonical.json
