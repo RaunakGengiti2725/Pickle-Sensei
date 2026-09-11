@@ -78,7 +78,8 @@ export interface CanonicalAccessState {
   premium: boolean;
   entitlements: string[];
   freeRatings: {
-    limit: 2;
+    /** The server-declared lifetime allowance (one since 2026-09-10). */
+    limit: number;
     used: number;
     reserved: number;
     remaining: number;

@@ -15,12 +15,24 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
+import {
+  PLAYER_RANK_TIERS,
+  playerRankDivisionForRating,
+  playerRankTierForRating,
+  type PlayerRankDivision,
+  type PlayerRankTierKey,
+} from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, space, type } from '../design/tokens';
 import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 import type { RankCelebration } from '../progress/rankCelebration';
+import {
+  DUPR_LABEL,
+  formatDupr,
+  formatDuprDistance,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
 /**
@@ -54,6 +66,18 @@ function segmentFill(rating: number, index: number): number {
   return Math.max(0, Math.min(1, (rating - floor) / (ceiling - floor)));
 }
 
+/** The division the player held before the jump — read from the recorded
+ * rating, and only when that rating really sits in the recorded tier; the
+ * plain tier mark is shown otherwise rather than inventing a division. */
+function previousDivision(
+  fromTier: PlayerRankTierKey,
+  fromRating: number | null,
+): PlayerRankDivision | null {
+  if (fromRating === null || !Number.isFinite(fromRating)) return null;
+  if (playerRankTierForRating(fromRating).key !== fromTier) return null;
+  return playerRankDivisionForRating(fromRating).division;
+}
+
 function CelebrationStage(props: {
   celebration: RankCelebration;
   dismiss: () => void;
@@ -75,17 +99,17 @@ function CelebrationStage(props: {
     return () => cancelAnimation(entry);
   }, [entry, reduced]);
 
+  const ratingSpoken = `Estimated DUPR ${formatDupr(
+    summary.rating,
+  )}, technique rating ${summary.rating.toFixed(2)} out of 10`;
+
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility(
       placement
-        ? `You are on the board: ${
-            summary.tierLabel
-          }. Rating ${summary.rating.toFixed(2)} out of 10.`
-        : `Rank up: ${summary.tierLabel}. Rating ${summary.rating.toFixed(
-            2,
-          )} out of 10.`,
+        ? `You are on the board: ${summary.tierLabel}. ${ratingSpoken}.`
+        : `Rank up: ${summary.tierLabel}. ${ratingSpoken}.`,
     );
-  }, [placement, summary.rating, summary.tierLabel]);
+  }, [placement, ratingSpoken, summary.tierLabel]);
 
   const entryStyle = useAnimatedStyle(() => ({
     opacity: entry.value,
@@ -107,10 +131,21 @@ function CelebrationStage(props: {
       <View style={styles.stage} pointerEvents="none" testID="rank-up-stage">
         {celebration.fromTier ? (
           <View style={styles.fromEmblem}>
-            <RankIcon tier={celebration.fromTier} size={FROM_EMBLEM_SIZE} />
+            <RankIcon
+              tier={celebration.fromTier}
+              division={previousDivision(
+                celebration.fromTier,
+                celebration.fromRating,
+              )}
+              size={FROM_EMBLEM_SIZE}
+            />
           </View>
         ) : null}
-        <RankIcon tier={celebration.toTier} size={EMBLEM_SIZE} />
+        <RankIcon
+          tier={celebration.toTier}
+          division={summary.division}
+          size={EMBLEM_SIZE}
+        />
       </View>
 
       <View style={styles.copyBlock}>
@@ -120,13 +155,21 @@ function CelebrationStage(props: {
         <View style={styles.ratingRow}>
           <Text
             style={styles.ratingValue}
-            accessibilityLabel={`Rating ${summary.rating.toFixed(2)} out of 10`}
+            accessibilityLabel={ratingSpoken}
             testID="rank-up-rating"
           >
-            {summary.rating.toFixed(2)}
-            <Text style={[type.caption, styles.ratingScale]}>{' / 10'}</Text>
+            {formatDupr(summary.rating)}
+            <Text style={[type.caption, styles.ratingScale]}>
+              {` ${DUPR_LABEL}`}
+            </Text>
           </Text>
         </View>
+        <Text
+          style={[type.micro, styles.ratingTechnique]}
+          testID="rank-up-technique-rating"
+        >
+          {formatTechniqueScore(summary.rating, 2)}
+        </Text>
       </View>
 
       <View style={styles.ladder}>
@@ -145,9 +188,10 @@ function CelebrationStage(props: {
               summary.techniqueCount === 1 ? 'technique' : 'techniques'
             } — recent swings count most.`
           : summary.nextTier
-            ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                summary.nextTier.label
-              }. Every analysis moves it.`
+            ? `${formatDuprDistance(
+                summary.rating,
+                summary.nextTier.minRating,
+              )} to ${summary.nextTier.label}. Every analysis moves it.`
             : 'Top tier — every new analysis defends it.'}
       </Text>
     </>
@@ -281,6 +325,12 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   ratingScale: { color: color.onDarkSubtle },
+  ratingTechnique: {
+    color: color.onDarkFaint,
+    textAlign: 'center',
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
   ladder: {
     flexDirection: 'row',
     gap: 5,

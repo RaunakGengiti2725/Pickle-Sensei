@@ -962,7 +962,7 @@ describe('Restrained visual primitives', () => {
     act(() => checkpoint.unmount());
   });
 
-  it('uses a solid score arc while preserving the actual score label', () => {
+  it('uses a solid score arc while presenting the estimated DUPR over the /10 reading', () => {
     const renderer = render(<ScoreRing score={7.1} dark />);
     expect(
       renderer.root.findAll(node => node.props.id === 'scoreGradient'),
@@ -970,12 +970,20 @@ describe('Restrained visual primitives', () => {
     expect(
       renderer.root.findAll(node => node.props.stroke === color.volt).length,
     ).toBeGreaterThan(0);
+    // D-046: VoiceOver hears both figures and which is which; the caption
+    // names the unit and the smaller line keeps the 0–10 score.
     expect(
       renderer.root.findAll(
         node =>
-          node.props.accessibilityLabel === 'Technique score 7.1 out of 10',
+          node.props.accessibilityLabel ===
+          'Estimated DUPR 3.40, technique score 7.1 out of 10',
       ).length,
     ).toBeGreaterThan(0);
+    const texts = renderer.root
+      .findAllByType(Text)
+      .map(node => node.props.children);
+    expect(texts).toContain('EST. DUPR');
+    expect(texts).toContain('7.1 /10');
     act(() => renderer.unmount());
   });
 

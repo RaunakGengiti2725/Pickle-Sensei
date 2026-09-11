@@ -41,6 +41,7 @@ const mockRead = jest.fn(async (key: string) => mockKv.get(key) ?? null);
 const mockHydrate = jest.fn(async () => {});
 const mockUnderlyingPress = jest.fn();
 let mockOwner = '11111111-1111-4111-8111-111111111111';
+const SECOND_OWNER = '22222222-2222-4222-8222-222222222222';
 let mockSignedIn = true;
 let mockReady = true;
 let mockReducedMotion = false;
@@ -130,8 +131,8 @@ import { useRankCelebrationStore } from '../src/progress/rankCelebration';
 import { useConsistencyStore } from '../src/consistency/store';
 import {
   useWalkthroughStore,
-  WALKTHROUGH_KV_KEY,
   WALKTHROUGH_SEEN_VALUE,
+  walkthroughKeyForOwner,
 } from '../src/walkthrough/walkthroughStore';
 import { registerWalkthroughMeasurer } from '../src/walkthrough/targets';
 
@@ -273,7 +274,12 @@ beforeEach(() => {
   mockReady = true;
   mockReducedMotion = false;
   mockKv.clear();
-  mockKv.set(WALKTHROUGH_KV_KEY, WALKTHROUGH_SEEN_VALUE);
+  // Every account these scenarios sign in as has already toured: the
+  // walkthrough is owner-scoped, so an unseeded second account would raise
+  // its own first-run tour on top of the ceremony under test.
+  for (const owner of [mockOwner, SECOND_OWNER]) {
+    mockKv.set(walkthroughKeyForOwner(owner), WALKTHROUGH_SEEN_VALUE);
+  }
   mockShots.length = 0;
   mockUnderlyingPress.mockClear();
   mockRead.mockClear();
@@ -298,12 +304,17 @@ beforeEach(() => {
     queued: false,
     request: null,
   });
-  unregister = ['coach-fab', 'rank-banner', 'tab-library', 'tab-progress'].map(
-    key =>
-      registerWalkthroughMeasurer(
-        key as Parameters<typeof registerWalkthroughMeasurer>[0],
-        async () => ({ x: 20, y: 300, width: 200, height: 48 }),
-      ),
+  unregister = [
+    'coach-fab',
+    'rank-banner',
+    'home-streak',
+    'tab-library',
+    'tab-progress',
+  ].map(key =>
+    registerWalkthroughMeasurer(
+      key as Parameters<typeof registerWalkthroughMeasurer>[0],
+      async () => ({ x: 20, y: 300, width: 200, height: 48 }),
+    ),
   );
   appStateChange = new Set();
   backHandlers = new Set();
@@ -517,7 +528,7 @@ describe('App ceremony overlay arbitration without UIKit presentation callbacks'
 
   it('owner A → B → A never leaks old content and retains requests without any native callbacks', async () => {
     const ownerA = mockOwner;
-    const ownerB = '22222222-2222-4222-8222-222222222222';
+    const ownerB = SECOND_OWNER;
     await mount();
     await raise('streak');
     await raise('rank');
@@ -558,7 +569,7 @@ describe('App ceremony overlay arbitration without UIKit presentation callbacks'
     await raise('streak');
     const close = overlays()[0]!.props.onAccessibilityEscape;
     await act(async () => {
-      setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+      setActiveDataOwner(SECOND_OWNER);
       close();
       renderer!.update(<App />);
     });

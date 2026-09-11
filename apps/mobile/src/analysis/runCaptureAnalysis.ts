@@ -6,6 +6,7 @@ import type {
 } from '@pickle/shared-types';
 import {
   analyzeCapture,
+  captureQualityLimitingFactors,
   FUSION_ENGINE_VERSION,
   STROKE_TAXONOMY_VERSION,
   isDeclaredTechniqueIntent,
@@ -414,7 +415,12 @@ const POSE_QUALITY_REASON_COPY: Record<string, string> = {
 };
 
 function poseQualityBlockedReason(gate: PreAnalysisGateDecision): string {
-  const measured = gate.reasons
+  // Only the BLOCKING reasons are why nothing was rated; advisory ones ride
+  // along on a scored read instead.
+  const blocking = gate.reasons.filter(
+    reason => !gate.advisories.includes(reason),
+  );
+  const measured = (blocking.length > 0 ? blocking : gate.reasons)
     .map(
       reason => POSE_QUALITY_REASON_COPY[reason] ?? reason.replace(/_/g, ' '),
     )
@@ -2071,14 +2077,19 @@ async function runCaptureAnalysisCore(
             },
           };
 
-    // ── Pose-quality gate: the engine only sees measurably usable tracking ──
+    // ── Pose-quality gate: only a capture with NOTHING measurable is refused
+    // (no person, no torso, too few frames, too slow a stream). Degraded but
+    // measurable footage — part of the body out of frame, a tracking gap, an
+    // unusual scale — is analyzed on what was measured, with every advisory
+    // reason attached to the record as a `capture_quality:*` limiting factor
+    // and its presentation capped at lower_confidence.
     const gate = evaluatePreAnalysisGate({
       frame: null,
       pose: parsed.value,
       poseQuality: evaluateCaptureQuality(parsed.value),
       stroke: strokeWindowFor(clip, parsed.value),
     });
-    if (!gate.analyzable) {
+    if (gate.blocking) {
       await cleanup('unsupported');
       assertCurrent();
       return {
@@ -2116,6 +2127,7 @@ async function runCaptureAnalysisCore(
         nowIso: () => new Date().toISOString(),
         makeId: makeUuid,
         captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
+        captureQualityFactors: captureQualityLimitingFactors(gate),
         ...(request.focusCheckpoint
           ? { focusCheckpoint: request.focusCheckpoint }
           : {}),

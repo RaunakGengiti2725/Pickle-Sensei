@@ -29,7 +29,11 @@ final class PickleClipPlayerView: UIView {
 
   override init(frame: CGRect) {
     super.init(frame: frame)
-    backgroundColor = .black
+    // Transparent: in 'contain' mode the area outside the video rect shows
+    // whatever the JS host draws under the player (the dark stage), instead
+    // of black pillarbox bars painted by this layer.
+    backgroundColor = .clear
+    isOpaque = false
     player.isMuted = true
     player.actionAtItemEnd = .pause
     playerLayer.player = player

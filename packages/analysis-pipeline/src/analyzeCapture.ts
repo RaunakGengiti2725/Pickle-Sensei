@@ -128,6 +128,15 @@ export interface CaptureAnalysisOptions {
    * CAPTURE_ENVELOPE_VERSION_NOT_MEASURED — never guessed.
    */
   captureEnvelopeThresholdsVersion?: string | null;
+  /**
+   * Advisory capture-quality reasons the pre-analysis gate measured on this
+   * capture (`capture_quality:<reason>` tokens, see
+   * `captureQualityLimitingFactors`). The capture is degraded but measurable:
+   * the tokens join the record's limiting factors and the presentation is
+   * capped at `lower_confidence` — a degraded read is never presented as a
+   * confident one, and never refused because of its degradation.
+   */
+  captureQualityFactors?: readonly string[];
 }
 
 const CHECKPOINT_PHASE: Record<string, PhaseKey> = {
@@ -446,11 +455,19 @@ export async function analyzeCapture(
     }),
   );
 
-  const uncertainty = await run("uncertainty_estimation", providers.uncertainty.descriptor, () =>
+  // A capture the gate measured as degraded (advisory reasons) is scored from
+  // what was measured but never presented as a confident read.
+  const captureQualityFactors = [...new Set(options.captureQualityFactors ?? [])];
+  const presentation =
+    captureQualityFactors.length > 0 && scored.value.presentation === "normal"
+      ? "lower_confidence"
+      : scored.value.presentation;
+
+  const estimated = await run("uncertainty_estimation", providers.uncertainty.descriptor, () =>
     providers.uncertainty.estimate({
       checkpoints: scored.value.checkpoints,
       analysisConfidence: scored.value.analysisConfidence,
-      presentation: scored.value.presentation,
+      presentation,
       modalitiesUsed: {
         pose: true,
         paddle: input.paddle.status === "measured",
@@ -459,10 +476,15 @@ export async function analyzeCapture(
       },
     }),
   );
-  if (!uncertainty.ok) return uncertainty;
+  if (!estimated.ok) return estimated;
+  const uncertainty: UncertaintySummary = {
+    ...estimated.value,
+    presentation,
+    limitingFactors: [...new Set([...estimated.value.limitingFactors, ...captureQualityFactors])],
+  };
 
   const coached =
-    scored.value.presentation === "abstain"
+    presentation === "abstain"
       ? null
       : await run("coaching_ranking", providers.coach.descriptor, () =>
           providers.coach.rank({
@@ -519,7 +541,7 @@ export async function analyzeCapture(
     checkpoints: scored.value.checkpoints,
     overallScore: scored.value.overallScore,
     analysisConfidence: scored.value.analysisConfidence,
-    resultKind: scored.value.presentation === "abstain" ? "low_confidence" : "scored",
+    resultKind: presentation === "abstain" ? "low_confidence" : "scored",
     guidance: scored.value.guidance,
     priorityFix: coached && coached.ok ? coached.value : null,
     versionVector: {
@@ -565,7 +587,7 @@ export async function analyzeCapture(
     }),
     result,
     faults: faults.ok ? faults.value : [],
-    uncertainty: uncertainty.value,
+    uncertainty,
     evidence,
     shadow,
     strokeIntent,
@@ -633,6 +655,7 @@ async function partialAutoRecord(args: {
       resolution.kind === "side"
         ? "auto_stroke_resolved_at_side_depth_no_leaf_for_scoring"
         : resolution.reason,
+      ...(options.captureQualityFactors ?? []),
     ]),
   ];
   const uncertainty: UncertaintySummary = {

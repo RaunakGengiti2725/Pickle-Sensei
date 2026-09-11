@@ -336,8 +336,9 @@ describe('StreakCalendarScreen', () => {
     expect(copy).toContain('forehand drive');
     expect(copy).toContain('Dink ladder');
     expect(copy).toContain('2 ACTIVITIES');
-    // Scored average for the day: one 7.4 analysis → 7.4.
-    expect(copy).toContain('AVG 7.4');
+    // Scored average for the day: one 7.4 analysis → estimated DUPR 3.60.
+    expect(copy).toContain('AVG 3.60 DUPR');
+    expect(copy).toContain('3.60 DUPR 7.4 /10');
     act(() => renderer.unmount());
   });
 

@@ -13,6 +13,7 @@ import type {
 import {
   StrokeResult,
   StrokeResultAnalyzing,
+  replayStageHeight,
 } from '../src/components/StrokeResult';
 import {
   ANALYSIS_TIMELINE_CAPTION,
@@ -699,6 +700,87 @@ describe('StrokeResultAnalyzing — single-state arc + honest stage captions', (
     const rendered = textOf(renderer);
     expect(rendered).toContain('Measuring your swing…');
     expect(rendered).toContain('nothing is invented');
+    await unmount(renderer);
+  });
+});
+
+describe('StrokeResult — replay shows the whole body on the dark surface', () => {
+  it('sizes the replay stage from the recorded frame: a portrait clip gets its full aspect (capped), landscape/unknown keep the band', () => {
+    // Portrait phone capture at a 313pt-wide card → 16:9 tall, capped at 420.
+    expect(replayStageHeight({ width: 1080, height: 1920 }, 313)).toBe(420);
+    expect(replayStageHeight({ width: 1080, height: 1920 }, 200)).toBe(356);
+    // Landscape and square frames keep the historical band.
+    expect(replayStageHeight({ width: 1920, height: 1080 }, 313)).toBe(168);
+    expect(replayStageHeight({ width: 1080, height: 1080 }, 313)).toBe(168);
+    // Unknown, degenerate or unlaid-out inputs never produce NaN or 0.
+    expect(replayStageHeight(null, 313)).toBe(168);
+    expect(replayStageHeight(undefined, 313)).toBe(168);
+    expect(replayStageHeight({ width: 0, height: 1920 }, 313)).toBe(168);
+    expect(replayStageHeight({ width: 1080, height: Number.NaN }, 313)).toBe(
+      168,
+    );
+    expect(replayStageHeight({ width: 1080, height: 1920 }, 0)).toBe(168);
+  });
+
+  it('letterboxes the clip ("contain") and grows the stage for a portrait frame — nothing of the body is cropped', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={scoredAnalysis()}
+        record={declaredRecord}
+        clip={{ uri: 'file:///clip.mov', durationMs: 4200 }}
+        replayVideoSize={{ width: 1080, height: 1920 }}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+      />,
+    );
+    const [stage] = renderer.root.findAll(
+      node => node.props.testID === 'stroke-result-replay-stage',
+    );
+    expect(stage).toBeDefined();
+    await act(async () => {
+      stage!.props.onLayout({
+        nativeEvent: { layout: { width: 313, height: 168 } },
+      });
+    });
+    const [laidOut] = renderer.root.findAll(
+      node => node.props.testID === 'stroke-result-replay-stage',
+    );
+    const style = Object.assign(
+      {},
+      ...[laidOut!.props.style].flat(Number.POSITIVE_INFINITY).filter(Boolean),
+    ) as { height?: number };
+    expect(style.height).toBe(420);
+    // The poster (test builds have no native player) is fitted, not cropped.
+    const posters = renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Captured clip poster',
+    );
+    for (const poster of posters)
+      expect(poster.props.resizeMode).toBe('contain');
+    await unmount(renderer);
+  });
+
+  it('a replaySlot replaces the replay card entirely (one replay, never two)', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={scoredAnalysis()}
+        record={declaredRecord}
+        clip={{ uri: 'file:///clip.mov', durationMs: 4200 }}
+        replaySlot={<Text testID="host-player">player</Text>}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+      />,
+    );
+    const hosts = (testID: string) =>
+      renderer.root.findAll(
+        node => typeof node.type === 'string' && node.props.testID === testID,
+      );
+    expect(hosts('host-player')).toHaveLength(1);
+    expect(hosts('stroke-result-replay')).toHaveLength(0);
+    expect(hosts('stroke-result-replay-slot')).toHaveLength(1);
+    // The rest of the surface is unchanged around it.
+    expect(textOf(renderer)).toContain('WHAT THE CAMERA MEASURED');
     await unmount(renderer);
   });
 });

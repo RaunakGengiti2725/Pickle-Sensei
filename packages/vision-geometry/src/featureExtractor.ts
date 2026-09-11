@@ -46,12 +46,24 @@ import {
  * joints it used, scaled by documented method factors. Metrics whose joints
  * were not measured are omitted so the scoring engine can abstain rather than
  * receive fabricated values.
+ *
+ * features-geometry-3 degrades instead of refusing (2026-09-10 field
+ * failure: a live swing ended in "Acceleration and contact-proxy observations
+ * are required" and no score). A missing phase now falls back to the
+ * neighbouring measured phase, the torso length and ground line fall back to
+ * the whole recording when the stroke window itself did not show them, and
+ * the forward direction is read from the first and last visible wrist inside
+ * the run-up when the exact boundary frames hide it. Nothing is invented:
+ * every fallback is another measured frame of the same clip, and a metric
+ * whose joints were never measured is still omitted.
  */
 
-export const FEATURE_EXTRACTOR_VERSION = "features-geometry-2";
+export const FEATURE_EXTRACTOR_VERSION = "features-geometry-3";
 
 const PADDLE_PROXY_FACTOR = 0.75;
 const SIDE_VIEW_TURN_FACTOR = 0.7;
+/** Confidence factor for a phase span stood in for by a neighbouring phase. */
+const FALLBACK_PHASE_FACTOR = 0.5;
 
 interface Body {
   dominant: {
@@ -108,21 +120,24 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
         ),
       );
     }
-    const accelerate = phaseByKey.get("accelerate");
-    const contact = phaseByKey.get("contact");
-    if (!accelerate || !contact) {
+    if (phases.length === 0) {
       return fail(
         failure(
           "low_confidence",
           "features.missing_phase",
-          "Acceleration and contact-proxy observations are required.",
+          "No stroke phase was observed; nothing can be measured.",
         ),
       );
     }
+    const { accelerate, contact } = resolveSwingSpans(phases, phaseByKey);
     const ready = phaseByKey.get("ready");
     const prepareSpan = phaseByKey.get("prepare");
     const followSpan = phaseByKey.get("follow_through");
-    const observedPhases = phases.filter((phase) => phase.key !== "recover");
+    const observedPhases = [
+      ...phases.filter((phase) => phase.key !== "recover"),
+      accelerate,
+      contact,
+    ];
     const poseFrames = framesWithin(
       input.poseFrames,
       Math.min(...observedPhases.map((phase) => phase.startMs)),
@@ -133,7 +148,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       position: "startMs" | "endMs" | "representativeMs",
     ) => (phase ? this.observedPhaseFrame(poseFrames, phase, phase[position]) : null);
 
-    const body = this.measureBody(poseFrames, handedness, accelerate, contact);
+    const body = this.measureBody(poseFrames, input.poseFrames, handedness, accelerate, contact);
     if (!body.ok) return body;
     const { torsoLength, groundY, forwardSign, dominant } = body.value;
 
@@ -377,38 +392,62 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     return ok(measurements);
   }
 
+  /**
+   * Torso length (shoulder-center → hip-center) and ground line (lowest
+   * ankle) as measured across `frames`; both are body constants, so the
+   * stroke window is preferred and the whole recording stands in when the
+   * window itself did not show the joints.
+   */
+  private bodyConstants(frames: readonly PoseFrame[]): {
+    torsoSamples: number[];
+    groundSamples: number[];
+  } {
+    const torsoSamples: number[] = [];
+    const groundSamples: number[] = [];
+    for (const frame of frames) {
+      const shoulders = this.pair(frame, "left_shoulder", "right_shoulder");
+      const hips = this.pair(frame, "left_hip", "right_hip");
+      if (shoulders && hips) {
+        const torso = distance(midpoint(shoulders[0], shoulders[1]), midpoint(hips[0], hips[1]));
+        if (Number.isFinite(torso) && torso >= 1e-4) torsoSamples.push(torso);
+      }
+      const ankles = this.pair(frame, "left_ankle", "right_ankle");
+      if (ankles) {
+        const ground = Math.max(ankles[0].y, ankles[1].y);
+        if (Number.isFinite(ground)) groundSamples.push(ground);
+      }
+    }
+    return { torsoSamples, groundSamples };
+  }
+
   private measureBody(
     poseFrames: readonly PoseFrame[],
+    allFrames: readonly PoseFrame[],
     handedness: Handedness,
     accelerate: PhaseSpan,
     contact: PhaseSpan,
   ): Result<Body> {
     const aspect = this.aspectRatio;
-    const torsoSamples: number[] = [];
-    const groundSamples: number[] = [];
-    for (const frame of poseFrames) {
-      const shoulders = this.pair(frame, "left_shoulder", "right_shoulder");
-      const hips = this.pair(frame, "left_hip", "right_hip");
-      if (shoulders && hips) {
-        torsoSamples.push(
-          distance(midpoint(shoulders[0], shoulders[1]), midpoint(hips[0], hips[1])),
-        );
-      }
-      const ankles = this.pair(frame, "left_ankle", "right_ankle");
-      if (ankles) groundSamples.push(Math.max(ankles[0].y, ankles[1].y));
-    }
+    const inWindow = this.bodyConstants(poseFrames);
+    const whole =
+      inWindow.torsoSamples.length >= 4 && inWindow.groundSamples.length > 0
+        ? inWindow
+        : this.bodyConstants(allFrames);
+    const torsoSamples =
+      inWindow.torsoSamples.length >= 4 ? inWindow.torsoSamples : whole.torsoSamples;
+    const groundSamples =
+      inWindow.groundSamples.length > 0 ? inWindow.groundSamples : whole.groundSamples;
     const torsoLength = median(torsoSamples);
-    if (torsoSamples.length < 4 || !Number.isFinite(torsoLength) || torsoLength < 1e-4) {
+    if (torsoSamples.length === 0 || !Number.isFinite(torsoLength) || torsoLength < 1e-4) {
       return fail(
         failure(
           "low_confidence",
           "features.torso_not_measured",
-          "Torso landmarks were not measured reliably; body-relative metrics are impossible.",
+          "Torso landmarks were not measured anywhere in the recording; body-relative metrics are impossible.",
         ),
       );
     }
-    const observedGround = groundSamples.filter(Number.isFinite);
-    const groundY = observedGround.length > 0 ? median(observedGround) : null;
+    const groundY = groundSamples.length > 0 ? median(groundSamples) : null;
 
     const side =
       handedness === "left"
@@ -435,16 +474,47 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
             ankle: "right_ankle",
           };
 
-    // Forward = measured travel direction of the swinging wrist to contact.
+    // Forward = measured travel direction of the swinging wrist to contact:
+    // the run-up's first frame to the contact frame when both show the wrist,
+    // else the first and last frames inside the run-up that do.
     const startFrame = this.observedPhaseFrame(poseFrames, accelerate, accelerate.startMs);
     const contactFrame = this.observedPhaseFrame(poseFrames, contact, contact.representativeMs);
     let forwardSign: 1 | -1 | null = null;
-    if (startFrame && contactFrame) {
-      const start = landmark(startFrame, dominant.wrist, aspect);
-      const end = landmark(contactFrame, dominant.wrist, aspect);
-      if (start && end && end.x !== start.x) forwardSign = end.x > start.x ? 1 : -1;
-    }
+    const start =
+      (startFrame && landmark(startFrame, dominant.wrist, aspect)) ??
+      this.firstWrist(poseFrames, dominant.wrist, accelerate.startMs, contact.representativeMs);
+    const end =
+      (contactFrame && landmark(contactFrame, dominant.wrist, aspect)) ??
+      this.lastWrist(poseFrames, dominant.wrist, accelerate.startMs, contact.endMs);
+    if (start && end && end.x !== start.x) forwardSign = end.x > start.x ? 1 : -1;
     return ok({ dominant, torsoLength, groundY, forwardSign });
+  }
+
+  private firstWrist(
+    frames: readonly PoseFrame[],
+    wrist: PoseLandmarkName,
+    startMs: number,
+    endMs: number,
+  ): Point | null {
+    for (const frame of framesWithin(frames, startMs, endMs)) {
+      const point = landmark(frame, wrist, this.aspectRatio);
+      if (point) return point;
+    }
+    return null;
+  }
+
+  private lastWrist(
+    frames: readonly PoseFrame[],
+    wrist: PoseLandmarkName,
+    startMs: number,
+    endMs: number,
+  ): Point | null {
+    const inSpan = framesWithin(frames, startMs, endMs);
+    for (let index = inSpan.length - 1; index >= 0; index -= 1) {
+      const point = landmark(inSpan[index]!, wrist, this.aspectRatio);
+      if (point) return point;
+    }
+    return null;
   }
 
   private busierWristSide(
@@ -560,6 +630,59 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       confidence: mean(frames.map((frame) => frame.confidence)) * 0.85,
     };
   }
+}
+
+/**
+ * The run-up and contact-proxy spans the measurements are anchored on. The
+ * segmenter emits both for every peak it finds; when one is absent (an older
+ * or foreign segmenter), the neighbouring measured phase stands in at
+ * reduced confidence rather than refusing every metric of the read.
+ */
+function resolveSwingSpans(
+  phases: readonly PhaseSpan[],
+  phaseByKey: ReadonlyMap<PhaseSpan["key"], PhaseSpan>,
+): { accelerate: PhaseSpan; contact: PhaseSpan } {
+  let contact = phaseByKey.get("contact");
+  let accelerate = phaseByKey.get("accelerate");
+  if (!contact) {
+    // The contact proxy is the peak-speed instant; without it, the end of
+    // the latest phase that precedes any follow-through stands in.
+    const anchor =
+      accelerate ??
+      [...phases]
+        .filter((phase) => phase.key !== "follow_through" && phase.key !== "recover")
+        .sort((a, b) => b.endMs - a.endMs)[0] ??
+      phases[0]!;
+    contact = {
+      key: "contact",
+      startMs: anchor.endMs,
+      representativeMs: anchor.endMs,
+      endMs: anchor.endMs,
+      confidence: anchor.confidence * FALLBACK_PHASE_FACTOR,
+    };
+  }
+  if (!accelerate) {
+    const proxyStart = contact.startMs;
+    const before = [...phases]
+      .filter((phase) => phase.key !== "contact" && phase.endMs <= proxyStart)
+      .sort((a, b) => b.endMs - a.endMs)[0];
+    accelerate = before
+      ? {
+          key: "accelerate",
+          startMs: before.startMs,
+          representativeMs: before.representativeMs,
+          endMs: proxyStart,
+          confidence: before.confidence * FALLBACK_PHASE_FACTOR,
+        }
+      : {
+          key: "accelerate",
+          startMs: proxyStart,
+          representativeMs: proxyStart,
+          endMs: proxyStart,
+          confidence: contact.confidence * FALLBACK_PHASE_FACTOR,
+        };
+  }
+  return { accelerate, contact };
 }
 
 function indexOfMax(values: readonly number[]): number {

@@ -224,7 +224,7 @@ import {
   isReleasePolicyRequest,
 } from '../testSupport/releasePolicyFixture';
 import { loadSavedTechniqueConfirmation } from '../src/analysis/savedTechniqueConfirmation';
-import { Button, ScreenHeader } from '../src/design/components';
+import { Button, PressableScale, ScreenHeader } from '../src/design/components';
 import { TechniqueIntentPicker } from '../src/flow/TechniqueIntentPicker';
 import {
   closeSqliteTestDatabases,
@@ -885,7 +885,7 @@ describe('cold original analysis recovery', () => {
       renderer = TestRenderer.create(<LibraryScreen />);
     });
     const open = renderer!.root
-      .findAllByType(Button)
+      .findAllByType(PressableScale)
       .find(
         node => node.props.testID === `open-saved-original-${captureId(1)}`,
       )!;
@@ -1415,7 +1415,7 @@ it('gives the fourth pending confirmation an owner-guarded library open action, 
     renderer = TestRenderer.create(<LibraryScreen />);
   });
   const open = renderer!.root
-    .findAllByType(Button)
+    .findAllByType(PressableScale)
     .find(
       node => node.props.testID === `open-saved-confirmation-${captureId(4)}`,
     )!;

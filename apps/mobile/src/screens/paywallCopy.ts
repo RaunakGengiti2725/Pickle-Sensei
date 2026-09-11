@@ -1,5 +1,12 @@
+import {
+  allowanceWord,
+  FREE_RATING_LIMIT,
+  freeRatingNoun,
+} from '../billing/freeRatings';
 import type { MembershipState } from '../billing/membershipState';
 import type { CanonicalAccessState } from '../billing/types';
+
+export { FREE_PLAY_EYEBROW } from '../billing/freeRatings';
 
 export interface MembershipHeroCopy {
   eyebrow: string;
@@ -40,27 +47,46 @@ export function membershipHeroCopy(
 export const RATING_CONSUMPTION_RULE =
   'A completed rating uses one free rating. Unscored attempts are not charged. Pending work may keep a rating reserved until it is reconciled.';
 
+function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/**
+ * The allowance line on the paywall. Before a server answer exists it states
+ * the product's allowance (FREE_RATING_LIMIT); with one, every number comes
+ * from the server's own `freeRatings` so the copy follows whatever allowance
+ * the account was actually given.
+ */
 export function freeRatingAllowanceCopy(
   access: CanonicalAccessState | null,
 ): string {
   if (!access) {
-    return 'Two lifetime free ratings are included once your account is verified.';
+    return FREE_RATING_LIMIT === 1
+      ? 'One lifetime free rating is included once your account is verified.'
+      : `${capitalize(allowanceWord(FREE_RATING_LIMIT))} lifetime free ratings are included once your account is verified.`;
   }
 
   const { freeRatings } = access;
-  if (freeRatings.used >= freeRatings.limit) {
-    return 'Both lifetime free ratings have been successfully scored.';
+  const { limit, remaining, reserved } = freeRatings;
+  if (freeRatings.used >= limit) {
+    if (limit === 1) {
+      return 'Your lifetime free rating has been successfully scored.';
+    }
+    return `${limit === 2 ? 'Both' : `All ${limit}`} lifetime free ratings have been successfully scored.`;
   }
 
-  const remainingLabel = `${freeRatings.remaining} free rating${
-    freeRatings.remaining === 1 ? '' : 's'
-  } remain`;
+  const remainingLabel = `${remaining} ${freeRatingNoun(remaining)} ${
+    remaining === 1 ? 'remains' : 'remain'
+  }`;
 
-  if (freeRatings.reserved > 0) {
-    return `${remainingLabel}, but ${freeRatings.reserved} capture${
-      freeRatings.reserved === 1 ? ' is' : 's are'
+  if (reserved > 0) {
+    return `${remainingLabel}, but ${reserved} capture${
+      reserved === 1 ? ' is' : 's are'
     } still being finalized.`;
   }
 
-  return `${freeRatings.remaining} of your 2 lifetime free ratings remain.`;
+  if (limit === 1) {
+    return 'Your lifetime free rating is still available.';
+  }
+  return `${remaining} of your ${limit} lifetime free ratings remain.`;
 }

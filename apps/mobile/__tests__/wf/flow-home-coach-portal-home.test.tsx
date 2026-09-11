@@ -343,9 +343,11 @@ describe('Home — controls', () => {
     act(() => renderer.unmount());
   });
 
-  it('rank banner toggles in place (expanded state flips, no navigation) and registers the walkthrough anchor', async () => {
+  it('rank banner toggles in place (expanded state flips, no navigation) and registers the walkthrough anchors', async () => {
     const renderer = await renderHome();
     expect(hasWalkthroughTarget('rank-banner')).toBe(true);
+    // The daily-streak step spotlights the top-bar flame chip.
+    expect(hasWalkthroughTarget('home-streak')).toBe(true);
     const toggle = () =>
       pressableByTestId(renderer, 'player-rank-banner-toggle');
     expect(toggle().props.accessibilityRole).toBe('button');
@@ -369,6 +371,7 @@ describe('Home — controls', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     act(() => renderer.unmount());
     expect(hasWalkthroughTarget('rank-banner')).toBe(false);
+    expect(hasWalkthroughTarget('home-streak')).toBe(false);
   });
 
   it('rank banner reports a resolved rank to the celebration store (owner-scoped ceremony hook)', async () => {
@@ -461,15 +464,21 @@ describe('Home — controls', () => {
     const copy = allText(renderer);
     expect(copy).toMatch(/5\s+latest/);
 
-    const first = pressableByLabel(renderer, 'Open backhand dink result');
+    // A scored row's label carries the estimated DUPR and the 0–10 score so
+    // VoiceOver hears the rating without opening it (row 0: 6.0 → 2.92).
+    const first = pressableByLabel(
+      renderer,
+      'Open backhand dink result, Estimated DUPR 2.92, technique score 6.0 out of 10',
+    );
     expect(first.props.accessibilityRole).toBe('button');
     await press(first);
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: 'aaaaaaaa-0000-4000-8000-000000000000',
     });
-    const serveCards = hostNodes(
-      renderer,
-      n => n.props.accessibilityLabel === 'Open serve result',
+    const serveCards = hostNodes(renderer, n =>
+      /^Open serve result(, Estimated DUPR \d\.\d\d, technique score \d\.\d out of 10)?$/.test(
+        String(n.props.accessibilityLabel),
+      ),
     );
     expect(serveCards).toHaveLength(4);
     act(() => renderer.unmount());

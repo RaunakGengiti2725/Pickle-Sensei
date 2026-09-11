@@ -664,10 +664,10 @@ export function OnboardingScreen(props: {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[type.h3, { color: color.ink }]}>
-                  Two ratings are on us.
+                  Your first rating is on us.
                 </Text>
                 <Text style={[type.caption, styles.accessCopy]}>
-                  After your second successful, server-accepted Technique Score,
+                  After your first successful, server-accepted Technique Score,
                   Pickle Sensei Pro is required before another rating can start.
                   Unscored attempts do not count. Past results and saved drills
                   stay available; reviewed plans appear only when matching work

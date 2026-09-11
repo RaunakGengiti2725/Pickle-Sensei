@@ -593,7 +593,7 @@ describe('W05-06 the sync runtime pulls an offline grant when it has signal', ()
     });
     expect(issue!.body).toEqual({
       installationKeyId: key,
-      requestedTickets: 2,
+      requestedTickets: 1,
     });
 
     expect(handle.count('offline_grant', OWNER)).toBe(1);
@@ -728,7 +728,7 @@ describe('W05-06 the sync runtime pulls an offline grant when it has signal', ()
     expect(server.urls()).toEqual([REGISTER_ROUTE, GRANTS_ROUTE]);
     expect(server.calls.find(call => call.url === GRANTS_ROUTE)!.body).toEqual({
       installationKeyId: expiredGrant.installationKeyId,
-      requestedTickets: 2,
+      requestedTickets: 1,
     });
     // Held, not spent, released or reclaimed: the expired grant stays in the
     // ledger with its unspent tickets, and nothing was consumed.

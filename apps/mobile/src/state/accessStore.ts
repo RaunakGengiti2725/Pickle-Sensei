@@ -173,7 +173,7 @@ const dataDefaults = () => ({
   status: 'idle' as AccessLoadStatus,
   operation: 'idle' as AccessOperation,
   plans: null as StorePlans | null,
-  selectedPeriod: 'annual' as BillingPeriod,
+  selectedPeriod: 'monthly' as BillingPeriod,
   canonicalAccess: null as CanonicalAccessState | null,
   canonicalBilling: null as CanonicalBillingState | null,
   pendingFulfilment: null as PendingFulfilment | null,
@@ -857,13 +857,15 @@ export const useAccessStore = create<AccessStoreState>((set, get) => {
               ? statusFor(error)
               : 'ready',
           plans,
-          selectedPeriod: plans?.annual
-            ? 'annual'
-            : plans?.lifetime
-              ? 'lifetime'
-              : plans?.monthly
-                ? 'monthly'
-                : 'annual',
+          // The recommended (monthly) plan is pre-selected; the paywall's
+          // podium presents it as the hero, so the store must agree.
+          selectedPeriod: plans?.monthly
+            ? 'monthly'
+            : plans?.annual
+              ? 'annual'
+              : plans?.lifetime
+                ? 'lifetime'
+                : 'monthly',
           canonicalAccess: accessResult.ok ? accessResult.value.access : null,
           ...(accessResult.ok
             ? {

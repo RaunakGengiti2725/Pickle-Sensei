@@ -18,7 +18,7 @@ import Animated, {
 import { Button, useReducedMotion } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
-import { badgeArtFor, MilestoneBadge } from './MilestoneBadge';
+import { badgeArtFor, MilestoneBadge, RARITY_PALETTE } from './MilestoneBadge';
 import { specialistTitle } from './engine';
 import { RARITY_LABEL, VOLUME_ACHIEVEMENTS } from './milestones';
 import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
@@ -104,7 +104,15 @@ function CelebrationStage(props: {
 
   const facts = (
     <>
-      <Text style={[type.micro, styles.eyebrow]}>
+      <Text
+        style={[
+          type.micro,
+          styles.eyebrow,
+          // The rarity line wears the badge's own material (≥ 4.5:1 on the
+          // dark stage for every rarity).
+          { color: RARITY_PALETTE[celebration.rarity].accent },
+        ]}
+      >
         {celebration.kind === 'streak'
           ? `STREAK MILESTONE · ${RARITY_LABEL[
               celebration.rarity
@@ -219,7 +227,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: space.md,
   },
-  eyebrow: { color: color.volt, textAlign: 'center' },
+  eyebrow: { textAlign: 'center' },
   stage: {
     width: '100%',
     maxWidth: 320,

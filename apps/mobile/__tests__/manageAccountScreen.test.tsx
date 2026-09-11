@@ -383,7 +383,7 @@ describe('ManageAccountScreen', () => {
     expectContext('review');
     expectHeaderTarget('Close account deletion confirmation');
     expect(allText(renderer)).toContain(
-      "Free ratings you've already used stay used",
+      "A free rating you've already used stays used",
     );
     expect(allText(renderer)).toContain(
       'does not cancel a subscription or issue a',

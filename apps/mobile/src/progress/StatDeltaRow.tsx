@@ -14,6 +14,9 @@ export function StatDeltaRow(props: {
   icon: IconName;
   label: string;
   value: string;
+  /** Smaller reading of the same value in its underlying unit (the "/10"
+   * beneath a DUPR figure); null renders nothing. */
+  secondary?: string | null;
   /** Formatted prior-window value; null hides the comparison entirely. */
   previous: string | null;
   /** Sign picks the triangle direction; null or 0 renders no triangle. */
@@ -37,10 +40,15 @@ export function StatDeltaRow(props: {
               : ', trending down'
         }`;
 
+  const secondary =
+    props.secondary === null || props.secondary === undefined
+      ? ''
+      : ` (${props.secondary})`;
+
   return (
     <View
       accessible
-      accessibilityLabel={`${props.label}: ${props.value}${comparison}`}
+      accessibilityLabel={`${props.label}: ${props.value}${secondary}${comparison}`}
       style={styles.row}
       testID={props.testID}
     >
@@ -62,6 +70,9 @@ export function StatDeltaRow(props: {
             />
           ) : null}
         </View>
+        {props.secondary !== null && props.secondary !== undefined ? (
+          <Text style={[type.micro, styles.secondary]}>{props.secondary}</Text>
+        ) : null}
         {props.previous !== null ? (
           <Text style={[type.caption, styles.previous]}>{props.previous}</Text>
         ) : null}
@@ -104,6 +115,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 25,
     color: color.onDark,
+    fontVariant: ['tabular-nums'],
+  },
+  secondary: {
+    color: color.onDarkFaint,
+    marginTop: 1,
     fontVariant: ['tabular-nums'],
   },
   previous: {

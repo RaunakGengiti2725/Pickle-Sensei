@@ -69,66 +69,83 @@ describe("player visibility matrix", () => {
     expect(control.violations).toEqual({});
   });
 
-  it("no player / no tracked wrist / spectator gesture: fusion abstains on every seed", async () => {
+  it("no player / no tracked wrist / hitting arm never measured: fusion abstains on every seed", async () => {
     const value = await report();
     for (const id of [
       "no_player_no_frames",
       "no_player_empty_frames",
       "no_player_subthreshold_visibility",
       "arms_missing_both",
-      "spectator_gesture",
+      "arms_missing_dominant",
     ]) {
       const summary = scenario(value, id);
       expect(summary.outcomes.scored ?? 0, id).toBe(0);
       expect(summary.outcomes.failed, id).toBe(SEEDS);
     }
-    // The pre-analysis gate abstains upstream of fusion, carrying its reason.
+    // The pre-analysis gate abstains upstream of fusion on its BLOCKING
+    // reasons, carrying the reason.
     expect(scenario(value, "no_player_no_frames").failureCodes).toEqual({
       "capture.not_analyzable.no_person_found": SEEDS,
     });
     expect(scenario(value, "no_player_no_frames").preGateReasons).toEqual({
       no_person_found: SEEDS,
     });
+    expect(scenario(value, "no_player_empty_frames").failureCodes).toEqual({
+      "capture.not_analyzable.torso_not_measured": SEEDS,
+    });
+    // A partially visible body is ADVISORY: fusion runs and abstains only
+    // because no wrist (arms_missing_both) or no MOVING wrist
+    // (arms_missing_dominant: the off hand's jitter travels nowhere) exists.
     expect(scenario(value, "arms_missing_both").failureCodes).toEqual({
-      "capture.not_analyzable.body_not_fully_visible": SEEDS,
+      "phase.wrist_not_tracked": SEEDS,
+    });
+    expect(scenario(value, "arms_missing_dominant").failureCodes).toEqual({
+      "phase.no_motion": SEEDS,
     });
   });
 
-  it("dominant arm missing / upper body only: never produces a score", async () => {
+  it("upper body only: no torso means nothing body-relative can be measured — never a score", async () => {
     const value = await report();
-    for (const id of ["arms_missing_dominant", "partial_body_upper_only"]) {
-      expect(scenario(value, id).outcomes.scored ?? 0, id).toBe(0);
-      expect(scenario(value, id).poseQualityRejects, id).toBe(SEEDS);
+    const summary = scenario(value, "partial_body_upper_only");
+    expect(summary.outcomes.scored ?? 0).toBe(0);
+    expect(summary.outcomes.failed).toBe(SEEDS);
+    expect(summary.poseQualityRejects).toBe(SEEDS);
+    expect(summary.preGateReasons.body_not_fully_visible).toBe(SEEDS);
+    for (const code of Object.keys(summary.failureCodes)) {
+      expect(code, code).toMatch(/torso_not_measured$/);
     }
-    expect(scenario(value, "partial_body_upper_only").failureCodes).toEqual({
-      "capture.not_analyzable.body_not_fully_visible": SEEDS,
-    });
-    expect(scenario(value, "partial_body_upper_only").preGateReasons.body_not_fully_visible).toBe(
-      SEEDS,
-    );
   });
 
-  it("legs missing, legs cropped, too close: the pose-quality gate rejects and no seed presents as normal", async () => {
+  it("legs missing, legs cropped, too close: scored as a DISCLOSED degraded read — never presented as normal", async () => {
     const value = await report();
     for (const id of ["legs_missing", "legs_cropped_by_frame", "close_camera"]) {
       const summary = scenario(value, id);
       expect(summary.poseQualityRejects, id).toBe(SEEDS);
+      expect(summary.outcomes.scored, id).toBe(SEEDS);
       expect(summary.presentations.normal ?? 0, id).toBe(0);
       expect(summary.violations, id).toEqual({});
     }
     expect(scenario(value, "legs_missing").poseQualityReasons.body_not_fully_visible).toBe(SEEDS);
+    for (const entry of value.cases) {
+      if (entry.scenarioId !== "legs_missing" || entry.fusion.kind !== "scored") continue;
+      expect(entry.fusion.limitingFactors, `seed ${entry.seed}`).toContain(
+        "capture_quality:body_not_fully_visible",
+      );
+    }
   });
 
-  it("far camera: the committed pose-quality gate and pre-analysis gate reject every seed", async () => {
+  it("far camera: the pose-quality gate flags the scale on every seed and the read is never presented as normal", async () => {
     const value = await report();
     for (const id of ["far_camera", "far_camera_noiseless"]) {
       const summary = scenario(value, id);
       expect(summary.poseQualityReasons.player_too_small_in_frame, id).toBe(SEEDS);
       expect(summary.preGateReasons.person_implausible_scale, id).toBe(SEEDS);
+      expect(summary.presentations.normal ?? 0, id).toBe(0);
+      expect(summary.violations, id).toEqual({});
     }
   });
 
-  it("exit/re-enter through contact: the pose-quality gate flags the dropout gap whenever it exceeds 700 ms", async () => {
+  it("exit/re-enter through contact: the pose-quality gate flags the dropout gap whenever it exceeds 700 ms, and no seed presents as normal", async () => {
     const value = await report();
     const gapCases = value.cases.filter(
       (entry) =>
@@ -137,28 +154,43 @@ describe("player visibility matrix", () => {
     expect(gapCases.length).toBeGreaterThan(0);
     for (const entry of gapCases) {
       expect(entry.quality.reasons, `seed ${entry.seed}`).toContain("tracking_dropout_gap");
+      if (entry.fusion.kind === "scored") {
+        expect(entry.fusion.presentation, `seed ${entry.seed}`).toBe("lower_confidence");
+        expect(entry.fusion.limitingFactors, `seed ${entry.seed}`).toContain(
+          "capture_quality:tracking_dropout_gap",
+        );
+      }
     }
+    expect(scenario(value, "exit_reenter_through_contact").violations).toEqual({});
   });
 
-  it("no score ever carries confidence at/above the normal-presentation threshold while below the scoring floor", async () => {
+  it("a still spectator is stillness, not a stroke, on (almost) every seed", async () => {
+    // Sensor jitter on a resting wrist is caught by the segmenter's flat-and-
+    // slow rule and the body-relative run-up travel rule. A rare seed whose
+    // noise happens to walk the wrist a tenth of a torso is the residual gap.
+    const summary = scenario(await report(), "spectator_static");
+    expect(summary.outcomes.failed).toBeGreaterThanOrEqual(Math.floor(SEEDS * 0.9));
+    expect(summary.failureCodes["phase.no_motion"]).toBe(summary.outcomes.failed);
+    expect(summary.presentations.normal ?? 0).toBe(0);
+  });
+
+  it("presentation is honest about confidence: normal only at/above 0.8 with a clean capture; abstention only with nothing observed", async () => {
     const value = await report();
     for (const entry of value.cases) {
+      const label = `${entry.scenarioId}#${entry.seed}`;
       if (entry.fusion.kind === "scored") {
-        expect(
-          entry.fusion.analysisConfidence,
-          `${entry.scenarioId}#${entry.seed}`,
-        ).toBeGreaterThanOrEqual(0.65);
+        expect(entry.fusion.analysisConfidence, label).toBeGreaterThan(0);
         if (entry.fusion.presentation === "normal") {
+          expect(entry.fusion.analysisConfidence, label).toBeGreaterThanOrEqual(0.8);
           expect(
-            entry.fusion.analysisConfidence,
-            `${entry.scenarioId}#${entry.seed}`,
-          ).toBeGreaterThanOrEqual(0.8);
+            entry.fusion.limitingFactors.some((factor) => factor.startsWith("capture_quality:")),
+            label,
+          ).toBe(false);
         }
       }
       if (entry.fusion.kind === "low_confidence") {
-        expect(entry.fusion.analysisConfidence, `${entry.scenarioId}#${entry.seed}`).toBeLessThan(
-          0.65,
-        );
+        // The engine withholds the grade only when no checkpoint was observed.
+        expect(entry.fusion.analysisConfidence, label).toBe(0);
       }
     }
   });

@@ -16,20 +16,31 @@ import {
   type Metrics,
 } from 'react-native-safe-area-context';
 import TestRenderer, { act } from 'react-test-renderer';
-import { Circle, Defs, G, Path } from 'react-native-svg';
+import { Circle, Defs, Path, Rect } from 'react-native-svg';
 import { ConsistencyCard } from '../src/consistency/ConsistencyCard';
 import * as Reanimated from 'react-native-reanimated';
 import { AnimatedFlame, FlameIcon } from '../src/consistency/FlameIcon';
 import {
   badgeArtFor,
+  LOCKED_RIM,
   MilestoneBadge,
+  numeralWidth,
   RARITY_PALETTE,
 } from '../src/consistency/MilestoneBadge';
+import {
+  achievementBadgePlaque,
+  achievementBadgeShapes,
+} from '../src/consistency/achievementBadgeArt';
 import {
   STREAK_MILESTONES,
   VOLUME_ACHIEVEMENTS,
 } from '../src/consistency/milestones';
-import { color, type as typography } from '../src/design/tokens';
+import {
+  achievementLocked,
+  achievementRarity,
+  color,
+  type as typography,
+} from '../src/design/tokens';
 
 // The consistency store persists through SQLite; the native module is absent
 // under jest and these tests only drive the overlay through store state.
@@ -589,7 +600,28 @@ describe('DaySecuredBanner', () => {
 });
 
 describe('flat milestone insignia', () => {
-  it('leaves a two-point gap between a 40pt motif and the uncapped micro numeral', () => {
+  const ALL = [...STREAK_MILESTONES, ...Object.values(VOLUME_ACHIEVEMENTS)];
+
+  /** Every paint an SVG mark on the badge uses (fills and strokes). */
+  function paintsOf(renderer: TestRenderer.ReactTestRenderer): string[] {
+    const marks = [
+      ...renderer.root.findAllByType(Path),
+      ...renderer.root.findAllByType(Circle),
+      ...renderer.root.findAllByType(Rect),
+    ];
+    return [
+      ...new Set(
+        marks
+          .flatMap(mark => [mark.props.fill, mark.props.stroke])
+          .filter(
+            (paint): paint is string =>
+              typeof paint === 'string' && paint !== 'none',
+          ),
+      ),
+    ].sort();
+  }
+
+  it('keeps a 40pt badge’s uncapped micro numeral inside its ribbon banner', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
@@ -603,17 +635,25 @@ describe('flat milestone insignia', () => {
       );
     });
     try {
-      const transform = renderer.root
-        .findAllByType(G)
-        .find(node => node.props.testID === 'milestone-glyph')!.props.transform;
-      expect(transform).toBe('translate(7.2 -2) scale(0.85)');
       const value = renderer.root.findByType(Text);
       const valueStyle = StyleSheet.flatten(value.props.style);
       expect(valueStyle.fontSize).toBe(typography.micro.fontSize);
-      const motifBottom = ((50.5 * 0.85 - 2) * 40) / 96;
-      expect(
-        40 * 0.83 - valueStyle.lineHeight - motifBottom,
-      ).toBeGreaterThanOrEqual(2);
+      expect(value.props.maxFontSizeMultiplier).toBeUndefined();
+      const panel = renderer.root.findAll(
+        node =>
+          node.props.testID === 'milestone-value' &&
+          typeof node.type === 'string',
+      )[0]!;
+      const panelStyle = StyleSheet.flatten(panel.props.style);
+      // Laid exactly over the shield's own banner …
+      const plaque = achievementBadgePlaque('shieldFlame')!;
+      expect(panelStyle.position).toBe('absolute');
+      expect(panelStyle.left).toBeCloseTo((plaque.x * 40) / 96, 5);
+      expect(panelStyle.top).toBeCloseTo((plaque.y * 40) / 96, 5);
+      expect(panelStyle.width).toBeCloseTo((plaque.w * 40) / 96, 5);
+      expect(panelStyle.height).toBeCloseTo((plaque.h * 40) / 96, 5);
+      // … and the digit's cap height fits the banner with room to spare.
+      expect(valueStyle.fontSize * 0.72).toBeLessThanOrEqual(panelStyle.height);
     } finally {
       act(() => renderer.unmount());
     }
@@ -655,20 +695,31 @@ describe('flat milestone insignia', () => {
         expect(style.position).not.toBe('absolute');
         expect(style.height).toBeUndefined();
         expect(style.backgroundColor).toBe(color.inkElevated);
+        // The banner is not drawn under a numeral that has left it: the
+        // art is exactly the plate's own shapes.
+        expect(
+          renderer.root.findAllByType(Path).length +
+            renderer.root.findAllByType(Circle).length +
+            renderer.root.findAllByType(Rect).length,
+        ).toBe(achievementBadgeShapes('phoenix', false).length);
+        expect(achievementBadgeShapes('phoenix', true).length).toBeGreaterThan(
+          achievementBadgeShapes('phoenix', false).length,
+        );
       } finally {
         act(() => renderer.unmount());
       }
     },
   );
 
-  it.each([...STREAK_MILESTONES, ...Object.values(VOLUME_ACHIEVEMENTS)])(
-    'preserves $id artwork, numbers, and earned/locked states without rarity hues',
+  it.each(ALL)(
+    'casts $id in its rarity’s material when earned and in charcoal with a dashed rim when locked',
     milestone => {
       const art = badgeArtFor(milestone.id);
-      expect(RARITY_PALETTE[milestone.rarity]).toEqual({
-        accent: color.volt,
-        deep: color.inkElevated,
-        tint: color.voltTint,
+      const material = achievementRarity[milestone.rarity];
+      expect(RARITY_PALETTE[milestone.rarity]).toMatchObject({
+        accent: material.accent,
+        deep: material.deep,
+        tint: material.tint,
       });
       for (const earned of [false, true]) {
         let renderer!: TestRenderer.ReactTestRenderer;
@@ -682,31 +733,131 @@ describe('flat milestone insignia', () => {
             />,
           );
         });
-        const paths = renderer.root.findAllByType(Path);
-        const marks = [...paths, ...renderer.root.findAllByType(Circle)];
-        const paints = marks
-          .flatMap(mark => [mark.props.fill, mark.props.stroke])
-          .filter(paint => paint && paint !== 'none');
-        expect([...new Set(paints)].sort()).toEqual(
-          [color.inkElevated, earned ? color.volt : color.onDarkFaint].sort(),
-        );
-        expect(paths[0]!.props.strokeDasharray).toBe(
-          earned ? undefined : '7 5',
-        );
-        expect(renderer.root.findAllByType(Defs)).toHaveLength(0);
-        if (art.value !== undefined) {
-          const value = renderer.root.findByType(Text);
-          expect(value.props.children).toBe(art.value);
-          expect(StyleSheet.flatten(value.props.style).color).toBe(
-            earned ? color.volt : color.onDarkFaint,
+        try {
+          const palette = earned ? material : achievementLocked;
+          const allowed = new Set(
+            earned
+              ? [
+                  palette.deep,
+                  palette.base,
+                  palette.light,
+                  palette.bright,
+                  color.surfaceDark,
+                ]
+              : [
+                  palette.deep,
+                  palette.base,
+                  palette.light,
+                  palette.bright,
+                  palette.accent,
+                ],
           );
+          const paints = paintsOf(renderer);
+          expect(paints.length).toBeGreaterThanOrEqual(3);
+          for (const paint of paints) expect(allowed).toContain(paint);
+          // Flat: no gradient definitions anywhere in the badge.
+          expect(renderer.root.findAllByType(Defs)).toHaveLength(0);
+          // The locked silhouette wears the dashed rim; nothing else does.
+          const dashed = [
+            ...renderer.root.findAllByType(Path),
+            ...renderer.root.findAllByType(Circle),
+            ...renderer.root.findAllByType(Rect),
+          ].filter(node => node.props.strokeDasharray !== undefined);
+          expect(dashed).toHaveLength(earned ? 0 : 1);
+          if (!earned) {
+            expect(dashed[0]!.props).toMatchObject({
+              stroke: achievementLocked.accent,
+              strokeDasharray: LOCKED_RIM.dash,
+            });
+          }
+          if (art.value !== undefined) {
+            const value = renderer.root.findByType(Text);
+            expect(value.props.children).toBe(art.value);
+            expect(StyleSheet.flatten(value.props.style).color).toBe(
+              earned ? material.bright : achievementLocked.accent,
+            );
+          } else {
+            expect(renderer.root.findAllByType(Text)).toHaveLength(0);
+          }
+        } finally {
+          act(() => renderer.unmount());
         }
-        act(() => renderer.unmount());
       }
     },
   );
 
-  it.each([40, 54, 64, 72, 148])(
+  it('gives every achievement its own silhouette and emblem — no two badges share a drawing', () => {
+    const drawings = ALL.map(milestone => {
+      const art = badgeArtFor(milestone.id);
+      return JSON.stringify(
+        achievementBadgeShapes(art.glyph, art.value !== undefined),
+      );
+    });
+    expect(new Set(drawings).size).toBe(ALL.length);
+    // Every numbered badge wears its own ribbon banner; First Spark, which
+    // has no value, stands alone.
+    for (const milestone of ALL) {
+      const art = badgeArtFor(milestone.id);
+      const shapes = achievementBadgeShapes(art.glyph, art.value !== undefined);
+      expect(shapes.some(shape => shape.fill === 'plaque')).toBe(
+        art.value !== undefined,
+      );
+      expect(achievementBadgePlaque(art.glyph) !== null).toBe(
+        art.value !== undefined,
+      );
+    }
+    expect(badgeArtFor('streak.1').value).toBeUndefined();
+  });
+
+  it('sizes every banner for its own numeral in every size role, digits ≥ 2 units clear of the ends', () => {
+    // The renderer picks micro under 64pt, h3 from 64pt and score from
+    // 120pt; the sizes below are the ones the app renders (next-reward chip,
+    // Century advert, showcase rail, default, celebration). Widths use the
+    // bundled Manrope Bold's real digit advances.
+    const roles = [
+      [48, typography.micro],
+      [54, typography.micro],
+      [64, typography.h3],
+      [72, typography.h3],
+      [148, typography.score],
+    ] as const;
+    for (const milestone of ALL) {
+      const art = badgeArtFor(milestone.id);
+      if (art.value === undefined) continue;
+      const plaque = achievementBadgePlaque(art.glyph)!;
+      for (const [size, role] of roles) {
+        const unit = size / 96;
+        const width = numeralWidth(art.value, role, 1);
+        expect(width).toBeLessThanOrEqual((plaque.w - 4) * unit);
+        expect(role.fontSize * 0.72).toBeLessThanOrEqual((plaque.h - 1) * unit);
+      }
+    }
+  });
+
+  it('flows a three-digit numeral under a 40pt badge, where no banner could hold it legibly', () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        <MilestoneBadge
+          glyph="phoenix"
+          value="365"
+          rarity="mythic"
+          earned
+          size={40}
+        />,
+      );
+    });
+    const panel = renderer.root.findAll(
+      node =>
+        node.props.testID === 'milestone-value' &&
+        typeof node.type === 'string',
+    )[0]!;
+    expect(StyleSheet.flatten(panel.props.style).position).not.toBe('absolute');
+    expect(renderer.root.findByType(Text).props.children).toBe('365');
+    act(() => renderer.unmount());
+  });
+
+  it.each([48, 54, 64, 72, 148])(
     'keeps badge numerals readable at size %s',
     size => {
       let renderer!: TestRenderer.ReactTestRenderer;
@@ -726,6 +877,13 @@ describe('flat milestone insignia', () => {
       expect(
         StyleSheet.flatten(value.props.style).fontSize,
       ).toBeGreaterThanOrEqual(typography.micro.fontSize);
+      // At the default font scale the widest numeral still sits on the banner.
+      const panel = renderer.root.findAll(
+        node =>
+          node.props.testID === 'milestone-value' &&
+          typeof node.type === 'string',
+      )[0]!;
+      expect(StyleSheet.flatten(panel.props.style).position).toBe('absolute');
       act(() => renderer.unmount());
     },
   );

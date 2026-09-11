@@ -40,8 +40,25 @@ import Foundation
 /// the swinging wrist must cover ≥ `minWristPathBodyHeights` between the
 /// trigger and the close or the candidate is dropped silently (short flicks,
 /// grip adjustments).
+///
+/// HEURISTIC-6 — a swing is never lost for lacking a textbook ready position
+/// (2026-09-10 field failure: a full practice swing went undetected):
+///
+/// 1. STRONG MOTION opens a candidate without a qualified quiet onset. A
+///    hip-relative wrist speed ≥ `strongTriggerWristSpeed` (2.5 bh/s ≈ a
+///    4.4 m/s wrist) is a swing whatever preceded it — walking arm swing reads
+///    0.4–0.6, fidgeting under 1 — so the athlete who steps in and swings at
+///    once is captured. Its `startMs` is the most recent quiet sample of that
+///    wrist inside `maxOnsetToTriggerMs` (any run length), else the trigger
+///    interval's start; the analysis reads the capture's own pre-roll for the
+///    ready position. Motion between the trigger and the strong threshold
+///    still needs the quiet onset (heuristic-4 rules, unchanged).
+/// 2. A STRONG candidate that never settles inside `maxStrokeMs` (the athlete
+///    walks toward the phone after the swing) COMPLETES at the timeout with
+///    `endMs` = the current frame, provided its path gate passed; a weak one
+///    is still dropped as sustained motion.
 public final class TemporalStrokeDetector: StrokeDetecting {
-  public let modelVersion = "temporal-stroke-heuristic-5"
+  public let modelVersion = "temporal-stroke-heuristic-6"
 
   public enum Handedness: String, Sendable { case left, right }
 
@@ -90,6 +107,12 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     /// ≈ 0.4–0.6, a drive ≈ 0.7–1.0; a grip adjustment or a flick ≈ 0.1.
     public var minWristPathBodyHeights: Double
     public var handedness: Handedness?
+    /// Relative wrist speed at or above which a sample opens a candidate
+    /// WITHOUT a qualified quiet onset, body-heights/second (heuristic-6).
+    /// 2.5 ≈ a 4.4 m/s wrist: drives, serves and overheads reach it, walking
+    /// arm swing (0.4–0.6) and fidgeting (< 1) never do. A candidate that
+    /// peaked here also completes at `maxStrokeMs` instead of being dropped.
+    public var strongTriggerWristSpeed: Double
 
     public init(
       triggerWristSpeed: Double = 1.15,
@@ -102,7 +125,8 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       minQuietBeforeMs: Int = 350,
       maxOnsetToTriggerMs: Int = 1200,
       minWristPathBodyHeights: Double = 0.3,
-      handedness: Handedness? = nil
+      handedness: Handedness? = nil,
+      strongTriggerWristSpeed: Double = 2.5
     ) {
       self.triggerWristSpeed = triggerWristSpeed
       self.endWristSpeed = endWristSpeed
@@ -115,6 +139,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       self.maxOnsetToTriggerMs = maxOnsetToTriggerMs
       self.minWristPathBodyHeights = minWristPathBodyHeights
       self.handedness = handedness
+      self.strongTriggerWristSpeed = strongTriggerWristSpeed
     }
   }
 
@@ -139,6 +164,10 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// the neighbourhood of the heuristic-2 image-unit thresholds instead of
   /// dividing by zero or refusing to detect.
   public static let fallbackBodyScale = 0.5
+  /// A strong crossing needs the previous sample this far (body-heights/s)
+  /// under `strongTriggerWristSpeed`: 0.05 bh/s ≈ 9 cm/s for a 1.75 m
+  /// player, well inside any real acceleration and far above float noise.
+  public static let strongCrossingMargin = 0.05
   /// Spans smaller than this (normalized-image units) are not a standing body
   /// (lying down, a collapsed detection) and are ignored for scale.
   private static let minimumMeasurableBodyScale = 0.05
@@ -229,6 +258,13 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   /// — the motion onset a trigger may grow out of. Consumed by a trigger and
   /// cleared when a candidate ends, so every stroke needs a fresh quiet run.
   private var onsetMs: [String: Int] = [:]
+  /// Most recent sample of each point at or below `quietWristSpeed`, whatever
+  /// its run length or continuity: the best available start for a STRONG
+  /// candidate that has no qualified onset (heuristic-6).
+  private var lastQuietSampleMs: [String: Int] = [:]
+  /// Speed of each point's most recent sample, so a strong sample can be told
+  /// apart as a CROSSING of the strong threshold rather than sustained speed.
+  private var lastSpeed: [String: Double] = [:]
 
   /// Body scale (normalized-image units) that the most recent speeds were
   /// normalized by: the EMA-smoothed vertical span from the shoulder midpoint
@@ -304,9 +340,36 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     let speed = fastest.speed
 
     for sample in samples { trackQuietRun(sample, at: pose.timestampMs) }
-    let triggering = samples.filter {
-      guard $0.speed >= config.triggerWristSpeed, let onset = onsetMs[$0.key] else { return false }
+    // A sample opens (or joins) a candidate through the quiet onset, or —
+    // heuristic-6 — through STRONG motion alone, when that wrist's speed
+    // CROSSES the strong threshold from an observed slower sample: a swing
+    // accelerates into it; a hand already waving at that speed (its previous
+    // sample was as fast, or was never observed) is sustained motion.
+    let previousSpeeds = lastSpeed
+    for sample in samples { lastSpeed[sample.key] = sample.speed }
+    let triggering = samples.filter { sample in
+      // The previous sample must sit measurably under the threshold: a hand
+      // holding exactly the threshold speed (float noise either side of it)
+      // is not accelerating into a swing.
+      if sample.speed >= config.strongTriggerWristSpeed,
+         let previous = previousSpeeds[sample.key],
+         previous < config.strongTriggerWristSpeed - Self.strongCrossingMargin {
+        return true
+      }
+      guard sample.speed >= config.triggerWristSpeed, let onset = onsetMs[sample.key] else { return false }
       return pose.timestampMs - onset <= config.maxOnsetToTriggerMs
+    }
+    /// The window start a triggering sample supplies: its qualified onset,
+    /// else (strong motion) its latest quiet sample inside the onset horizon,
+    /// else the interval that crossed the trigger.
+    func startMs(for sample: Sample) -> Int {
+      if let onset = onsetMs[sample.key], pose.timestampMs - onset <= config.maxOnsetToTriggerMs {
+        return onset
+      }
+      if let quiet = lastQuietSampleMs[sample.key], pose.timestampMs - quiet <= config.maxOnsetToTriggerMs {
+        return quiet
+      }
+      return sample.previousTimestampMs
     }
 
     switch state {
@@ -314,13 +377,13 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       // Stillness is tracked through the refractory period too, so the next
       // stroke's quiet run can build while re-triggering is still blocked.
       guard pose.timestampMs >= refractoryUntilMs, speed >= config.triggerWristSpeed else { return nil }
-      guard let fastest = triggering.max(by: { $0.speed < $1.speed }),
-            let onset = onsetMs[fastest.key] else {
-        // Fast without a recent still start: walking, fidgeting, a scramble.
+      guard let fastest = triggering.max(by: { $0.speed < $1.speed }) else {
+        // Fast without a recent still start and not strong enough to be a
+        // swing on its own: walking, fidgeting, a scramble.
         return nil
       }
       state = .candidate
-      strokeStartMs = triggering.compactMap { onsetMs[$0.key] }.min() ?? onset
+      strokeStartMs = triggering.map(startMs(for:)).min() ?? startMs(for: fastest)
       triggerMs = fastest.previousTimestampMs
       peakSpeed = fastest.speed
       peakSpeedMs = pose.timestampMs
@@ -336,7 +399,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     case .candidate:
       for sample in triggering where !candidateKeys.contains(sample.key) {
         candidateKeys.insert(sample.key)
-        strokeStartMs = min(strokeStartMs, onsetMs[sample.key] ?? strokeStartMs)
+        strokeStartMs = min(strokeStartMs, startMs(for: sample))
         clearQuietRun(for: sample.key)
       }
       if let motion = samples.filter({ candidateKeys.contains($0.key) }).max(by: { $0.speed < $1.speed }),
@@ -353,7 +416,14 @@ public final class TemporalStrokeDetector: StrokeDetecting {
       }
       let elapsed = pose.timestampMs - triggerMs
       if elapsed > config.maxStrokeMs {
-        // Sustained motion (rally scramble, walking) — not a discrete stroke.
+        // A STRONG swing that never settled (the athlete walked off toward
+        // the phone) is still a swing: it completes here, ending on the
+        // current frame. Anything weaker that ran this long is sustained
+        // motion (rally scramble, walking) — not a discrete stroke.
+        if peakSpeed >= config.strongTriggerWristSpeed,
+           (wristPaths.values.max() ?? 0) >= config.minWristPathBodyHeights {
+          return complete(endMs: pose.timestampMs)
+        }
         drop()
         return nil
       }
@@ -391,6 +461,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
   public func reset() {
     state = .idle
     lastPoints.removeAll(keepingCapacity: true)
+    lastSpeed.removeAll(keepingCapacity: true)
     lastFrameTimestampMs = nil
     recentCadenceSupport.removeAll(keepingCapacity: true)
     supportedCadenceSinceMs = nil
@@ -464,6 +535,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     // uncovered stretch (occlusion, dropped frames, a low-confidence pose) is
     // no evidence of stillness, so the run ends where the evidence did.
     let key = sample.key
+    if sample.speed <= config.quietWristSpeed { lastQuietSampleMs[key] = timestampMs }
     if let end = quietRunEndMs[key], sample.previousTimestampMs != end {
       endQuietRun(for: key)
     }
@@ -507,6 +579,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
     quietRunEndMs.removeAll(keepingCapacity: true)
     quietRunIntervals.removeAll(keepingCapacity: true)
     onsetMs.removeAll(keepingCapacity: true)
+    lastQuietSampleMs.removeAll(keepingCapacity: true)
   }
 
   /// The hips visible on this frame (visibility ≥ 0.35); nil when neither is.
@@ -607,5 +680,73 @@ extension TemporalStrokeDetector {
       best = event
     }
     return best
+  }
+
+  /// Hip-relative wrist speed at or above which the fastest interval of a
+  /// recording counts as a deliberate movement for `fallbackMotionWindow`,
+  /// body-heights/second. Walking arm swing reads 0.4–0.6 relative to the
+  /// hips; a soft shadow swing 0.8 and up.
+  public static let fallbackMotionFloor = 0.7
+  /// Window the fallback cuts around the fastest interval: enough lead for
+  /// the ready position and backswing, enough tail for the follow-through.
+  public static let fallbackPreMs = 1_000
+  public static let fallbackPostMs = 800
+
+  /// Last resort for STOP & ANALYZE when `strongestEvent` finds no completed
+  /// candidate (the athlete never settled, the swing straddled a dropped
+  /// frame, the ready position was never still): the window around the
+  /// fastest hip-relative wrist interval in `poses`, provided that interval
+  /// was a deliberate movement (≥ `fallbackMotionFloor`). The athlete pressed
+  /// STOP because a swing happened; discarding the recording is the failure
+  /// this prevents. Pure, handedness-aware like the detector, nil when the
+  /// history holds no such movement or fewer than two usable wrist samples.
+  public static func fallbackMotionWindow(in poses: [PoseFrame], handedness: Handedness? = nil) -> StrokeEvent? {
+    guard let first = poses.first, let last = poses.last, poses.count >= 2 else { return nil }
+    let selectedWrist = handedness.map { "\($0.rawValue)_wrist" }
+    var lastPoints: [String: Observation] = [:]
+    var bodyScale: Double?
+    var peakSpeed = 0.0
+    var peakStartMs: Int?
+    var peakEndMs: Int?
+    var previousTimestampMs: Int?
+    for pose in poses {
+      if let previous = previousTimestampMs, pose.timestampMs <= previous { continue }
+      previousTimestampMs = pose.timestampMs
+      guard pose.confidence >= manualStopConfig.minPoseConfidence else { continue }
+      if let measured = measureBodyScale(pose) {
+        bodyScale = bodyScale.map { $0 + bodyScaleSmoothing * (measured - $0) } ?? measured
+      }
+      let scale = bodyScale ?? fallbackBodyScale
+      guard let hips = hipAnchor(pose) else { continue }
+      for landmark in pose.landmarks
+      where (landmark.name == "right_wrist" || landmark.name == "left_wrist")
+        && (selectedWrist == nil || landmark.name == selectedWrist)
+        && landmark.visibility >= minimumLandmarkVisibility {
+        if let previous = lastPoints[landmark.name], pose.timestampMs > previous.tMs,
+           pose.timestampMs - previous.tMs <= maximumSampleGapMs,
+           let shift = hips.displacement(since: previous.hips) {
+          let dt = Double(pose.timestampMs - previous.tMs) / 1000.0
+          let dx = landmark.x - previous.x - shift.x
+          let dy = landmark.y - previous.y - shift.y
+          let speed = (dx * dx + dy * dy).squareRoot() / scale / dt
+          if speed > peakSpeed {
+            peakSpeed = speed
+            peakStartMs = previous.tMs
+            peakEndMs = pose.timestampMs
+          }
+        }
+        lastPoints[landmark.name] = Observation(x: landmark.x, y: landmark.y, tMs: pose.timestampMs, hips: hips)
+      }
+    }
+    guard peakSpeed >= fallbackMotionFloor, let peakStartMs, let peakEndMs else { return nil }
+    let startMs = max(first.timestampMs, peakStartMs - fallbackPreMs)
+    let endMs = min(last.timestampMs, peakEndMs + fallbackPostMs)
+    guard endMs > startMs else { return nil }
+    return StrokeEvent(
+      startMs: startMs,
+      endMs: endMs,
+      peakMotionMs: peakEndMs,
+      confidence: min(0.95, 0.5 + peakSpeed / (manualStopConfig.triggerWristSpeed * 4))
+    )
   }
 }

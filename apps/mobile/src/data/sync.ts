@@ -37,6 +37,30 @@ export interface SyncTransport {
   }>;
 }
 
+/**
+ * Millisecond offsets on the wire are WHOLE milliseconds: the server's
+ * `isMs` check (`Number.isInteger`, `shot_phases`/`shots` are Postgres `int`
+ * columns) refuses a fractional value with `shot.invalid_payload`, and the
+ * phase segmenter cuts boundaries at fractions of a frame interval. A stored
+ * analysis keeps its measured values; only the wire form is rounded. Anything
+ * that is not a finite number (a legacy row's missing field) passes through
+ * untouched for the server to judge — this shaper never invents a value.
+ */
+function wireMs<T>(value: T): T | number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value)
+    : value;
+}
+
+function wireUnit<T>(value: T): T | number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(1, Math.max(0, value))
+    : value;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 /** Convert a persisted ShotAnalysis into the canonical sync payload (spec p. 21). */
 export function toSyncPayload(
   analysis: ShotAnalysis,
@@ -52,12 +76,31 @@ export function toSyncPayload(
     shotType: analysis.shotType,
     cameraView: analysis.cameraView,
     capturedAt: analysis.capturedAtIso,
-    timestamps: analysis.timestamps,
+    timestamps: isRecord(analysis.timestamps)
+      ? {
+          ...analysis.timestamps,
+          startMs: wireMs(analysis.timestamps.startMs),
+          contactMs: wireMs(analysis.timestamps.contactMs),
+          endMs: wireMs(analysis.timestamps.endMs),
+        }
+      : analysis.timestamps,
     overallScore: analysis.overallScore,
-    confidence: analysis.analysisConfidence,
+    confidence: wireUnit(analysis.analysisConfidence),
     resultKind: analysis.resultKind,
     source: analysis.source,
-    phases: analysis.phases,
+    phases: Array.isArray(analysis.phases)
+      ? analysis.phases.map(p =>
+          isRecord(p)
+            ? {
+                key: p.key,
+                startMs: wireMs(p.startMs),
+                representativeMs: wireMs(p.representativeMs),
+                endMs: wireMs(p.endMs),
+                confidence: wireUnit(p.confidence),
+              }
+            : p,
+        )
+      : analysis.phases,
     checkpoints: analysis.checkpoints.map(c => ({
       key: c.key,
       score: c.score,

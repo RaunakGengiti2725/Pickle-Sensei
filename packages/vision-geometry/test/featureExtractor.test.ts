@@ -338,4 +338,126 @@ describe("PoseGeometryFeatureExtractor ground-truth accuracy", () => {
     const second = await measure({});
     expect([...second.byKey.entries()]).toEqual([...first.byKey.entries()]);
   });
+
+  describe("degrades instead of refusing (features-geometry-3)", () => {
+    it("still measures a read whose segmenter emitted no accelerate span", async () => {
+      // Regression: a live swing ended in "Acceleration and contact-proxy
+      // observations are required" — the whole read was refused because one
+      // phase was absent. The neighbouring phase stands in at reduced
+      // confidence and every independent metric is still reported.
+      const input = await phaseFixture();
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        {
+          ...input,
+          phases: input.phases.filter((phase) => phase.key !== "accelerate"),
+        },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const keys = result.value.map((measurement) => measurement.metricKey);
+      expect(keys).toContain("stance_width_ratio");
+      expect(keys).toContain("contact_height_ratio");
+      expect(keys).toContain("follow_through_length_norm");
+      expect(result.value.length).toBeGreaterThanOrEqual(8);
+    });
+
+    it("still measures a read whose segmenter emitted neither accelerate nor contact", async () => {
+      const input = await phaseFixture();
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        {
+          ...input,
+          phases: input.phases.filter(
+            (phase) => phase.key !== "accelerate" && phase.key !== "contact",
+          ),
+        },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const keys = result.value.map((measurement) => measurement.metricKey);
+      expect(keys).toContain("stance_width_ratio");
+      expect(keys).toContain("knee_flexion_deg");
+      expect(keys).toContain("shoulder_turn_deg");
+      expect(keys).toContain("backswing_length_norm");
+    });
+
+    it("refuses only when no phase at all was observed", async () => {
+      const input = await phaseFixture();
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        { ...input, phases: [] },
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.failure.code).toBe("features.missing_phase");
+    });
+
+    it("normalizes by the torso measured elsewhere in the recording when the stroke window hides it", async () => {
+      const input = await phaseFixture();
+      const spanStart = Math.min(...input.phases.map((phase) => phase.startMs));
+      const spanEnd = Math.max(...input.phases.map((phase) => phase.endMs));
+      const shouldersHidden = input.poseFrames.map((frame) =>
+        frame.timestampMs >= spanStart && frame.timestampMs <= spanEnd
+          ? {
+              ...frame,
+              landmarks: frame.landmarks.filter((point) => !point.name.endsWith("shoulder")),
+            }
+          : frame,
+      );
+      // The stroke window itself never shows a torso: only frames before the
+      // ready phase do. Body-relative metrics that need no shoulder are
+      // still reported, normalized by that measured torso.
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        { ...input, poseFrames: shouldersHidden },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const keys = result.value.map((measurement) => measurement.metricKey);
+      expect(keys).toContain("knee_flexion_deg");
+      expect(keys).toContain("paddle_ready_height_ratio");
+      expect(keys).toContain("backswing_length_norm");
+      expect(keys).toContain("contact_forward_of_hip_norm");
+      expect(keys).not.toContain("shoulder_turn_deg");
+      expect(keys).not.toContain("contact_height_ratio");
+    });
+
+    it("refuses only when the torso was never measured anywhere", async () => {
+      const input = await phaseFixture();
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        {
+          ...input,
+          poseFrames: input.poseFrames.map((frame) => ({
+            ...frame,
+            landmarks: frame.landmarks.filter((point) => !point.name.endsWith("hip")),
+          })),
+        },
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.failure.code).toBe("features.torso_not_measured");
+    });
+
+    it("reads the forward direction from the first and last visible wrist of the run-up when the boundary frames hide it", async () => {
+      const input = await phaseFixture();
+      const accelerate = input.phases.find((phase) => phase.key === "accelerate")!;
+      const contact = input.phases.find((phase) => phase.key === "contact")!;
+      const boundaryHidden = input.poseFrames.map((frame) =>
+        frame.timestampMs === accelerate.startMs || frame.timestampMs === contact.representativeMs
+          ? {
+              ...frame,
+              landmarks: frame.landmarks.filter((point) => !point.name.endsWith("wrist")),
+            }
+          : frame,
+      );
+      const result = await new PoseGeometryFeatureExtractor({ aspectRatio: 1 }).extractMeasurements(
+        { ...input, poseFrames: boundaryHidden },
+      );
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const keys = result.value.map((measurement) => measurement.metricKey);
+      // Metrics measured AT the hidden frames stay unobserved (no wrist
+      // there); the direction-dependent weight transfer, which needs only
+      // the hips at those frames plus a forward direction, is still measured
+      // from the visible run-up wrists.
+      expect(keys).toContain("weight_transfer_norm");
+      expect(keys).not.toContain("contact_forward_of_hip_norm");
+      expect(keys).not.toContain("paddle_set_forward_norm");
+    });
+  });
 });

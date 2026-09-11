@@ -124,6 +124,7 @@ const OWNER_SCOPED_TABLES = [
  *   notifications     → notifications/types.ts notificationPrefsKeyForOwner
  *   consistency       → consistency/store.ts consistencyKeyForOwner
  *   practice.set      → analysis/practiceSet.ts practiceSetKeyForOwner
+ *   walkthrough.complete → walkthrough/walkthroughKey.ts walkthroughKeyForOwner
  * (pinned by repositoryAccountScope tests). */
 export const OWNER_SCOPED_KV_NAMESPACES = [
   'profile',
@@ -133,6 +134,7 @@ export const OWNER_SCOPED_KV_NAMESPACES = [
   'practice.set',
   'billing.pending-fulfilment',
   'analysis.release-policy',
+  'walkthrough.complete',
 ] as const;
 
 /**

@@ -240,7 +240,7 @@ describe('imported clip — stroke-window tracking gate', () => {
     expect(server.releases).toEqual([]);
   });
 
-  it('torso hidden for 300 ms through contact → refused before inference, permit released as unsupported, no rating written', async () => {
+  it('torso hidden for 300 ms through contact → scored from the frames that were measured, with the stroke-window gap DISCLOSED and the presentation capped (2026-09-10: advisory, not blocking)', async () => {
     const { sequence, window } = generateSwingSequence({ handed: 'right' });
     const occluded = hideTorso(
       sequence,
@@ -248,7 +248,9 @@ describe('imported clip — stroke-window tracking gate', () => {
       window.peakMs + 150,
     );
     // Whole-clip statistics cannot see a short occlusion: only the
-    // stroke-window gate can, which is exactly why the phone path needs it.
+    // stroke-window gate can. It still measures the gap — but a gap is a
+    // degraded read, not an unmeasurable one, so the phone path scores what
+    // it saw and says so instead of refusing the swing.
     expect(evaluateCaptureQuality(occluded).analyzable).toBe(true);
     const { clip, sidecarJson } = importedClip(
       'occluded',
@@ -258,18 +260,37 @@ describe('imported clip — stroke-window tracking gate', () => {
 
     const { outcome, fake } = await run(clip, sidecarJson);
 
-    expect(outcome.kind).toBe('quality_blocked');
-    if (outcome.kind === 'quality_blocked') {
-      expect(outcome.poseQuality?.reasons).toContain(
-        'stroke_window_tracking_gap',
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind === 'scored') {
+      expect(outcome.record.uncertainty.limitingFactors).toContain(
+        'capture_quality:stroke_window_tracking_gap',
       );
-      expect(outcome.reason).toMatch(/during the stroke/);
+      expect(outcome.record.uncertainty.presentation).toBe('lower_confidence');
+      expect(outcome.record.result?.overallScore).not.toBeNull();
     }
-    expect(fake.shots).toHaveLength(0);
-    expect(fake.analysisRecords).toHaveLength(0);
+    expect(fake.shots).toHaveLength(1);
+    expect(fake.analysisRecords).toHaveLength(1);
     expect(server.reserves).toBe(1);
-    expect(server.releases).toEqual([
-      { permitId: fixtureUuid('permit-1'), outcome: 'unsupported' },
-    ]);
+    expect(server.releases).toEqual([]);
+  });
+
+  it('torso never visible anywhere in the clip → nothing body-relative can be measured: no rating, permit released', async () => {
+    const { sequence, window } = generateSwingSequence({ handed: 'right' });
+    const first = sequence.frames[0]!.timestampMs;
+    const last = sequence.frames[sequence.frames.length - 1]!.timestampMs;
+    const torsoless = hideTorso(sequence, first, last);
+    const { clip, sidecarJson } = importedClip(
+      'torsoless',
+      torsoless,
+      window.endMs + 500,
+    );
+
+    const { outcome, fake } = await run(clip, sidecarJson);
+
+    expect(outcome.kind).not.toBe('scored');
+    expect(fake.shots).toHaveLength(0);
+    expect(server.reserves).toBe(1);
+    expect(server.releases).toHaveLength(1);
+    expect(server.releases[0]?.permitId).toBe(fixtureUuid('permit-1'));
   });
 });

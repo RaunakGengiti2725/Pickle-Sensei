@@ -589,7 +589,8 @@ final class GuidedCaptureViewController: UIViewController {
   /// image tinted white). Where to stand and how big to be in frame — laid
   /// out in the GUIDE BAND between the status card and the shutter row (see
   /// viewDidLayoutSubviews), so it can never sit under any chrome. Fades as
-  /// the live exoskeleton takes over, hidden once locked.
+  /// the live exoskeleton takes over, gone the moment the athlete matches it
+  /// (readiness `ready`) and once locked.
   private let silhouetteView = UIImageView()
   /// Status card: state dot + kicker on the first row, the instruction on
   /// the second. Fixed height so the guide band below it never jitters as
@@ -678,6 +679,10 @@ final class GuidedCaptureViewController: UIViewController {
   /// until it expires or the user acts; readiness copy resumes after.
   private var transientNotice: (text: String, until: Date)?
   private var lastComposingSnapshot: PoseReadinessEvaluator.Snapshot?
+  /// True from the frame the athlete matched the outline (readiness `ready`)
+  /// until the framing is actually lost again. Presentation only — drives
+  /// nothing but `silhouetteView.alpha`; main thread only.
+  private var silhouetteDismissedByFraming = false
 
   init(engine: CameraEngine, operation: ClipMediaOperation, handedness: TemporalStrokeDetector.Handedness? = nil) {
     self.engine = engine
@@ -1522,8 +1527,13 @@ final class GuidedCaptureViewController: UIViewController {
 
   /// Offline pass over the retained history: only poses inside the current
   /// file (a rolling restart may have replaced it) and older than the
-  /// approach window count. The strongest event wins; nil when nothing moved
-  /// like a swing.
+  /// approach window count. The strongest completed event wins; when no
+  /// candidate completed (the athlete never settled, a dropped frame split
+  /// the swing, no still ready position), the window around the fastest
+  /// deliberate hip-relative wrist movement stands in
+  /// (`TemporalStrokeDetector.fallbackMotionWindow`) — the athlete pressed
+  /// STOP because a swing happened, and the recording is only discarded when
+  /// nothing in it moved like one. nil in that case.
   private static func manualStopEvent(
     history: [PoseFrame], fileStartMs: Int?, stopMs: Int,
     handedness: TemporalStrokeDetector.Handedness?
@@ -1533,6 +1543,7 @@ final class GuidedCaptureViewController: UIViewController {
     let usable = history.filter { $0.timestampMs >= lowerBound && $0.timestampMs <= cutoff }
     guard usable.count >= 8 else { return nil }
     return TemporalStrokeDetector.strongestEvent(in: usable, handedness: handedness)
+      ?? TemporalStrokeDetector.fallbackMotionWindow(in: usable, handedness: handedness)
   }
 
   /// Stop pressed with no swing in the history: the spool is discarded
@@ -2570,14 +2581,26 @@ final class GuidedCaptureViewController: UIViewController {
   }
 
   /// Silhouette opacity per stage: strongest while composing, softer once
-  /// the exoskeleton is tracking a body during recording, gone once locked.
+  /// the exoskeleton is tracking a body during recording, gone the moment
+  /// the athlete matches the outline — readiness `ready`: whole body in
+  /// frame at a usable size and still for 450 ms, the same verdict that
+  /// arms BODY TRACKED — and gone once locked. A framed body that is merely
+  /// moving (`holdStill`) keeps a dismissed outline away, so it does not
+  /// pulse back in on every weight shift or practice swing; it returns only
+  /// when the framing itself is lost (nobody, cropped, too near, too far).
   private func updateSilhouette(stage: CapturePresentationStage) {
-    let personVisible = (lastComposingSnapshot?.state ?? .noPerson) != .noPerson
+    let readiness = lastComposingSnapshot?.state ?? .noPerson
+    switch readiness {
+    case .ready: silhouetteDismissedByFraming = true
+    case .noPerson, .fullBodyRequired, .moveCloser, .moveFarther: silhouetteDismissedByFraming = false
+    case .holdStill: break
+    }
+    let personVisible = readiness != .noPerson
     let target: CGFloat
     switch stage {
     case .starting: target = 0
-    case .composing: target = personVisible ? 0.2 : 0.3
-    case .positioning: target = personVisible ? 0.14 : 0.26
+    case .composing: target = silhouetteDismissedByFraming ? 0 : (personVisible ? 0.2 : 0.3)
+    case .positioning: target = silhouetteDismissedByFraming ? 0 : (personVisible ? 0.14 : 0.26)
     case .bodyLocked, .capturing, .saving: target = 0
     }
     guard abs(silhouetteView.alpha - target) > 0.01 else { return }

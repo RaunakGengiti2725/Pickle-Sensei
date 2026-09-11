@@ -11,6 +11,11 @@ import { Card, PressableScale } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 import { DashSectionHeader } from './DashSectionHeader';
 import {
+  DUPR_ESTIMATE_LABEL,
+  duprAccessibilityLabel,
+  formatDupr,
+} from './duprEstimate';
+import {
   practiceSetHeadline,
   practiceSetInsight,
   type PracticeSetAttempt,
@@ -24,8 +29,9 @@ import {
  *
  * Every element traces to the summary's measured facts: the headline is the
  * exact tenths delta between the first and latest comparable attempt (mint
- * when improved, flame when slipped, plain when held); the pill row lists
- * each comparable attempt's score in order with the latest ringed in volt;
+ * when improved, flame when slipped, plain when held), printed in estimated
+ * DUPR (D-046); the pill row lists each comparable attempt's estimated DUPR
+ * in order with the latest ringed in volt (VoiceOver reads the "/10" too);
  * the insight line is the pure module's one factual sentence. Nothing is
  * interpolated. No emojis.
  */
@@ -46,7 +52,7 @@ function attemptLabel(
   total: number,
 ): string {
   const ordinal = `Attempt ${index + 1} of ${total}`;
-  const score = `score ${attempt.overallScore.toFixed(1)}`;
+  const score = duprAccessibilityLabel(attempt.overallScore);
   return index === total - 1
     ? `${ordinal}, ${score}, latest`
     : `${ordinal}, ${score}`;
@@ -75,7 +81,11 @@ export function PracticeSetCard(props: {
     >
       <DashSectionHeader
         title="THIS SET"
-        right={compact ? undefined : strokeLabel(summary.shotType)}
+        right={
+          compact
+            ? DUPR_ESTIMATE_LABEL
+            : `${strokeLabel(summary.shotType)} · ${DUPR_ESTIMATE_LABEL}`
+        }
         style={styles.header}
       />
       <Text
@@ -108,7 +118,7 @@ export function PracticeSetCard(props: {
               testID={latest ? 'practice-set-latest-pill' : undefined}
             >
               <Text style={[type.caption, styles.pillScore]}>
-                {attempt.overallScore.toFixed(1)}
+                {formatDupr(attempt.overallScore)}
               </Text>
             </View>
           );

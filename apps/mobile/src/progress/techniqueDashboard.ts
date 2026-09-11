@@ -1,4 +1,5 @@
 import type { RealAnalysisFact } from '../data/repository';
+import { formatDuprDelta } from './duprEstimate';
 import {
   PRACTICE_HISTORY_RANGES,
   type PracticeHistoryRangeKey,
@@ -375,8 +376,11 @@ function insightLine(
   if (previousAvg === null) {
     return `No comparable reads landed in the prior ${rangeLabel.toLowerCase()}.`;
   }
-  return `Average score ${formatSignedDelta(
-    currentAvg - previousAvg,
+  // The insight speaks the headline unit (estimated DUPR, D-046); the
+  // arithmetic underneath is still the exact-tenths 0–10 window averages.
+  return `Average DUPR ${formatDuprDelta(
+    previousAvg,
+    currentAvg,
   )} vs the prior ${rangeLabel.toLowerCase()}.`;
 }
 

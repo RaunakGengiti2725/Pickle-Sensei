@@ -240,7 +240,7 @@ describe('OnboardingScreen', () => {
       backgroundColor: color.surfaceElevated,
       borderColor: color.line,
     });
-    expect(allText(renderer)).toContain('Two ratings are on us.');
+    expect(allText(renderer)).toContain('Your first rating is on us.');
     expect(allText(renderer)).toContain('Unscored attempts do not count.');
     expect(allText(renderer)).toContain('Paddle Set');
     act(() => renderer.unmount());

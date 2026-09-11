@@ -1,8 +1,9 @@
 /**
  * First-run walkthrough + technique intent picker driven as a user would.
  *
- * Walkthrough: the device-scoped store persists the seen marker BEFORE the
- * overlay shows, shows once, fails closed on KV errors, replays from Settings;
+ * Walkthrough: the account-scoped store persists the seen marker BEFORE the
+ * overlay shows, shows once per account, fails closed on KV errors, replays
+ * from Settings;
  * the overlay's Skip / Next / Got it / backdrop / hardware-back all dismiss or
  * advance, every control is a labeled button, a target that never measures
  * ends the tour instead of leaving a blank scrim, and target registration is
@@ -40,14 +41,20 @@ import {
 } from '../../src/walkthrough/targets';
 import {
   useWalkthroughStore,
-  WALKTHROUGH_KV_KEY,
   WALKTHROUGH_SEEN_VALUE,
+  walkthroughKeyForOwner,
 } from '../../src/walkthrough/walkthroughStore';
 import {
   autoDetectIntent,
   TechniqueIntentPicker,
 } from '../../src/flow/TechniqueIntentPicker';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import type { TechniqueIntent } from '@pickle/shared-types';
+
+const ACCOUNT = '11111111-1111-4111-8111-111111111111';
 
 const RECTS: Record<
   WalkthroughTargetKey,
@@ -55,6 +62,7 @@ const RECTS: Record<
 > = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
+  'home-streak': { x: 313, y: 62, width: 56, height: 32 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },
   'tab-progress': { x: 236, y: 760, width: 70, height: 54 },
 };
@@ -96,7 +104,10 @@ afterEach(() => {
 beforeEach(() => {
   mockGetKv.mockReset().mockResolvedValue(null);
   mockSetKv.mockReset().mockResolvedValue(undefined);
+  setActiveDataOwner(ACCOUNT);
 });
+
+afterAll(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
 function textOf(renderer: TestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -132,7 +143,7 @@ async function renderVisible() {
   return renderer;
 }
 
-describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
+describe('Walkthrough store — account-scoped, shown once, fail closed', () => {
   it('first run: persists the seen marker BEFORE showing, then shows exactly once', async () => {
     const order: string[] = [];
     mockSetKv.mockImplementation(async () => {
@@ -145,10 +156,10 @@ describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
     unsubscribe();
 
     expect(order).toEqual(['setKv', 'visible']);
-    expect(mockGetKv).toHaveBeenCalledWith({}, WALKTHROUGH_KV_KEY);
+    expect(mockGetKv).toHaveBeenCalledWith({}, walkthroughKeyForOwner(ACCOUNT));
     expect(mockSetKv).toHaveBeenCalledWith(
       {},
-      WALKTHROUGH_KV_KEY,
+      walkthroughKeyForOwner(ACCOUNT),
       WALKTHROUGH_SEEN_VALUE,
     );
     expect(useWalkthroughStore.getState().visible).toBe(true);
@@ -157,7 +168,7 @@ describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
     await useWalkthroughStore.getState().maybeShowFirstRun();
     expect(mockSetKv).toHaveBeenCalledTimes(1);
 
-    // Dismissed and the device marker is now present → never shows again.
+    // Dismissed and the account marker is now present → never shows again.
     useWalkthroughStore.getState().dismiss();
     mockGetKv.mockResolvedValue(WALKTHROUGH_SEEN_VALUE);
     await useWalkthroughStore.getState().maybeShowFirstRun();
@@ -236,7 +247,7 @@ describe('Walkthrough overlay — controls', () => {
   it('Next walks all four steps in order; the last step offers only "Got it" which dismisses', async () => {
     registerTargets(Object.keys(RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
-    expect(WALKTHROUGH_STEPS).toHaveLength(4);
+    expect(WALKTHROUGH_STEPS).toHaveLength(5);
 
     for (const [index, step] of WALKTHROUGH_STEPS.entries()) {
       const text = textOf(renderer);

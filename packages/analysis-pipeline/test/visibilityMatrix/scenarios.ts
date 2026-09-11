@@ -34,17 +34,22 @@ import {
  *
  *   must_score            — clean control; the pipeline must still score.
  *   must_abstain          — there is no analyzable player stroke in the
- *                           tracked keypoints (no player, spectator, tracked
- *                           identity is not the hitter, swinging arm never
- *                           measured, player absent through contact). ANY
- *                           scored result is a wrong score.
+ *                           tracked keypoints (no player, still spectator,
+ *                           tracked identity is not the hitter, swinging arm
+ *                           never measured). ANY scored result is a wrong
+ *                           score.
  *   must_not_be_confident — a stroke exists but the body is degraded in a way
- *                           the committed capture-quality gate itself refuses
- *                           (too small / cropped / not fully visible). A score
- *                           may be shown only with reduced confidence — a
+ *                           the capture-quality gate flags as ADVISORY (too
+ *                           small / cropped / not fully visible / a tracking
+ *                           gap through the stroke). Since 2026-09-10 such a
+ *                           read is SCORED from what was measured, with the
+ *                           `capture_quality:*` limiting factors attached and
+ *                           the presentation capped at lower_confidence — a
  *                           "normal" presentation is a confident wrong score.
- *   measure_only          — mild degradation; recorded for the deviation
- *                           table, no hard verdict.
+ *   measure_only          — mild degradation, or motion the pipeline cannot
+ *                           tell from a stroke without a classifier (a slow
+ *                           gesture); recorded for the deviation table, no
+ *                           hard verdict.
  */
 export type Expectation = "must_score" | "must_abstain" | "must_not_be_confident" | "measure_only";
 
@@ -262,8 +267,8 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
   {
     id: "exit_reenter_through_contact",
     description:
-      "Player leaves the frame and comes back: no frames measured for a 500–1500 ms gap that contains contact.",
-    expectation: "must_abstain",
+      "Player leaves the frame and comes back: no frames measured for a 500–1500 ms gap that contains contact. Scored from the frames around the gap with the dropout disclosed; never a confident read.",
+    expectation: "must_not_be_confident",
     build: (rng, base) => {
       const gap = rng.uniform(500, 1500);
       const startMs = base.contactMs - gap * rng.uniform(0.2, 0.8);
@@ -349,8 +354,8 @@ export const SCENARIOS: readonly ScenarioDefinition[] = [
   {
     id: "spectator_gesture",
     description:
-      "The tracked person is a spectator making a slow arm gesture (wave / point) — motion, but no stroke.",
-    expectation: "must_abstain",
+      "The tracked person is a spectator making a slow arm gesture (wave / point) — motion, but no stroke. Without a stroke classifier a slow gesture is indistinguishable from a slow dink; the segmenter's stillness rules catch most, the rest score as lower_confidence.",
+    expectation: "measure_only",
     build: (rng, base) => {
       const amplitude = rng.uniform(0.02, 0.08);
       const periodMs = rng.uniform(900, 1800);

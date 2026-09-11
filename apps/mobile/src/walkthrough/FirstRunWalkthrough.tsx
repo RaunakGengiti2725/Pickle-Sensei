@@ -33,20 +33,22 @@ import { CeremonyHost, useCeremonyPresentation } from '../flow/CeremonyHost';
 /**
  * The first-run walkthrough — a spotlight tour over the REAL interface.
  * Each step dims the screen, cuts a bright hole around the actual element
- * (the Coach button, the rank banner, the tabs), draws an arrow into it, and
- * explains that element where it lives. Positions come from live
+ * (the Coach button, the rank banner, the tabs, the Home streak flame), draws
+ * an arrow into it, and explains that element where it lives. Positions come from live
  * measurement (targets.ts), never from hardcoded layouts, and a step whose
  * target cannot be measured right now is skipped instead of pointing at
  * empty space.
  *
  * Copy rules it never breaks: every claim is a behavior the shipping build
  * actually has — automatic capture, the import path, permits released on
- * every unscored outcome, on-device analysis. No promised accuracy, no
- * invented numbers.
+ * every unscored outcome, on-device analysis, a streak day earned only by a
+ * finished read or drill (never an app open) and the flame chip opening the
+ * consistency calendar. No promised accuracy, no invented numbers.
  *
  * Interaction rules, from the ceremony surfaces: it never blocks input
  * (backdrop tap and Skip both end it immediately), and the store's durable
- * device record guarantees it is raised once — Settings → About replays it.
+ * owner-scoped record guarantees it is raised once per account — Settings →
+ * About replays it.
  */
 
 interface WalkthroughStep {
@@ -76,7 +78,7 @@ export const WALKTHROUGH_STEPS: readonly WalkthroughStep[] = [
     eyebrow: 'HONEST RATINGS',
     headline: 'Only clear reads count.',
     body: 'Clear reads build your rank and streak. If a stroke can’t be read, the app says so — and it costs nothing.',
-    finePrint: 'Two validated ratings free · Unscored attempts don’t count',
+    finePrint: 'One validated rating free · Unscored attempts don’t count',
   },
   {
     key: 'library',
@@ -93,6 +95,14 @@ export const WALKTHROUGH_STEPS: readonly WalkthroughStep[] = [
     eyebrow: 'OVER TIME',
     headline: 'Track progress here.',
     body: 'Streaks, trends, and personal bests from your real reads.',
+  },
+  {
+    key: 'streak',
+    targetKey: 'home-streak',
+    shape: 'rounded',
+    eyebrow: 'DAILY STREAK',
+    headline: 'Train a little every day.',
+    body: 'A day counts when you finish a read or a drill — never for just opening the app. Tap the flame for your calendar, Streak Shields and achievements.',
   },
 ] as const;
 

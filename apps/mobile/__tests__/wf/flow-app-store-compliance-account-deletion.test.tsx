@@ -204,7 +204,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     // identity across deletion; the confirmation must say so before the
     // player deletes expecting a fresh allowance.
     expect(copy).toContain(
-      "Free ratings you've already used stay used — a new account with the same Apple or Google sign-in won't get them again.",
+      "A free rating you've already used stays used — a new account with the same Apple or Google sign-in won't get it again.",
     );
     expect(copy).toContain('does not cancel a subscription or issue a refund');
     const [manageSubscription] = pressables(

@@ -4,6 +4,7 @@ import {
   getApiSession,
   type ApiSession,
 } from '../account/apiSession';
+import { FREE_RATING_LIMIT } from '../billing/freeRatings';
 import type { CanonicalAccessState } from '../billing/types';
 import { canonicalDataOwner, getActiveDataOwner } from './accountScope';
 import {
@@ -52,14 +53,15 @@ export function nextSyncRetryDelayMs(
   return Math.round(base + jitter);
 }
 
-/** Tickets the app asks the server for: two for a free account (the lifetime
- * allowance the server clamps against what is already scored, reserved or
+/** Tickets the app asks the server for: the lifetime allowance for a free
+ * account (the server clamps it against what is already scored, reserved or
  * held), none for Pro (a lease authorizes without tickets). The app holds
  * and displays only what the server actually issued. */
 export function offlineGrantRequestedTickets(
   access: CanonicalAccessState | null,
-): 0 | 2 {
-  return access?.premium === true ? 0 : 2;
+): 0 | 1 | 2 {
+  if (access?.premium === true) return 0;
+  return FREE_RATING_LIMIT >= 2 ? 2 : 1;
 }
 
 /** The access snapshot a refusal was given under. A refusal is recorded

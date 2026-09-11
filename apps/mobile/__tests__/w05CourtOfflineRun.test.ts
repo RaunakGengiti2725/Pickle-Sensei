@@ -18,6 +18,7 @@
  * reserves a live permit for it, and a commit whose acknowledgement is lost
  * still hands the durable scored read to the caller.
  */
+import { installAbstainingScorer } from '../__harness__/abstainingScorer';
 import {
   OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
   OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
@@ -90,6 +91,15 @@ import {
 } from '../testSupport/sqlite';
 
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
+// The court-offline abstention fixtures lower every landmark to 0.5
+// visibility; since 2026-09-10 the engine scores such a read, so the
+// abstaining verdict is a test double keyed on that fixture marker
+// (__harness__/abstainingScorer.ts). The pipeline module is namespace-mocked
+// so its `analyzeCapture` export is spy-able.
+jest.mock('@pickle/analysis-pipeline', () => ({
+  __esModule: true,
+  ...jest.requireActual('@pickle/analysis-pipeline'),
+}));
 jest.mock('../src/camera/capture', () => ({
   ...jest.requireActual('../src/camera/capture'),
   readCaptureArtifact: (uri: string) => mockReadArtifact(uri),
@@ -546,6 +556,7 @@ async function reconnectSweep(store: Store) {
 
 beforeEach(() => {
   signIn();
+  installAbstainingScorer();
 });
 afterEach(() => {
   clearSyncRuntime();

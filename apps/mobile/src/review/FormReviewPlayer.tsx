@@ -55,14 +55,18 @@ import {
  * every measured checkpoint moment with the coaching caption for that stop.
  *
  * Layout (music-player style — NOTHING is drawn over the body): the stage
- * carries only the video, the exoskeleton and the arrow with its label. Three
- * fixed-height siblings sit under it, so they never scroll away and never
- * cover a joint: the STOP CARD (verdict · phase, "STOP n OF m", the measured
- * headline, the coaching cue), the TIMELINE (scrubber with verdict-colored
- * stop markers and the clock) and ONE symmetric transport row (speed · prev ·
- * play/pause · next · AUTO-pause). A tap on the stage toggles play/pause. In
- * `fill` mode the stage takes all the height its parent leaves after those
- * rows, so a host can pin header + player + CTAs with no scroll.
+ * carries only the video, the exoskeleton and the arrow with its label. The
+ * video is drawn in its own letterbox rect (`containRect`), as a rounded
+ * card floating on the page's dark surface — a portrait phone clip on a
+ * wide stage shows the WHOLE body with no black bars beside it, because the
+ * stage itself paints nothing. Three fixed-height siblings sit under it, so
+ * they never scroll away and never cover a joint: the STOP CARD (verdict ·
+ * phase, "STOP n OF m", the measured headline, the coaching cue), the
+ * TIMELINE (scrubber with verdict-colored stop markers and the clock) and
+ * ONE symmetric transport row (speed · prev · play/pause · next ·
+ * AUTO-pause). A tap on the stage toggles play/pause. In `fill` mode the
+ * stage takes all the height its parent leaves after those rows, so a host
+ * can pin header + player + CTAs with no scroll.
  *
  * Two hosts render it: the full-screen `FormReview` route and the Result
  * guide's "The problem" page (inline). Both hand it the same evidence — the
@@ -104,6 +108,15 @@ const VERDICT: Record<StopVerdict, { label: string; tint: string }> = {
   watch: { label: 'WATCH', tint: color.volt },
   strong: { label: 'STRONG', tint: color.mint },
 };
+
+/** A stop that owns no scored checkpoint — the contact proxy on a read where
+ * nothing scored there, or the ONE stop of a not-scored read — carries no
+ * verdict word or tint: it marks the measured wrist-speed peak and says so. */
+const MEASURED_ONLY = { label: 'MEASURED', tint: color.onDarkMuted };
+
+function stopBadge(stop: ReviewStop): { label: string; tint: string } {
+  return stop.checkpoints.length === 0 ? MEASURED_ONLY : VERDICT[stop.verdict];
+}
 
 /** Fallback stage aspect (portrait phone capture) when nothing recorded a size. */
 const DEFAULT_VIDEO = { width: 9, height: 16 };
@@ -411,7 +424,7 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   // The engine's own priority checkpoint names the stop it leads: that card
   // reads PRIORITY FIX so the guide's thesis and the replay agree.
   const priorityKey = analysis.priorityFix?.checkpoint ?? null;
-  const verdict = shownStop ? VERDICT[shownStop.verdict] : null;
+  const verdict = shownStop ? stopBadge(shownStop) : null;
   const verdictLabel =
     shownStop && verdict
       ? shownStop.verdict === 'fix' &&
@@ -458,24 +471,42 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
         }
         accessibilityHint={playing ? 'Pauses the replay' : 'Plays the replay'}
       >
-        {clip && !clipUnreadable ? (
-          <ClipPlayer
-            uri={clip.uri}
-            {...(clip.posterUri !== undefined
-              ? { posterUri: clip.posterUri }
-              : {})}
-            playing={playing}
-            seekMs={seekMs}
-            resizeMode="contain"
-            rate={rate}
-            onProgress={advanceTo}
-            onLoad={loaded => {
-              if (loaded > 0) setDurationMs(loaded);
-            }}
-            onEnd={finish}
-            onError={() => setClipUnreadable(true)}
-          />
-        ) : null}
+        {/* The video card: exactly the letterbox rect the overlay projects
+            into, rounded, on the dark camera surface. 'contain' inside it
+            only matters if the file's aspect differs from the recorded size —
+            the frame then letterboxes on that surface, never on black. */}
+        <View
+          pointerEvents="none"
+          style={[
+            styles.videoCard,
+            {
+              left: rect.x,
+              top: rect.y,
+              width: rect.width,
+              height: rect.height,
+            },
+          ]}
+          testID="form-review-video-card"
+        >
+          {clip && !clipUnreadable ? (
+            <ClipPlayer
+              uri={clip.uri}
+              {...(clip.posterUri !== undefined
+                ? { posterUri: clip.posterUri }
+                : {})}
+              playing={playing}
+              seekMs={seekMs}
+              resizeMode="contain"
+              rate={rate}
+              onProgress={advanceTo}
+              onLoad={loaded => {
+                if (loaded > 0) setDurationMs(loaded);
+              }}
+              onEnd={finish}
+              onError={() => setClipUnreadable(true)}
+            />
+          ) : null}
+        </View>
         <FormReviewOverlay
           rect={rect}
           frame={frame}
@@ -604,7 +635,7 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
                 styles.stopMarker,
                 {
                   left: `${fraction(stop.atMs) * 100}%`,
-                  backgroundColor: VERDICT[stop.verdict].tint,
+                  backgroundColor: stopBadge(stop).tint,
                   borderColor:
                     shownStop?.id === stop.id
                       ? color.onDark
@@ -711,7 +742,13 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // The stage paints nothing of its own: the page surface shows around the
+  // video card, so a portrait clip is never boxed in black bars.
   stage: {
+    overflow: 'hidden',
+  },
+  videoCard: {
+    position: 'absolute',
     borderRadius: radius.lg,
     overflow: 'hidden',
     backgroundColor: color.cameraSurface,

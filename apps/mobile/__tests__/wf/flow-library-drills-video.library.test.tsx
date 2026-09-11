@@ -366,9 +366,13 @@ describe('Library flow · Reads tab', () => {
     // The empty state never coexists with rows.
     expect(text).not.toContain('Your measured reads, in one place.');
 
-    const dropRow = oneByLabel(renderer, 'Open third shot drop result');
+    // A scored row's label carries its estimated DUPR (7.4 → 3.60) and the
+    // 0–10 score; an unread row's label stays the bare stroke.
+    const dropLabel =
+      'Open third shot drop result, Estimated DUPR 3.60, technique score 7.4 out of 10';
+    const dropRow = oneByLabel(renderer, dropLabel);
     expect(dropRow.props.accessibilityRole).toBe('button');
-    await pressByLabel(renderer, 'Open third shot drop result');
+    await pressByLabel(renderer, dropLabel);
     expect(mockNavigate).toHaveBeenLastCalledWith('Result', {
       analysisId: 'shot-0001',
     });
@@ -404,7 +408,7 @@ describe('Library flow · Reads tab', () => {
     expect(text).toContain(
       'Saved evidence could not be verified — can’t be scored',
     );
-    expect(text).toContain('4 s clip');
+    expect(text).toContain('4s · Clip saved — analysis has not run yet');
     // Pending clips never claim they can be analyzed from here; the note
     // states the real next step and the Analyze CTA stays reachable so the
     // tab is never a dead end. No Result row exists for an unscored clip.

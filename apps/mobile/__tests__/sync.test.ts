@@ -73,6 +73,65 @@ describe('toSyncPayload', () => {
       (payload.versionVector as Record<string, string>).scoringModelVersion,
     ).toBe('sm-v1');
   });
+
+  it('sends whole-millisecond phase and timestamp offsets — the server refuses fractional ms ("Each phase needs key, startMs, representativeMs, endMs, confidence.")', () => {
+    // Regression (2026-09-10): the geometry segmenter cut the contact proxy
+    // at peak ± half a sample interval (e.g. 3854.185 ms), the payload sent
+    // those boundaries verbatim, and the server's integer check refused the
+    // scored read on every one of its 8 attempts.
+    const fractional: ShotAnalysis = {
+      ...analysis,
+      timestamps: { startMs: 0.4, contactMs: 3866.6, endMs: 3971.5 },
+      phases: [
+        {
+          key: 'accelerate',
+          startMs: 3804,
+          representativeMs: 3833,
+          endMs: 3854.185039370079,
+          confidence: 0.7123,
+        },
+        {
+          key: 'contact',
+          startMs: 3854.185039370079,
+          representativeMs: 3866.6,
+          endMs: 3887.814960629921,
+          confidence: 1.0000001,
+        },
+      ],
+    };
+    const payload = toSyncPayload(fractional, analysisPermitId);
+    expect(payload.timestamps).toEqual({
+      startMs: 0,
+      contactMs: 3867,
+      endMs: 3972,
+    });
+    expect(payload.phases).toEqual([
+      {
+        key: 'accelerate',
+        startMs: 3804,
+        representativeMs: 3833,
+        endMs: 3854,
+        confidence: 0.7123,
+      },
+      {
+        key: 'contact',
+        startMs: 3854,
+        representativeMs: 3867,
+        endMs: 3888,
+        confidence: 1,
+      },
+    ]);
+    // A null contact proxy stays null; integers pass through unchanged.
+    const nullContact = toSyncPayload(
+      { ...analysis, timestamps: { startMs: 0, contactMs: null, endMs: 2000 } },
+      analysisPermitId,
+    );
+    expect(nullContact.timestamps).toEqual({
+      startMs: 0,
+      contactMs: null,
+      endMs: 2000,
+    });
+  });
 });
 
 describe('drainOutbox', () => {

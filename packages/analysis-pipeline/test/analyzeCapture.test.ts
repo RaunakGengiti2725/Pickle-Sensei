@@ -118,10 +118,13 @@ describe("analyzeCapture fusion engine", () => {
     });
     expect(record.uncertainty.limitingFactors).toContain("paddle_track_unavailable");
     expect(record.uncertainty.limitingFactors).toContain("ball_track_unavailable");
-    expect(record.uncertainty.limitingFactors).toContain("checkpoint_unobserved:recovery");
-    expect(
-      record.result?.checkpoints.find((checkpoint) => checkpoint.key === "recovery")?.score,
-    ).toBeNull();
+    // Recovery has no measurable metric in this stack, so it is not
+    // applicable — never reported as an unobserved checkpoint (which would
+    // count as zero confidence against every capture).
+    expect(record.uncertainty.limitingFactors).not.toContain("checkpoint_unobserved:recovery");
+    expect(record.result?.checkpoints.some((checkpoint) => checkpoint.key === "recovery")).toBe(
+      false,
+    );
     expect(
       record.result?.measurements.some(
         (measurement) => measurement.metricKey === "recovery_time_ms",

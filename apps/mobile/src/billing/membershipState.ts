@@ -6,6 +6,7 @@ import type {
   CanonicalBillingState,
 } from './types';
 import { plural } from '../util/plural';
+import { FREE_PLAY_EYEBROW } from './freeRatings';
 
 /** Apple's account-level subscription management surface. */
 export const APP_STORE_SUBSCRIPTIONS_URL =
@@ -275,7 +276,7 @@ export function describeMembershipState(
   return {
     kind: 'free',
     label: freeRatingsLeft(access) ?? 'Upgrade required',
-    eyebrow: 'PLAY PAST THE FIRST TWO',
+    eyebrow: FREE_PLAY_EYEBROW,
     title: 'A coach for every stroke.',
     detail:
       'Free ratings are counted by our server; membership pricing comes only from the App Store.',

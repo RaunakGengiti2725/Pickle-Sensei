@@ -97,21 +97,26 @@ describe("scoreShot", () => {
     expect(contact?.severity).toBeGreaterThan(0.2);
   });
 
-  it("ABSTAINS (no numeric grade) when analysis confidence is below 0.65", () => {
+  it("scores a low-visibility read as lower_confidence instead of withholding the grade", () => {
+    // 2026-09-10: the 0.65 floor turned real swings (Apple Vision measures
+    // 0.60–0.70 joint visibility) into NOT SCORED reads. Visibility is
+    // disclosed through analysisConfidence and the presentation, never by
+    // refusing the score.
     const outcome = scoreShot(
       getShotScoringConfig("forehand_drive"),
       perfectForehandMeasurements(0.3),
     );
-    expect(outcome.presentation).toBe("abstain");
-    expect(outcome.overallScore).toBeNull();
-    expect(outcome.guidance).toMatch(/couldn't read/i);
+    expect(outcome.presentation).toBe("lower_confidence");
+    expect(outcome.analysisConfidence).toBeCloseTo(0.3, 5);
+    expect(outcome.overallScore).toBe(10);
+    expect(outcome.guidance).toBeNull();
     for (const cp of outcome.checkpoints) {
-      expect(cp.score).toBeNull();
-      expect(cp.band).toBe("unscored");
+      expect(cp.score).toBe(100);
+      expect(cp.band).toBe("green");
     }
   });
 
-  it("abstains when key subsystems (e.g. paddle) were never observed", () => {
+  it("scores from the observed checkpoints when others (e.g. paddle metrics) were never observed", () => {
     // Only pose-derived base metrics present — paddle metrics missing entirely.
     const measurements = [
       m("stance_width_ratio", 1.3),
@@ -119,17 +124,39 @@ describe("scoreShot", () => {
       m("shoulder_turn_deg", 50),
     ];
     const outcome = scoreShot(getShotScoringConfig("forehand_drive"), measurements);
-    expect(outcome.presentation).toBe("abstain");
-    expect(outcome.overallScore).toBeNull();
+    expect(outcome.presentation).toBe("lower_confidence");
+    // Coverage is honest: the unobserved checkpoints hold the confidence down.
+    expect(outcome.analysisConfidence).toBeCloseTo((22 * 0.95) / 95, 5);
+    expect(outcome.overallScore).toBe(10);
+    const observed = outcome.checkpoints.filter((cp) => cp.score !== null).map((cp) => cp.key);
+    expect(observed.sort()).toEqual(["athletic_base", "preparation"]);
+    for (const cp of outcome.checkpoints) {
+      if (observed.includes(cp.key)) continue;
+      expect(cp.score).toBeNull();
+      expect(cp.band).toBe("unscored");
+      expect(cp.confidence).toBe(0);
+    }
   });
 
-  it("flags lower-confidence presentation between 0.65 and 0.80", () => {
+  it("flags lower-confidence presentation below 0.80", () => {
     const outcome = scoreShot(
       getShotScoringConfig("forehand_drive"),
       perfectForehandMeasurements(0.7),
     );
     expect(outcome.presentation).toBe("lower_confidence");
     expect(outcome.overallScore).toBe(10);
+  });
+
+  it("honours a config that sets its own confidence floor", () => {
+    const config = { ...getShotScoringConfig("forehand_drive"), minAnalysisConfidence: 0.65 };
+    const outcome = scoreShot(config, perfectForehandMeasurements(0.3));
+    expect(outcome.presentation).toBe("abstain");
+    expect(outcome.overallScore).toBeNull();
+    expect(outcome.guidance).toMatch(/couldn't read/i);
+    for (const cp of outcome.checkpoints) {
+      expect(cp.score).toBeNull();
+      expect(cp.band).toBe("unscored");
+    }
   });
 
   it("abstains when no configured metric was actually measured (no fake scores)", () => {
@@ -157,18 +184,47 @@ describe("config integrity", () => {
     }
   });
 
-  it("ALL eight shot types have configs with full metric coverage", () => {
+  it("ALL eight shot types have configs with full metric coverage for every measurable checkpoint", () => {
     const configs = getAllShotScoringConfigs();
     expect(configs).toHaveLength(8);
     for (const config of configs) {
       for (const cp of config.checkpoints) {
+        if (cp.key === "recovery") {
+          // No extractor measures recovery (recovery_time_ms was the trigger
+          // window's tail padding, dropped in geometry-2): the checkpoint is
+          // not applicable rather than unobserved-against-every-capture.
+          expect(cp.metrics, `${config.shotType}/${cp.key}`).toEqual([]);
+          continue;
+        }
         expect(cp.metrics.length, `${config.shotType}/${cp.key}`).toBeGreaterThan(0);
       }
     }
   });
 
+  it("a checkpoint no extractor can measure never drags analysis confidence toward abstention", () => {
+    // Regression (2026-09-10): with `recovery` still targeting the dropped
+    // recovery_time_ms metric, every real read carried a permanent zero-
+    // confidence checkpoint worth 4–7% of the weight, so reads that measured
+    // every REAL checkpoint at 0.66–0.68 mean visibility abstained. The
+    // engine must score them exactly as the ten measurable checkpoints say.
+    for (const config of getAllShotScoringConfigs()) {
+      const outcome = scoreShot(config, perfectMeasurements(config.shotType, 0.66));
+      expect(outcome.analysisConfidence, config.shotType).toBeCloseTo(0.66, 6);
+      expect(outcome.presentation, config.shotType).toBe("lower_confidence");
+      expect(outcome.overallScore, config.shotType).toBe(10);
+      expect(outcome.checkpoints.some((cp) => cp.key === "recovery")).toBe(false);
+      // A stray recovery measurement changes nothing: there is no target for it.
+      const withStray = scoreShot(config, [
+        ...perfectMeasurements(config.shotType, 0.66),
+        m("recovery_time_ms", 100, 1),
+      ]);
+      expect(withStray.analysisConfidence).toBeCloseTo(0.66, 6);
+      expect(withStray.overallScore).toBe(10);
+    }
+  });
+
   it("every configured metric key is one the geometry extractor can measure", () => {
-    // The measurable vocabulary of features-geometry-1 (featureExtractor.ts).
+    // The measurable vocabulary of features-geometry-2 (featureExtractor.ts).
     const measurable = new Set([
       "stance_width_ratio",
       "knee_flexion_deg",
@@ -184,7 +240,6 @@ describe("config integrity", () => {
       "contact_height_ratio",
       "wrist_angle_variance_deg",
       "follow_through_length_norm",
-      "recovery_time_ms",
     ]);
     for (const config of getAllShotScoringConfigs()) {
       for (const cp of config.checkpoints) {

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Modal,
   Platform,
@@ -28,10 +34,41 @@ import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import type { MainTabParams, RootStackParams } from './params';
+import {
+  TAB_BAR_ACTION_RISE,
+  TAB_BAR_HEIGHT,
+  tabBarDockedFrame,
+  tabBarFloatingFrame,
+  tabBarRowBottom,
+} from './tabBarLayout';
+import { useTabBarDocked } from './tabBarDock';
 
-const BAR_HEIGHT = 70;
 const ACTION_SIZE = 68;
-const ACTION_RISE = 24;
+/** The Coach button's bottom edge, measured up from the tab row's bottom. */
+const ACTION_BOTTOM = TAB_BAR_HEIGHT + TAB_BAR_ACTION_RISE - ACTION_SIZE;
+/** Floating ↔ docked: one strong ease-out, the same language as the menu. */
+const DOCK_DURATION = 240;
+/** A plain number the frame worklet can capture (not the StyleSheet module). */
+const HAIRLINE = StyleSheet.hairlineWidth;
+/** The card's floating shadow → the docked bar's faint upward rule. */
+const FLOATING_SHADOW = {
+  opacity: shadow.floating.shadowOpacity,
+  radius: shadow.floating.shadowRadius,
+  offsetY: shadow.floating.shadowOffset.height,
+  elevation: shadow.floating.elevation,
+};
+const DOCKED_SHADOW = {
+  opacity: 0.055,
+  radius: 20,
+  offsetY: -8,
+  elevation: 14,
+};
+
+function mix(from: number, to: number, t: number): number {
+  'worklet';
+  // Two-sided lerp: exact at both ends, so a settled bar sits on the frame.
+  return from * (1 - t) + to * t;
+}
 
 const TAB_META: Record<keyof MainTabParams, { label: string; icon: IconName }> =
   {
@@ -166,7 +203,14 @@ export function PremiumTabBar(props: BottomTabBarProps) {
     Platform.OS === 'ios' && parseInt(Platform.Version, 10) >= 13;
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  const actionsBottom = insets.bottom + BAR_HEIGHT + space.xl;
+  // The bar floats while the focused page scrolls and docks — full width,
+  // flush with the screen — once that page's end is reached. The Coach menu
+  // and the overlay copy of its button anchor to whichever frame it is in.
+  const focusedTab = (props.state.routes[props.state.index]?.name ??
+    'Home') as keyof MainTabParams;
+  const docked = useTabBarDocked(focusedTab);
+  const rowBottom = tabBarRowBottom(insets.bottom, docked);
+  const actionsBottom = rowBottom + TAB_BAR_HEIGHT + space.xl;
   const actionsMaxHeight = Math.max(
     0,
     windowHeight - insets.top - space.md - actionsBottom,
@@ -185,6 +229,45 @@ export function PremiumTabBar(props: BottomTabBarProps) {
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
   }));
+
+  // 0 = floating card, 1 = docked bar. Layout props animate on the UI thread
+  // and retarget mid-flight, so a scroll that crosses the latch twice in
+  // quick succession never snaps or restarts.
+  const dock = useSharedValue(docked ? 1 : 0);
+  const floating = useMemo(() => tabBarFloatingFrame(insets), [insets]);
+  const landed = useMemo(() => tabBarDockedFrame(insets), [insets]);
+  useEffect(() => {
+    const target = docked ? 1 : 0;
+    dock.value = reducedMotion
+      ? target
+      : withTiming(target, {
+          duration: DOCK_DURATION,
+          easing: Easing.out(Easing.cubic),
+        });
+  }, [dock, docked, reducedMotion]);
+  const frameStyle = useAnimatedStyle(() => {
+    const t = dock.value;
+    // The card's edge folds into the docked bar's single top rule halfway.
+    const sideRule = t < 0.5 ? HAIRLINE : 0;
+    return {
+      bottom: mix(floating.bottom, landed.bottom, t),
+      left: mix(floating.left, landed.left, t),
+      right: mix(floating.right, landed.right, t),
+      height: mix(floating.height, landed.height, t),
+      paddingBottom: mix(floating.paddingBottom, landed.paddingBottom, t),
+      borderRadius: mix(floating.borderRadius, landed.borderRadius, t),
+      borderLeftWidth: sideRule,
+      borderRightWidth: sideRule,
+      borderBottomWidth: sideRule,
+      shadowOpacity: mix(FLOATING_SHADOW.opacity, DOCKED_SHADOW.opacity, t),
+      shadowRadius: mix(FLOATING_SHADOW.radius, DOCKED_SHADOW.radius, t),
+      shadowOffset: {
+        width: 0,
+        height: mix(FLOATING_SHADOW.offsetY, DOCKED_SHADOW.offsetY, t),
+      },
+      elevation: mix(FLOATING_SHADOW.elevation, DOCKED_SHADOW.elevation, t),
+    };
+  }, [floating, landed]);
 
   useEffect(() => {
     progress.value = reducedMotion
@@ -286,12 +369,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
 
   return (
     <>
-      <View
-        style={[
-          styles.bar,
-          { height: BAR_HEIGHT + insets.bottom, paddingBottom: insets.bottom },
-        ]}
-      >
+      <Animated.View testID="premium-tab-bar" style={[styles.bar, frameStyle]}>
         <View style={styles.barContent}>
           {props.state.routes.map((route, index) => {
             const name = route.name as keyof MainTabParams;
@@ -383,7 +461,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             );
           })}
         </View>
-      </View>
+      </Animated.View>
 
       <Modal
         animationType="none"
@@ -393,13 +471,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
         visible={menuVisible}
       >
         <View style={styles.modal}>
-          <Animated.View
-            style={[
-              styles.backdrop,
-              { bottom: BAR_HEIGHT + insets.bottom },
-              backdropAnimatedStyle,
-            ]}
-          >
+          <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close coach actions"
@@ -436,7 +508,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             </ScrollView>
           </View>
           <CoachActionButton
-            bottom={insets.bottom + 26}
+            bottom={rowBottom + ACTION_BOTTOM}
             largeContentViewer={largeContentViewer}
             overlay
             progress={progress}
@@ -450,18 +522,17 @@ export function PremiumTabBar(props: BottomTabBarProps) {
 }
 
 const styles = StyleSheet.create({
+  // Position, corner radius, side rules and shadow come from `frameStyle`,
+  // which animates between `tabBarFloatingFrame` and `tabBarDockedFrame`.
   bar: {
+    position: 'absolute',
     backgroundColor: color.tabBar,
-    borderTopColor: color.line,
+    borderColor: color.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     shadowColor: color.shadow,
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.055,
-    shadowRadius: 20,
-    elevation: 14,
   },
   barContent: {
-    height: BAR_HEIGHT,
+    height: TAB_BAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'stretch',
     paddingHorizontal: 6,
@@ -494,7 +565,7 @@ const styles = StyleSheet.create({
   },
   actionButtonPressable: {
     position: 'absolute',
-    top: -ACTION_RISE,
+    top: -TAB_BAR_ACTION_RISE,
     width: ACTION_SIZE,
     height: ACTION_SIZE,
     borderRadius: ACTION_SIZE / 2,
@@ -520,11 +591,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.65,
   },
   modal: { flex: 1 },
+  // Covers the floating bar too: with surface showing around the bar, a scrim
+  // that stopped at its top edge would leave an undimmed band at the bottom.
   backdrop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     backgroundColor: color.overlayStrong,
   },
   backdropPressable: { flex: 1 },
@@ -571,7 +645,6 @@ const styles = StyleSheet.create({
   actionDetail: { color: color.inkSoft, marginTop: 1 },
   overlayActionButton: {
     top: undefined,
-    bottom: 26,
     left: '50%',
     marginLeft: -ACTION_SIZE / 2,
   },

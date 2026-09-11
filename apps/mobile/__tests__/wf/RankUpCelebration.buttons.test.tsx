@@ -273,8 +273,12 @@ describe('RankUpCelebration button ledger', () => {
           'light-content',
         );
         expect(rendered(renderer)).toContain('Diamond unlocked');
-        expect(rendered(renderer)).toContain('7.62');
-        expect(rendered(renderer)).not.toMatch(/DUPR|≈/);
+        // D-046: estimated DUPR (7.62 → 3.75) headlines; the 0–10 rating
+        // stays as the smaller "/10" line.
+        expect(rendered(renderer)).toContain('3.75');
+        expect(rendered(renderer)).toContain(' DUPR');
+        expect(rendered(renderer)).toContain('7.62 /10');
+        expect(rendered(renderer)).not.toMatch(/≈/);
         const dismiss = overlay(renderer).props.onAccessibilityEscape;
         expect(typeof dismiss).toBe('function');
         expect(backdrop(renderer).props.onPress).toBe(dismiss);
@@ -518,7 +522,7 @@ describe('RankUpCelebration button ledger', () => {
       setPromotion();
       const renderer = await render();
       expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(
-        'Rank up: Diamond. Rating 7.62 out of 10.',
+        'Rank up: Diamond. Estimated DUPR 3.75, technique rating 7.62 out of 10.',
       );
       unmount(renderer);
     });
@@ -527,14 +531,17 @@ describe('RankUpCelebration button ledger', () => {
       setPromotion();
       const renderer = await render();
       const rating = () => hostNodes(renderer, 'rank-up-rating')[0]!;
-      expect(rating().children[0]).toBe('7.62');
-      expect(rating().props.accessibilityLabel).toBe('Rating 7.62 out of 10');
+      expect(rating().children[0]).toBe('3.75');
+      expect(rating().props.accessibilityLabel).toBe(
+        'Estimated DUPR 3.75, technique rating 7.62 out of 10',
+      );
+      expect(rendered(renderer)).toContain('7.62 /10');
       expect(rendered(renderer)).not.toContain('7.10');
       expect(frames.size).toBe(0);
 
       act(() => flushFrame(0));
       act(() => flushFrame(1500));
-      expect(rating().children[0]).toBe('7.62');
+      expect(rating().children[0]).toBe('3.75');
       expect(frames.size).toBe(0);
       unmount(renderer);
     });

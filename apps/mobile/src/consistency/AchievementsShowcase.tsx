@@ -13,15 +13,16 @@ import {
   VOLUME_ACHIEVEMENTS,
   type AchievementRarity,
 } from './milestones';
-import { badgeArtFor, MilestoneBadge } from './MilestoneBadge';
+import { badgeArtFor, MilestoneBadge, RARITY_PALETTE } from './MilestoneBadge';
 import { plural } from '../util/plural';
 
 /**
- * The achievement rail. Earned badges use the house accent; locked ones
- * stay visible as charcoal silhouettes with honest progress copy ("13 days
- * away"). The next reachable milestone has a quiet outline, while the
- * selected badge has a flat contextual surface. Tap any badge for its
- * story and rarity label.
+ * The achievement rail. Every badge is its own insignia in its rarity's
+ * material (`MilestoneBadge`); locked ones stay visible as charcoal
+ * silhouettes with honest progress copy ("13 days away"). The next
+ * reachable milestone has a quiet outline, while the selected badge has a
+ * flat contextual surface. Tap any badge for its story and a rarity label
+ * tinted in the same material.
  */
 
 interface ShowcaseEntry {
@@ -188,17 +189,18 @@ export function AchievementsShowcase(props: {
             <View
               style={[
                 styles.rarityPill,
-                {
-                  backgroundColor: props.dark
-                    ? color.voltTint
-                    : color.courtSoft,
-                },
+                { backgroundColor: RARITY_PALETTE[selected.rarity].tint },
               ]}
+              testID="achievement-rarity-pill"
             >
               <Text
                 style={[
                   type.micro,
-                  { color: props.dark ? color.volt : color.courtDeep },
+                  {
+                    color: props.dark
+                      ? RARITY_PALETTE[selected.rarity].accent
+                      : RARITY_PALETTE[selected.rarity].deep,
+                  },
                 ]}
               >
                 {RARITY_LABEL[selected.rarity].toUpperCase()}

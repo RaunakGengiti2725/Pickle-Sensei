@@ -236,6 +236,68 @@ describe('legacy premium alias', () => {
       code: 'billing.backend_invalid_response',
     });
   });
+
+  it('access parser takes the allowance from the server (one since 2026-09-10) and checks every counter against it', async () => {
+    const client = (body: unknown) =>
+      createCanonicalAccessClient({
+        baseUrl: 'https://api.test',
+        token: 'id-token',
+        fetchFn: async () => jsonResponse(200, body),
+      });
+    const one = (used: 0 | 1, reserved = 0) => {
+      const remaining = 1 - used;
+      const availableToReserve = remaining - reserved;
+      return {
+        premium: false,
+        entitlements: [],
+        freeRatings: {
+          limit: 1,
+          used,
+          reserved,
+          remaining,
+          availableToReserve,
+        },
+        canStartRating: availableToReserve > 0,
+        paywallRequired: availableToReserve === 0,
+      };
+    };
+
+    // The shipping allowance: a fresh identity, then the one rating spent.
+    await expect(client(one(0)).getAccess()).resolves.toMatchObject({
+      freeRatings: { limit: 1, used: 0, remaining: 1, availableToReserve: 1 },
+      canStartRating: true,
+    });
+    await expect(client(one(1)).getAccess()).resolves.toMatchObject({
+      freeRatings: { limit: 1, used: 1, remaining: 0, availableToReserve: 0 },
+      paywallRequired: true,
+    });
+    // A server still on the historical allowance is rendered as it answers.
+    await expect(client(access(1)).getAccess()).resolves.toMatchObject({
+      freeRatings: { limit: 2, used: 1, remaining: 1 },
+    });
+    // Counters that disagree with the declared allowance are refused …
+    await expect(
+      client({
+        ...one(0),
+        freeRatings: { ...one(0).freeRatings, used: 2, remaining: -1 },
+      }).getAccess(),
+    ).rejects.toMatchObject({ code: 'billing.backend_invalid_response' });
+    await expect(
+      client({
+        ...access(1),
+        freeRatings: { ...access(1).freeRatings, limit: 1 },
+      }).getAccess(),
+    ).rejects.toMatchObject({ code: 'billing.backend_invalid_response' });
+    // … and so is an allowance that is not a positive integer.
+    for (const limit of [0, -1, 1.5, '1', null]) {
+      await expect(
+        client({
+          ...one(0),
+          freeRatings: { ...one(0).freeRatings, limit },
+        }).getAccess(),
+      ).rejects.toMatchObject({ code: 'billing.backend_invalid_response' });
+    }
+  });
 });
 
 // ── 2. expired bearer after purchase ────────────────────────────────────────

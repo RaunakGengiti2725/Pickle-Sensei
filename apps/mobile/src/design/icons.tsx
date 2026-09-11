@@ -28,7 +28,14 @@ export type IconName =
   | 'crown'
   | 'spark'
   | 'star'
-  | 'bell';
+  | 'bell'
+  | 'replay'
+  | 'verdict'
+  | 'ladder'
+  | 'cones'
+  | 'calendar'
+  | 'orbit'
+  | 'infinity';
 
 export function Icon(props: {
   name: IconName;
@@ -210,6 +217,58 @@ export function Icon(props: {
           <Path d="M12 5.3V3.5" {...common} />
           <Path d="M10 19a2 2 0 0 0 4 0" {...common} />
         </>
+      )}
+      {props.name === 'replay' && (
+        <>
+          <Path d="M4.5 12A7.5 7.5 0 1 0 5.5 8.25" {...common} />
+          <Path d="M5.5 3.9v4.35h4.35" {...common} />
+          <Path d="m10.6 9.4 4.6 2.6-4.6 2.6Z" {...common} />
+        </>
+      )}
+      {props.name === 'verdict' && (
+        <>
+          <Rect x="4.5" y="4.5" width="15" height="17" rx="2.5" {...common} />
+          <Path
+            d="M9 4.5V3.4A1.4 1.4 0 0 1 10.4 2h3.2A1.4 1.4 0 0 1 15 3.4v1.1"
+            {...common}
+          />
+          <Path d="m8.6 13 2.4 2.4 4.6-5" {...common} />
+        </>
+      )}
+      {props.name === 'ladder' && (
+        <>
+          <Path d="M3.5 20.5v-7h5.5" {...common} />
+          <Path d="M9 20.5v-13h6v13" {...common} />
+          <Path d="M15 20.5v-5.5h5.5v5.5" {...common} />
+          <Line x1="3" y1="20.5" x2="21" y2="20.5" {...common} />
+        </>
+      )}
+      {props.name === 'cones' && (
+        <>
+          <Path d="M9.4 4.5h5.2l3.4 14H6Z" {...common} />
+          <Line x1="4" y1="18.5" x2="20" y2="18.5" {...common} />
+          <Line x1="7.9" y1="11.4" x2="16.1" y2="11.4" {...common} />
+        </>
+      )}
+      {props.name === 'calendar' && (
+        <>
+          <Rect x="3.5" y="5" width="17" height="15.5" rx="3" {...common} />
+          <Path d="M3.5 9.5h17M8 3v3.5M16 3v3.5" {...common} />
+          <Circle cx="12" cy="15" r="2.2" {...common} />
+        </>
+      )}
+      {props.name === 'orbit' && (
+        <>
+          <Circle cx="12" cy="12" r="7.5" {...common} />
+          <Circle cx="12" cy="4.6" r="1.9" {...common} fill={stroke} />
+          <Circle cx="12" cy="12" r="1.5" {...common} />
+        </>
+      )}
+      {props.name === 'infinity' && (
+        <Path
+          d="M12 12c-1.6-2.3-3-3.6-4.8-3.6a3.6 3.6 0 0 0 0 7.2c1.8 0 3.2-1.3 4.8-3.6s3-3.6 4.8-3.6a3.6 3.6 0 0 1 0 7.2c-1.8 0-3.2-1.3-4.8-3.6Z"
+          {...common}
+        />
       )}
     </Svg>
   );

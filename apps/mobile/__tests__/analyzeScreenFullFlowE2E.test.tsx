@@ -1461,6 +1461,44 @@ describe('W03 original saved-analysis retry UI', () => {
     });
   });
 
+  it('a clip the analyzer cannot measure (permit reserved, verdict returned) offers a new clip — never the "Check saved analysis" trap (2026-09-10 field failure)', async () => {
+    // The live swing that ended on "Your saved analysis is held. Acceleration
+    // and contact-proxy observations are required." was refused AFTER its
+    // permit was reserved; the held screen then offered only "Check saved
+    // analysis", which re-reconciles a verdict that cannot change. The
+    // analyzer itself no longer refuses such a swing (phase-geometry-3), but
+    // when it truly cannot measure a clip the player must be sent to another
+    // clip, not trapped.
+    const server = permitServer();
+    globalThis.fetch = server.fetchMock;
+    jest.mocked(pipeline.analyzeCapture).mockResolvedValueOnce({
+      ok: false,
+      failure: {
+        kind: 'low_confidence',
+        code: 'phase.no_motion',
+        message: 'The swinging wrist did not move inside the stroke window.',
+        retryable: false,
+      },
+    });
+    const { renderer } = await startGuided('unmeasurable-ui');
+    const copy = textOf(renderer);
+    expect(copy).toContain('Nothing was rated.');
+    expect(copy).toContain(
+      'The swinging wrist did not move inside the stroke window.',
+    );
+    expect(copy).toContain('Record another clip');
+    expect(copy).not.toMatch(/Check saved analysis|saved analysis is held/);
+    // The reservation was released as failed, not consumed, and nothing was
+    // rated or queued.
+    expect(server.finalized).toEqual([{ outcome: 'failed', ratingId: null }]);
+    expect(activeDb.count('local_shot', owner)).toBe(0);
+    expect(activeDb.count('outbox', owner)).toBe(0);
+    // "Record another clip" is a real new capture.
+    act(() => action(renderer, 'Record another clip')());
+    await settled();
+    expect(captureStrokeVideo).toHaveBeenCalledTimes(2);
+  });
+
   it('unknown reservation only reconciles its original key; released technical proof enables a separate explicit retry', async () => {
     const server = permitServer();
     let lost = false;

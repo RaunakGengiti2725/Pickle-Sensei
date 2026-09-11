@@ -13,7 +13,11 @@ import {
   STREAK_MILESTONES,
   VOLUME_ACHIEVEMENTS,
 } from '../../src/consistency/milestones';
-import { color, type as typography } from '../../src/design/tokens';
+import {
+  achievementRarity,
+  color,
+  type as typography,
+} from '../../src/design/tokens';
 
 /**
  * Button ledger for AchievementsShowcase. Every pressable in the file is a
@@ -143,9 +147,25 @@ function shimmers(renderer: TestRenderer.ReactTestRenderer) {
   });
 }
 
+function relativeLuminance(hex: string): number {
+  const channel = (offset: number) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+/** WCAG contrast ratio of two opaque hex colors. */
+function contrastRatio(foreground: string, background: string): number {
+  const [lighter, darker] = [foreground, background]
+    .map(relativeLuminance)
+    .sort((a, b) => b - a);
+  return (lighter! + 0.05) / (darker! + 0.05);
+}
+
 describe('AchievementsShowcase button ledger', () => {
   it.each([false, true])(
-    'keeps rarity text legible independently of badge colors (dark=%s)',
+    'names the rarity in the badge material and keeps it legible on its surface (dark=%s)',
     async dark => {
       const renderer = render(threeDaySnapshot, dark);
       for (const milestone of STREAK_MILESTONES) {
@@ -159,10 +179,28 @@ describe('AchievementsShowcase button ledger', () => {
               node.props.children ===
               RARITY_LABEL[milestone.rarity].toUpperCase(),
           )!;
+        // The pill is tinted with the rarity's own material; its text is
+        // the material's accent on the dark panel and its deep tone on the
+        // light one — both pinned ≥ 4.5:1 in design/tokens.ts.
+        const material = achievementRarity[milestone.rarity];
         expect(StyleSheet.flatten(label.props.style)).toMatchObject({
-          color: dark ? color.volt : color.courtDeep,
+          color: dark ? material.accent : material.deep,
           fontSize: typography.micro.fontSize,
         });
+        expect(
+          contrastRatio(
+            dark ? material.accent : material.deep,
+            dark ? color.inkElevated : color.surfaceAlt,
+          ),
+        ).toBeGreaterThanOrEqual(4.5);
+        const pill = renderer.root.findAll(
+          node =>
+            node.props.testID === 'achievement-rarity-pill' &&
+            typeof node.type === 'string',
+        )[0]!;
+        expect(StyleSheet.flatten(pill.props.style).backgroundColor).toBe(
+          material.tint,
+        );
         expect(
           pressableStyle(badgeButton(renderer, milestone.title))
             .backgroundColor,

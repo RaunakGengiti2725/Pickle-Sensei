@@ -309,13 +309,17 @@ describe('free limit → Result + Paywall', () => {
 
     const rendered = textOf(renderer);
     expect(rendered).toContain('That was your last free analysis.');
-    expect(rendered).toContain('both free analyses');
+    // No server snapshot here → the product's own allowance (one) words it.
+    expect(rendered).toContain('your free analysis');
+    expect(rendered).not.toContain('both free analyses');
     const dialog = hosts(
       renderer,
       n => n.props.accessibilityViewIsModal === true,
     );
     expect(dialog).toHaveLength(1);
-    expect(dialog[0]!.props.accessibilityLabel).toContain('free analyses');
+    expect(dialog[0]!.props.accessibilityLabel).toBe(
+      "You've used your free analysis",
+    );
     // Nothing navigated yet: the prompt sits on top of the saved score.
     expect(mockNavigation.replace).not.toHaveBeenCalled();
 

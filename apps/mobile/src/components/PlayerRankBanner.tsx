@@ -28,6 +28,14 @@ import {
   type ServerPlayerRank,
 } from '../progress/playerRank';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
+import {
+  DUPR_ESTIMATE_NOTE,
+  DUPR_LABEL,
+  duprFromScore,
+  formatDupr,
+  formatDuprDistance,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { flameIntensityForStreak } from '../consistency/engine';
 import { AnimatedFlame } from '../consistency/FlameIcon';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
@@ -44,6 +52,11 @@ import { plural } from '../util/plural';
  * Data rules are unchanged from PlayerRankCard: account-saved rank when it
  * has seen the most evidence, local compute otherwise; no rank is ever
  * invented for an unranked player.
+ *
+ * Every rating figure here is printed as an estimated DUPR (D-046): the
+ * headline rating (with its "/10" reading beneath), the tier ranges, the
+ * distance to the next tier and the per-technique chips. The tier math
+ * itself stays on the 0–10 rating; only the display converts.
  */
 
 const TOP_OF_SCALE = 10;
@@ -58,12 +71,13 @@ function segmentFill(rating: number, index: number): number {
   return Math.max(0, Math.min(1, (rating - floor) / (ceiling - floor)));
 }
 
-function tierRangeLabel(index: number): string {
+/** The tier's DUPR band, e.g. "4.10 – 4.99" or "6.50+" for the top tier. */
+export function tierRangeLabel(index: number): string {
   const floor = PLAYER_RANK_TIERS[index]!.minRating;
   const ceiling = PLAYER_RANK_TIERS[index + 1]?.minRating ?? null;
   return ceiling === null
-    ? `${floor.toFixed(1)}+`
-    : `${floor.toFixed(1)} – ${(ceiling - 0.01).toFixed(2)}`;
+    ? `${formatDupr(floor)}+`
+    : `${formatDupr(floor)} – ${(duprFromScore(ceiling) - 0.01).toFixed(2)}`;
 }
 
 export function PlayerRankBanner(props: {
@@ -169,20 +183,23 @@ export function PlayerRankBanner(props: {
   const detailLine = summary
     ? `Best: ${
         best
-          ? `${best.shotType.replace(/_/g, ' ')} ${best.score.toFixed(1)}`
+          ? `${best.shotType.replace(/_/g, ' ')} ${formatDupr(best.score)}`
           : '—'
       }${
         summary.nextTier
-          ? ` · ${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-              summary.nextTier.label
-            }`
+          ? ` · ${formatDuprDistance(
+              summary.rating,
+              summary.nextTier.minRating,
+            )} to ${summary.nextTier.label}`
           : ' · Top tier'
       }`
     : 'Your first scored analysis places you.';
   const rankLabel = summary
     ? `Player rank ${summary.tierLabel} ${
         summary.divisionLabel
-      }, rating ${summary.rating.toFixed(2)} out of 10.`
+      }, estimated DUPR ${formatDupr(
+        summary.rating,
+      )}, technique rating ${summary.rating.toFixed(2)} out of 10.`
     : 'Player rank: unranked.';
   const intensity = flameIntensityForStreak(props.streakDays);
 
@@ -206,7 +223,11 @@ export function PlayerRankBanner(props: {
           testID="player-rank-banner-toggle"
         >
           <View style={stacked && styles.emblemStacked}>
-            <RankIcon tier={summary?.tier ?? null} size={46} />
+            <RankIcon
+              tier={summary?.tier ?? null}
+              division={summary?.division ?? null}
+              size={46}
+            />
           </View>
           <View
             style={[styles.body, stacked && styles.bodyStacked]}
@@ -223,18 +244,32 @@ export function PlayerRankBanner(props: {
                   : 'Unranked'}
               </Text>
               {summary ? (
-                <Text
-                  style={[
-                    type.bodyBold,
-                    styles.rating,
-                    { color: color.onDark },
-                  ]}
-                  accessibilityLabel={`Rating ${summary.rating.toFixed(2)} out of 10`}
-                  testID="player-rank-banner-rating"
-                >
-                  {summary.rating.toFixed(2)}
-                  <Text style={[type.micro, styles.ratingScale]}>{' /10'}</Text>
-                </Text>
+                <View style={styles.ratingBlock}>
+                  <Text
+                    style={[
+                      type.bodyBold,
+                      styles.rating,
+                      { color: color.onDark },
+                    ]}
+                    accessibilityLabel={`Estimated DUPR ${formatDupr(
+                      summary.rating,
+                    )}, technique rating ${summary.rating.toFixed(
+                      2,
+                    )} out of 10`}
+                    testID="player-rank-banner-rating"
+                  >
+                    {formatDupr(summary.rating)}
+                    <Text style={[type.micro, styles.ratingScale]}>
+                      {` ${DUPR_LABEL}`}
+                    </Text>
+                  </Text>
+                  <Text
+                    style={[type.micro, styles.ratingTechnique]}
+                    testID="player-rank-banner-technique-rating"
+                  >
+                    {formatTechniqueScore(summary.rating, 2)}
+                  </Text>
+                </View>
               ) : null}
             </View>
             <Text style={[type.caption, styles.detail]}>{detailLine}</Text>
@@ -349,7 +384,7 @@ export function PlayerRankBanner(props: {
                   <View key={technique.shotType} style={styles.techniqueChip}>
                     <Text style={[type.micro, styles.techniqueChipLabel]}>
                       {technique.shotType.replace(/_/g, ' ')}{' '}
-                      {technique.score.toFixed(1)}
+                      {formatDupr(technique.score)}
                     </Text>
                   </View>
                 ))}
@@ -359,10 +394,17 @@ export function PlayerRankBanner(props: {
                 set its score — newest count most. Strokes with more evidence
                 weigh more (up to {RANK_CONFIDENCE_CAP} analyses each).{' '}
                 {summary.nextTier
-                  ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                      summary.nextTier.label
-                    }.`
+                  ? `${formatDuprDistance(
+                      summary.rating,
+                      summary.nextTier.minRating,
+                    )} to ${summary.nextTier.label}.`
                   : 'Top tier — every new analysis defends it.'}
+              </Text>
+              <Text
+                style={[type.caption, styles.formulaNote]}
+                testID="player-rank-banner-dupr-note"
+              >
+                {DUPR_ESTIMATE_NOTE}
               </Text>
             </>
           ) : (
@@ -437,6 +479,7 @@ const styles = StyleSheet.create({
   },
   tierRowStacked: { flexDirection: 'column', alignItems: 'stretch' },
   tierLabel: { color: color.onDark, flexShrink: 1, maxWidth: '100%' },
+  ratingBlock: { alignItems: 'flex-start', maxWidth: '100%' },
   rating: {
     flexShrink: 1,
     minWidth: 0,
@@ -444,6 +487,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   ratingScale: { color: color.onDarkSubtle },
+  ratingTechnique: {
+    color: color.onDarkFaint,
+    fontVariant: ['tabular-nums'],
+  },
   detail: { color: color.onDarkSubtle, marginTop: 2 },
   streakBlock: {
     minHeight: 44,

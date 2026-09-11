@@ -163,19 +163,28 @@ describe('accessStore', () => {
     expect(selectCanStartRating(state)).toBe(false);
   });
 
-  it('loads canonical allowance and selects annual by default', async () => {
+  it('loads canonical allowance and selects the recommended monthly plan by default', async () => {
     configureAccessStore(dependencies());
     await useAccessStore.getState().initialize();
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
-    expect(state.selectedPeriod).toBe('annual');
+    expect(state.selectedPeriod).toBe('monthly');
     expect(state.plans?.lifetime?.id).toBe('lifetime-plan');
     expect(state.canonicalAccess).toEqual(freeAccess);
   });
 
-  it('prefers the lifetime plan over monthly when annual is unavailable', async () => {
+  it('falls back to annual, then lifetime, when the recommended plan is unavailable', async () => {
     configureAccessStore(
-      dependencies({ loadPlans: async () => ({ ...plans, annual: null }) }),
+      dependencies({ loadPlans: async () => ({ ...plans, monthly: null }) }),
+    );
+    await useAccessStore.getState().initialize();
+    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
+
+    clearAccessStoreConfiguration();
+    configureAccessStore(
+      dependencies({
+        loadPlans: async () => ({ ...plans, monthly: null, annual: null }),
+      }),
     );
     await useAccessStore.getState().initialize();
     expect(useAccessStore.getState().selectedPeriod).toBe('lifetime');
@@ -199,7 +208,7 @@ describe('accessStore', () => {
     );
     await useAccessStore.getState().initialize();
     useAccessStore.getState().selectPeriod('lifetime');
-    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
+    expect(useAccessStore.getState().selectedPeriod).toBe('monthly');
   });
 
   it('keeps verified free ratings available when store pricing is unconfigured', async () => {
@@ -231,7 +240,7 @@ describe('accessStore', () => {
     const purchased = await useAccessStore.getState().purchaseSelected();
     const state = useAccessStore.getState();
     expect(purchased).toBe(false);
-    expect(clients.store.purchase).toHaveBeenCalledWith('annual-plan');
+    expect(clients.store.purchase).toHaveBeenCalledWith('monthly-plan');
     expect(state.canonicalAccess).toBeNull();
     expect(selectHasPremium(state)).toBe(false);
     expect(state.error?.code).toBe('billing.backend_verification_pending');

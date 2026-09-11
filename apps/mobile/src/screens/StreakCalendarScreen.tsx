@@ -21,6 +21,8 @@ import {
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import type { RootStackParams } from '../navigation/params';
+import { DuprReadout } from '../progress/DuprReadout';
+import { duprAccessibilityLabel, formatDupr } from '../progress/duprEstimate';
 import {
   dayFromOrdinal,
   dayHeatLevel,
@@ -554,7 +556,7 @@ export function StreakCalendarScreen() {
                   : {})}
                 rarity={next.rarity}
                 earned={false}
-                size={40}
+                size={48}
               />
               <Text style={[type.caption, styles.nextRewardText]}>
                 Next reward: {next.title} — {next.daysAway}{' '}
@@ -691,8 +693,13 @@ export function StreakCalendarScreen() {
                       )}
                     </Text>
                     {selectedLog.scoreAvg !== null ? (
-                      <Text style={[type.micro, styles.dayChip]}>
-                        AVG {selectedLog.scoreAvg.toFixed(1)}
+                      <Text
+                        accessibilityLabel={`Average ${duprAccessibilityLabel(
+                          selectedLog.scoreAvg,
+                        )}`}
+                        style={[type.micro, styles.dayChip]}
+                      >
+                        AVG {formatDupr(selectedLog.scoreAvg)} DUPR
                       </Text>
                     ) : null}
                     <Text style={[type.micro, styles.dayChipVolt]}>
@@ -733,11 +740,14 @@ export function StreakCalendarScreen() {
                               : ''}
                         </Text>
                       </View>
-                      <Text style={styles.activityScore}>
-                        {activity.score === null
-                          ? '—'
-                          : activity.score.toFixed(1)}
-                      </Text>
+                      {activity.score === null ? (
+                        <Text style={styles.activityScore}>—</Text>
+                      ) : (
+                        <DuprReadout
+                          score={activity.score}
+                          valueStyle={styles.activityScore}
+                        />
+                      )}
                     </View>
                   ))}
                 </>

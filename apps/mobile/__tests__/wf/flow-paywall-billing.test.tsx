@@ -662,7 +662,18 @@ describe('paywall-billing: pricing page controls', () => {
     const { renderer } = await renderPaywall();
     await openPricing(renderer);
 
-    // Annual is pre-selected with a trial CTA.
+    // The recommended monthly plan is pre-selected with its price in the CTA.
+    expect(
+      pressable(renderer, 'paywall-plan-monthly').props.accessibilityState,
+    ).toEqual({ selected: true });
+    expect(
+      pressable(renderer, 'paywall-plan-annual').props.accessibilityState,
+    ).toEqual({ selected: false });
+    expect(
+      pressable(renderer, 'paywall-continue').props.accessibilityLabel,
+    ).toBe('Continue · $7.99/mo');
+
+    await press(renderer, 'paywall-plan-annual');
     expect(
       pressable(renderer, 'paywall-plan-annual').props.accessibilityState,
     ).toEqual({ selected: true });
@@ -955,7 +966,7 @@ describe('paywall-billing: purchase', () => {
 
     const continueButton = pressable(renderer, 'paywall-continue');
     expect(continueButton.props.disabled).toBe(true);
-    expect(continueButton.props.accessibilityLabel).toBe('Start free trial');
+    expect(continueButton.props.accessibilityLabel).toBe('Continue · $7.99/mo');
     expect(errorCard(renderer)?.props.accessibilityHint).toBe(
       'Membership verification is temporarily unavailable.',
     );

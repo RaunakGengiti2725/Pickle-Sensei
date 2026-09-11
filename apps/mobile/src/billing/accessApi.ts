@@ -40,13 +40,18 @@ function parseAccess(value: unknown): CanonicalAccessState {
     throw invalidResponse();
   }
   const freeRatings = value.freeRatings;
+  // The allowance is the server's to declare (one since 2026-09-10, two
+  // before): any positive integer is accepted and every counter is checked
+  // against IT, so a build and a deployment that disagree for a moment render
+  // honest copy from `limit` instead of refusing the whole response.
   if (
     typeof value.premium !== 'boolean' ||
     !Array.isArray(value.entitlements) ||
     !value.entitlements.every(item => typeof item === 'string') ||
     typeof value.canStartRating !== 'boolean' ||
     typeof value.paywallRequired !== 'boolean' ||
-    freeRatings.limit !== 2 ||
+    !isInteger(freeRatings.limit) ||
+    freeRatings.limit < 1 ||
     !isInteger(freeRatings.used) ||
     !isInteger(freeRatings.reserved) ||
     !isInteger(freeRatings.remaining) ||
@@ -54,6 +59,7 @@ function parseAccess(value: unknown): CanonicalAccessState {
   ) {
     throw invalidResponse();
   }
+  const limit = freeRatings.limit;
   const used = freeRatings.used;
   const reserved = freeRatings.reserved;
   const remaining = freeRatings.remaining;
@@ -62,9 +68,9 @@ function parseAccess(value: unknown): CanonicalAccessState {
   const expectedCanStart = value.premium || availableToReserve > 0;
   if (
     used < 0 ||
-    used > 2 ||
+    used > limit ||
     reserved < 0 ||
-    remaining !== 2 - used ||
+    remaining !== limit - used ||
     reserved > remaining ||
     availableToReserve !== remaining - reserved ||
     value.premium !== premiumEntitlement ||
@@ -77,7 +83,7 @@ function parseAccess(value: unknown): CanonicalAccessState {
     premium: value.premium,
     entitlements: [...value.entitlements],
     freeRatings: {
-      limit: 2,
+      limit,
       used,
       reserved,
       remaining,

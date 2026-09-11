@@ -33,9 +33,12 @@ import { scoringStackStatus } from '../vision/providers';
 import { selectMembershipState, useAccessStore } from '../state/accessStore';
 import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
+import { useTabBarContentInset } from '../navigation/tabBarLayout';
+import { useTabScrollDock } from '../navigation/tabBarDock';
 import { showBrandNotice } from '../design/BrandNotice';
 import {
   OfflineAllocationCard,
@@ -213,6 +216,8 @@ function SignOutSheet(props: {
 export function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
+  const tabBarInset = useTabBarContentInset();
+  const tabBarDock = useTabScrollDock('Settings');
   const profile = useAppStore(s => s.profile);
   const session = useAuthStore(s => s.session);
   const signOut = useAuthStore(s => s.signOut);
@@ -294,7 +299,8 @@ export function SettingsScreen() {
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        {...tabBarDock}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarInset }]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
@@ -543,9 +549,12 @@ export function SettingsScreen() {
         </Card>
         <View style={styles.ratingNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
-          <Text style={[type.caption, { color: color.inkSoft, flex: 1 }]}>
-            Technique Score describes stroke form. A technique benchmark
-            requires separate validation and does not measure match results.
+          <Text
+            style={[type.caption, { color: color.inkSoft, flex: 1 }]}
+            testID="settings-dupr-note"
+          >
+            {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
+            describes stroke form.
           </Text>
         </View>
 
@@ -596,7 +605,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.xl,
-    paddingBottom: space.xl,
   },
   accountCard: { minHeight: 190, marginTop: space.xl },
   accountTop: {

@@ -511,12 +511,24 @@ describe('PaywallScreen buttons — plan podium', () => {
     const renderer = await renderPaywall(screenProps());
     await openPricing(renderer);
 
-    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
+    // The recommended monthly plan is pre-selected.
+    expect(useAccessStore.getState().selectedPeriod).toBe('monthly');
+    expect(
+      byTestId(renderer, 'paywall-plan-monthly').props.accessibilityState
+        .selected,
+    ).toBe(true);
     expect(
       byTestId(renderer, 'paywall-plan-annual').props.accessibilityState
         .selected,
-    ).toBe(true);
+    ).toBe(false);
 
+    await act(async () => {
+      byTestId(renderer, 'paywall-plan-annual').props.onPress();
+    });
+    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
+    expect(
+      byTestId(renderer, 'paywall-plan-annual').props.accessibilityLabel,
+    ).toBe('Yearly membership, $59.99 per year, selected');
     await act(async () => {
       byTestId(renderer, 'paywall-plan-monthly').props.onPress();
     });
@@ -600,7 +612,7 @@ describe('PaywallScreen buttons — purchase CTA', () => {
     await flush();
 
     expect(deps.store.purchase).toHaveBeenCalledTimes(1);
-    expect(deps.store.purchase).toHaveBeenCalledWith('annual-plan');
+    expect(deps.store.purchase).toHaveBeenCalledWith('monthly-plan');
     expect(deps.backend.syncBilling).toHaveBeenCalledTimes(1);
     expect(props.onPurchased).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().canonicalAccess?.premium).toBe(true);
@@ -1304,12 +1316,12 @@ describe('PaywallScreen buttons — accessibility and hit targets', () => {
       [
         'Back to membership benefits',
         'Close membership offer',
-        'Monthly membership, $7.99 per month',
-        'Yearly membership, $59.99 per year, selected',
+        'Monthly membership, $7.99 per month, selected',
+        'Yearly membership, $59.99 per year',
         'Lifetime membership, $159.99 one-time',
         'Dismiss membership message',
         'Retry loading membership',
-        'Start free trial',
+        'Continue · $7.99/mo',
         'Restore purchases',
         'Terms of use',
         'Privacy policy',

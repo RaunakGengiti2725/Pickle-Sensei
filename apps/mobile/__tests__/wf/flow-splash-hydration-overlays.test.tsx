@@ -85,8 +85,9 @@ import {
   WALKTHROUGH_STEPS,
 } from '../../src/walkthrough/FirstRunWalkthrough';
 import {
-  WALKTHROUGH_KV_KEY,
+  WALKTHROUGH_KV_NAMESPACE,
   useWalkthroughStore,
+  walkthroughKeyForOwner,
 } from '../../src/walkthrough/walkthroughStore';
 import { registerWalkthroughMeasurer } from '../../src/walkthrough/targets';
 
@@ -386,7 +387,7 @@ describe('hydration failure paths keep the launch gate moving', () => {
 });
 
 describe('AGENTS.md owner-scoping invariants for overlay state', () => {
-  it('rank + consistency records are owner scoped; the walkthrough is device scoped', () => {
+  it('rank + consistency + walkthrough records are all owner scoped', () => {
     expect(OWNER_SCOPED_KV_NAMESPACES).toEqual([
       'profile',
       'rank.celebrated',
@@ -395,17 +396,19 @@ describe('AGENTS.md owner-scoping invariants for overlay state', () => {
       'practice.set',
       'billing.pending-fulfilment',
       'analysis.release-policy',
+      'walkthrough.complete',
     ]);
     expect(rankCelebrationKeyForOwner('owner-1')).toBe(
       'rank.celebrated:owner-1',
     );
-    expect(WALKTHROUGH_KV_KEY).toBe('walkthrough.device-complete');
-    expect(
-      OWNER_SCOPED_KV_NAMESPACES.some(ns => WALKTHROUGH_KV_KEY.startsWith(ns)),
-    ).toBe(false);
+    expect(WALKTHROUGH_KV_NAMESPACE).toBe('walkthrough.complete');
+    expect(walkthroughKeyForOwner('owner-1')).toBe(
+      'walkthrough.complete:owner-1',
+    );
+    expect(OWNER_SCOPED_KV_NAMESPACES).toContain(WALKTHROUGH_KV_NAMESPACE);
   });
 
-  it('walkthrough writes its device record BEFORE becoming visible', async () => {
+  it('walkthrough writes its account record BEFORE becoming visible', async () => {
     const visibleAtWrite: boolean[] = [];
     const unsubscribe = useWalkthroughStore.subscribe(state => {
       visibleAtWrite.push(state.visible);
@@ -416,7 +419,9 @@ describe('AGENTS.md owner-scoping invariants for overlay state', () => {
       sql.startsWith('INSERT OR REPLACE INTO kv'),
     );
     expect(writeIndex).toBeGreaterThanOrEqual(0);
-    expect(mockKvTable.get(WALKTHROUGH_KV_KEY)).toBeDefined();
+    expect(
+      mockKvTable.get(walkthroughKeyForOwner(GUEST_DATA_OWNER)),
+    ).toBeDefined();
     expect(useWalkthroughStore.getState().visible).toBe(true);
     expect(visibleAtWrite).toEqual([true]);
   });

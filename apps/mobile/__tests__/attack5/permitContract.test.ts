@@ -23,6 +23,7 @@ import {
   isReleasePolicyRequest,
 } from '../../testSupport/releasePolicyFixture';
 import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
+import { installAbstainingScorer } from '../../__harness__/abstainingScorer';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -200,7 +201,13 @@ function setFetch(fetchMock: unknown) {
   (globalThis as { fetch?: unknown }).fetch = fetchMock;
 }
 
-beforeEach(() => signInCaptureOwner(owner));
+// The 0.5-visibility fixture used to trip the engine's confidence floor;
+// since 2026-09-10 it scores, so the abstaining verdict is a test double
+// keyed on that fixture (see __harness__/abstainingScorer.ts).
+beforeEach(() => {
+  signInCaptureOwner(owner);
+  installAbstainingScorer();
+});
 afterEach(() => {
   closeCaptureHarness();
   setFetch(undefined);

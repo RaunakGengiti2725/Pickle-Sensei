@@ -54,7 +54,9 @@ class ClipPlayerView(context: Context) : FrameLayout(context) {
   }
 
   init {
-    setBackgroundColor(Color.BLACK)
+    // Transparent: in 'contain' mode the area outside the video rect shows the
+    // JS host's stage under the player instead of black pillarbox bars.
+    setBackgroundColor(Color.TRANSPARENT)
     textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
       override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
         surface = Surface(texture)

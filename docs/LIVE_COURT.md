@@ -30,7 +30,7 @@ continuous native capture → validated repetition event → retain pre/post win
 → score or explicit abstention → one cue → owner-scoped persistence → canonical sync
 ```
 
-Core coaching remains designed for zero network dependency. A future score is accepted only with its complete model/config version vector and sufficient confidence. The server consumes one of the two free ratings only when that successful result is atomically accepted.
+Core coaching remains designed for zero network dependency. A future score is accepted only with its complete model/config version vector and sufficient confidence. The server consumes the free rating only when that successful result is atomically accepted.
 
 ## Measurement gates
 

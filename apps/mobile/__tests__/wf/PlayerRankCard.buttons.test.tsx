@@ -160,8 +160,12 @@ describe('PlayerRankCard button ledger', () => {
     const renderer = await render(deviceFacts());
     const copy = allText(renderer);
     expect(copy).toContain('Gold');
-    expect(copy).toContain('5.50');
-    expect(copy).toContain('1.00 to Platinum');
+    // D-046: estimated DUPR first (5.5 → 2.85), the /10 beneath, the tier
+    // distance as the DUPR gap to Platinum's 6.5 → 3.00.
+    expect(copy).toContain('2.85');
+    expect(copy).toContain('5.50 /10');
+    expect(copy).toContain('0.15 to Platinum');
+    expect(copy).toContain('Not an official DUPR rating.');
     expect(copy).toContain('Computed on this device');
     expect(copy).not.toContain('Saved to your account.');
     expectNoControls(renderer);
@@ -183,7 +187,9 @@ describe('PlayerRankCard button ledger', () => {
       labels.some(
         label =>
           label.startsWith('Player rank Gold') &&
-          label.includes('Rating 5.50 out of 10') &&
+          label.includes(
+            'Estimated DUPR 2.85, technique rating 5.50 out of 10',
+          ) &&
           label.includes('1 technique.'),
       ),
     ).toBe(true);

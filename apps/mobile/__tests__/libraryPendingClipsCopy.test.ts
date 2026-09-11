@@ -6,6 +6,8 @@ import {
   PENDING_SECTION_LABEL,
   PENDING_SECTION_NOTE,
   PENDING_SECTION_PILL,
+  formatClipDuration,
+  pendingCaptureActionLabel,
   pendingCaptureTitle,
   pendingEvidenceCopy,
 } from '../src/screens/LibraryScreen';
@@ -79,6 +81,82 @@ describe('pendingEvidenceCopy', () => {
     expect(pendingEvidenceCopy(capture({ evidenceStatus: 'corrupt' }))).toBe(
       'Saved evidence could not be verified — can’t be scored',
     );
+  });
+
+  it('never says "has not run yet" beside a row action that reopens a saved analysis', () => {
+    for (const overrides of [
+      { hasOriginalOperation: true },
+      { techniqueConfirmation: 'ready' },
+      { techniqueConfirmation: 'release_pending' },
+      { techniqueConfirmation: 'blocked' },
+    ] as const) {
+      const copy = pendingEvidenceCopy(capture({ clip: null, ...overrides }));
+      expect(copy).toBe('Analysis started — not scored yet');
+      expect(copy).not.toMatch(/has not run/i);
+    }
+  });
+
+  it('keeps the measured evidence line even when the row has an action', () => {
+    const withEvidence = capture({
+      hasOriginalOperation: true,
+      clip: {
+        captureEvidence: { poseFrameCount: 54, meanJointCoverage: 1 },
+      } as unknown as PendingCapture['clip'],
+    });
+    expect(pendingEvidenceCopy(withEvidence)).toBe(
+      '54 pose frames · 100% joint coverage',
+    );
+  });
+});
+
+describe('pendingCaptureActionLabel', () => {
+  it('is null for read-only clips so the row renders without a tap affordance', () => {
+    expect(pendingCaptureActionLabel(capture({}))).toBeNull();
+    expect(
+      pendingCaptureActionLabel(capture({ hasOriginalOperation: false })),
+    ).toBeNull();
+  });
+
+  it('names the reopen action by saved state', () => {
+    expect(
+      pendingCaptureActionLabel(capture({ hasOriginalOperation: true })),
+    ).toBe('Review saved analysis');
+    expect(
+      pendingCaptureActionLabel(capture({ techniqueConfirmation: 'ready' })),
+    ).toBe('Confirm technique');
+    expect(
+      pendingCaptureActionLabel(
+        capture({ techniqueConfirmation: 'release_pending' }),
+      ),
+    ).toBe('Recover confirmation');
+    expect(
+      pendingCaptureActionLabel(capture({ techniqueConfirmation: 'blocked' })),
+    ).toBe('Review saved capture');
+  });
+
+  it('prefers the technique confirmation over a plain original operation', () => {
+    expect(
+      pendingCaptureActionLabel(
+        capture({ techniqueConfirmation: 'ready', hasOriginalOperation: true }),
+      ),
+    ).toBe('Confirm technique');
+  });
+});
+
+describe('formatClipDuration', () => {
+  it('renders seconds compactly and switches to m:ss at a minute', () => {
+    expect(formatClipDuration(4200)).toBe('4s');
+    expect(formatClipDuration(23_400)).toBe('23s');
+    expect(formatClipDuration(59_400)).toBe('59s');
+    expect(formatClipDuration(60_000)).toBe('1:00');
+    expect(formatClipDuration(65_000)).toBe('1:05');
+    expect(formatClipDuration(754_000)).toBe('12:34');
+  });
+
+  it('never rounds a real clip down to nothing and never invents a length', () => {
+    expect(formatClipDuration(400)).toBe('<1s');
+    expect(formatClipDuration(0)).toBe('<1s');
+    expect(formatClipDuration(Number.NaN)).toBe('—');
   });
 });
 

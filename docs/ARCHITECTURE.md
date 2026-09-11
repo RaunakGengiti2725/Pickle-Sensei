@@ -109,7 +109,7 @@ Fastify + TypeScript modular monolith; modules communicate in-process via typed 
 
 ## Entitlement boundary
 
-The server reserves an analysis permit before inference and atomically binds a successful rating to that permit. Exactly two lifetime successful, server-accepted ratings are free; abstentions, model-unavailable captures, failures, cancellations, and incorrect-recognition releases do not consume them. The third attempted rating is a hard paywall unless the canonical entitlement is active. Until a validated model can emit an accepted rating, the allowance remains untouched.
+The server reserves an analysis permit before inference and atomically binds a successful rating to that permit. Exactly one lifetime successful, server-accepted rating is free (D-045; two before 2026-09-10 — the allowance is `public.free_rating_limit()`); abstentions, model-unavailable captures, failures, cancellations, and incorrect-recognition releases do not consume it. The next attempted rating is a hard paywall unless the canonical entitlement is active. Until a validated model can emit an accepted rating, the allowance remains untouched.
 
 ## Model delivery
 

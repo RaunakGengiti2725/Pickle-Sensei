@@ -325,10 +325,16 @@ describe('Paywall — exits and legal links (3.1.2)', () => {
     expect(handlers.onOpenPrivacy).toHaveBeenCalledTimes(1);
 
     // Subscription disclosure sits next to the links: price, period,
-    // auto-renewal, and where to cancel.
-    const copy = allText(renderer);
-    expect(copy).toContain('$59.99 per year, automatically renewing');
+    // auto-renewal, and where to cancel — for the pre-selected monthly plan
+    // and again once yearly is chosen.
+    let copy = allText(renderer);
+    expect(copy).toContain('$7.99 per month, automatically renewing');
     expect(copy).toContain('Cancel in your store account settings.');
+    await act(async () =>
+      byTestId(renderer, 'paywall-plan-annual').props.onPress(),
+    );
+    copy = allText(renderer);
+    expect(copy).toContain('$59.99 per year, automatically renewing');
     act(() => renderer.unmount());
   });
 
@@ -368,13 +374,11 @@ describe('Paywall — purchase branches', () => {
 
     const continueButton = byTestId(renderer, 'paywall-continue');
     expect(continueButton.props.disabled).toBe(false);
-    expect(continueButton.props.accessibilityLabel).toBe(
-      'Continue · $59.99/yr',
-    );
+    expect(continueButton.props.accessibilityLabel).toBe('Continue · $7.99/mo');
     await act(async () => continueButton.props.onPress());
     await flush();
 
-    expect(deps.store.purchase).toHaveBeenCalledWith('annual-plan');
+    expect(deps.store.purchase).toHaveBeenCalledWith('monthly-plan');
     expect(deps.backend.syncBilling).toHaveBeenCalledTimes(1);
     expect(handlers.onPurchased).toHaveBeenCalledTimes(1);
     expect(hasLabel(renderer, 'Dismiss membership message')).toBe(0);

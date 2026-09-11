@@ -72,6 +72,7 @@ jest.mock('../../src/auth/authStore', () => ({
 }));
 
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
+import { Button } from '../../src/design/components';
 import { getDb } from '../../src/data/db';
 import {
   setActiveDataOwner,
@@ -107,6 +108,11 @@ const shotNotRead: LocalShotRow = {
   confidence: 0.2,
   resultKind: 'low_confidence',
 };
+
+/** The scored row's label carries its estimated DUPR and 0–10 score (D-046)
+ * so VoiceOver hears the rating without opening the read. */
+const SCORED_ROW_LABEL =
+  'Open forehand drive result, Estimated DUPR 3.50, technique score 7.3 out of 10';
 
 /** Server rows can arrive with a scored kind but no number; must not throw. */
 const shotScoredWithoutNumber: LocalShotRow = {
@@ -441,7 +447,7 @@ describe('LibraryScreen · reads tab', () => {
       setActiveDataOwner(mockOwner);
       oldReads.resolve([shotScored]);
     });
-    expect(findByLabel(renderer, 'Open forehand drive result')).toBeNull();
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
     expect(mockListShots).toHaveBeenCalledTimes(2);
     await act(async () => freshReads.resolve([shotNotRead]));
     expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
@@ -458,7 +464,7 @@ describe('LibraryScreen · reads tab', () => {
       setActiveDataOwner(mockOwner);
     });
     expect(allText(renderer)).toContain('Opening your library');
-    expect(findByLabel(renderer, 'Open forehand drive result')).toBeNull();
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
     await act(async () => reads.resolve([shotNotRead]));
     expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
     act(() => renderer.unmount());
@@ -471,7 +477,7 @@ describe('LibraryScreen · reads tab', () => {
     mockFocused = false;
     await act(async () => renderer.update(<LibraryScreen />));
     await act(async () => oldReads.resolve([shotScored]));
-    expect(findByLabel(renderer, 'Open forehand drive result')).toBeNull();
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
     mockListShots.mockResolvedValue([shotNotRead]);
     mockFocused = true;
     await act(async () => renderer.update(<LibraryScreen />));
@@ -516,9 +522,7 @@ describe('LibraryScreen · reads tab', () => {
       expect(findByLabel(renderer, 'Try again')).toBeNull();
       await act(async () => retry.resolve([shotScored]));
       expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
-      expect(
-        findByLabel(renderer, 'Open forehand drive result'),
-      ).not.toBeNull();
+      expect(findByLabel(renderer, SCORED_ROW_LABEL)).not.toBeNull();
       act(() => renderer.unmount());
     },
   );
@@ -532,7 +536,7 @@ describe('LibraryScreen · reads tab', () => {
     mockListShots.mockResolvedValue([shotNotRead]);
     await act(async () => renderer.update(<LibraryScreen />));
     await act(async () => oldReads.resolve([shotScored]));
-    expect(findByLabel(renderer, 'Open forehand drive result')).toBeNull();
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
     expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
     act(() => renderer.unmount());
   });
@@ -571,16 +575,26 @@ describe('LibraryScreen · reads tab', () => {
         shotScored,
         shotNotRead,
       ]);
+      // D-046: the row prints the estimated DUPR (7.25 → 3.50) in the
+      // card-score role with the "7.3 /10" reading beneath in micro.
       const score = renderer.root
         .findAllByType(Text)
         .find(
-          node => node.props.children === shotScored.overallScore!.toFixed(1),
+          node =>
+            Array.isArray(node.props.children) &&
+            node.props.children[0] === '3.50',
         )!;
       expect(StyleSheet.flatten(score.props.style)).toMatchObject({
         ...type.score,
         color: color.ink,
       });
-      await pressByLabel(renderer, 'Open forehand drive result');
+      const technique = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === '7.3 /10')!;
+      expect(StyleSheet.flatten(technique.props.style)).toMatchObject(
+        type.micro,
+      );
+      await pressByLabel(renderer, SCORED_ROW_LABEL);
       expect(mockNavigate).toHaveBeenCalledWith('Result', {
         analysisId: shotScored.id,
       });
@@ -613,12 +627,12 @@ describe('LibraryScreen · reads tab', () => {
   it('a read row opens its Result with the row id as analysisId', async () => {
     const renderer = await renderLibrary();
 
-    const row = findByLabel(renderer, 'Open forehand drive result');
+    const row = findByLabel(renderer, SCORED_ROW_LABEL);
     expect(row).not.toBeNull();
     expect(pressedStyle(row!).minHeight).toBeGreaterThanOrEqual(44);
     expect(allText(renderer)).toContain('7.3');
 
-    await pressByLabel(renderer, 'Open forehand drive result');
+    await pressByLabel(renderer, SCORED_ROW_LABEL);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: shotScored.id,
@@ -694,6 +708,74 @@ describe('LibraryScreen · reads tab', () => {
     ).toEqual(new Set(['Analyze your first stroke']));
     await pressByLabel(renderer, 'Analyze your first stroke');
     expect(mockNavigate).toHaveBeenCalledWith('Analyze');
+
+    act(() => renderer.unmount());
+  });
+
+  it('a clip with a saved analysis is one tappable row that reopens it — never a per-row button', async () => {
+    mockListShots.mockResolvedValue([]);
+    mockListPendingCaptures.mockResolvedValue([
+      { ...pendingCapture, id: 'cap-orig', hasOriginalOperation: true },
+      { ...pendingCapture, id: 'cap-confirm', techniqueConfirmation: 'ready' },
+      pendingCapture,
+    ]);
+    const renderer = await renderLibrary();
+
+    const text = allText(renderer);
+    expect(text).toContain('0 analyzed reads · 3 pending clips');
+    expect(text).toContain('Review saved analysis');
+    expect(text).toContain('Confirm technique');
+    // A row that reopens a saved analysis cannot also claim it never ran.
+    expect(text).toContain('4s · Analysis started — not scored yet');
+    expect(text).toContain('4s · Clip saved — analysis has not run yet');
+
+    // Exactly the two actionable rows are pressable beside the Analyze CTA;
+    // the read-only clip stays a plain row. No Button primitive is spent on
+    // a row: the row itself is the control.
+    const nonTab = pressables(renderer).filter(
+      n => n.props.accessibilityRole !== 'tab',
+    );
+    expect(
+      new Set(nonTab.map(n => n.props.accessibilityLabel ?? n.props.label)),
+    ).toEqual(
+      new Set([
+        'Analyze your first stroke',
+        'Review saved analysis: Forehand Drive · auto capture',
+        'Confirm technique: Forehand Drive · auto capture',
+      ]),
+    );
+    expect(renderer.root.findAllByType(Button).map(b => b.props.label)).toEqual(
+      ['Analyze your first stroke'],
+    );
+
+    const original = findByLabel(
+      renderer,
+      'Review saved analysis: Forehand Drive · auto capture',
+    )!;
+    expect(original.props.testID).toBe('open-saved-original-cap-orig');
+    expect(pressedStyle(original).minHeight).toBeGreaterThanOrEqual(44);
+    await pressByLabel(
+      renderer,
+      'Review saved analysis: Forehand Drive · auto capture',
+    );
+    expect(mockNavigate).toHaveBeenLastCalledWith('Analyze', {
+      captureId: 'cap-orig',
+      mode: 'original',
+    });
+
+    const confirm = findByLabel(
+      renderer,
+      'Confirm technique: Forehand Drive · auto capture',
+    )!;
+    expect(confirm.props.testID).toBe('open-saved-confirmation-cap-confirm');
+    await pressByLabel(
+      renderer,
+      'Confirm technique: Forehand Drive · auto capture',
+    );
+    expect(mockNavigate).toHaveBeenLastCalledWith('Analyze', {
+      captureId: 'cap-confirm',
+    });
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
 
     act(() => renderer.unmount());
   });
@@ -1105,7 +1187,7 @@ describe('LibraryScreen · pressable ledger', () => {
       .filter(n => n.props.accessibilityRole !== 'tab')
       .map(n => n.props.accessibilityLabel);
     expect(new Set(labels)).toEqual(
-      new Set(['Open forehand drive result', 'Open dink result']),
+      new Set([SCORED_ROW_LABEL, 'Open dink result']),
     );
     act(() => renderer.unmount());
   });

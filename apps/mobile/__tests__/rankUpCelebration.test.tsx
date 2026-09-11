@@ -8,12 +8,18 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 import TestRenderer, { act } from 'react-test-renderer';
 import * as Components from '../src/design/components';
-import { space, type, color, type as typography } from '../src/design/tokens';
+import {
+  space,
+  type,
+  color,
+  rankTier,
+  type as typography,
+} from '../src/design/tokens';
 import {
   PLAYER_RANK_TIERS,
   type PlayerRankSummary,
 } from '@pickle/shared-types';
-import { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 declare const __dirname: string;
 const { readFileSync } = require('node:fs') as {
   readFileSync: (path: string, encoding: 'utf8') => string;
@@ -22,6 +28,10 @@ const { join } = require('node:path') as {
   join: (...parts: string[]) => string;
 };
 import { RankIcon, RANK_TIER_STYLE } from '../src/components/RankIcon';
+import {
+  RANK_BADGE_VIEWBOX,
+  RANK_TIER_MARK_VIEWBOX,
+} from '../src/components/rankInsigniaArt';
 
 // The celebration store persists through SQLite; the native module is absent
 // under jest and none of these tests exercise persistence.
@@ -192,7 +202,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
     },
   );
 
-  it('keeps the reflowing 7.02 / 10 numeral and uncapped remaining-points copy without an invented benchmark', async () => {
+  it('keeps the reflowing estimated-DUPR numeral (7.02 → 3.35) over the /10 line and uncapped remaining-points copy', async () => {
     const previous = {
       window: Dimensions.get('window'),
       screen: Dimensions.get('screen'),
@@ -228,37 +238,44 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
       await act(async () => {
         renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
       });
+      // D-046: the big numeral is the estimated DUPR (7.02 → 3.35) with its
+      // unit; the 0–10 rating is the smaller line beneath it.
       const rating = renderer.root
         .findAllByType(Text)
-        .find(
-          node =>
-            node.props.testID === 'rank-up-rating' ||
-            node.props.children === '7.02',
-        )!;
+        .find(node => node.props.testID === 'rank-up-rating')!;
       expect(rating.props).toMatchObject({
-        accessibilityLabel: 'Rating 7.02 out of 10',
+        accessibilityLabel:
+          'Estimated DUPR 3.35, technique rating 7.02 out of 10',
       });
       expect(rating.props.numberOfLines).toBeUndefined();
       expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
-      expect(rating.props.children[0]).toBe('7.02');
+      expect(rating.props.children[0]).toBe('3.35');
       expect(
         rating
           .findAllByType(Text)
-          .some(node => node.props.children === ' / 10'),
+          .some(node => node.props.children === ' DUPR'),
       ).toBe(true);
       expect(StyleSheet.flatten(rating.props.style)).toMatchObject({
         ...type.score,
         maxWidth: '100%',
       });
+      const technique = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.testID === 'rank-up-technique-rating')!;
+      expect(technique.props.children).toBe('7.02 /10');
+      expect(StyleSheet.flatten(technique.props.style)).toMatchObject(
+        type.micro,
+      );
       const scroll = renderer.root.findByType(ScrollView);
       const texts = scroll.findAllByType(Text);
-      expect(
-        texts.some(node => /DUPR|≈/.test(String(node.props.children))),
-      ).toBe(false);
+      expect(texts.some(node => /≈/.test(String(node.props.children)))).toBe(
+        false,
+      );
+      // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
       expect(
         texts.some(
           node =>
-            node.props.children === '0.48 to Diamond. Every analysis moves it.',
+            node.props.children === '0.32 to Diamond. Every analysis moves it.',
         ),
       ).toBe(true);
     } finally {
@@ -322,45 +339,131 @@ describe('RankUpCelebration', () => {
   });
 });
 
-describe('flat rank insignia', () => {
-  it('keeps every tier label and a distinct shape in the same two-color palette', () => {
+/** Geometry-only fingerprint of a rendered insignia, plus the paints it
+ * used, in draw order. */
+function insignia(node: React.ReactElement) {
+  let renderer!: TestRenderer.ReactTestRenderer;
+  act(() => {
+    renderer = TestRenderer.create(node);
+  });
+  const marks = renderer.root.findAll(
+    candidate =>
+      candidate.type === Path ||
+      candidate.type === Circle ||
+      candidate.type === Rect,
+  );
+  const silhouette = JSON.stringify(
+    marks.map(mark => {
+      const { d, cx, cy, r, x, y, width, height } = mark.props;
+      return { d, cx, cy, r, x, y, width, height };
+    }),
+  );
+  const paints = new Set<string>(
+    marks
+      .flatMap(mark => [mark.props.fill, mark.props.stroke])
+      .filter(paint => paint && paint !== 'none'),
+  );
+  const numeralBars = marks.filter(
+    mark => mark.type === Rect && mark.props.height === 5.6,
+  ).length;
+  const json = JSON.stringify(renderer.toJSON());
+  act(() => renderer.unmount());
+  return { count: marks.length, silhouette, paints, numeralBars, json };
+}
+
+function relativeLuminance(hex: string): number {
+  const channel = (offset: number) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+function contrast(foreground: string, background: string): number {
+  const [lighter, darker] = [foreground, background]
+    .map(relativeLuminance)
+    .sort((a, b) => b - a);
+  return (lighter! + 0.05) / (darker! + 0.05);
+}
+
+describe('rank insignia', () => {
+  const divisions = [3, 2, 1] as const;
+
+  it('gives every tier its own material, drawn only from that tier’s tokens', () => {
+    const accents = new Set<string>();
+    for (const tier of PLAYER_RANK_TIERS) {
+      const material = rankTier[tier.key];
+      expect(RANK_TIER_STYLE[tier.key]).toBe(material);
+      expect(
+        contrast(material.accent, color.surfaceDark),
+      ).toBeGreaterThanOrEqual(4.5);
+      accents.add(material.accent);
+      const allowed = new Set<string>([
+        material.deep,
+        material.base,
+        material.light,
+        material.bright,
+        color.ink,
+      ]);
+      for (const division of [null, ...divisions]) {
+        const badge = insignia(
+          <RankIcon tier={tier.key} division={division} size={44} />,
+        );
+        for (const paint of badge.paints) expect(allowed).toContain(paint);
+        expect(badge.paints).not.toContain(color.volt);
+      }
+    }
+    expect(accents.size).toBe(PLAYER_RANK_TIERS.length);
+  });
+
+  it('renders fifteen distinct division badges plus five distinct tier marks', () => {
     const silhouettes = new Set<string>();
     for (const tier of PLAYER_RANK_TIERS) {
-      let renderer!: TestRenderer.ReactTestRenderer;
-      act(() => {
-        renderer = TestRenderer.create(<RankIcon tier={tier.key} size={44} />);
-      });
-      const paths = renderer.root.findAllByType(Path);
-      const circles = renderer.root.findAllByType(Circle);
-      const marks = [...paths, ...circles];
-      const paints = marks
-        .flatMap(mark => [mark.props.fill, mark.props.stroke])
-        .filter(paint => paint && paint !== 'none');
-      expect([...new Set(paints)].sort()).toEqual(
-        [color.inkElevated, color.volt].sort(),
-      );
-      expect(marks).toHaveLength(2);
-      expect(JSON.stringify(renderer.toJSON())).toContain(
-        `${tier.label} rank emblem`,
-      );
-      expect(RANK_TIER_STYLE[tier.key]).toEqual({
-        accent: color.volt,
-        deep: color.inkElevated,
-        tint: color.voltTint,
-      });
-      silhouettes.add(
-        JSON.stringify(
-          marks.map(mark => ({
-            d: mark.props.d,
-            cx: mark.props.cx,
-            cy: mark.props.cy,
-            r: mark.props.r,
-          })),
-        ),
-      );
-      act(() => renderer.unmount());
+      const mark = insignia(<RankIcon tier={tier.key} size={44} />);
+      expect(mark.json).toContain(`"${tier.label} rank emblem"`);
+      expect(mark.numeralBars).toBe(0);
+      silhouettes.add(mark.silhouette);
+      let previousCount = mark.count;
+      for (const division of divisions) {
+        const badge = insignia(
+          <RankIcon tier={tier.key} division={division} size={44} />,
+        );
+        expect(badge.json).toContain(
+          `"${tier.label} ${['', 'I', 'II', 'III'][division]} rank emblem"`,
+        );
+        // The plaque spells the same numeral the copy uses …
+        expect(badge.numeralBars).toBe(division);
+        // … and ornament grows as the player climbs III → II → I.
+        expect(badge.count).toBeGreaterThan(previousCount);
+        previousCount = badge.count;
+        silhouettes.add(badge.silhouette);
+      }
     }
-    expect(silhouettes.size).toBe(PLAYER_RANK_TIERS.length);
+    expect(silhouettes.size).toBe(PLAYER_RANK_TIERS.length * 4);
+  });
+
+  it('crops the tier mark to its plate and centres the full badge', () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(<RankIcon tier="gold" size={26} />);
+    });
+    expect(renderer.root.findByType(Svg).props).toMatchObject({
+      width: 26,
+      height: 26,
+      viewBox: RANK_TIER_MARK_VIEWBOX,
+    });
+    act(() => renderer.unmount());
+    act(() => {
+      renderer = TestRenderer.create(
+        <RankIcon tier="gold" division={1} size={132} />,
+      );
+    });
+    expect(renderer.root.findByType(Svg).props).toMatchObject({
+      width: 132,
+      height: 132,
+      viewBox: RANK_BADGE_VIEWBOX,
+    });
+    act(() => renderer.unmount());
   });
 
   it('keeps unranked neutral on its own dark plate', () => {
@@ -385,11 +488,13 @@ describe('inventory visual contract', () => {
     'screens/StreakCalendarScreen.tsx',
     'screens/LibraryScreen.tsx',
     'components/RankIcon.tsx',
+    'components/rankInsigniaArt.ts',
     'components/PlayerRankBanner.tsx',
     'components/PlayerRankCard.tsx',
     'components/RankUpCelebration.tsx',
     'consistency/FlameIcon.tsx',
     'consistency/MilestoneBadge.tsx',
+    'consistency/achievementBadgeArt.ts',
     'consistency/ConsistencyCard.tsx',
     'consistency/AchievementsShowcase.tsx',
     'consistency/StreakCelebration.tsx',

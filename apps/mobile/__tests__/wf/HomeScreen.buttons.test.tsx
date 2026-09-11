@@ -32,6 +32,8 @@ jest.mock('react-native-safe-area-context', () => {
   return {
     ...jest.requireActual('react-native-safe-area-context'),
     SafeAreaView: View,
+    // The screen is rendered without a SafeAreaProvider here.
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
   };
 });
 
@@ -131,6 +133,7 @@ jest.mock('../../src/notifications/notificationStore', () => ({
 
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import { color, type as typography } from '../../src/design/tokens';
+import { duprAccessibilityLabel } from '../../src/progress/duprEstimate';
 import type { LocalShotRow, RealAnalysisFact } from '../../src/data/repository';
 import {
   setActiveDataOwner,
@@ -255,6 +258,14 @@ function pressableByLabel(renderer: Renderer, label: string): Node | null {
   );
 }
 
+/** A recent-read row's label: the stroke, then (for a scored read) the
+ * estimated DUPR and the 0–10 score VoiceOver reads without opening it. */
+function openResultLabel(stroke: string, score: number | null = 6.4): string {
+  return `Open ${stroke} result${
+    score === null ? '' : `, ${duprAccessibilityLabel(score)}`
+  }`;
+}
+
 /** The host view a Pressable renders — where the resolved style lives. */
 function hostOf(pressable: Node): Node {
   const [host] = pressable.findAll(isHost);
@@ -351,9 +362,23 @@ describe('HomeScreen button ledger', () => {
     mockListShots.mockResolvedValue([shot({})]);
     mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
     const renderer = await renderHome();
-    const scores = renderer.root
+    // D-046: the latest-technique card and the recent-read row both print
+    // the estimated DUPR (6.4 → 2.98) in the card-score role with the
+    // " DUPR" unit nested, and "6.4 /10" as the smaller micro line.
+    const duprNumerals = renderer.root
       .findAllByType(Text)
-      .filter(node => node.props.children === '6.4');
+      .filter(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children[0] === '2.98',
+      );
+    // The rank banner prints the same estimate in its own bodyBold role; the
+    // two card scores are the ones in the shared card-score role.
+    const scores = duprNumerals.filter(
+      node =>
+        StyleSheet.flatten(node.props.style)?.fontSize ===
+        typography.score.fontSize,
+    );
     expect(scores).toHaveLength(2);
     for (const score of scores) {
       expect(StyleSheet.flatten(score.props.style)).toMatchObject({
@@ -361,6 +386,20 @@ describe('HomeScreen button ledger', () => {
         color: color.ink,
       });
     }
+    const secondary = renderer.root
+      .findAllByType(Text)
+      .filter(node => node.props.children === '6.4 /10');
+    expect(secondary.length).toBeGreaterThanOrEqual(2);
+    for (const line of secondary) {
+      expect(StyleSheet.flatten(line.props.style)).toMatchObject(
+        typography.micro,
+      );
+    }
+    expect(
+      renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.children === '6.4'),
+    ).toHaveLength(0);
     const counters = renderer.root
       .findAllByType(Text)
       .filter(
@@ -467,12 +506,14 @@ describe('HomeScreen button ledger', () => {
           expect(text.props.allowFontScaling).not.toBe(false);
         }
         expect(allText(renderer)).toContain('Platinum III');
-        expect(allText(renderer)).toContain('6.81');
-        expect(allText(renderer)).toContain('/10');
-        expect(allText(renderer)).not.toMatch(/DUPR|≈/);
+        // D-046: the estimated DUPR (6.81 → 3.21) headlines with its unit;
+        // the 0–10 rating is the smaller "/10" line beneath.
+        expect(allText(renderer)).toContain('3.21 DUPR');
+        expect(allText(renderer)).toContain('6.81 /10');
+        expect(allText(renderer)).not.toMatch(/≈/);
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(toggle.props.accessibilityLabel).toContain(
-          'rating 6.81 out of 10.',
+          'estimated DUPR 3.21, technique rating 6.81 out of 10.',
         );
         await press(badge);
         expect(mockNavigate).toHaveBeenCalledTimes(1);
@@ -711,11 +752,11 @@ describe('HomeScreen button ledger', () => {
         String(n.props.accessibilityLabel).startsWith('Open '),
       );
       expect(cards.map(c => c.props.accessibilityLabel)).toEqual([
-        'Open dink result',
-        'Open drive result',
-        'Open serve result',
-        'Open volley result',
-        'Open lob result',
+        openResultLabel('dink', 7.2),
+        openResultLabel('drive', null),
+        openResultLabel('serve'),
+        openResultLabel('volley'),
+        openResultLabel('lob'),
       ]);
       for (const card of cards) {
         expect(card.props.accessibilityRole).toBe('button');
@@ -743,7 +784,9 @@ describe('HomeScreen button ledger', () => {
       const text = allText(renderer);
       expect(text).toContain('—');
       expect(text).toContain('No scored technique yet');
-      expect(pressableByLabel(renderer, 'Open drive result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('drive', null)),
+      ).not.toBeNull();
       act(() => renderer.unmount());
     });
 
@@ -755,7 +798,9 @@ describe('HomeScreen button ledger', () => {
       const renderer = await renderHome();
       const text = allText(renderer);
       expect(text).toContain('third shot drop');
-      expect(text).toContain('6.4');
+      // Estimated DUPR first (6.4 → 2.98), the score beneath.
+      expect(text).toContain('2.98');
+      expect(text).toContain('6.4 /10');
       expect(text).toContain('Latest validated scored stroke on this device');
       act(() => renderer.unmount());
     });
@@ -822,7 +867,7 @@ describe('HomeScreen button ledger', () => {
       expect(text.match(/3\.7/g)?.length).toBeGreaterThanOrEqual(2);
       // Default lens is the dot plot, summarized for screen readers.
       expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day technique scores: 1 scored read across 1 day, latest 3.7 out of 10.',
+        'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
       );
       expect(chartLabel(renderer, 'practice-volume-chart')).toBeUndefined();
       act(() => renderer.unmount());
@@ -866,7 +911,7 @@ describe('HomeScreen button ledger', () => {
         'scores',
       );
       expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day technique scores: 2 scored reads across 2 days, latest 6.1 out of 10.',
+        'Seven day estimated DUPR: 2 scored reads across 2 days, latest Estimated DUPR 2.94, technique score 6.1 out of 10.',
       );
       act(() => renderer.unmount());
     });
@@ -946,7 +991,9 @@ describe('HomeScreen button ledger', () => {
       expect(renderer.root.findByType(RefreshControl).props.refreshing).toBe(
         false,
       );
-      expect(pressableByLabel(renderer, 'Open dink result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('dink')),
+      ).not.toBeNull();
       act(() => renderer.unmount());
     });
   });
@@ -983,7 +1030,9 @@ describe('HomeScreen button ledger', () => {
       expect(mockListShots).toHaveBeenCalledTimes(1);
       expect(pressableByLabel(renderer, 'Try again')).toBeNull();
       expect(pressableByTestId(renderer, 'home-streak-badge')).not.toBeNull();
-      expect(pressableByLabel(renderer, 'Open dink result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('dink')),
+      ).not.toBeNull();
       act(() => renderer.unmount());
     });
 
@@ -1019,7 +1068,9 @@ describe('HomeScreen button ledger', () => {
       mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(9.1));
       mockListShots.mockResolvedValue([shot({ shotType: 'dink' })]);
       const renderer = await renderHome();
-      expect(pressableByLabel(renderer, 'Open dink result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('dink')),
+      ).not.toBeNull();
       expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
       act(() => renderer.unmount());
     });
@@ -1031,11 +1082,13 @@ describe('HomeScreen button ledger', () => {
       setActiveDataOwner(OTHER_OWNER);
       setActiveDataOwner(OWNER);
       await act(async () => local.resolve([shot({ shotType: 'dink' })]));
-      expect(pressableByLabel(renderer, 'Open dink result')).toBeNull();
+      expect(pressableByLabel(renderer, openResultLabel('dink'))).toBeNull();
       mockListShots.mockResolvedValue([shot({ shotType: 'serve' })]);
       await act(async () => renderer.update(<HomeScreen />));
       expect(mockListShots).toHaveBeenCalledTimes(2);
-      expect(pressableByLabel(renderer, 'Open serve result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('serve')),
+      ).not.toBeNull();
       act(() => renderer.unmount());
     });
 
@@ -1052,7 +1105,7 @@ describe('HomeScreen button ledger', () => {
       mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(7.9));
       await act(async () => renderer.update(<HomeScreen />));
       expect(allText(renderer)).toContain('Loading your court');
-      expect(pressableByLabel(renderer, 'Open dink result')).toBeNull();
+      expect(pressableByLabel(renderer, openResultLabel('dink'))).toBeNull();
       await act(async () => canonical.resolve(syncedProgress(4.2)));
       expect(allText(renderer)).toContain('Loading your court');
       await act(async () => local.resolve([]));
@@ -1087,7 +1140,9 @@ describe('HomeScreen button ledger', () => {
       const renderer = await renderHome();
 
       expect(allText(renderer)).not.toContain('Loading your court');
-      expect(pressableByLabel(renderer, 'Open dink result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('dink')),
+      ).not.toBeNull();
       expect(allText(renderer)).toContain('THIS WEEK');
       expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
       await act(async () => {
@@ -1132,12 +1187,16 @@ describe('HomeScreen button ledger', () => {
       mockAppState.ownerKey = OTHER_OWNER;
       mockListShots.mockResolvedValue([shot({ shotType: 'serve' })]);
       await act(async () => renderer.update(<HomeScreen />));
-      expect(pressableByLabel(renderer, 'Open serve result')).not.toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('serve')),
+      ).not.toBeNull();
       await act(async () => {
         first.resolve([shot({ shotType: 'dink' })]);
       });
-      expect(pressableByLabel(renderer, 'Open dink result')).toBeNull();
-      expect(pressableByLabel(renderer, 'Open serve result')).not.toBeNull();
+      expect(pressableByLabel(renderer, openResultLabel('dink'))).toBeNull();
+      expect(
+        pressableByLabel(renderer, openResultLabel('serve')),
+      ).not.toBeNull();
       act(() => renderer.unmount());
     });
 
@@ -1258,15 +1317,17 @@ describe('HomeScreen button ledger', () => {
       const labels = controls.map(n => String(n.props.accessibilityLabel));
       expect(labels).toEqual([
         '2 days training streak. Opens the consistency calendar.',
-        expect.stringContaining('Player rank Gold I, rating 6.40 out of 10.'),
+        expect.stringContaining(
+          'Player rank Gold I, estimated DUPR 2.98, technique rating 6.40 out of 10.',
+        ),
         '2 days training streak. Opens the consistency calendar.',
         'Turn on practice reminders',
         'Not now',
         'Stroke Analysis. Analyze one movement with fast, detailed feedback.',
         'Drill Library. Guided drills you can search.',
-        'Scores chart: every scored read at its score',
+        'DUPR chart: every scored read at its estimated DUPR',
         'Reads chart: scored reads per day',
-        'Open dink result',
+        openResultLabel('dink'),
       ]);
       for (const node of controls) {
         // The week-card lenses are a two-tab segmented control; every other

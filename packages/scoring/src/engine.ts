@@ -124,8 +124,15 @@ export function scoreShot(
   }
   const analysisConfidence = confDenominator > 0 ? confNumerator / confDenominator : 0;
 
+  // Abstention is reserved for a read with NOTHING to score: no applicable
+  // checkpoint was observed at all (or the config's own floor, when it sets
+  // one above zero). A read that observed some checkpoints is scored from
+  // exactly those, and its coverage is disclosed through `analysisConfidence`,
+  // the `lower_confidence` presentation and the unobserved checkpoints
+  // (score null, band "unscored") — never withheld wholesale.
+  const anyObserved = checkpointResults.some((result) => result.score !== null);
   const presentation: ConfidencePresentation =
-    analysisConfidence < config.minAnalysisConfidence
+    !anyObserved || analysisConfidence < config.minAnalysisConfidence
       ? "abstain"
       : analysisConfidence < config.lowerConfidenceThreshold
         ? "lower_confidence"

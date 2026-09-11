@@ -20,7 +20,10 @@ import {
  * generateSwingSequence() fixture → 0.9 scored / 0.5 low_confidence (conf
  * 0.46) / 0.3 low_confidence (0.28) / ≤0.2 unavailable (wrist not measured
  * on enough frames). Visibility 0.5 is therefore the deterministic
- * low-confidence fixture used below.
+ * low-confidence fixture used below. Since 2026-09-10 the engine abstains
+ * only with nothing observed (a 0.5-visibility read now SCORES), so the
+ * abstaining verdict comes from `installAbstainingScorer` — keyed on this
+ * very fixture marker — while every other stage stays real.
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
@@ -34,6 +37,7 @@ import {
   permitCalls,
 } from '../testSupport/releasePolicyFixture';
 import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
+import { installAbstainingScorer } from '../__harness__/abstainingScorer';
 
 jest.mock('../src/camera/capture', () => {
   const actual = jest.requireActual('../src/camera/capture');
@@ -248,8 +252,13 @@ const localShotInserts = (calls: RecordedCall[]) =>
 const outboxInserts = (calls: RecordedCall[]) =>
   calls.filter(call => call.sql.includes('INSERT INTO outbox'));
 
-beforeEach(() => signInCaptureOwner(owner));
+let abstainingScorer: jest.SpyInstance;
+beforeEach(() => {
+  signInCaptureOwner(owner);
+  abstainingScorer = installAbstainingScorer();
+});
 afterEach(() => {
+  abstainingScorer.mockRestore();
   closeCaptureHarness();
   setFetch(undefined);
 });

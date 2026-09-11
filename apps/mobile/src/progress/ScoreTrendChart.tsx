@@ -10,6 +10,11 @@ import {
 import { useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { plural } from '../util/plural';
+import {
+  duprAccessibilityLabel,
+  duprFraction,
+  formatDupr,
+} from './duprEstimate';
 import { ChartDataRows } from './PracticeVolumeChart';
 import type { ScoreTrendBucket } from './techniqueDashboard';
 
@@ -20,6 +25,9 @@ import type { ScoreTrendBucket } from './techniqueDashboard';
  * lifted "today" background. Buckets with no comparable reads render a stub —
  * an honest gap, never an interpolated bar. Enlarged text uses bounded,
  * flowing rows with the same averages and explicit grouped date ranges.
+ * Every printed value is the bucket's estimated DUPR (D-046) and each bar's
+ * height is that DUPR's position between the app's lowest and highest
+ * estimate, so the picture and the numbers agree.
  */
 export function ScoreTrendChart(props: {
   buckets: readonly ScoreTrendBucket[];
@@ -68,10 +76,10 @@ export function ScoreTrendChart(props: {
   const summary =
     scoredBuckets.length === 0
       ? 'No comparable scored reads in this window yet.'
-      : `Average technique score by ${period}. ${scoredBuckets.length} scored ${plural(scoredBuckets.length, period)}${
+      : `Average estimated DUPR by ${period}. ${scoredBuckets.length} scored ${plural(scoredBuckets.length, period)}${
           latestAvg === null
             ? ''
-            : `, latest average ${latestAvg.toFixed(1)} out of 10`
+            : `, latest average: ${duprAccessibilityLabel(latestAvg)}`
         }.`;
 
   if (largeText) {
@@ -100,7 +108,7 @@ export function ScoreTrendChart(props: {
             const value =
               bucket.avg === null
                 ? 'No comparable scored reads'
-                : `${bucket.avg.toFixed(1)} out of 10 · ${bucket.count} scored ${plural(bucket.count, 'read')}`;
+                : `${duprAccessibilityLabel(bucket.avg)} · ${bucket.count} scored ${plural(bucket.count, 'read')}`;
             return {
               key: bucket.key,
               label: `${label}: ${value}${latest ? ' · Latest scored period' : ''}`,
@@ -121,7 +129,7 @@ export function ScoreTrendChart(props: {
           const targetHeight =
             bucket.avg === null
               ? 4
-              : 10 + (Math.min(bucket.avg, 10) / 10) * barCeiling;
+              : 10 + duprFraction(bucket.avg) * barCeiling;
           return (
             <View key={bucket.key} style={styles.barSlot}>
               {isLatestColumn ? <View style={styles.todayColumn} /> : null}
@@ -129,7 +137,7 @@ export function ScoreTrendChart(props: {
                 <Text
                   style={[styles.barValue, isAccent && styles.barValueAccent]}
                 >
-                  {bucket.avg.toFixed(1)}
+                  {formatDupr(bucket.avg)}
                 </Text>
               ) : null}
               <Animated.View

@@ -39,6 +39,8 @@ import {
   type RealAnalysisFact,
 } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
+import { useTabBarContentInset } from '../navigation/tabBarLayout';
+import { useTabScrollDock } from '../navigation/tabBarDock';
 import { getApiSession } from '../account/apiSession';
 import {
   fetchCanonicalProgress,
@@ -47,6 +49,12 @@ import {
 import { buildTechniqueDashboard } from '../progress/techniqueDashboard';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { ScoreDotPlot } from '../progress/ScoreDotPlot';
+import { DuprReadout } from '../progress/DuprReadout';
+import {
+  duprAccessibilityLabel,
+  formatDupr,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { PlayerRankBanner } from '../components/PlayerRankBanner';
 import { NotificationPrimingCard } from '../notifications/NotificationPrimingCard';
 import { flameIntensityForStreak } from '../consistency/engine';
@@ -78,8 +86,8 @@ const WEEK_CHART_OPTIONS: ReadonlyArray<{
 }> = [
   {
     key: 'scores',
-    label: 'SCORES',
-    accessibilityLabel: 'Scores chart: every scored read at its score',
+    label: 'DUPR',
+    accessibilityLabel: 'DUPR chart: every scored read at its estimated DUPR',
   },
   {
     key: 'reads',
@@ -92,11 +100,45 @@ export function parseWeekChart(value: string | null): WeekChart {
   return value === 'reads' ? 'reads' : 'scores';
 }
 
+/** One "This week" footer stat: the estimated DUPR over its label, with the
+ * "/10" reading beneath; an em dash when the window holds no scored read. */
+function WeekRatingStat(props: {
+  label: string;
+  score: number | null;
+  testID: string;
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={
+        props.score === null
+          ? `${props.label}: none yet`
+          : `${props.label}: ${duprAccessibilityLabel(props.score)}`
+      }
+      style={styles.practiceFooterItem}
+      testID={props.testID}
+    >
+      <Text style={styles.practiceFooterValue}>
+        {props.score === null ? '—' : formatDupr(props.score)}
+      </Text>
+      <Text style={styles.practiceFooterLabel}>{props.label}</Text>
+      {props.score !== null ? (
+        <Text style={styles.practiceFooterSub}>
+          {formatTechniqueScore(props.score)}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const rankBannerTarget = useWalkthroughTarget('rank-banner');
+  const streakTarget = useWalkthroughTarget('home-streak');
   const largeText = useWindowDimensions().fontScale >= 1.5;
+  const tabBarInset = useTabBarContentInset();
+  const tabBarDock = useTabScrollDock('Home');
   const profile = useAppStore(s => s.profile);
   const ownerKey = useAppStore(s => s.ownerKey);
   const activeOwner = getActiveDataOwner();
@@ -250,20 +292,26 @@ export function HomeScreen() {
     loadedOwner?.ownerKey !== activeOwner ||
     loadedOwner.generation !== ownerGeneration
   ) {
-    return <LoadingState label="Loading your court…" />;
+    return (
+      <View style={[styles.screen, { paddingBottom: tabBarInset }]}>
+        <LoadingState label="Loading your court…" />
+      </View>
+    );
   }
 
   if (loadError) {
     return (
-      <ErrorState
-        title="Your court couldn’t load"
-        detail={loadError}
-        onRetry={() => {
-          setLoadError(null);
-          setLoaded(false);
-          void load();
-        }}
-      />
+      <View style={[styles.screen, { paddingBottom: tabBarInset }]}>
+        <ErrorState
+          title="Your court couldn’t load"
+          detail={loadError}
+          onRetry={() => {
+            setLoadError(null);
+            setLoaded(false);
+            void load();
+          }}
+        />
+      </View>
     );
   }
 
@@ -271,7 +319,8 @@ export function HomeScreen() {
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        {...tabBarDock}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarInset }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -299,26 +348,37 @@ export function HomeScreen() {
               }
               tone="neutral"
             />
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel={`${trainingStreak} ${plural(
-                trainingStreak,
-                'day',
-              )} training streak. Opens the consistency calendar.`}
-              onPress={() => navigation.navigate('StreakCalendar')}
-              hitSlop={6}
-              containerStyle={styles.streakBadgeSlot}
-              style={[styles.streakBadge, largeText && styles.streakBadgeLarge]}
-              testID="home-streak-badge"
+            {/* Walkthrough anchor: the daily-streak step spotlights the real
+                flame chip (collapsable={false} keeps the view measurable). */}
+            <View
+              ref={streakTarget}
+              collapsable={false}
+              style={styles.streakBadgeSlot}
             >
-              <FlameIcon
-                intensity={flameIntensityForStreak(trainingStreak)}
-                size={17}
-              />
-              <Text style={[type.caption, styles.streakValue]}>
-                {trainingStreak}
-              </Text>
-            </PressableScale>
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel={`${trainingStreak} ${plural(
+                  trainingStreak,
+                  'day',
+                )} training streak. Opens the consistency calendar.`}
+                onPress={() => navigation.navigate('StreakCalendar')}
+                hitSlop={6}
+                containerStyle={styles.streakBadgeSlot}
+                style={[
+                  styles.streakBadge,
+                  largeText && styles.streakBadgeLarge,
+                ]}
+                testID="home-streak-badge"
+              >
+                <FlameIcon
+                  intensity={flameIntensityForStreak(trainingStreak)}
+                  size={17}
+                />
+                <Text style={[type.caption, styles.streakValue]}>
+                  {trainingStreak}
+                </Text>
+              </PressableScale>
+            </View>
           </View>
         </View>
 
@@ -486,23 +546,17 @@ export function HomeScreen() {
               </Text>
             </View>
             <View style={styles.practiceFooterDivider} />
-            <View style={styles.practiceFooterItem}>
-              <Text style={styles.practiceFooterValue}>
-                {week.avgScore.current === null
-                  ? '—'
-                  : week.avgScore.current.toFixed(1)}
-              </Text>
-              <Text style={styles.practiceFooterLabel}>avg score</Text>
-            </View>
+            <WeekRatingStat
+              label="avg DUPR"
+              score={week.avgScore.current}
+              testID="home-week-avg"
+            />
             <View style={styles.practiceFooterDivider} />
-            <View style={styles.practiceFooterItem}>
-              <Text style={styles.practiceFooterValue}>
-                {week.bestScore.current === null
-                  ? '—'
-                  : week.bestScore.current.toFixed(1)}
-              </Text>
-              <Text style={styles.practiceFooterLabel}>best score</Text>
-            </View>
+            <WeekRatingStat
+              label="best DUPR"
+              score={week.bestScore.current}
+              testID="home-week-best"
+            />
           </View>
         </View>
 
@@ -528,9 +582,15 @@ export function HomeScreen() {
             </Text>
           </View>
           <View style={styles.techniqueSummaryScoreWrap}>
-            <Text style={styles.techniqueSummaryScore}>
-              {displayedScore === null ? '—' : displayedScore.toFixed(1)}
-            </Text>
+            {displayedScore === null ? (
+              <Text style={styles.techniqueSummaryScore}>—</Text>
+            ) : (
+              <DuprReadout
+                score={displayedScore}
+                valueStyle={styles.techniqueSummaryScore}
+                testID="home-latest-technique-rating"
+              />
+            )}
           </View>
         </Card>
 
@@ -605,7 +665,11 @@ export function HomeScreen() {
               accessibilityLabel={`Open ${shot.shotType.replace(
                 /_/g,
                 ' ',
-              )} result`}
+              )} result${
+                shot.overallScore === null
+                  ? ''
+                  : `, ${duprAccessibilityLabel(shot.overallScore)}`
+              }`}
               onPress={() =>
                 navigation.navigate('Result', { analysisId: shot.id })
               }
@@ -639,11 +703,16 @@ export function HomeScreen() {
                   })}
                 </Text>
               </View>
-              <Text style={[type.score, styles.recentScore]}>
-                {shot.overallScore === null
-                  ? '—'
-                  : shot.overallScore.toFixed(1)}
-              </Text>
+              {shot.overallScore === null ? (
+                <Text style={[type.score, styles.recentScore]}>—</Text>
+              ) : (
+                <DuprReadout
+                  score={shot.overallScore}
+                  valueStyle={[type.score, styles.recentScore]}
+                  accessible={false}
+                  style={styles.recentRating}
+                />
+              )}
               <Icon name="chevron" color={color.inkSoft} size={17} />
             </PressableScale>
           ))
@@ -699,7 +768,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,
-    paddingBottom: space.xxxl + 28,
   },
   topBar: {
     flexDirection: 'row',
@@ -844,6 +912,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+  practiceFooterSub: {
+    ...type.micro,
+    color: color.onDarkFaint,
+    marginTop: 1,
+    fontVariant: ['tabular-nums'],
+  },
   techniqueSummary: {
     minHeight: 100,
     flexDirection: 'row',
@@ -949,4 +1023,5 @@ const styles = StyleSheet.create({
     color: color.ink,
     marginLeft: 2,
   },
+  recentRating: { flexShrink: 0 },
 });

@@ -30,6 +30,13 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { bandColor, color, radius, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
+import {
+  DUPR_ESTIMATE_LABEL,
+  duprAccessibilityLabel,
+  duprFraction,
+  formatDupr,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 
 const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
 
@@ -624,9 +631,13 @@ export function SectionTitle(props: {
 
 const SCORE_RING_SWEEP_MS = 240;
 
-/** 0–10 technique score ring; color and label are never color-only. The arc
- * sweeps in and the number counts up once on mount (the score-reveal moment);
- * reduced motion renders the final state immediately. */
+/** The rating ring. `score` is the 0–10 technique score; the big numeral is
+ * its estimated DUPR (D-046) under the `label` (default "EST. DUPR"), with
+ * the "/10" reading as the smaller line beneath, and the arc is the DUPR's
+ * position between the app's lowest and highest estimate (2.00–6.00) so the
+ * picture agrees with the printed number — color and label are never
+ * color-only. The arc sweeps in and the number counts up once on mount (the
+ * score-reveal moment); reduced motion renders the final state immediately. */
 export function ScoreRing(props: {
   score: number | null;
   size?: number;
@@ -638,7 +649,7 @@ export function ScoreRing(props: {
   const stroke = Math.max(8, size * 0.065);
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
-  const fraction = props.score === null ? 0 : Math.min(props.score / 10, 1);
+  const fraction = props.score === null ? 0 : duprFraction(props.score);
   const accent = props.accent ?? color.volt;
   const fg = props.dark ? color.onDark : color.ink;
   const track = props.dark ? color.lineDark : color.line;
@@ -682,14 +693,14 @@ export function ScoreRing(props: {
   }, [animate, props.score]);
 
   const scoreText =
-    props.score === null ? '—' : (displayScore ?? props.score).toFixed(1);
+    props.score === null ? '—' : formatDupr(displayScore ?? props.score);
 
   return (
     <View
       accessibilityLabel={
         props.score === null
-          ? 'No technique score yet'
-          : `Technique score ${props.score.toFixed(1)} out of 10`
+          ? 'No rating yet'
+          : duprAccessibilityLabel(props.score)
       }
       style={{
         width: size,
@@ -728,17 +739,31 @@ export function ScoreRing(props: {
       >
         {scoreText}
       </Text>
-      {props.label ? (
+      <Text
+        style={[
+          type.caption,
+          {
+            color: props.dark ? color.onDarkSubtle : color.inkSoft,
+            textAlign: 'center',
+          },
+        ]}
+      >
+        {props.label ?? DUPR_ESTIMATE_LABEL}
+      </Text>
+      {props.score !== null ? (
         <Text
           style={[
-            type.caption,
+            type.micro,
             {
-              color: props.dark ? color.onDarkSubtle : color.inkSoft,
+              color: props.dark ? color.onDarkFaint : color.inkSoft,
               textAlign: 'center',
+              marginTop: 2,
+              fontVariant: ['tabular-nums'],
             },
           ]}
+          testID="score-ring-technique-score"
         >
-          {props.label}
+          {formatTechniqueScore(props.score)}
         </Text>
       ) : null}
     </View>
@@ -784,6 +809,21 @@ export function RevealFill(props: {
   );
 }
 
+/** Band tints legible on the dark surface (the light `bandColor` set is
+ * tuned for chalk backgrounds; yellow/red there read muddy on ink). */
+function bandColorDark(band: 'green' | 'yellow' | 'red' | 'unscored'): string {
+  switch (band) {
+    case 'green':
+      return color.mint;
+    case 'yellow':
+      return color.volt;
+    case 'red':
+      return color.flame;
+    case 'unscored':
+      return color.onDarkSubtle;
+  }
+}
+
 export function CheckpointRow(props: {
   name: string;
   score: number | null;
@@ -791,24 +831,31 @@ export function CheckpointRow(props: {
   onPress?: () => void;
   /** Stagger offset (ms) for the bar's one-time reveal sweep. */
   revealDelay?: number;
+  /** On the dark result surface: light text, dark track, dark-tuned bands. */
+  dark?: boolean;
 }) {
   const value =
     props.score === null ? 0 : Math.max(0, Math.min(100, props.score));
-  const bar = bandColor(props.band);
+  const bar = props.dark ? bandColorDark(props.band) : bandColor(props.band);
   const accessibilityLabel = `${props.name}, ${
     props.score === null ? 'not read' : `${Math.round(props.score)} out of 100`
   }`;
   const body = (
     <>
       <View style={styles.checkpointTop}>
-        <Text style={[type.bodyBold, { color: color.ink, flex: 1 }]}>
+        <Text
+          style={[
+            type.bodyBold,
+            { color: props.dark ? color.onDark : color.ink, flex: 1 },
+          ]}
+        >
           {props.name}
         </Text>
         <Text
           style={[
             type.h3,
             {
-              color: props.band === 'yellow' ? color.ink : bar,
+              color: props.band === 'yellow' && !props.dark ? color.ink : bar,
               fontVariant: ['tabular-nums'],
             },
           ]}
@@ -816,7 +863,7 @@ export function CheckpointRow(props: {
           {props.score === null ? '—' : Math.round(props.score)}
         </Text>
       </View>
-      <View style={styles.metricTrack}>
+      <View style={[styles.metricTrack, props.dark && styles.metricTrackDark]}>
         <RevealFill
           delay={props.revealDelay}
           style={[
@@ -827,13 +874,17 @@ export function CheckpointRow(props: {
       </View>
     </>
   );
+  const rowStyle = [
+    styles.checkpointRow,
+    props.dark && styles.checkpointRowDark,
+  ];
   if (!props.onPress) {
     return (
       <View
         accessible
         accessibilityRole="text"
         accessibilityLabel={accessibilityLabel}
-        style={[styles.pressableBase, styles.checkpointRow]}
+        style={[styles.pressableBase, ...rowStyle]}
       >
         {body}
       </View>
@@ -844,7 +895,7 @@ export function CheckpointRow(props: {
       onPress={props.onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      style={styles.checkpointRow}
+      style={rowStyle}
     >
       {body}
     </PressableScale>
@@ -1270,6 +1321,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: color.line,
   },
+  checkpointRowDark: { borderBottomColor: color.lineDark },
   checkpointTop: { flexDirection: 'row', alignItems: 'center' },
   metricTrack: {
     height: 4,
@@ -1278,6 +1330,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginTop: 9,
   },
+  metricTrackDark: { backgroundColor: color.onDarkTint },
   metricFill: { height: 4, borderRadius: 2 },
   revealFill: { transformOrigin: 'left' },
   stateScroll: { flex: 1 },

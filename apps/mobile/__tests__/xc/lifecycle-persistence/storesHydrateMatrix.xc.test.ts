@@ -9,7 +9,7 @@
  *   notificationStore.hydrate()     notifications:<owner>,
  *                                   onboarding.pending-notifications
  *   consistencyStore.hydrate()      consistency:<owner> (+ local_shot rows)
- *   walkthroughStore                walkthrough.device-complete
+ *   walkthroughStore                walkthrough.complete:<owner>
  *   rankCelebrationStore            rank.celebrated:<owner>
  *   appStoreReview                  review.prompt-state
  *   practiceSet                     practice.set:<owner>
@@ -662,7 +662,7 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
   seedKv('review.prompt-state', REVIEW_VARIANTS[scenario.review] ?? null);
   seedKv(`practice.set:${owner}`, PRACTICE_VARIANTS[scenario.practice] ?? null);
   seedKv(
-    'walkthrough.device-complete',
+    `walkthrough.complete:${owner}`,
     WALKTHROUGH_VARIANTS[scenario.walkthrough] ?? null,
   );
   const shotsBefore = db.shotFingerprint();
@@ -895,14 +895,23 @@ async function runScenario(scenario: StoreScenario): Promise<MatrixRow> {
 
   const walkthroughRaw = WALKTHROUGH_VARIANTS[scenario.walkthrough] ?? null;
   const walkthroughUnseen = walkthroughRaw === null || walkthroughRaw === '';
+  // Owner-scoped: a signed-in owner without a record tours exactly once and
+  // writes exactly its own key; a signed-out process never tours or even
+  // attempts a write; a faulted database never tours, and whatever write it
+  // attempted (the statement log keeps failed ones) targeted only this
+  // owner's key.
+  const walkthroughKey = `walkthrough.complete:${owner}`;
+  const walkthroughWrites = db
+    .kvWrites()
+    .filter(w => w.key.startsWith('walkthrough.'));
   invariants['walkthroughShownAtMostOnce'] =
-    dbHealthy && walkthroughUnseen
+    dbHealthy && writable && walkthroughUnseen
       ? walkthrough.visible === true &&
-        db.kvWrites().filter(w => w.key === 'walkthrough.device-complete')
-          .length === 1
-      : dbHealthy
-        ? walkthrough.visible === false
-        : walkthrough.visible === false;
+        walkthroughWrites.length === 1 &&
+        walkthroughWrites[0]!.key === walkthroughKey
+      : walkthrough.visible === false &&
+        (writable || walkthroughWrites.length === 0) &&
+        walkthroughWrites.every(w => w.key === walkthroughKey);
 
   if (writable && dbHealthy) {
     const rankRecordAfter = kvAfter[`rank.celebrated:${owner}`];

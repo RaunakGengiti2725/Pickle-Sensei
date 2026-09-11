@@ -72,13 +72,17 @@ describe("geometry providers through the full analysis pipeline", () => {
     expect(analysis.measurements.some((entry) => entry.metricKey === "recovery_time_ms")).toBe(
       false,
     );
-    expect(analysis.checkpoints.find((entry) => entry.key === "recovery")?.score).toBeNull();
+    // Recovery is not applicable in sm-v1 (nothing measures it), so it is
+    // neither scored nor counted as an unobserved checkpoint against the
+    // read's analysis confidence.
+    expect(analysis.checkpoints.some((entry) => entry.key === "recovery")).toBe(false);
+    expect(analysis.checkpoints).toHaveLength(10);
     expect(analysis.priorityFix).not.toBeNull();
     expect(analysis.versionVector).toMatchObject({
       modelBundleVersion: GEOMETRY_BUNDLE_VERSION,
       poseModelVersion: "apple-vision-bodypose-1",
       strokeDetectorVersion: "temporal-stroke-heuristic-2",
-      phaseModelVersion: "phase-geometry-2",
+      phaseModelVersion: "phase-geometry-3",
       scoringModelVersion: "sm-v1",
       shotConfigVersion: "forehand_drive@1",
     });

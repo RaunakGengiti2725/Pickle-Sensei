@@ -45,6 +45,7 @@ import { useWalkthroughStore } from '../../src/walkthrough/walkthroughStore';
 const TARGET_RECTS: Record<WalkthroughTargetKey, TargetRect> = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
+  'home-streak': { x: 313, y: 62, width: 56, height: 32 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },
   'tab-progress': { x: 236, y: 760, width: 70, height: 54 },
 };

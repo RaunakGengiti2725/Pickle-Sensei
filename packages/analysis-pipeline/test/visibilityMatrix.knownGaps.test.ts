@@ -27,40 +27,44 @@ async function run(id: string, seed: number): Promise<CaseResult> {
 }
 
 describe("player visibility — known gaps (pinned, replayable)", () => {
-  it("far camera: a stream the pose-quality gate rejects (torso < 0.08) must abstain, never score with presentation normal", async () => {
+  it("far camera: a stream the pose-quality gate flags (torso < 0.08) is scored as a disclosed degraded read, never with presentation normal", async () => {
+    // 2026-09-10: the scale reason is ADVISORY. The read proceeds on what
+    // was measured, carries the reason as a capture_quality factor and is
+    // capped at lower_confidence — it is never withheld for being far.
     const result = await run("far_camera", 1);
     expect(result.quality.reasons).toContain("player_too_small_in_frame");
     expect(result.preGate.analyzable).toBe(false);
     expect(result.preGate.reasons).toContain("person_implausible_scale");
-    expect(result.fusion.kind).not.toBe("scored");
-    expect(result.fusion.kind).toBe("failed");
-    if (result.fusion.kind === "failed") {
-      expect(result.fusion.code).toBe("capture.not_analyzable.person_implausible_scale");
+    expect(result.fusion.kind === "scored" && result.fusion.presentation === "normal").toBe(false);
+    if (result.fusion.kind === "scored") {
+      expect(result.fusion.presentation).toBe("lower_confidence");
+      expect(result.fusion.limitingFactors).toContain("capture_quality:person_implausible_scale");
     }
     expect(result.violations).toEqual([]);
   });
 
-  it("far camera (noiseless): the gated stream must abstain instead of reproducing the clean reference score", async () => {
+  it("far camera (noiseless): the flagged stream reproduces the clean reference's measurements at reduced confidence", async () => {
     const result = await run("far_camera_noiseless", 1);
     expect(result.quality.analyzable).toBe(false);
     expect(result.preGate.analyzable).toBe(false);
-    expect(result.fusion.kind).not.toBe("scored");
-    // No score at all → no delta against the reference to reproduce.
-    expect(result.scoreDelta).toBeNull();
+    expect(result.preGate.blocking).toBe(false);
     expect(result.reference.outcome).toBe("scored");
+    expect(result.fusion.kind).toBe("scored");
+    if (result.fusion.kind === "scored") {
+      expect(result.fusion.presentation).toBe("lower_confidence");
+    }
+    expect(result.violations).toEqual([]);
   });
 
-  it("exit/re-enter through contact: a > 700 ms tracking gap across the stroke must abstain with the dropout reason", async () => {
+  it("exit/re-enter through contact: a > 700 ms tracking gap across the stroke is disclosed on the read and never presented as normal", async () => {
     const result = await run("exit_reenter_through_contact", 1);
     expect(result.quality.reasons).toContain("tracking_dropout_gap");
     expect(result.quality.largestGapMs).toBeGreaterThan(700);
     expect(result.preGate.analyzable).toBe(false);
     expect(result.preGate.reasons).toContain("tracking_dropout_gap");
-    expect(result.fusion.kind).not.toBe("scored");
-    expect(result.fusion.kind).toBe("failed");
-    if (result.fusion.kind === "failed") {
-      expect(result.fusion.failureKind).toBe("low_confidence");
-      expect(result.fusion.code).toMatch(/^capture\.not_analyzable\./);
+    expect(result.fusion.kind === "scored" && result.fusion.presentation === "normal").toBe(false);
+    if (result.fusion.kind === "scored") {
+      expect(result.fusion.limitingFactors).toContain("capture_quality:tracking_dropout_gap");
     }
     expect(result.violations).toEqual([]);
   });
@@ -100,15 +104,19 @@ describe("player visibility — known gaps (pinned, replayable)", () => {
     },
   );
 
-  it("occlusion through contact: swinging arm + torso hidden across contact must abstain, never score normal with contact shifted 383 ms", async () => {
+  it("occlusion through contact: swinging arm + torso hidden across contact is disclosed as a stroke-window gap and never scores normal", async () => {
     const result = await run("occlusion_through_contact", 7);
     // The whole-clip quality report cannot see a 150–400 ms occlusion (the
     // full-body rate stays above 0.5); the gate measures tracking continuity
-    // inside the stroke window and abstains on it.
+    // inside the stroke window and flags it. The read proceeds on the frames
+    // that were measured and is capped at lower_confidence.
     expect(result.preGate.analyzable).toBe(false);
+    expect(result.preGate.blocking).toBe(false);
     expect(result.preGate.reasons).toContain("stroke_window_tracking_gap");
-    expect(result.fusion.kind).not.toBe("scored");
     expect(result.fusion.kind === "scored" && result.fusion.presentation === "normal").toBe(false);
+    if (result.fusion.kind === "scored") {
+      expect(result.fusion.limitingFactors).toContain("capture_quality:stroke_window_tracking_gap");
+    }
     expect(result.reference.outcome).toBe("scored");
   });
 

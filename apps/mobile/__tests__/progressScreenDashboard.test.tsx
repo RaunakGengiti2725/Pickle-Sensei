@@ -19,7 +19,10 @@ jest.mock('../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
 });
 
 const mockNavigate = jest.fn();
@@ -415,7 +418,7 @@ describe('ProgressScreen dashboard', () => {
     setActiveDataOwner(OTHER_OWNER);
     setActiveDataOwner(OWNER);
     await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 8.3 })]);
     await act(async () => renderer.update(<ProgressScreen />));
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(2);
@@ -436,12 +439,12 @@ describe('ProgressScreen dashboard', () => {
     mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
     await act(async () => renderer.update(<ProgressScreen />));
     expect(renderedText(renderer)).toContain('Loading measured progress');
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     await act(async () => canonical.resolve(syncedProgress(4.2)));
     expect(renderedText(renderer)).toContain('Loading measured progress');
     await act(async () => local.resolve([]));
     expect(renderedText(renderer)).toContain('8.3');
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     act(() => renderer.unmount());
   });
 
@@ -454,7 +457,7 @@ describe('ProgressScreen dashboard', () => {
     mockFocused = false;
     await act(async () => renderer.update(<ProgressScreen />));
     await act(async () => first.resolve(syncedProgress(4.2)));
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
     mockFocused = true;
     await act(async () => renderer.update(<ProgressScreen />));
@@ -514,7 +517,7 @@ describe('ProgressScreen dashboard', () => {
     expect(renderedText(renderer)).toContain('8.3');
     await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
     expect(renderedText(renderer)).toContain('8.3');
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     act(() => renderer.unmount());
   });
 
@@ -531,7 +534,7 @@ describe('ProgressScreen dashboard', () => {
     await act(async () => renderer.update(<ProgressScreen />));
     await act(async () => first.resolve(syncedProgress(4.2)));
     expect(renderedText(renderer)).toContain('8.3');
-    expect(renderedText(renderer)).not.toContain('4.2');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
     act(() => renderer.unmount());
   });
 
@@ -744,17 +747,19 @@ describe('ProgressScreen dashboard', () => {
 
     expect(text).toContain('KEY STATISTICS');
     expect(text).toContain('VS. PRIOR 4 WEEKS');
-    expect(text).toContain('SCORE TREND');
+    expect(text).toContain('DUPR TREND');
     expect(text).toContain('DAILY AVG · ALL TECHNIQUES');
+    expect(text).toContain('EST. DUPR');
 
-    // Key statistic rows carry the honest prior-window comparison.
+    // Key statistic rows carry the honest prior-window comparison — the
+    // estimated DUPR first, the 0–10 score beside it (D-046).
     const reps = findByTestId(renderer, 'technique-stat-reps')!;
     expect(reps.props.accessibilityLabel).toBe(
       'SCORED REPS: 2. Prior period 1, trending up',
     );
     const best = findByTestId(renderer, 'technique-stat-best')!;
     expect(best.props.accessibilityLabel).toBe(
-      'BEST SCORE: 8.2. Prior period 8.1, trending up',
+      'BEST DUPR: 4.13 (8.2 /10). Prior period 4.07, trending up',
     );
 
     // The 8.2 read strictly beats the pre-window best of 8.1.
@@ -764,17 +769,23 @@ describe('ProgressScreen dashboard', () => {
         findByTestId(renderer, 'personal-best-card')!.props.style,
       ),
     ).toMatchObject({ borderColor: color.lineDark });
-    const scoreLabels = renderer.root
+    // Every 8.2 prints as its estimated DUPR 4.13 in the host's numeral role,
+    // with the " DUPR" unit nested and "8.2 /10" as the smaller line.
+    const duprLabels = renderer.root
       .findAllByType(Text)
-      .filter(node => node.props.children === '8.2');
+      .filter(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children[0] === '4.13',
+      );
     expect(
-      scoreLabels.filter(
+      duprLabels.filter(
         node =>
           StyleSheet.flatten(node.props.style)?.fontSize ===
           typography.score.fontSize,
       ).length,
     ).toBeGreaterThanOrEqual(2);
-    const heroScore = scoreLabels.find(
+    const heroScore = duprLabels.find(
       node =>
         StyleSheet.flatten(node.props.style)?.fontSize ===
         typography.display.fontSize,
@@ -782,11 +793,17 @@ describe('ProgressScreen dashboard', () => {
     expect(StyleSheet.flatten(heroScore.props.style)).toMatchObject(
       typography.display,
     );
+    expect(
+      renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.children === '8.2 /10').length,
+    ).toBeGreaterThanOrEqual(3);
     expect(text).toContain('NEW PERSONAL BEST');
-    expect(text).toMatch(/Beats your previous best\s+8\.1/);
+    expect(text).toMatch(/Beats your previous best\s+4\.07\s+DUPR/);
 
-    // Insight states the window arithmetic, nothing more.
-    expect(text).toContain('Average score -0.4 vs the prior 4 weeks.');
+    // Insight states the window arithmetic, nothing more — as the change in
+    // estimated DUPR (7.7 → 3.80 vs 8.1 → 4.07).
+    expect(text).toContain('Average DUPR \u22120.27 vs the prior 4 weeks.');
     act(() => renderer.unmount());
   });
 
@@ -979,8 +996,9 @@ describe('ProgressScreen dashboard', () => {
     expect(
       findByTestId(renderer, 'technique-stat-reps')!.props.accessibilityLabel,
     ).toBe('SCORED REPS: 2. Prior period 1, trending up');
+    // 5.0 → 2.77 in the prior window, 6.5 → 3.00 now.
     expect(renderedText(renderer)).toContain(
-      'Average score +1.5 vs the prior 4 weeks.',
+      'Average DUPR +0.23 vs the prior 4 weeks.',
     );
     act(() => renderer.unmount());
   });
@@ -1014,16 +1032,19 @@ describe('ProgressScreen dashboard', () => {
 
     expect(findByTestId(renderer, 'practice-set-card')).not.toBeNull();
     expect(text).toContain('THIS SET');
-    expect(text).toContain('+0.8 in this set');
+    expect(text).toContain('+0.53 DUPR in this set');
     expect(text).toContain(
-      '2 attempts · best 7.4 · contact position improved from 48 to 81',
+      '2 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
     );
     // Both attempts render as pills, in order, the latest ringed.
     expect(findByTestId(renderer, 'practice-set-attempt-set-1')).not.toBeNull();
     expect(findByTestId(renderer, 'practice-set-attempt-set-2')).not.toBeNull();
     expect(findByTestId(renderer, 'practice-set-latest-pill')).not.toBeNull();
 
-    await pressByLabel(renderer, 'Attempt 1 of 2, score 6.6');
+    await pressByLabel(
+      renderer,
+      'Attempt 1 of 2, Estimated DUPR 3.07, technique score 6.6 out of 10',
+    );
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: 'set-1',
     });

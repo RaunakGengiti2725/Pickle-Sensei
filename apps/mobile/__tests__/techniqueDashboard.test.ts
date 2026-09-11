@@ -65,7 +65,8 @@ describe('buildTechniqueDashboard', () => {
     expect(dashboard.avgScore.current).toBeCloseTo(7);
     expect(dashboard.avgScore.previous).toBeCloseTo(5.5);
     expect(dashboard.bestScore).toEqual({ current: 8, previous: 6 });
-    expect(dashboard.insight).toBe('Average score +1.5 vs the prior 7 days.');
+    // The insight speaks estimated DUPR (D-046): 5.5 → 2.85, 7.0 → 3.33.
+    expect(dashboard.insight).toBe('Average DUPR +0.48 vs the prior 7 days.');
   });
 
   it('never invents a prior side for a first measured window', () => {

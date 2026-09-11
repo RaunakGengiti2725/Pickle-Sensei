@@ -65,6 +65,7 @@ const TARGET_RECTS: Record<
 > = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
+  'home-streak': { x: 313, y: 62, width: 56, height: 32 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },
   'tab-progress': { x: 236, y: 760, width: 70, height: 54 },
 };
@@ -352,6 +353,12 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
           width: dimensions.width - 48,
           height: dimensions.targetHeight,
         },
+        'home-streak': {
+          x: dimensions.width - 24 - 56,
+          y: dimensions.top + 4,
+          width: 56,
+          height: 32,
+        },
         'tab-library': {
           x: 96,
           y: dimensions.height - dimensions.bottom - 54,
@@ -513,7 +520,7 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     for (const [index, step] of WALKTHROUGH_STEPS.entries()) {
       expect(announce).toHaveBeenLastCalledWith(
         expect.stringContaining(
-          `Walkthrough, step ${index + 1} of 4. ${step.headline}`,
+          `Walkthrough, step ${index + 1} of ${WALKTHROUGH_STEPS.length}. ${step.headline}`,
         ),
       );
       await pressByTestId(renderer, 'walkthrough-advance');
@@ -651,7 +658,7 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     expect(text).toContain('HONEST RATINGS');
     expect(text).toContain('Only clear reads count.');
     expect(text).toContain(
-      'Two validated ratings free · Unscored attempts don’t count',
+      'One validated rating free · Unscored attempts don’t count',
     );
   });
 
@@ -683,6 +690,7 @@ const SE_VIEWPORT = { x: 24, y: 44, width: 327, height: 599 };
 const SE_TARGETS = {
   'coach-fab': { x: 155, y: 565, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 140, width: 327, height: 200 },
+  'home-streak': { x: 295, y: 24, width: 56, height: 32 },
   'tab-library': { x: 76, y: 613, width: 70, height: 54 },
   'tab-progress': { x: 226, y: 613, width: 70, height: 54 },
 };
@@ -717,6 +725,7 @@ function registerLayoutTargets() {
   const measurers = {
     'coach-fab': jest.fn(async () => SE_TARGETS['coach-fab']),
     'rank-banner': jest.fn(async () => SE_TARGETS['rank-banner']),
+    'home-streak': jest.fn(async () => SE_TARGETS['home-streak']),
     'tab-library': jest.fn(async () => SE_TARGETS['tab-library']),
     'tab-progress': jest.fn(async () => SE_TARGETS['tab-progress']),
   };
@@ -796,6 +805,49 @@ describe('walkthrough safe viewport and measured callout geometry', () => {
     });
     expect(layout.top + layout.maxHeight).toBe(643);
     expect(layout.bodyMaxHeight).toBeLessThan(350);
+  });
+
+  it('the daily-streak step spotlights the Home flame chip: callout below the top-bar target, arrow rising into it', () => {
+    // The closing step (owner request 2026-09-10): the Consistency streak.
+    const step = WALKTHROUGH_STEPS.at(-1)!;
+    expect(step).toMatchObject({
+      key: 'streak',
+      targetKey: 'home-streak',
+      shape: 'rounded',
+      eyebrow: 'DAILY STREAK',
+    });
+    // Honest copy: a day is earned by finishing a read or a drill, never by
+    // opening the app, and the flame opens the calendar / shields /
+    // achievements — exactly what the shipping chip does.
+    expect(step.body).toMatch(/finish a read or a drill/);
+    expect(step.body).toMatch(/never for just opening the app/);
+    expect(step.body).toMatch(/Tap the flame/);
+    expect(step.body).toMatch(/Streak Shields and achievements/);
+
+    const layout = walkthroughCalloutLayout(
+      SE_VIEWPORT,
+      SE_TARGETS['home-streak'],
+      'rounded',
+      { bodyHeight: 120, controlsHeight: 56 },
+    );
+    // A target in the top bar puts the card underneath it, with the arrow
+    // lane between them, and the card stays inside the safe viewport.
+    expect(layout.below).toBe(true);
+    expect(layout.top).toBeGreaterThanOrEqual(
+      SE_TARGETS['home-streak'].y + SE_TARGETS['home-streak'].height,
+    );
+    expect(layout.top + layout.height).toBeLessThanOrEqual(
+      SE_VIEWPORT.y + SE_VIEWPORT.height,
+    );
+    // The arrow's head lands on the target, pointing up from the card.
+    const hole = {
+      x: SE_TARGETS['home-streak'].x + SE_TARGETS['home-streak'].width / 2,
+      y: SE_TARGETS['home-streak'].y + SE_TARGETS['home-streak'].height + 8,
+    };
+    const arrow = arrowGeometry({ x: hole.x, y: layout.top }, hole);
+    expect(arrow.shaft.startsWith(`M ${hole.x} ${layout.top}`)).toBe(true);
+    expect(arrow.shaft.endsWith(`${hole.x} ${hole.y}`)).toBe(true);
+    expect(arrow.head).toContain(`L ${hole.x} ${hole.y}`);
   });
 
   it.each([

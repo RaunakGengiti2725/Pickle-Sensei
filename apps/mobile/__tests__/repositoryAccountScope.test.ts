@@ -14,6 +14,7 @@ import {
   saveAnalysis,
 } from '../src/data/repository';
 import { practiceSetKeyForOwner } from '../src/analysis/practiceSet';
+import { walkthroughKeyForOwner } from '../src/walkthrough/walkthroughKey';
 
 const ownerA = '11111111-1111-4111-8111-111111111111';
 const permitId = '22222222-2222-4222-8222-222222222222';
@@ -144,8 +145,12 @@ describe('account-scoped local repository', () => {
       'practice.set',
       'billing.pending-fulfilment',
       'analysis.release-policy',
+      'walkthrough.complete',
     ]);
     expect(practiceSetKeyForOwner(ownerA)).toBe(`practice.set:${ownerA}`);
+    expect(walkthroughKeyForOwner(ownerA)).toBe(
+      `walkthrough.complete:${ownerA}`,
+    );
   });
 
   it('exposes the practice-set tie, priority checkpoint, and applicable checkpoint scores as facts', async () => {

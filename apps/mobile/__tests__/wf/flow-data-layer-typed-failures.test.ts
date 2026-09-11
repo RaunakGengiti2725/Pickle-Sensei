@@ -394,9 +394,10 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
       );
     }
     // profile, rank.celebrated, notifications, consistency, practice.set,
-    // billing.pending-fulfilment (repository.ts OWNER_SCOPED_KV_NAMESPACES).
+    // billing.pending-fulfilment, analysis.release-policy,
+    // walkthrough.complete (repository.ts OWNER_SCOPED_KV_NAMESPACES).
     expect(inTx.filter(sql => sql.startsWith('DELETE FROM kv'))).toHaveLength(
-      7,
+      8,
     );
     expect(log.includes('ROLLBACK')).toBe(false);
     expect(useAuthStore.getState().deletionCleanup).toEqual({

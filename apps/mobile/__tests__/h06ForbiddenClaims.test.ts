@@ -3,9 +3,12 @@
  *
  * `docs/APP_STORE_SUBMISSION.md` §1 (rules 4 and 5) and REVIEW.md forbid, in
  * anything a user or App Review reads: Android, Google Play, "guest mode",
- * "Live Court", DUPR, competitor names, accuracy percentages, superlatives,
- * and AI-coach-equivalence claims. This suite walks every place that copy
- * lives and fails on the first violation with file:line evidence:
+ * "Live Court", competitor names, accuracy percentages, superlatives, and
+ * AI-coach-equivalence claims. DUPR (a third-party trademark) is forbidden in
+ * App Store METADATA and the iOS permission prompts only: since D-046
+ * (2026-09-10) the app itself prints every rating as a disclaimed "estimated
+ * DUPR", so the in-app corpora may name it. This suite walks every place that
+ * copy lives and fails on the first violation with file:line evidence:
  *
  *  1. the shipping mobile sources (`src/**` and `App.tsx`, every `.ts`,
  *     `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` module) plus every monorepo
@@ -34,7 +37,7 @@
  * code tokens rather than prose (identifiers, kebab/snake case keys, paths,
  * URLs, JSON, style values) are skipped so `Platform.OS === 'android'` and
  * `'device-guest'` stay legal while `'Android'`, `'Guest'` and hyphenated
- * prose such as `'DUPR-style'` are scanned. Invisible code points, entity
+ * prose such as `'PB-Vision'` are scanned. Invisible code points, entity
  * references and Unicode dash variants are folded before matching so the
  * regexes see what the reader sees.
  */
@@ -108,7 +111,7 @@ const COACH_OR_PRO = String.raw`(?:${COACH_NOUN}|${COACH_MODIFIER}pros?)`;
 const PERSONAL_BEST = new RegExp(
   [
     String.raw`\b(?:your|my|personal|previous|season|monthly|weekly|all[\s-]time|new|current|lifetime|today'?s|this (?:week|month|session)'?s) best\b`,
-    String.raw`\bbest (?:score|result|rating|run|streak|attempt|round|session|rep|so far|yet|of \d+)\b`,
+    String.raw`\bbest (?:score|result|rating|dupr|run|streak|attempt|round|session|rep|so far|yet|of \d+)\b`,
     String.raw`\bbest (?:\w+ )?(?:today|so far|yet|this (?:week|month|session))\b`,
     String.raw`\bbest:? \{(?:…|\.{3})\}`,
   ].join('|'),
@@ -127,7 +130,6 @@ const FORBIDDEN_RULES: ReadonlyArray<ForbiddenRule> = [
       /\bguests?\b|\bwithout (?:an? |your |first )?(?:account|sign(?:ing)?[\s-]?(?:in|up)|logging in|log[\s-]?in|creating an account|registering)\b|\bskip (?:the )?(?:sign[\s-]?(?:in|up)|login|log[\s-]?in|registration)\b|\bno (?:account|sign[\s-]?in|sign[\s-]?up|login) (?:needed|required|necessary)\b/i,
   },
   { id: 'live-court', pattern: /\blive[\s-]?courts?\b/i },
-  { id: 'dupr', pattern: /\bdupr\b/i },
   {
     id: 'competitor',
     pattern: /\bswing[\s-]?vision\b|\bpb[\s-]?vision\b|\bselkirk\b|\bjoola\b/i,
@@ -208,6 +210,19 @@ const FORBIDDEN_RULES: ReadonlyArray<ForbiddenRule> = [
       'i',
     ),
   },
+];
+
+/** Rules that apply ONLY to what Apple reads outside the running app — the
+ * App Store dossier's store copy and the Info.plist strings. DUPR is a
+ * third-party trademark (guideline 5.2.1 / "names of other apps or companies
+ * aren't allowed" in keywords); in-app it is a disclaimed estimate the owner
+ * chose to show (D-046). */
+const STORE_ONLY_RULES: ReadonlyArray<ForbiddenRule> = [
+  { id: 'dupr', pattern: /\bdupr\b/i },
+];
+const STORE_RULES: ReadonlyArray<ForbiddenRule> = [
+  ...FORBIDDEN_RULES,
+  ...STORE_ONLY_RULES,
 ];
 
 type CopyString = { source: string; line: number; text: string };
@@ -304,10 +319,13 @@ function ruleMatches(rule: ForbiddenRule, raw: string): boolean {
   return false;
 }
 
-function findViolations(strings: ReadonlyArray<CopyString>): Violation[] {
+function findViolations(
+  strings: ReadonlyArray<CopyString>,
+  rules: ReadonlyArray<ForbiddenRule> = FORBIDDEN_RULES,
+): Violation[] {
   const found: Violation[] = [];
   for (const entry of strings) {
-    for (const rule of FORBIDDEN_RULES) {
+    for (const rule of rules) {
       if (ruleMatches(rule, entry.text)) {
         found.push({ ...entry, rule: rule.id });
       }
@@ -334,8 +352,11 @@ function paragraphs(raw: string): Array<{ text: string; lineOffset: number }> {
 
 /** Violations as `source:line [rule] text`, one per line — the assertion
  * diff then names the file, the line, the rule and the phrase. */
-function describeViolations(strings: ReadonlyArray<CopyString>): string {
-  return findViolations(strings)
+function describeViolations(
+  strings: ReadonlyArray<CopyString>,
+  rules: ReadonlyArray<ForbiddenRule> = FORBIDDEN_RULES,
+): string {
+  return findViolations(strings, rules)
     .map(entry => `${entry.source}:${entry.line} [${entry.rule}] ${entry.text}`)
     .join('\n');
 }
@@ -1041,8 +1062,6 @@ describe('H06 forbidden claims — rule fixtures', () => {
     ['live-court', 'Live Court sessions coach you in real time.'],
     ['live-court', 'Live Courts coach you in real time.'],
     ['live-court', 'Live\u2011Court sessions coach you in real time.'],
-    ['dupr', 'A DUPR-style estimate of your level.'],
-    ['dupr', 'DUPR-style'],
     ['competitor', 'Better than SwingVision and PB Vision.'],
     ['competitor', 'Better than PB-Vision.'],
     ['competitor', 'Selkirk TV'],
@@ -1095,9 +1114,23 @@ describe('H06 forbidden claims — rule fixtures', () => {
   });
 
   it.each([
+    'A DUPR-style estimate of your level.',
+    'DUPR-style',
+    'Estimated DUPR 5.84',
+    'DU\u3164PR ratings on every swing.',
+  ])('store copy rule dupr flags "%s" but the in-app rules do not', text => {
+    const entry = { source: 'fixture', line: 1, text };
+    expect(findViolations([entry], STORE_RULES).map(v => v.rule)).toContain(
+      'dupr',
+    );
+    expect(findViolations([entry]).map(v => v.rule)).not.toContain('dupr');
+  });
+
+  it.each([
     'Every price below comes from your app store — never an estimate.',
     'Your best score this month.',
     'Personal best',
+    'best DUPR',
     'New best: 82',
     'best of 3 games per role',
     'SAVE 33%',
@@ -1177,8 +1210,8 @@ describe('H06 forbidden claims — scanner fixtures (rendered copy)', () => {
     expect(fixtureRules('Fixture.tsx', interpolated)).toContain(
       'accuracy-percentage',
     );
-    const constant = `${FIXTURE_HEADER}const SYSTEM = 'DUPR';\nexport function Fixture() {\n  return <Text>Estimated {SYSTEM} rating</Text>;\n}\n`;
-    expect(fixtureRules('Fixture.tsx', constant)).toContain('dupr');
+    const constant = `${FIXTURE_HEADER}const BRAND = 'Selkirk';\nexport function Fixture() {\n  return <Text>Paddles by {BRAND}</Text>;\n}\n`;
+    expect(fixtureRules('Fixture.tsx', constant)).toContain('competitor');
   });
 
   it('scans prose object keys and hyphenated proper nouns', () => {
@@ -1227,9 +1260,9 @@ describe('H06 forbidden claims — scanner fixtures (rendered copy)', () => {
     expect(
       fixtureRules(
         'Fixture.tsx',
-        `${FIXTURE_HEADER}const RATING_SYSTEM: Record<string, string> = {\n  external: 'DUPR',\n};\nexport function Fixture() {\n  return <Text>{RATING_SYSTEM.external}</Text>;\n}\n`,
+        `${FIXTURE_HEADER}const PADDLE_BRAND: Record<string, string> = {\n  external: 'Selkirk',\n};\nexport function Fixture() {\n  return <Text>{PADDLE_BRAND.external}</Text>;\n}\n`,
       ),
-    ).toContain('dupr');
+    ).toContain('competitor');
     expect(
       fixtureRules(
         'Fixture.tsx',
@@ -1380,14 +1413,17 @@ describe('H06 forbidden claims — App Store dossier store copy', () => {
     ]);
   });
 
-  it('contains none of the forbidden terms', () => {
+  it('contains none of the forbidden terms, DUPR included', () => {
     expect(
-      describeViolations([
-        ...copy.values,
-        ...copy.blockStrings,
-        ...copy.characterCountText,
-        ...copy.screenshotCaptions,
-      ]),
+      describeViolations(
+        [
+          ...copy.values,
+          ...copy.blockStrings,
+          ...copy.characterCountText,
+          ...copy.screenshotCaptions,
+        ],
+        STORE_RULES,
+      ),
     ).toBe('');
   });
 });
@@ -1399,8 +1435,8 @@ describe('H06 forbidden claims — iOS permission prompts', () => {
     expect(strings.length).toBeGreaterThanOrEqual(4);
   });
 
-  it('contains none of the forbidden terms', () => {
-    expect(describeViolations(strings)).toBe('');
+  it('contains none of the forbidden terms, DUPR included', () => {
+    expect(describeViolations(strings, STORE_RULES)).toBe('');
   });
 });
 

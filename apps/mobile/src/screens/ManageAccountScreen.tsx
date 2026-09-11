@@ -1046,10 +1046,10 @@ function DeleteAccountDialog(props: {
           >
             This permanently deletes your account and all synced data — your
             profile, analysis history, progress, and membership records. This
-            cannot be undone. Free ratings you've already used stay used — a new
-            account with the same Apple or Google sign-in won't get them again.
-            Clips saved on this phone stay on this phone until you delete the
-            app.
+            cannot be undone. A free rating you've already used stays used — a
+            new account with the same Apple or Google sign-in won't get it
+            again. Clips saved on this phone stay on this phone until you delete
+            the app.
           </Text>
           {SUBSCRIPTION_MANAGEMENT ? (
             <>

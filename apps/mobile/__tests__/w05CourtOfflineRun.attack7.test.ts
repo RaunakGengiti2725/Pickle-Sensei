@@ -47,6 +47,7 @@
  *     the replay must answer as the live path does; after the signal returns
  *     the re-run recovers it without spending.
  */
+import { installAbstainingScorer } from '../__harness__/abstainingScorer';
 import {
   OFFLINE_AUTHORIZATION_PROTOCOL_VERSION,
   OFFLINE_EXECUTION_GRANT_SCHEMA_VERSION,
@@ -119,6 +120,15 @@ import {
 } from '../testSupport/sqlite';
 
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
+// The court-offline abstention fixtures lower every landmark to 0.5
+// visibility; since 2026-09-10 the engine scores such a read, so the
+// abstaining verdict is a test double keyed on that fixture marker
+// (__harness__/abstainingScorer.ts). The pipeline module is namespace-mocked
+// so its `analyzeCapture` export is spy-able.
+jest.mock('@pickle/analysis-pipeline', () => ({
+  __esModule: true,
+  ...jest.requireActual('@pickle/analysis-pipeline'),
+}));
 jest.mock('../src/camera/capture', () => ({
   ...jest.requireActual('../src/camera/capture'),
   readCaptureArtifact: (uri: string) => mockReadArtifact(uri),
@@ -627,6 +637,7 @@ async function paidOffline(
 
 beforeEach(() => {
   signIn();
+  installAbstainingScorer();
 });
 afterEach(() => {
   clearSyncRuntime();

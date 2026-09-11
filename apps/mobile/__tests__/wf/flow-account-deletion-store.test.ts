@@ -247,8 +247,9 @@ describe('completeAccountDeletion', () => {
         params: [OWNER],
       });
     }
-    // repository.ts pins the full owner-scoped kv set: practice sets and
-    // pending billing fulfilment join profile, rank, notifications and consistency.
+    // repository.ts pins the full owner-scoped kv set: practice sets,
+    // pending billing fulfilment and the first-run walkthrough record join
+    // profile, rank, notifications and consistency.
     expect([...OWNER_SCOPED_KV_NAMESPACES]).toEqual([
       'profile',
       'rank.celebrated',
@@ -257,6 +258,7 @@ describe('completeAccountDeletion', () => {
       'practice.set',
       'billing.pending-fulfilment',
       'analysis.release-policy',
+      'walkthrough.complete',
     ]);
     const kvDeletes = tx
       .filter(c => c.sql === 'DELETE FROM kv WHERE key = ?')
@@ -269,6 +271,7 @@ describe('completeAccountDeletion', () => {
       `practice.set:${OWNER}`,
       `billing.pending-fulfilment:${OWNER}`,
       `analysis.release-policy:${OWNER}`,
+      `walkthrough.complete:${OWNER}`,
     ]);
     expect(mockExecuted.some(c => c.sql === 'ROLLBACK')).toBe(false);
     // One clean pass: the purge is not retried once it committed.

@@ -467,17 +467,17 @@ function Gate() {
     else if (restoreState?.status === 'unavailable') void current.hydrate();
   };
 
-  // First-run walkthrough: raised the first time this DEVICE lands on the
+  // First-run walkthrough: raised the first time each ACCOUNT lands on the
   // main app (session + profile both present — the moment the tab bar and
-  // Coach button appear with no explanation). The store's durable KV record
-  // makes repeat calls no-ops, so this effect can fire on every re-render of
-  // the signed-in state.
+  // Coach button appear with no explanation). The store's durable
+  // owner-scoped KV record makes repeat calls no-ops, so this effect can fire
+  // on every re-render of the signed-in state and on every owner change.
   const mainAppVisible = ready && Boolean(session) && Boolean(profile);
   const maybeShowWalkthrough = useWalkthroughStore(s => s.maybeShowFirstRun);
   useEffect(() => {
     if (!mainAppVisible) return;
     void maybeShowWalkthrough();
-  }, [mainAppVisible, maybeShowWalkthrough]);
+  }, [mainAppVisible, desiredOwner, maybeShowWalkthrough]);
 
   // Rendered under the splash so the first screen is already painted by the
   // time the overlay clears — the handoff is a fade, not a swap. Every later
@@ -577,8 +577,8 @@ function Gate() {
         {/* Global streak-milestone overlay: the consistency store raises one
           durable ceremony per earned milestone. */}
         <StreakCelebration />
-        {/* First-run walkthrough: one tour per device, raised on the first
-          signed-in landing; Settings → About replays it. */}
+        {/* First-run walkthrough: one tour per account, raised on that
+          account's first signed-in landing; Settings → About replays it. */}
         <FirstRunWalkthrough />
       </CeremonyHost>
       {/* Product-owned notice surface for errors that can outlive the screen

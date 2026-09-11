@@ -12,6 +12,7 @@ import Svg, { Polyline } from 'react-native-svg';
 import { useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { plural } from '../util/plural';
+import { duprAccessibilityLabel, formatDupr } from './duprEstimate';
 import { ChartDataRows } from './PracticeVolumeChart';
 import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
 
@@ -22,7 +23,10 @@ import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
  * a faint line traces the reads in time order, and (like the bar charts)
  * value labels ride on the dots only while the window is sparse enough to
  * read them. Days with no read stay empty — an honest gap, never a
- * carried-forward point.
+ * carried-forward point. Geometry runs on the 0–10 score; every printed
+ * value is the read's estimated DUPR (D-046), and the two gridlines sit at
+ * the scores where the estimate crosses DUPR's Intermediate (3.00) and
+ * Advanced (4.00) bands, labelled as such.
  *
  * At default text size the plot matches `PracticeVolumeChart` so Home's
  * toggle never moves the card. Enlarged text uses bounded, flowing rows
@@ -31,6 +35,16 @@ import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
 
 /** Matches PracticeVolumeChart's plot so the Home toggle never shifts layout. */
 export const DOT_PLOT_HEIGHT = 82;
+/** Gridlines at the technique scores where the estimated DUPR reaches 4.00
+ * (the Advanced band) and 3.00 (the Intermediate band); the upper label sits
+ * above its line and the lower one below so the two never collide. */
+const GRIDLINES: ReadonlyArray<{
+  score: number;
+  labelSide: 'above' | 'below';
+}> = [
+  { score: 8, labelSide: 'above' },
+  { score: 6.5, labelSide: 'below' },
+];
 const BAND_TOP = 16;
 const BAND_BOTTOM = 8;
 const DOT_RADIUS = 4.5;
@@ -198,12 +212,12 @@ export function ScoreDotPlot(props: {
   const summary =
     readCount === 0
       ? 'No scored reads in this window yet.'
-      : `${props.rangeLabel} technique scores: ${readCount} scored ${plural(
+      : `${props.rangeLabel} estimated DUPR: ${readCount} scored ${plural(
           readCount,
           'read',
         )} across ${dayCount} ${plural(dayCount, 'day')}, latest ${
-          latest?.score.toFixed(1) ?? ''
-        } out of 10.`;
+          latest ? duprAccessibilityLabel(latest.score) : ''
+        }.`;
 
   if (largeText) {
     return (
@@ -222,7 +236,7 @@ export function ScoreDotPlot(props: {
           unit="reads"
           rowForItem={(read, index) => ({
             key: read.id,
-            label: `${read.day} · Read ${index + 1}: ${read.score.toFixed(1)} out of 10${read.id === latest?.id ? ' · Latest read' : ''}`,
+            label: `${read.day} · Read ${index + 1}: ${duprAccessibilityLabel(read.score)}${read.id === latest?.id ? ' · Latest read' : ''}`,
             latest: read.id === latest?.id,
           })}
         />
@@ -253,22 +267,27 @@ export function ScoreDotPlot(props: {
             />
           ))}
         </View>
-        <View
-          pointerEvents="none"
-          style={[styles.gridline, { top: yForScore(10) }]}
-        />
-        <View
-          pointerEvents="none"
-          style={[styles.gridline, { top: yForScore(5) }]}
-        />
-        <Text
-          style={[styles.scaleLabel, { top: yForScore(10) - LABEL_HEIGHT }]}
-        >
-          10
-        </Text>
-        <Text style={[styles.scaleLabel, { top: yForScore(5) - LABEL_HEIGHT }]}>
-          5
-        </Text>
+        {GRIDLINES.map(line => (
+          <React.Fragment key={line.score}>
+            <View
+              pointerEvents="none"
+              style={[styles.gridline, { top: yForScore(line.score) }]}
+            />
+            <Text
+              style={[
+                styles.scaleLabel,
+                {
+                  top:
+                    line.labelSide === 'above'
+                      ? yForScore(line.score) - LABEL_HEIGHT
+                      : yForScore(line.score) + 1,
+                },
+              ]}
+            >
+              {formatDupr(line.score)}
+            </Text>
+          </React.Fragment>
+        ))}
         {linePoints ? (
           <Animated.View
             pointerEvents="none"
@@ -349,7 +368,7 @@ export function ScoreDotPlot(props: {
                   <Text
                     style={[styles.value, point.isLatest && styles.valueLatest]}
                   >
-                    {point.score.toFixed(1)}
+                    {formatDupr(point.score)}
                   </Text>
                 </View>
               );

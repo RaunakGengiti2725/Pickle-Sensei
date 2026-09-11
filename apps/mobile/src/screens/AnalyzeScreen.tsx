@@ -89,6 +89,7 @@ import { getApiSession, subscribeToApiSession } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { useAppStore } from '../state/appStore';
 import { useAccessStore } from '../state/accessStore';
+import { FREE_RATING_LIMIT } from '../billing/freeRatings';
 import { makeUuid } from '../util/uuid';
 import {
   SHOT_TYPES,
@@ -714,12 +715,15 @@ function clipExplanation(clip: CapturedClip) {
 }
 
 /**
- * "both" reads naturally only while the free allowance really is 2; any
- * other server-declared limit falls back to "all N" so the copy never lies
- * about how many free analyses the account actually had.
+ * The object of "You've used …" in the free-limit dialog, worded from the
+ * SERVER-declared allowance so the copy never lies about how many free
+ * analyses the account actually had: "your free analysis" for one (the
+ * shipping allowance), "both free analyses" for two, "all N free analyses"
+ * otherwise.
  */
 export function freeAnalysesPhrase(limit: number): string {
-  return limit === 2 ? 'both' : `all ${limit}`;
+  if (limit === 1) return 'your free analysis';
+  return `${limit === 2 ? 'both' : `all ${limit}`} free analyses`;
 }
 
 export function AnalyzeScreen({
@@ -907,9 +911,10 @@ export function AnalyzeScreen({
   const attemptEvidence = useRef(createAttemptEvidenceBuffer());
   const profile = useAppStore(s => s.profile);
   // Server-declared free-analysis allowance; the free-limit dialog derives
-  // its wording from this instead of hardcoding "both".
+  // its wording from this instead of hardcoding a count. Without a server
+  // snapshot the product's own allowance is the honest fallback.
   const freeRatingsLimit: number = useAccessStore(
-    s => s.canonicalAccess?.freeRatings.limit ?? 2,
+    s => s.canonicalAccess?.freeRatings.limit ?? FREE_RATING_LIMIT,
   );
   const operationActive = useRef(false);
   const cameraRun = useRef<{
@@ -1367,6 +1372,12 @@ export function AnalyzeScreen({
         'reconcile_saved';
       let predecessorAttemptId: string | undefined;
       let canStartAnotherClip = false;
+      // The attempt ran to a verdict of "this clip cannot be measured" (no
+      // technical failure, no result, permit released as failed). Checking
+      // the saved analysis again cannot change that verdict; the way forward
+      // is another clip, so the held screen must never trap the player on
+      // "Check saved analysis" for it.
+      let unmeasurable = false;
       try {
         const operation = await originalAnalysisOperations.read(
           getDb(),
@@ -1398,22 +1409,33 @@ export function AnalyzeScreen({
             );
             const run = attempt.run;
             if (!current()) return;
-            if (
+            const settledWithoutResult =
               run.state === 'released' &&
               run.releaseOutcome === 'failed' &&
-              run.permitId !== null &&
               run.resultId === null &&
+              !runJournal
+                .activeOperationIds(execution.scope)
+                .includes(run.operationId);
+            if (
+              settledWithoutResult &&
+              run.permitId !== null &&
               run.terminalReason === null &&
               run.lastHttpStatus === null &&
               run.attemptCount >= 1 &&
-              attempt.technicalFailure !== null &&
-              !runJournal
-                .activeOperationIds(execution.scope)
-                .includes(run.operationId)
+              attempt.technicalFailure !== null
             ) {
               recovery = 'retry_saved';
               predecessorAttemptId = run.operationId;
               canStartAnotherClip = true;
+            } else if (
+              settledWithoutResult &&
+              run.permitId !== null &&
+              attempt.technicalFailure === null
+            ) {
+              // A permit was reserved, so inference ran and returned its
+              // verdict; the release-authority and reservation refusals
+              // (no permit) keep the reconcile path.
+              unmeasurable = true;
             }
           }
         }
@@ -1421,6 +1443,19 @@ export function AnalyzeScreen({
         // Unknown storage is not empty storage or proof of release.
       }
       if (!current()) return;
+      // Only the run that just returned the analyzer's own verdict (`reason`)
+      // is unmeasurable for certain; a reconcile pass without a verdict, or
+      // an unclassified throw, keeps the saved analysis held.
+      const verdict = reason?.trim() || null;
+      if (unmeasurable && verdict && !paywallRequired) {
+        setPhase({
+          kind: 'error',
+          stage: 'analysis',
+          recovery: 'retry',
+          message: `${verdict} This clip could not be measured, so nothing was rated and no rating was used. Record another clip with your whole body in frame and swing once.`,
+        });
+        return;
+      }
       const recoveryCopy = paywallRequired
         ? 'The rating service requires an upgrade before another rating can start. This saved analysis has not been replaced.'
         : recovery === 'retry_saved'
@@ -2643,7 +2678,7 @@ export function AnalyzeScreen({
 
   if (phase.kind === 'free_limit') {
     // The scored result is saved and one tap away — this popup only tells
-    // the player their two free analyses are used up and Pro unlocks more.
+    // the player their free allowance is used up and Pro unlocks more.
     const { analysisId } = phase;
     const seeScore = () => {
       if (!screenCurrent() || phaseRef.current !== phase) return;
@@ -2665,7 +2700,7 @@ export function AnalyzeScreen({
               accessibilityViewIsModal
               accessibilityLabel={`You've used ${freeAnalysesPhrase(
                 freeRatingsLimit,
-              )} free analyses`}
+              )}`}
               style={styles.freeLimitDialog}
             >
               <MascotStage
@@ -2680,8 +2715,8 @@ export function AnalyzeScreen({
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
                 Your score is saved. You’ve used{' '}
-                {freeAnalysesPhrase(freeRatingsLimit)} free analyses — upgrade
-                to Pickle Sensei Pro to keep rating every swing.
+                {freeAnalysesPhrase(freeRatingsLimit)} — upgrade to Pickle
+                Sensei Pro to keep rating every swing.
               </Text>
               <View style={styles.freeLimitActions}>
                 <Button

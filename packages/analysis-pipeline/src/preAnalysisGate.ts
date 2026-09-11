@@ -31,13 +31,49 @@ import type { CaptureQualityReport, FrameAnalyzabilityReport } from "@pickle/vis
  * in `notEvaluated`, never treated as passing evidence of the opposite.
  */
 
-export const PRE_ANALYSIS_GATE_VERSION = "pre-analysis-gate-2";
+export const PRE_ANALYSIS_GATE_VERSION = "pre-analysis-gate-3";
 
 /** Pose-quality reason codes that mean "a person exists but at a scale no real capture produces". */
 const IMPLAUSIBLE_SCALE_REASONS = new Set([
   "player_too_small_in_frame",
   "player_too_close_or_cropped",
 ]);
+
+/**
+ * Reasons after which NOTHING can be measured: no person, no torso to
+ * normalize against, too few frames or too slow a stream to segment. Every
+ * frame-statistic reason (still image, solid colour, title card, …) is
+ * blocking too — the medium itself is not a stroke video. Only these withhold
+ * the analysis (pre-analysis-gate-3, 2026-09-10).
+ */
+export const BLOCKING_GATE_REASONS: ReadonlySet<string> = new Set([
+  "no_person_found",
+  "torso_not_measured",
+  "too_few_pose_frames",
+  "insufficient_fps",
+]);
+
+/**
+ * Reasons that describe a DEGRADED but measurable capture — part of the body
+ * out of frame, a tracking gap, low pose confidence, an unusual scale. The
+ * analysis proceeds on what was measured; each reason travels with the record
+ * as a `capture_quality:<reason>` limiting factor and caps the presentation at
+ * `lower_confidence`, so the read is disclosed as degraded instead of refused.
+ */
+export const ADVISORY_GATE_REASONS: ReadonlySet<string> = new Set([
+  "body_not_fully_visible",
+  "person_implausible_scale",
+  "tracking_dropout_gap",
+  "stroke_window_tracking_gap",
+  "low_pose_confidence",
+]);
+
+export const CAPTURE_QUALITY_FACTOR_PREFIX = "capture_quality:";
+
+/** Limiting-factor tokens for the advisory reasons of a gate decision. */
+export function captureQualityLimitingFactors(decision: PreAnalysisGateDecision): string[] {
+  return decision.advisories.map((reason) => `${CAPTURE_QUALITY_FACTOR_PREFIX}${reason}`);
+}
 
 export const STROKE_WINDOW_TRACKING = {
   /** A landmark at/above this visibility counts as tracked (the whole-clip full-body coverage rule). */
@@ -80,9 +116,18 @@ export interface PreAnalysisGateInput {
 }
 
 export interface PreAnalysisGateDecision {
+  /** True when no reason at all fired — a clean capture. */
   analyzable: boolean;
+  /**
+   * True when a BLOCKING reason fired (see `BLOCKING_GATE_REASONS`): nothing
+   * can be measured and the analysis is withheld. False with advisory-only
+   * reasons: the analysis proceeds as a disclosed, degraded read.
+   */
+  blocking: boolean;
   /** Machine-readable reason codes, in evaluation order. */
   reasons: string[];
+  /** The advisory subset of `reasons` (degraded, still measurable). */
+  advisories: string[];
   /** Signals that were not measured for this capture (honest gaps). */
   notEvaluated: string[];
 }
@@ -162,25 +207,40 @@ export function evaluatePreAnalysisGate(input: PreAnalysisGateInput): PreAnalysi
     }
   }
 
-  return { analyzable: reasons.length === 0, reasons, notEvaluated };
+  // Frame-statistic reasons are the medium's, never advisory; every pose
+  // reason outside the advisory set (known or future) blocks.
+  const frameReasons = new Set(input.frame?.analyzable === false ? input.frame.reasons : []);
+  const advisories = reasons.filter(
+    (reason) => !frameReasons.has(reason) && ADVISORY_GATE_REASONS.has(reason),
+  );
+  return {
+    analyzable: reasons.length === 0,
+    blocking: advisories.length !== reasons.length,
+    reasons,
+    advisories,
+    notEvaluated,
+  };
 }
 
 /**
- * Result-typed form for pipeline callers: `ok(decision)` when analyzable,
- * otherwise a typed failure whose code carries the first (most upstream)
- * reason and whose message lists them all. Frame-statistic failures are
+ * Result-typed form for pipeline callers: `ok(decision)` when the analysis
+ * may proceed (clean, or degraded with advisory reasons only — the caller
+ * attaches `captureQualityLimitingFactors(decision)` to the read), otherwise
+ * a typed failure whose code carries the first (most upstream) BLOCKING reason
+ * and whose message lists every reason. Frame-statistic failures are
  * `corrupted_media` (the medium itself is out of distribution); pose failures
  * are `low_confidence` (the medium may be fine, the perception is not).
  */
 export function preAnalysisGate(input: PreAnalysisGateInput): Result<PreAnalysisGateDecision> {
   const decision = evaluatePreAnalysisGate(input);
-  if (decision.analyzable) return ok(decision);
+  if (!decision.blocking) return ok(decision);
   const frameReasons = new Set(input.frame?.analyzable === false ? input.frame.reasons : []);
-  const poseOnly = decision.reasons.every((reason) => !frameReasons.has(reason));
+  const blocking = decision.reasons.filter((reason) => !decision.advisories.includes(reason));
+  const poseOnly = blocking.every((reason) => !frameReasons.has(reason));
   return fail(
     failure(
       poseOnly ? "low_confidence" : "corrupted_media",
-      `capture.not_analyzable.${decision.reasons[0]!}`,
+      `capture.not_analyzable.${blocking[0]!}`,
       `Capture is not analyzable: ${decision.reasons.join(", ")}.`,
       decision,
     ),

@@ -20,7 +20,10 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
 });
 
 const mockNavigate = jest.fn();
@@ -259,12 +262,12 @@ describe('flow: progress dashboard', () => {
 
   it('switches sections both ways and keeps the selected tab honest', async () => {
     const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('SCORE TREND');
+    expect(renderedText(renderer)).toContain('DUPR TREND');
 
     await pressByLabel(renderer, 'practice progress');
     let text = renderedText(renderer);
     expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('SCORE TREND');
+    expect(text).not.toContain('DUPR TREND');
     expect(
       hostByLabel(renderer, 'practice progress')!.props.accessibilityState
         .selected,
@@ -277,7 +280,7 @@ describe('flow: progress dashboard', () => {
 
     await pressByLabel(renderer, 'technique progress');
     text = renderedText(renderer);
-    expect(text).toContain('SCORE TREND');
+    expect(text).toContain('DUPR TREND');
     expect(
       hostByLabel(renderer, 'technique progress')!.props.accessibilityState
         .selected,

@@ -147,26 +147,37 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
         const tier = texts.find(node => node.props.children === 'Platinum II')!;
         expect(tier.props.numberOfLines).toBeUndefined();
         expect(StyleSheet.flatten(tier.props.style)).toMatchObject(type.h3);
+        // D-046: the headline rating is the estimated DUPR (7.02 → 3.35) with
+        // the unit beside it; the 0–10 rating is the smaller line.
         const rating = texts.find(
           node => node.props.testID === 'player-rank-banner-rating',
         )!;
         expect(rating.props).toMatchObject({
-          accessibilityLabel: 'Rating 7.02 out of 10',
+          accessibilityLabel:
+            'Estimated DUPR 3.35, technique rating 7.02 out of 10',
         });
         expect(rating.props.numberOfLines).toBeUndefined();
         expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
-        expect(rating.props.children[0]).toBe('7.02');
+        expect(rating.props.children[0]).toBe('3.35');
         expect(
           rating
             .findAllByType(Text)
-            .some(node => node.props.children === ' /10'),
+            .some(node => node.props.children === ' DUPR'),
         ).toBe(true);
         expect(StyleSheet.flatten(rating.props.style)).toMatchObject({
           ...type.bodyBold,
           maxWidth: '100%',
         });
-        expect(allText(renderer)).not.toMatch(/DUPR|≈/);
-        expect(allText(renderer)).toContain('0.48 to Diamond');
+        const technique = texts.find(
+          node => node.props.testID === 'player-rank-banner-technique-rating',
+        )!;
+        expect(technique.props.children).toBe('7.02 /10');
+        expect(StyleSheet.flatten(technique.props.style)).toMatchObject(
+          type.micro,
+        );
+        expect(allText(renderer)).not.toMatch(/≈/);
+        // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
+        expect(allText(renderer)).toContain('0.32 to Diamond');
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(
           style('player-rank-banner-streak').minHeight,
@@ -345,10 +356,13 @@ describe('PlayerRankBanner in-place expansion', () => {
     }
     expect(copy).toContain('YOU');
     expect(copy).toContain('Current form');
+    // Tier bands print in estimated DUPR: Silver 3.5–4.99 → 2.54 – 2.76.
     const range = renderer.root
       .findAllByType(Text)
-      .find(node => node.props.children === '3.5 – 4.99')!;
+      .find(node => node.props.children === '2.54 – 2.76')!;
     expect(StyleSheet.flatten(range.props.style).color).toBe(color.onDarkMuted);
+    expect(allText(renderer)).toContain('3.67+');
+    expect(allText(renderer)).toContain('Not an official DUPR rating.');
     act(() => renderer.unmount());
   });
 });

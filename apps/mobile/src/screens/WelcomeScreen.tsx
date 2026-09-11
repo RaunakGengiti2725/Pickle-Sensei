@@ -105,7 +105,7 @@ export function WelcomeScreen(props: {
   const adaptive = height < 760 || fontScale > 1.2;
   const freeCopy = (
     <Text style={styles.privacy} testID="welcome-free-copy">
-      Two successful validated ratings free · Unscored attempts don’t count
+      One successful validated rating free · Unscored attempts don’t count
     </Text>
   );
 

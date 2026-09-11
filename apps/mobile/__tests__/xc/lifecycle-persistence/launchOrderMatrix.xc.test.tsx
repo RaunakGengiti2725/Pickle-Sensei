@@ -1099,7 +1099,10 @@ async function runScenario(scenario: Scenario): Promise<MatrixRow> {
     if (scenario.install === 'existing-vault') {
       db.kv.set(`profile:${CANONICAL_OWNER}`, JSON.stringify(validProfile()));
     }
-    db.kv.set('walkthrough.device-complete', JSON.stringify({ version: 1 }));
+    db.kv.set(
+      `walkthrough.complete:${CANONICAL_OWNER}`,
+      JSON.stringify({ version: 1 }),
+    );
     expectedOwnerAtStart = CANONICAL_OWNER;
   } else if (scenario.install === 'existing-guest') {
     db.kv.set('auth.local-mode', JSON.stringify({ version: 1, mode: 'guest' }));

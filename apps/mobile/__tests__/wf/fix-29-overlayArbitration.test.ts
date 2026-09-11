@@ -38,9 +38,9 @@ import {
   useRankCelebrationStore,
 } from '../../src/progress/rankCelebration';
 import {
-  WALKTHROUGH_KV_KEY,
   WALKTHROUGH_SEEN_VALUE,
   useWalkthroughStore,
+  walkthroughKeyForOwner,
 } from '../../src/walkthrough/walkthroughStore';
 
 const owner = '55555555-5555-4555-8555-555555555555';
@@ -102,7 +102,9 @@ describe('walkthrough + rank ceremony arbitration', () => {
 
     expect(tour().visible).toBe(false);
     expect(tour().queued).toBe(true);
-    expect(mockKvTable.get(WALKTHROUGH_KV_KEY)).toBe(WALKTHROUGH_SEEN_VALUE);
+    expect(mockKvTable.get(walkthroughKeyForOwner(owner))).toBe(
+      WALKTHROUGH_SEEN_VALUE,
+    );
 
     rank().dismiss();
 

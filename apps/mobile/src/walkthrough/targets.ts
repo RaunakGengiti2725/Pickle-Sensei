@@ -3,7 +3,8 @@ import type { HostInstance } from 'react-native';
 
 /**
  * Walkthrough target registry. The spotlight tour points at REAL interface
- * elements — the Coach button, the rank banner, the tabs — so the components
+ * elements — the Coach button, the rank banner, the Home streak flame, the
+ * tabs — so the components
  * that own those elements register a measurer here and the overlay asks for
  * live window coordinates at show time. Nothing is hardcoded to a device
  * size, and a target that is not currently on screen simply measures null so
@@ -11,7 +12,7 @@ import type { HostInstance } from 'react-native';
  */
 
 export type WalkthroughTargetKey =
-  'coach-fab' | 'rank-banner' | 'tab-library' | 'tab-progress';
+  'coach-fab' | 'rank-banner' | 'home-streak' | 'tab-library' | 'tab-progress';
 
 export interface TargetRect {
   x: number;

@@ -43,6 +43,10 @@ import {
   type PendingCapture,
 } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
+import { useTabBarContentInset } from '../navigation/tabBarLayout';
+import { useTabScrollDock } from '../navigation/tabBarDock';
+import { DuprReadout } from '../progress/DuprReadout';
+import { duprAccessibilityLabel } from '../progress/duprEstimate';
 import { SavedDrillCard } from '../training/components';
 import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia } from '../training/types';
@@ -89,8 +93,56 @@ export function pendingEvidenceCopy(capture: PendingCapture): string {
     case 'corrupt':
       return 'Saved evidence could not be verified — can’t be scored';
     case 'valid':
-      return 'Clip saved — analysis has not run yet';
+      // A journaled run or a saved technique-confirmation record means an
+      // analysis DID start for this clip; "has not run yet" would contradict
+      // the row's own reopen action.
+      return pendingCaptureActionLabel(capture)
+        ? 'Analysis started — not scored yet'
+        : 'Clip saved — analysis has not run yet';
   }
+}
+
+/**
+ * Row action for a pending clip that can reopen its own saved analysis;
+ * null for the read-only clips the section note describes.
+ */
+export function pendingCaptureActionLabel(
+  capture: PendingCapture,
+): string | null {
+  switch (capture.techniqueConfirmation) {
+    case 'ready':
+      return 'Confirm technique';
+    case 'release_pending':
+      return 'Recover confirmation';
+    case 'blocked':
+      return 'Review saved capture';
+    case undefined:
+      return capture.hasOriginalOperation === true
+        ? 'Review saved analysis'
+        : null;
+  }
+}
+
+/** Compact clip length: `23s`, `1:05`; sub-second clips read `<1s`. */
+export function formatClipDuration(durationMs: number): string {
+  const seconds = Math.round(durationMs / 1000);
+  if (!Number.isFinite(seconds)) return '—';
+  if (seconds < 1) return '<1s';
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+/** Month + day tile shared by read rows and pending-clip rows. */
+function DateTile(props: { iso: string }) {
+  const date = new Date(props.iso);
+  return (
+    <View style={styles.dateBlock}>
+      <Text style={[type.micro, { color: color.inkSoft }]}>
+        {date.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}
+      </Text>
+      <Text style={[type.h2, styles.dateNumber]}>{date.getDate()}</Text>
+    </View>
+  );
 }
 
 /**
@@ -114,6 +166,10 @@ export function pendingCaptureTitle(capture: PendingCapture): string {
 export function LibraryScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
+  const tabBarInset = useTabBarContentInset();
+  // One latch for the tab; whichever list is mounted for the current state
+  // feeds it, and each list's own unmount releases it.
+  const tabBarDock = useTabScrollDock('Library');
   const localOnly = useAuthStore(state => state.session?.localOnly === true);
   const ownerKey = useAuthStore(state => state.session?.canonicalAppUserId);
   const ownerEpoch = useSyncExternalStore(
@@ -308,7 +364,11 @@ export function LibraryScreen() {
       <SafeAreaView edges={['top']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScrollView
-          contentContainerStyle={styles.savedContent}
+          {...tabBarDock}
+          contentContainerStyle={[
+            styles.savedContent,
+            { paddingBottom: tabBarInset },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {header}
@@ -526,7 +586,11 @@ export function LibraryScreen() {
       <SafeAreaView edges={['top']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScrollView
-          contentContainerStyle={styles.readsContent}
+          {...tabBarDock}
+          contentContainerStyle={[
+            styles.readsContent,
+            { paddingBottom: tabBarInset },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {header}
@@ -560,7 +624,12 @@ export function LibraryScreen() {
       <StatusBar barStyle="dark-content" />
       {shots === null || loadError || !ownsLoadedData ? (
         <ScrollView
-          contentContainerStyle={[styles.readsContent, styles.emptyContent]}
+          {...tabBarDock}
+          contentContainerStyle={[
+            styles.readsContent,
+            styles.emptyContent,
+            { paddingBottom: tabBarInset },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {header}
@@ -568,12 +637,14 @@ export function LibraryScreen() {
         </ScrollView>
       ) : (
         <FlatList
+          {...tabBarDock}
           data={reads}
           keyExtractor={item => item.id}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.readsContent,
             reads.length === 0 && captures.length === 0 && styles.emptyContent,
+            { paddingBottom: tabBarInset },
           ]}
           ListHeaderComponent={
             <>
@@ -595,80 +666,84 @@ export function LibraryScreen() {
                         </Text>
                         <Pill label={PENDING_SECTION_PILL} tone="neutral" />
                       </View>
-                      {captures.map(capture => (
-                        <View key={capture.id} style={styles.pendingRow}>
-                          <View style={styles.pendingIcon}>
-                            <Icon
-                              name={
-                                capture.evidenceStatus === 'valid'
-                                  ? 'person'
-                                  : 'camera'
-                              }
-                              size={18}
-                              color={color.court}
-                            />
-                          </View>
-                          <View style={styles.flex}>
-                            <Text
-                              numberOfLines={1}
-                              style={[type.bodyBold, styles.pendingTitle]}
-                            >
-                              {pendingCaptureTitle(capture)}
-                            </Text>
-                            <Text
-                              numberOfLines={2}
-                              style={[type.caption, styles.pendingMeta]}
-                            >
-                              {pendingEvidenceCopy(capture)}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              style={[type.caption, styles.pendingDate]}
-                            >
-                              {Math.round(capture.durationMs / 1000)}s clip ·{' '}
-                              {new Date(
-                                capture.capturedAtIso,
-                              ).toLocaleDateString()}
-                            </Text>
-                            {capture.techniqueConfirmation ||
-                            capture.hasOriginalOperation === true ? (
-                              <Button
-                                testID={
-                                  capture.techniqueConfirmation
-                                    ? `open-saved-confirmation-${capture.id}`
-                                    : `open-saved-original-${capture.id}`
-                                }
-                                label={
-                                  !capture.techniqueConfirmation
-                                    ? 'Review saved analysis'
-                                    : capture.techniqueConfirmation === 'ready'
-                                      ? 'Confirm technique'
-                                      : capture.techniqueConfirmation ===
-                                          'release_pending'
-                                        ? 'Recover confirmation'
-                                        : 'Review saved capture'
-                                }
-                                variant="secondary"
-                                onPress={() => {
-                                  if (
-                                    !loadedOwner ||
-                                    loadedOwner.ticket !== loadTicket.current ||
-                                    !isDataOwnerContextCurrent(ownerEpoch) ||
-                                    navigation.isFocused?.() === false
-                                  )
-                                    return;
-                                  navigation.navigate('Analyze', {
-                                    captureId: capture.id,
-                                    ...(capture.techniqueConfirmation
-                                      ? {}
-                                      : { mode: 'original' as const }),
-                                  });
-                                }}
+                      {captures.map(capture => {
+                        const action = pendingCaptureActionLabel(capture);
+                        const title = pendingCaptureTitle(capture);
+                        const content = (
+                          <>
+                            <DateTile iso={capture.capturedAtIso} />
+                            <View style={styles.flex}>
+                              <Text
+                                numberOfLines={1}
+                                style={[type.bodyBold, styles.pendingTitle]}
+                              >
+                                {title}
+                              </Text>
+                              <Text
+                                numberOfLines={2}
+                                style={[type.caption, styles.pendingMeta]}
+                              >
+                                {formatClipDuration(capture.durationMs)} ·{' '}
+                                {pendingEvidenceCopy(capture)}
+                              </Text>
+                              {action ? (
+                                <Text
+                                  numberOfLines={1}
+                                  style={[type.caption, styles.pendingAction]}
+                                >
+                                  {action}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {action ? (
+                              <Icon
+                                name="chevron"
+                                size={18}
+                                color={color.inkSoft}
                               />
                             ) : null}
-                          </View>
-                        </View>
-                      ))}
+                          </>
+                        );
+                        // Read-only clips are plain rows: nothing to tap, so
+                        // nothing pretends to be tappable.
+                        if (!action) {
+                          return (
+                            <View key={capture.id} style={styles.pendingRow}>
+                              {content}
+                            </View>
+                          );
+                        }
+                        return (
+                          <PressableScale
+                            key={capture.id}
+                            testID={
+                              capture.techniqueConfirmation
+                                ? `open-saved-confirmation-${capture.id}`
+                                : `open-saved-original-${capture.id}`
+                            }
+                            accessibilityLabel={`${action}: ${title}`}
+                            accessibilityHint="Reopens this saved clip without starting a rating."
+                            onPress={() => {
+                              if (
+                                !loadedOwner ||
+                                loadedOwner.ticket !== loadTicket.current ||
+                                !isDataOwnerContextCurrent(ownerEpoch) ||
+                                navigation.isFocused?.() === false
+                              )
+                                return;
+                              navigation.navigate('Analyze', {
+                                captureId: capture.id,
+                                ...(capture.techniqueConfirmation
+                                  ? {}
+                                  : { mode: 'original' as const }),
+                              });
+                            }}
+                            style={styles.pendingRow}
+                          >
+                            {content}
+                          </PressableScale>
+                        );
+                      })}
                       <Text style={[type.caption, styles.pendingNote]}>
                         {PENDING_SECTION_NOTE}
                       </Text>
@@ -703,22 +778,18 @@ export function LibraryScreen() {
               accessibilityLabel={`Open ${item.shotType.replace(
                 /_/g,
                 ' ',
-              )} result`}
+              )} result${
+                item.resultKind !== 'low_confidence' &&
+                item.overallScore !== null
+                  ? `, ${duprAccessibilityLabel(item.overallScore)}`
+                  : ''
+              }`}
               onPress={() =>
                 navigation.navigate('Result', { analysisId: item.id })
               }
               style={styles.row}
             >
-              <View style={styles.dateBlock}>
-                <Text style={[type.micro, { color: color.inkSoft }]}>
-                  {new Date(item.capturedAt)
-                    .toLocaleDateString(undefined, { month: 'short' })
-                    .toUpperCase()}
-                </Text>
-                <Text style={[type.h2, styles.dateNumber]}>
-                  {new Date(item.capturedAt).getDate()}
-                </Text>
-              </View>
+              <DateTile iso={item.capturedAt} />
               <View style={styles.flex}>
                 <Text numberOfLines={2} style={[type.h3, styles.strokeName]}>
                   {item.shotType.replace(/_/g, ' ')}
@@ -738,11 +809,13 @@ export function LibraryScreen() {
                     NOT READ
                   </Text>
                 </View>
-              ) : (
-                <Text style={styles.score}>
-                  {item.overallScore?.toFixed(1)}
-                </Text>
-              )}
+              ) : item.overallScore !== null ? (
+                <DuprReadout
+                  score={item.overallScore}
+                  valueStyle={styles.score}
+                  accessible={false}
+                />
+              ) : null}
               <Icon name="chevron" size={18} color={color.inkSoft} />
             </PressableScale>
           )}
@@ -773,14 +846,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentSelected: { backgroundColor: color.ink },
-  readsContent: {
-    paddingHorizontal: space.lg,
-    paddingBottom: space.xxxl + 28,
-  },
-  savedContent: {
-    paddingHorizontal: space.lg,
-    paddingBottom: space.xxxl + 28,
-  },
+  readsContent: { paddingHorizontal: space.lg },
+  savedContent: { paddingHorizontal: space.lg },
   emptyContent: { flexGrow: 1 },
   readHeader: { marginBottom: space.lg },
   readOrderCaption: {
@@ -804,27 +871,23 @@ const styles = StyleSheet.create({
     paddingBottom: space.sm,
   },
   pendingHeaderLabel: { color: color.inkSoft, flex: 1, flexShrink: 1 },
+  // Same anatomy as a read row (date tile · title/meta · trailing) so the two
+  // lists read as one library; only the trailing chevron marks a row that
+  // reopens something.
   pendingRow: {
-    minHeight: 82,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: 12,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.line,
-  },
-  pendingIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: color.courtSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   // No 'capitalize' here: pendingCaptureTitle already carries final casing
   // ('Forehand Drive · auto capture').
   pendingTitle: { color: color.ink },
   pendingMeta: { color: color.inkSoft, marginTop: 2 },
-  pendingDate: { color: color.inkSoft, marginTop: 1 },
+  pendingAction: { color: color.court, marginTop: 4 },
   pendingNote: {
     color: color.inkSoft,
     borderTopWidth: StyleSheet.hairlineWidth,

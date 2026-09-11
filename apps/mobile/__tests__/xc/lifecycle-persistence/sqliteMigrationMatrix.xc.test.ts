@@ -495,7 +495,7 @@ const KV_KEYS = [
   `rank.celebrated:${CANONICAL_ID}`,
   'review.prompt-state',
   `practice.set:${CANONICAL_ID}`,
-  'walkthrough.device-complete',
+  `walkthrough.complete:${CANONICAL_ID}`,
   'consent.training',
 ] as const;
 
