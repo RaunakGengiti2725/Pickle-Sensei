@@ -112,9 +112,30 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `access_state()` (1 round trip) and `apply_synced_shot(jsonb)` (atomic
   shot+details+permit write, SECURITY INVOKER so RLS applies). Rank/progress
   responses cache 60s and are invalidated by accepted shot syncs.
+- THE FREE ALLOWANCE IS ONE LIFETIME RATING (D-045, 2026-09-10; two
+  before). It has ONE server definition — `public.free_rating_limit()`
+  (`20260910170000_free_rating_limit_one.sql`, an immutable constant,
+  EXECUTE for `authenticated` only, in the K27 RPC allowlist) — read by
+  `reserve_analysis_permit()`, `apply_synced_shot()`'s backstop, the shots
+  write gate `enforce_scored_shot_permit()` and `issue_offline_grant()`;
+  never write the literal into a decision point again (change the
+  constant in a NEW migration). The edge fn mirrors it as
+  `FREE_RATING_LIMIT` in `index.ts` (accessPayload derives
+  used/remaining/limit from it; the static pin ties the two numbers
+  together), the app's pre-auth copy as `src/billing/freeRatings.ts`
+  `FREE_RATING_LIMIT`; everything with a server snapshot renders
+  `freeRatings.limit` as declared (`accessApi.ts parseAccess` accepts any
+  positive allowance and checks the counters against it — a build and a
+  deployment that disagree for a moment show honest copy, never a refused
+  response). The 0..2 request-shape caps on offline ticket issuance stay:
+  apps in the field ask for two tickets and are clamped, never refused.
+  `security_regression.sql` runs sections A–W at the historical two under
+  a test-only owner override of the constant (its header explains why) and
+  pins the shipping value in section X. Rollout: `db push` before
+  `functions deploy`; either half alone is safe.
 - Free ratings follow the SIGN-IN IDENTITY, not the account row
   (`20260902150000_free_rating_identity_ledger.sql`, 2026-09-02). Deleting
-  the account used to reset the two lifetime free ratings (every counted
+  the account used to reset the lifetime free ratings (every counted
   row cascades from auth.users; sign in again with the same Apple ID /
   Google account → fresh zero). `public.free_rating_ledger` keeps
   `sha256('provider:provider_id')` (the auth.identities subject — stable per
@@ -209,6 +230,16 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   considered and declined).
 - Entitlement id: `pickle_sensei_pro` (legacy alias `premium` also honored).
 - Offering packages must use standard types MONTHLY / ANNUAL / LIFETIME.
+- THE RECOMMENDED PLAN IS MONTHLY (D-047, 2026-09-10): `accessStore`
+  pre-selects `monthly` (then annual, then lifetime). The paywall sits on the
+  app's chalk surface; the pricing page is full-width rows Monthly · Yearly ·
+  Lifetime (`PaywallScreen.tsx`: `RECOMMENDED_PERIOD`, `PLAN_ORDER`) and the
+  monthly row is the ONE ink card (volt `RECOMMENDED` pill, volt amount while
+  selected; `tokens.ts` `membership`), siblings white with an ink edge when
+  chosen. Cal AI / Rivian restraint: no chips beyond yearly's computed
+  `SAVE n%`, flat fills, ink pill CTA, volt exactly twice. Badge copy must pass
+  H06 (no `BEST`/`MOST POPULAR`). Pinned by `__tests__/paywallPodium.test.tsx`
+  and the paywall button/flow suites.
 - Target prices: $7.99/mo, $59.99/yr, $159.99 lifetime — set on the store
   products; the app only ever displays store-returned prices. ASC product ids:
   `pickle_sensei_pro_monthly`, the yearly successor of
@@ -268,12 +299,50 @@ fontSize/fontFamily near a token. Title roles:
   (`marginTop: space.sm`, `maxWidth: 340`).
 - Sub-page headers: `ScreenHeader` (`type.h3`). Section headers:
   `SectionTitle` (`type.h3`); Progress's dark dashboard uses
-  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere).
+  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere). With
+  `wrapTitle`, `ScreenHeader` gives the title a full-width row below controls
+  at `fontScale >= 2`; otherwise it preserves the standard centered row.
+  Do not shrink the font or reuse the narrow Back/Close side slots for long
+  accessibility titles. The Consistency header is natively checked on a
+  375-point iPhone at fontScale 3.571.
 - Centered state/celebration headlines (signed-out states, Analyze states,
   Result moments, Paywall title): `type.h1`.
 - Data numerals may size per card, but the SAME role must match everywhere
   (e.g. card technique scores are `type.score` at 30/34 on Home, Progress,
   and Library; big stat counters are `type.display` at 64/66).
+
+## Floating tab bar that docks at the page end (2026-09-10)
+
+`PremiumTabBar` is positioned ABSOLUTELY over the tab screens with two frames
+(`src/navigation/tabBarLayout.ts`): FLOATING — a rounded card (`radius.lg`,
+`shadow.floating`, same `color.tabBar`/`color.line`) 16 from each side,
+resting JUST above the home indicator (iOS: `max(insets.bottom − 14, 12)` =
+20 on Face ID phones, the card dips into the soft 34pt inset like the
+system's own bars; Android: `max(insets.bottom + 8, 12)`, above the
+system-owned navigation band) — while the focused page scrolls, and DOCKED
+— full width, square, flush, stretched under the home indicator, the bar as
+it always sat — once that page's end is reached. The owner judged the earlier
+42pt lift "too high" (2026-09-10); tune `TAB_BAR_INDICATOR_DIP`, never the
+docked frame.
+The latch (`src/navigation/tabBarDock.ts`, a zustand store keyed by tab)
+closes within 8 of the end and opens only 32 back up (hysteresis); a page
+that cannot scroll never docks. Each tab screen (Home, Library, Progress,
+Settings) MUST spread `useTabScrollDock('<Tab>')` onto its main
+ScrollView/FlatList (every mounted variant — its callback ref releases the
+latch on unmount) and end its scroll content with
+`paddingBottom: useTabBarContentInset()` (the TALLER frame's footprint — the
+docked bar on Face ID phones, the card elsewhere — + the Coach button's 24
+rise + 8, so it clears both), wrapping full-screen Loading/Error states in a
+padded `screen` View. The bar animates
+between frames with Reanimated (240ms ease-out, snaps under reduced motion);
+the Coach menu anchors follow `tabBarRowBottom(inset, docked)`; its scrim
+covers the whole screen. Never hardcode 70/26/16 elsewhere. Pinned by
+`__tests__/premiumTabBar.test.tsx` ("floating geometry"),
+`__tests__/tabBarLayout.test.tsx` and `__tests__/tabBarDock.test.tsx`. Screen
+tests that stub `react-native-safe-area-context` must provide
+`useSafeAreaInsets`. RN 0.87 has no `StyleSheet.absoluteFillObject` (only
+`absoluteFill`); spell edges out. Worklets must capture plain numbers, not
+the `StyleSheet` module.
 
 ## Launch flow (onboarding BEFORE login — and REQUIRED)
 
@@ -327,6 +396,45 @@ files under `Sources/` need `bundle exec pod install` to enter the pod
 target. The OS sheet never appears in TestFlight builds by design; dev
 builds always show it.
 
+## Ratings display: ESTIMATED DUPR first, the /10 beneath (D-046, 2026-09-10)
+
+Every rating a player reads — the analysis `overallScore`, the rank
+`rating`, their averages, bests, deltas and tier bands — is printed as an
+ESTIMATED DUPR. The map is NOT linear (DUPR is bunched in the 3s; 5.0+ is
+the top ~0.7% of rated players, 6.0+ ≈ 190 people): `DUPR_ANCHORS` in
+`src/progress/duprEstimate.ts` tie the scoring engine's band boundaries to
+DUPR's published bands — score 0 → 2.00, 6.5 (checkpoints average the
+red/yellow line) → 3.00, 8.0 (the green line) → 4.00, 9.5 → 5.00, 10 → 6.00
+(the ceiling; never higher) — linear between anchors, two decimals
+(`formatDupr`; 5.8 → 2.89, 7.0 → 3.33, 7.8 → 3.87, 9.0 → 4.67). Differences
+are ALWAYS `duprDelta(from, to)` / `formatDuprDelta` / `formatDuprDistance`
+= the difference of the two converted endpoints — never a rescaled score
+gap, the map is not linear. `duprFraction` is the fill of a ring/bar (the
+DUPR's position between 2.00 and 6.00); `formatTechniqueScore` prints the
+"6.4 /10" line; `duprAccessibilityLabel` is VoiceOver's phrase;
+`DUPR_ESTIMATE_NOTE` the disclaimer. `src/progress/DuprReadout.tsx` renders
+the canonical pair — big DUPR + ` DUPR` unit, micro `x.x /10` beneath — in
+the host's numeral role; `ScoreRing` does the same inside the ring (its arc
+is `duprFraction`). Rules: the big number is
+ALWAYS the DUPR and ALWAYS says DUPR (unit, caption or kicker); the 0–10
+figure is ALWAYS the smaller secondary; surfaces with room carry the
+disclaimer (Result score page, rank banner fold-out, rank card, Progress
+footer, Settings); never print a bare `toFixed(1)` score or a "/10"-only
+number again. The DATA never changes — SQLite, sync payloads, the server,
+`computePlayerRank` and the tier thresholds stay on 0–10; convert at render
+only. Checkpoint scores (0–100) are a different quantity and stay as they
+are. The rank tiers keep their 0–10 thresholds, so their DUPR bands read
+Bronze 2.00–2.53 · Silver 2.54–2.76 · Gold 2.77–2.99 · Platinum 3.00–3.66 ·
+Diamond 3.67+ (re-anchoring the ladder to DUPR bands is a separate
+shared-types + migration + edge decision). DUPR is a third-party trademark:
+the H06 scan bans it in App Store metadata + Info.plist
+(`STORE_ONLY_RULES`) and allows it in-app; if Apple
+ever challenges the label, change `DUPR_LABEL`/`DUPR_ESTIMATE_LABEL`/the
+note in that one module. Pinned by `__tests__/duprEstimate.test.tsx`; the
+older validated-benchmark contract (`techniqueBenchmarkDisplay.ts`,
+`__tests__/techniqueBenchmarkDisplay.test.ts`) is unchanged and still
+governs the future calibrated interval.
+
 ## Player rank
 
 One formula in three places that MUST stay identical
@@ -350,6 +458,21 @@ durable owner-scoped kv record (`rank.celebrated:<owner>`) and raises the
 The Home banner no longer navigates on tap — it glow-pulses and unfolds the
 tier ladder in place (`player-rank-banner-toggle`); its streak block is a
 separate press target that opens the StreakCalendar route.
+
+Rank insignia (owner request 2026-09-10 — every division is its own badge):
+`RankIcon tier division` renders one of fifteen custom badges (Bronze III …
+Diamond I) from `src/components/rankInsigniaArt.ts` (pure geometry, named
+tones) painted with the tier's material in `design/tokens.ts` `rankTier`
+(copper / steel / gold / ice / sapphire — flat four-tone facets, NO
+gradients, shadows or particles; the inventory visual contract still
+applies). Grammar: tier = silhouette + engraved mark (coin/chevron,
+hex/arrow, shield/star, crest/lozenge, cut gem); division III = bare plate
+over the numeral plaque, II adds wings, I adds the second wings + crown —
+the plaque spells the SAME numeral as the copy (III/II/I, III at the
+floor). `division` omitted → the plate-only tier mark (ladder rows, 26px);
+`tier: null` → the muted unranked emblem. `RANK_TIER_STYLE[tier].accent`
+is what the ladder fills / YOU pill borrow (≥ 4.5:1 on surfaceDark).
+Pinned by `__tests__/rankUpCelebration.test.tsx` ("rank insignia").
 
 ## Progress dashboard (Performance tab)
 
@@ -454,16 +577,86 @@ detail), Settings Player row. Streak-defense notifications read
 `computeConsistencySnapshot()` (see `notificationStore.defaultLoadContext`);
 copy states only facts true at delivery (`streakDefenseCopy`).
 
+Achievement badges (owner request 2026-09-10 — every achievement is its own
+badge): `MilestoneBadge glyph value rarity earned size` renders one of TEN
+custom insignia from `consistency/achievementBadgeArt.ts` (pure geometry on
+a 96-unit canvas, named tones `deep/base/light/bright/mark/plaque`) — coin
+(First Spark), ember tile (Kindling), heater shield (Week One), twelve-lobe
+rosette with crossed paddles (Fortnight Form), laurel medallion (30 Day
+Club), hex seal with comet (Sixty Deep), crowned crest (Century Club),
+winged crest with the phoenix flame (Eternal Flame), ribboned medal with a
+check (100 Sessions), target rings with a paddle on the bull (Specialist).
+Paint comes from the RARITY's material in `design/tokens.ts
+achievementRarity` (chalk / court / volt / violet / flame / ember — flat
+four-tone facets, NO gradients, shadows or particles; the inventory visual
+contract lists both files) or `achievementLocked` (charcoal, dashed
+`accent` rim on the silhouette — `achievementSilhouetteIndex`). LAYOUT
+CONTRACT (owner: "no overlap, premium", 2026-09-10): each numbered badge
+declares its OWN ribbon banner rect (`achievementBadgePlaque(glyph)`) that
+lies wholly inside the plate's face ≥ 2 units from its edge (pointed-bottom
+plates keep straight flanks down to the banner for it); emblems stop ≥ 3
+units above the banner and clear of the bevel highlights; nothing leaves
+the 96-unit canvas; and every banner is wide enough for its own numeral in
+every size role at the default font scale — the geometry comments in the
+art module carry the computed margins, and the "sizes every banner" test
+re-derives the fit with Manrope Bold's real digit advances
+(`numeralWidth`). The value is ONE uncapped RN Text centred on that rect in
+the material's `bright` (micro < 64pt, h3 ≥ 64, score ≥ 120); when the
+scaled digits would touch the banner's ends or outgrow its height
+(`fontScale`, or a 3-digit value at 40pt), the banner is not drawn and the
+number flows onto an `inkElevated` plaque BELOW the art — never clipped,
+shrunk or overlapping. The StreakCalendar next-reward chip renders at 48pt
+for that reason. The showcase's rarity pill and the celebration's eyebrow
+borrow `RARITY_PALETTE[rarity]` (`accent` on dark ≥ 4.5:1 vs
+`surfaceDark`, `deep` on light ≥ 4.5:1 vs `surface`). `badgeArtFor(id)` is
+the id → glyph/value map (`fix-26-milestoneRewards` pins that reward copy
+names the art it grants). Pinned by `__tests__/streakCelebration.test.tsx`
+"flat milestone insignia" (materials, distinct drawings, locked rim,
+banner fit, numeral flow) and `wf/AchievementsShowcase.buttons.test.tsx`.
+To check the art by eye, render the shapes to SVG with the same paint
+resolution as `MilestoneBadge` and `qlmanage -t` the sheet — that is how
+every badge was audited.
+
 Owner-scoped kv namespaces (`profile`, `rank.celebrated`, `notifications`,
-`consistency`) are pinned in `repository.ts OWNER_SCOPED_KV_NAMESPACES` and
-purged together on account deletion — add new namespaces there.
+`consistency`, `practice.set`, `billing.pending-fulfilment`,
+`analysis.release-policy`, `walkthrough.complete`) are pinned in
+`repository.ts OWNER_SCOPED_KV_NAMESPACES` and purged together on account
+deletion — add new namespaces there.
+
+## First-run walkthrough (once per ACCOUNT, 2026-09-10)
+
+`src/walkthrough/FirstRunWalkthrough.tsx` is the 5-step spotlight tour over
+the real interface (Coach button → honest ratings on the rank banner →
+Library tab → Progress tab → the daily streak on the Home flame chip, target
+`home-streak`, added 2026-09-10 as the closing step so the earlier step
+indices the suites pin stay put; Skip / Next / Got it / backdrop / hardware
+back all end or advance it), raised by App.tsx `maybeShowFirstRun()` the first time
+`session + profile` are both present. Its "seen" record is OWNER-scoped —
+`walkthrough.complete:<owner>` (`walkthrough/walkthroughKey.ts`, a pure
+module so tests never load the native db) — NOT device-level (decision
+2026-09-10: every new account gets the tour; the old `walkthrough.device-complete`
+key is simply ignored). The record is written BEFORE the overlay shows
+(crash-loop safety), a signed-out process never evaluates, the request is
+tagged with its owner through `identifyCeremony(request, owner)` so
+`CeremonyHost` presents it only to that account, and a `subscribeToDataOwner`
+listener drops a tour still showing when the owner changes so the next
+account's evaluation is never blocked by a stale request. Settings → About
+"App walkthrough · Replay" re-raises it without touching the record. Pinned by
+`__tests__/walkthroughStore.test.ts` (new account tours, same account does
+not, owner switch mid-evaluation writes nothing) and the ceremony/overlay
+suites, which seed `walkthroughKeyForOwner(owner)` for EVERY account they
+sign in as.
 
 ## Auto Analyze camera — record button, then TRUE auto capture (iOS, 2026-09-02)
 
 `GuidedCaptureViewController.swift` is a camera app, not a wizard. It opens
 in `composing` (live preview + exoskeleton, NOTHING recorded; the translucent
-player silhouette — `CaptureSilhouette` imageset, alpha 0.3 → 0.14 as a body
-is tracked → hidden once tracked-ready, mirrored in RN as
+player silhouette — `CaptureSilhouette` imageset, alpha 0.3 → 0.2/0.14 as a
+body is tracked → FULLY hidden the moment readiness is `ready` in ANY stage
+(composing included, 2026-09-10; `updateSilhouette` +
+`silhouetteDismissedByFraming`: `holdStill` keeps it dismissed so it never
+pulses on a weight shift, it returns only on noPerson / fullBodyRequired /
+moveCloser / moveFarther) and once locked, mirrored in RN as
 `assets/capture/silhouette*.png` — shows where to stand). The ONE control is
 the `CaptureShutterButton`: record while composing
 (`startRecording(.initial)`: rolling spool + REC chip + 50 s timer, status
@@ -720,8 +913,10 @@ feedback): dark shell (`surfaceDark`, the route's `contentStyle` matches so
 nothing flashes light), top row close · segmented progress · "N OF M ·
 LABEL", pinned footer (primary Next with a descriptive label, Back/Done
 links). `GuideShell scroll={false}` gives a page a fixed flex column. Pages,
-each evidence-gated and SKIPPED when its evidence is absent: **Score** (ring,
-DUPR line, ONE `selectInsight` sentence, THIS SET card) → **The problem**
+each evidence-gated and SKIPPED when its evidence is absent: **Score** (kicker
+`ESTIMATED DUPR · <STROKE>`, the `ScoreRing` — big estimated DUPR, `EST.
+DUPR` caption, `6.4 /10` micro line — then `DUPR_ESTIMATE_NOTE`
+(`result-dupr-note`), ONE `selectInsight` sentence, THIS SET card) → **The problem**
 (with replay evidence the page IS `FormReviewPlayer fill` and NOTHING else —
 no kicker, no h1, no sub line, no "Full screen" link (2026-09-02: the page
 headline only repeated the player's stop card and cost the video its height;
@@ -733,7 +928,7 @@ the fault's headline + cue on arrival. The kicker + h1 fault name + "Scored N
 no sidecar) → **Drills** (`RecommendedDrills dark` with per-drill Save →
 `useTrainingStore().setDrillSaved`; empty/error → "Browse library") →
 **Next** ("Ready for another swing?", ONE recap card `result-guide-summary`:
-three tiles — `7.1` + `/10` caption / `SCORE`, `strengthList(analysis, ∞)`
+three tiles — `6.26` / `EST. DUPR` / `7.1 /10` micro, `strengthList(analysis, ∞)`
 count / `HELD`, `fixList(analysis, ∞)` count / `TO FIX` — numerals in the
 card `type.score` 30/34 role, then the rows Priority fix `name — direction`
 (or "Every checkpoint held") and Strongest `name · score`; the footer "Try it
@@ -741,16 +936,35 @@ again" re-arm + Back · Done). There is NO "See full breakdown" link any more
 (product decision 2026-09-02: the last page is a quick recap to move on
 from). The ENTIRE former result surface still lives in `ResultBreakdownSheet`
 (`StrokeResult hideCtaRow` + `FormReviewCard` + full `FixList` + stroke map +
-provenance + `TrainingPlanSection` + `AnalysisFeedbackPrompt`, light sheet),
-rendered by the route `ResultDetails { analysisId }`
-(`screens/ResultDetailsScreen.tsx`, `ScreenHeader "Full breakdown"`, loads
-through the shared `useStrokeResultEvidence`) — which the guide no longer
-navigates to, so it is currently reachable from nowhere in the app — and
-inline by the abstained / legacy ONE-page case (the honest ledger) with Try
-again / Done. `DaySecuredBanner` stays at shell level (one-shot ceremony). Nothing
-new is said anywhere — every page reads the same pure selectors as before;
-keep it that way and keep the audits (`coachLockAudit`,
-`resultEvidenceAudit`, `zeroHandholdingCopyAudit`…) green.
+provenance + `TrainingPlanSection` + `AnalysisFeedbackPrompt`), rendered by
+the route `ResultDetails { analysisId }` (`screens/ResultDetailsScreen.tsx`,
+`ScreenHeader "Full breakdown" dark`, loads through the shared
+`useStrokeResultEvidence`; the SCORE page's footer links to it) and inline by
+the abstained / legacy ONE-page case (the honest ledger) with Try again /
+Done. THE WHOLE RESULT IS DARK (2026-09-10, user decision — "not the lighter
+version"): `StrokeResult`, the ledger, measured rows, `UncertaintyNotes`,
+`CheckpointRow dark`, `FixList dark`, `TrainingPlanSection` (`PlanDrillCard
+dark`), `AnalysisFeedbackPrompt` and the details route all sit on
+`surfaceDark`; there is no light sheet left anywhere in Result — do not
+reintroduce one. The NOT-SCORED page (a `low_confidence` read: `analysis`
+exists, `overallScore` null) hosts `FormReviewPlayer` INLINE as the replay
+(`StrokeResult replaySlot`, pinned by `resultGuide.test` "not-scored read
+with replay evidence"): `useStrokeResultEvidence` verifies the pose sidecar
+for unscored reads too, and `buildFormReviewScript` on a score-less analysis
+yields exactly ONE stop — the wrist-speed peak with the contact-only copy —
+so the player shows the whole body with the exoskeleton and claims no
+verdict. Result-null abstentions (AUTO family-only) keep the replay card,
+which is now `contain` and sized from the recorded frame
+(`replayStageHeight`: portrait → up to 420pt, landscape → 168pt) so the
+body is never cropped to a 16:9 torso. In `FormReviewPlayer` the video is
+drawn in its `containRect` as a rounded card (`form-review-video-card`) on a
+stage that paints NOTHING — and the native `PickleClipPlayerView` /
+`ClipPlayerView` backgrounds are transparent — so a portrait clip on a wide
+stage never shows black pillarbox bars. `DaySecuredBanner` stays at shell
+level (one-shot ceremony). Nothing new is said anywhere — every page reads
+the same pure selectors as before; keep it that way and keep the audits
+(`coachLockAudit`, `resultEvidenceAudit`, `zeroHandholdingCopyAudit`…)
+green.
 
 ## Practice set (same-sitting re-analysis)
 
@@ -937,6 +1151,49 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
 - `Info.plist` declares `ITSAppUsesNonExemptEncryption=false` (HTTPS only) so
   App Store Connect skips the export-compliance question per build.
 
+## Archived 3D Analysis direction (future v2, 2026-09-05)
+
+This section records the parked v2 direction only. The later 2D production
+and v1 integration decisions below control this checkout.
+
+The new 3D Analysis system is the intended REPLACEMENT for primary 2D
+exoskeleton/heatmap analysis, not a permanent optional viewer or second mode.
+Keep shipping 2D functional during validation, then make released, eligible
+3D analyses canonical through Result, navigation, loaders, state and storage.
+Legacy 2D remains only where a documented technical fallback, regression
+baseline or historical-record reader is necessary. Preserve raw 2D observations
+when the chosen 3D estimator needs them; that does not preserve a competing UI.
+
+The one analysis has synchronized actual reconstructed motion, a qualified
+coach-reviewed compatible exemplar (otherwise eligible earlier own-best,
+otherwise no reference), and a separately labelled modelled correction of the
+player's own body. Preserve proportions, handedness and unaffected movement;
+modify only supported components. Generated motion never becomes measured
+truth, a rating, a reference observation or training ground truth.
+
+Require separate visualization-, comparison-, coaching- and scoring-grade
+validation, plus corrected-motion, UX/performance, physical-device, privacy,
+release and migration checks. Passing one grade does not authorize another.
+Keep unsupported capabilities blocked; do not unlock from finite XYZ values,
+a demo, LLM agreement or synthetic tests. The current 2D operational guidance
+above remains the shipping safety contract until the versioned cutover gates
+pass; it is not a requirement to retain that primary experience forever.
+
+The existing Astra master plan is `docs/prompts/astra-app-improvement.md`.
+It defines the audit, experiments, evidence requirements, strict acceptance
+criteria, route/history parity, rollback and retirement work. Canonical cutover
+requires scoring-grade approval too: no 2D-score/3D-coaching hybrid, and no
+legacy score to rescue a failed 3D-eligible run. Legacy scoring is limited to
+explicit out-of-scope cohorts or an authorized rollback policy for new runs.
+Before 3D writes, partition rank/best/comparison semantics by scoring definition
+across SQL, shared code and Edge; do not blend 2D and 3D scores. Own-best requires
+same-athlete evidence and approved 3D quality/review, not a legacy 2D score.
+Platform/OS scope, same-clip re-analysis charging and rank-partition display
+need explicit decisions before release. Follow the plan's
+VERIFIED / MEASURED / PARTIAL / BLOCKED distinctions. No runtime cutover,
+production deployment or legacy deletion is authorized merely by updating
+the plan. Preserve account, consent, entitlement and scoring-history safeguards.
+
 ## V1 UI and analysis boundary (owner decision, 2026-09-06)
 
 - V1 remains on the existing 2D analysis and replay path. Future 3D work is
@@ -980,14 +1237,14 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   rank/progress and billing. Do not cache its verdict. Missing server proof
   raises a database error, which the API reports as retryable 503 rather than
   signing users out; a valid proof with a revoked session returns false/401.
-- `service_role` bypasses RLS but still needs SQL grants. The live audit found
-  missing grants on billing, webhook audit, and external-account cleanup.
-  Grant SELECT/INSERT/UPDATE on `billing_entitlements` and
-  `account_external_credentials`, and SELECT/INSERT on `webhook_events`.
-  Client writes stay revoked. `20260907110000_api_audit_integration.sql`
-  reconciles the upstream webhook reservation lifecycle: service-role UPDATE
-  is limited to `claimed_at`/`processed_at`, DELETE to pending reservations;
-  a trigger protects live leases and makes completed audit rows immutable.
+- `service_role` bypasses RLS but still needs SQL grants. Historical fixes
+  added missing direct-write grants, but ordered-billing and deletion
+  migrations replace those writes with narrowly granted RPCs. Reconcile the
+  reservation-era grants in `20260907110000_api_audit_integration.sql` through
+  the forward readiness migration before rollout. Use the helpers appropriate
+  to the applied migration boundary; never restore obsolete billing,
+  webhook-audit or credential DML grants to make old callers or fixtures pass.
+  Keep all client writes revoked and completed audit history immutable.
 - Permits never reopen from a terminal state. The integrated late-sync RPC may
   settle an expired reservation through its vouch-aware path; the integration
   migration preserves that without allowing permit metadata to be rewritten.
@@ -1000,9 +1257,9 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   webhooks, 5 MB for shot batches/evaluation trials; body deadline 30 seconds.
 - Edge tests: `npx --yes deno@2.5.6 test -A --no-check --config
 supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
-  CI's `edge` job runs these and the frozen-lock entrypoint typecheck through
-  `scripts/verify-cloud.sh`; `supabase-security` runs the RLS matrix and
-  repository security scan. The SQL shim tests broad client
+  CI's `edge` job runs these, the frozen-lock entrypoint typecheck and offline
+  cryptographic vectors through `scripts/verify-cloud.sh`; `supabase-security`
+  runs the RLS matrix and repository security scan. The SQL shim tests broad client
   defaults AND absent service-role DML defaults; both require explicit grants.
   The local load stub now needs `SUPABASE_SERVICE_ROLE_KEY=stub-service-role-key`
   on the local Edge process, alongside its fake URL and anon key.
@@ -1021,9 +1278,279 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   (secret mode) and `account_routes.test.ts` (publishable fallback).
   Live Auth logs confirmed the forwarded client IP on 2026-09-06.
 
+## Production stays 2D; 3D is parked for v2 (2026-09-05)
+
+The owner explicitly chose to keep the previous 2D analysis for production.
+The main checkout's mobile, native and shared-analysis code has been restored
+to the pre-3D baseline `c23b266`; this includes Debug as well as Release.
+Do not reintroduce the 3D pipeline into this checkout without a new request.
+
+The complete in-progress 3D code, tests and research are saved on local branch
+`codex/3d-analysis-v2`, commit `3616560`, in the separate worktree
+`/Users/raunakgengiti/Pickle-Sensei-3d-v2`. That snapshot is future v2 work, not
+an approved release. The existing Astra master plan remains its roadmap;
+its implementation addendum describes archived work, not the current main app.
+Unrelated backend changes and the separate Astra app-polish worktree are retained.
+
+Never run Debug and Release Xcode builds concurrently against the same Pods
+directory, even with separate DerivedData paths: RN's dependency/core/Hermes
+configuration scripts replace shared prebuilt frameworks. Run them serially.
+
+## Local analysis durability and verification (2026-09-06)
+
+- Mobile verification uses Node 22, matching CI. The journal/pipeline tests use
+  Node's built-in `node:sqlite`; Node 20 is insufficient for those suites.
+  `apps/mobile/testSupport/sqlite.ts` runs the actual local migrations with a
+  real in-memory SQLite engine. It is test-only, not a shipping native adapter.
+- `getDb()` serializes native statements through the OP-SQLite transaction
+  queue. Use `withTransaction(rawDb, async rawTx => ...)` for a compound write;
+  do not issue manual `BEGIN`/`COMMIT` through the public `getDb().execute()`.
+  Derive `forDataOwner(rawTx, context)` for owner-sensitive repository writes.
+  `DataOwnerContext` includes a generation, so A → sign-out → A invalidates old
+  work even though the UUID is the same.
+- The legacy online analysis journal is `analysis_run_journal`. Reservation
+  identity is durable before HTTP; the committed marker, practice set, result,
+  and outbox share one transaction. Ambiguous commit acknowledgement means
+  HOLD/recover, not refund. Operational journal methods take a raw database
+  and immutable original owner/origin; never pass an owner-scoped handle or
+  substitute the currently signed-in account. Recovery excludes active
+  execution, not merely mounted screens. Register new owner tables/namespaces
+  in the repository purge allowlists.
+- A `replayed` analysis outcome reopens the existing result without another
+  review request. `recovery_pending` must not claim that nothing was rated or
+  mint another operation automatically. These guarantees are not the signed
+  offline wallet; that protocol is still separate unfinished work.
+- Guided capture, import, and extraction accept an operation ID/AbortSignal.
+  Cleanup must abort its own operation, not call the global no-argument cancel
+  from a stale screen. Native cancellation can reject promptly while retaining
+  the busy barrier until existing work drains.
+- The auth-owned billing lifecycle automatically reconciles through our
+  backend REST API, including after a restart without a purchase marker.
+  It does not call StoreKit purchase/restore/sync methods. Retries run only
+  while active, using the store's bounded backoff and captured configuration.
+  Ordinary bearer rotation must not reconfigure it. Preserve
+  `billing.pending-fulfilment:<owner>` on sign-out; discard/invalidate it only
+  for that owner after confirmed account deletion.
+- Diagnostics are disabled until provider, disclosure, native-privacy and
+  release-identity gates are approved. Do not add `Sentry.wrap`, another global
+  handler, automatic native collection, or an upload token to bypass these
+  gates. The current Xcode wrapper prepares local artifacts with uploads
+  explicitly disabled; an unsigned build and matching dSYM are not live
+  symbolication or device certification.
+- FFmpeg 9 removed `-vsync`; current timestamp fixtures use the output option
+  `-fps_mode passthrough`. Keep the VFR/duplicate-PTS assertions unchanged.
+  A host without `drawtext` still cannot run the broadcast-overlay fixture.
+
+## Follow-up reliability checks (2026-09-06)
+
+- Rank, streak and walkthrough presentations share `flow/CeremonyHost.tsx`.
+  The iOS host uses the installed `FullWindowOverlay`, not a native Modal
+  controller: an absent `onShow`/`onDismiss` must never hold input or block the
+  queue. Preserve native-fullScreenModal layering, owner generations, stale
+  handler protection and interrupted requests. Renderer tests are not proof
+  of native touch recovery or VoiceOver behavior.
+- Consistency ledger absence and unreadable/corrupt/future-version data are
+  different states. Unknown data cannot authorize a replacement ledger,
+  milestone ceremony or drill/day marker write. Preserve the same owner's
+  last valid snapshot and surface a load error instead of inventing an empty
+  history; notification snapshots must not use incomplete drill facts.
+- `__tests__/xc/xcMatrixNetworkAuth2.keeper.test.ts` retains 1,500 default
+  seeds in 60 batches of 25, with a fixed virtual epoch and drained request,
+  timer and listener cleanup. `XC_SEED` replays a uint32 seed; `XC_SEEDS` may
+  select 1–10,000 seeds. Do not replace this with a larger global timeout,
+  force-exit, skipped seeds or callbacks running after teardown. For repeated
+  verification, set `XC_OUT` to an explicitly owned temporary artifact
+  directory so new machine reports do not dirty the repository or its
+  subsequent formatting check; this does not change seeds or coverage.
+- A RevenueCat webhook audit row is a completion marker. Failed verification,
+  entitlement persistence or audit storage returns retryable failure, not a
+  successful acknowledgement that suppresses replay. FK failure alone does
+  not prove a missing account; require the ticket RPC's locked Auth-row
+  absence or an authoritative Auth admin `user_not_found` response.
+  Previously poisoned markers need approved reconciliation, not an
+  unrequested bulk deletion. Ordered verification is implemented and locally
+  tested, but its cutover must drain old writers and coordinate the migration,
+  Edge deployment and PostgREST reload before traffic resumes.
+- Request Content-Length is advisory for rejection only, never a reason to
+  allocate its claimed size before bytes arrive. The Edge body reader starts
+  at bounded 8 KiB and grows from actual received bytes while preserving the
+  existing per-route caps, cancellation and deadline.
+- Native UI acceptance uses a fresh explicitly owned simulator, a dedicated
+  Metro port and an external XCTest runner. The app is ad-hoc signed for
+  simulator secure-storage testing; unsigned Release compilation does not
+  establish Keychain behavior. The canonical Mac app build uses Xcode's
+  `CODE_SIGN_IDENTITY=-` simulator path so simulated entitlements enter the
+  binary; adding restricted entitlements with a post-build codesign command
+  is not equivalent. No distribution certificate or profile is used. Missing
+  Keychain entitlements fail the launch gate. Preserve other simulators.
+- Hermes Inspector did not await the app's Promise implementation through
+  CDP `awaitPromise`: it returned the Promise representation. Raw injected
+  async helpers also returned premature DB results in the UI probe. Compile
+  injected harness helpers with the installed Babel transforms and await
+  explicitly observed completion; do not alter production Promise globals.
+- In the iOS walkthrough's actual XCTest hierarchy, a React Native
+  ScrollView testID identifies an `Other` wrapper; the native `ScrollView`
+  is its child without that identifier. Resolve the wrapper first and then
+  its native scroll descendant. A failed `app.scrollViews[id]` lookup does
+  not establish that the UI lacks scrolling. Keep native button hit/viewport
+  assertions and verify the end of overflowing copy using real swipes.
+  Inspector clients must send the matching localhost Origin rather than
+  disabling Metro's origin checks.
+- Native test success requires an xcresult with the intended test actually
+  executed, correct device/runtime, zero skips/expected failures, and no
+  failures. An exit-zero selection that ran zero tests is not proof.
+- Onboarding still requires a name (one trimmed character minimum, existing
+  length cap); it may be a preferred name or nickname, not a verified legal
+  name. Preserve the questionnaire, pre-auth ordering, and historical optional
+  storage fields. Updated legal source remains an unpublished draft until an
+  approved deployment; do not claim the live privacy page changed.
+- The mobile CI job runs `node --test
+scripts/generate-third-party-notices.test.mjs` and the generator's `--check`.
+  These are offline source/provenance checks, not current-app clearance.
+  Final native delivery also requires `--check-app` with the actual fresh
+  Release source map and explicitly computed bundle/map hashes. Keep the
+  vendor Sentry privacy resource in its own bundle, not the app manifest.
+- Native Supabase SwiftPM linkage was removed with owner approval to preserve
+  iOS 15.1. The business API uses JS and the Edge service; Apple/Google auth,
+  Google AppAuth, Keychain, RevenueCat, and the CocoaPods aggregate remain.
+  Do not re-add the unused Swift products to silence a dependency warning.
+- A Devin renderer crash (`reason: crashed, code: 5`) was recorded on
+  2026-09-07. It is separate from native application test failures. Until the
+  environment is stable, keep active workers bounded, native builds/tests
+  serial with low job counts, and tool output compact. Retain full test
+  evidence in result bundles/reports instead of flooding the chat. Do not
+  disable system security/indexing or change IDE settings as a workaround.
+- Geometry v2 (`geometry-2`, `phase-geometry-2`, `features-geometry-2`) bounds
+  phases to observed samples and does not infer recovery from clip duration.
+  Optional missing phases omit dependent metrics; missing ground or forward
+  direction is not filled with image-bottom/rightward defaults. Keep the
+  scoring checkpoint weights and missing-observation penalties intact.
+  Fusion passes actual width/height into each phase call; the mobile phase
+  provider has no square-video fallback. Historical v1 records are not
+  rewritten or silently upgraded. The geometry/pipeline regression suites
+  cover these contracts; native media timing and scientific approval remain
+  separate requirements.
+- REGRESSION FIXED 2026-09-10 ("it doesn't score any more"): geometry-2
+  dropped `recovery_time_ms` (it was the trigger window's tail padding —
+  every v1 read showed "Recovery · 100") but sm-v1 still listed it as the
+  `recovery` checkpoint's metric, so recovery became PERMANENTLY unobserved
+  and the engine counted its weight (4–7%) as zero confidence on every read.
+  Real Apple-Vision footage sits at 0.60–0.70 against the 0.65 abstention
+  floor, so reads the v1 stack scored came back NOT SCORED (verified on all
+  six `datasets/paddle-bench/runs/*` pose sequences: every clip v1 scored,
+  v2 abstained on; with the fix the two agree wherever the phases agree).
+  `recovery` now carries `metrics: []` in `packages/scoring/src/config/v1.ts`
+  — NOT APPLICABLE (out of the confidence and score denominators, absent
+  from `checkpoints`, no `checkpoint_unobserved:recovery` factor) — pinned
+  by `packages/scoring/test/engine.test.ts` "never drags analysis
+  confidence toward abstention". Rule: a checkpoint no extractor can measure
+  must be not-applicable in the config, never a per-capture unobserved
+  penalty; when a real recovery measurement exists, add the target back.
+
+## Always-score contract (owner decision 2026-09-10 — "never show me this screen")
+
+Field failures on the same day: a live Auto Analyze swing ended on "Your saved
+analysis is held. Acceleration and contact-proxy observations are required."
+(`features.missing_phase`: the window opened on the forward swing, the
+run-up span collapsed to nothing and the WHOLE read was refused), and every
+scored read — import or camera — carried "The server refused this read 8
+times (shot.invalid_payload: Each phase needs key, startMs, representativeMs,
+endMs, confidence.)": the segmenter cut the contact proxy at peak ± half a
+FRACTIONAL sample interval and the edge `isMs` check (`Number.isInteger`,
+`shot_phases` int columns; `PhaseSpanSchema` says `.int()`) refused it.
+Once a clip with a tracked body reaches analysis, the product ALWAYS returns
+a score from what was measured and discloses the rest; refusal is reserved
+for footage with literally nothing to measure. Concretely:
+
+- `toSyncPayload` (`apps/mobile/src/data/sync.ts`) is the ONE wire shaper:
+  `timestamps` and every phase go out as whole ms (`Math.round`), phases
+  carry exactly the five server fields, confidences are clamped to [0,1].
+  Never send `analysis.phases`/`timestamps` verbatim; the offline-receipt
+  digest (`toOfflineOutput`) goes through the same function so spend and
+  replay agree. Pinned in `__tests__/sync.test.ts`. The server stays strict.
+- `phase-geometry-3` (`packages/vision-geometry/src/phaseSegmenter.ts`):
+  whole-ms boundaries; `accelerate`/`contact` guaranteed for every peak (the
+  run-up keeps ≥1 sample before the peak, or the first observed frame),
+  `prepare` keeps ≥1 sample (no visible backswing = a SHORT backswing, not
+  unobserved); the run-up starts at the paddle-set speed DIP (walk back while
+  non-increasing and ≥25% of peak), not at 25% alone; the analysis reads
+  context frames around the trigger window (`PRE_CONTEXT_MS` 2000 /
+  `POST_CONTEXT_MS` 1500 = the capture's own pre/post-roll; `ready` may
+  borrow ≤500 ms before the backswing) while the peak is chosen INSIDE the
+  window; the peak is the fastest local maximum whose run-up carried the
+  wrist ≥ `MIN_RUN_UP_TRAVEL_TORSOS` (0.1 torso) — label swaps and jitter
+  spikes are skipped, not mistaken for contact (`peakCandidates`, hint
+  neighbourhood first); "no distinct stroke" is a confidence factor
+  (`distinctness/2`, clamped 0.5–1), never a refusal. Abstentions left:
+  `phase.too_few_pose_frames` (<6 frames ANYWHERE), `phase.wrist_not_tracked`
+  (<4 speed samples anywhere), `phase.no_motion` (smoothed peak <0.05 ih/s,
+  or flat AND slow — ratio <1.8 AND peak <0.45 ih/s — or every candidate's
+  run-up travel under the torso rule), `phase.invalid_observations`. All six
+  `datasets/paddle-bench/runs/*` real clips score on their recorded windows
+  (they previously failed `no_distinct_stroke` or abstained).
+- `features-geometry-3` (`featureExtractor.ts`): a missing accelerate/contact
+  span falls back to the neighbouring measured phase (`resolveSwingSpans`,
+  confidence ×0.5) — refuses only with NO phase at all; torso and ground fall
+  back from the window to the WHOLE recording (fail only when the torso was
+  never measured anywhere); forward direction falls back to the first/last
+  visible run-up wrist. Missing joints still omit their metrics.
+- Scoring (`packages/scoring`): `MIN_ANALYSIS_CONFIDENCE = 0`; the engine
+  abstains ONLY when no applicable checkpoint was observed. Coverage is
+  disclosed by `analysisConfidence`, the `lower_confidence` presentation
+  (<0.8) and unobserved checkpoints (score null / band `unscored`). The 0.65
+  floor was calibrated on 0.95-visibility fixtures; Apple Vision measures
+  0.60–0.70 with every checkpoint observed. Do not reintroduce a floor.
+- Pre-analysis gate (`pre-analysis-gate-3`, `preAnalysisGate.ts`):
+  `BLOCKING_GATE_REASONS` = no_person_found, torso_not_measured,
+  too_few_pose_frames, insufficient_fps (+ every frame-statistic reason);
+  `ADVISORY_GATE_REASONS` = body_not_fully_visible, person_implausible_scale,
+  tracking_dropout_gap, stroke_window_tracking_gap, low_pose_confidence.
+  `decision.blocking` gates the phone path (`runCaptureAnalysis`), NOT
+  `analyzable`; advisories travel as `capture_quality:<reason>` limiting
+  factors (`captureQualityLimitingFactors` → `analyzeCapture` option
+  `captureQualityFactors`) and cap the presentation at `lower_confidence`
+  (a degraded read is never presented as normal). `strokeResultModel.ts`
+  has copy for each. The visibility matrix's `must_not_be_confident`
+  scenarios now SCORE with lower_confidence; `exit_reenter_through_contact`
+  and `spectator_gesture` were reclassified accordingly.
+- Versions: `geometry-3`, `phase-geometry-3`, `features-geometry-3`,
+  `temporal-stroke-heuristic-6` (manifest + `visionProviders.test.ts` +
+  `registry.test.ts`). `sm-v1` is unchanged (weights/targets untouched).
+- Native heuristic-6 (`TemporalStrokeDetector.swift`, 78 tests): a wrist
+  ACCELERATING past `strongTriggerWristSpeed` (2.5 bh/s; previous sample
+  ≥ `strongCrossingMargin` 0.05 under it) opens a candidate WITHOUT a quiet
+  onset — `startMs` = that wrist's latest quiet sample inside the onset
+  horizon (`lastQuietSampleMs`), else the trigger interval start; a strong
+  candidate that never settles COMPLETES at `maxStrokeMs` (path gate still
+  applies) instead of being dropped; a hand already waving at threshold
+  speed is not a crossing. Motion between 1.15 and 2.5 bh/s keeps the
+  heuristic-4/5 onset rules. STOP & ANALYZE: `strongestEvent ??
+fallbackMotionWindow` (window around the fastest hip-relative wrist
+  interval ≥ `fallbackMotionFloor` 0.7 bh/s, −1000/+800 ms clamped to the
+  file) — the spool is discarded only when nothing in it moved.
+- Held screen (`AnalyzeScreen showOriginalRecovery`): when the ORIGINAL run
+  reserved a permit and the analyzer returned its own verdict that the clip
+  cannot be measured (`unavailable` with a reason; attempt released `failed`,
+  no technical failure, no result), the screen is "Nothing was rated." +
+  the verdict + "Record another clip" (`recovery: 'retry'`) — never the
+  "Check saved analysis" loop, which only reconciles permits and cannot
+  change a measurement verdict. Reconcile passes without a verdict,
+  unclassified throws and no-permit refusals (release authority, reserve)
+  keep the held/reconcile screen exactly as before. Pinned in
+  `analyzeScreenFullFlowE2E` "a clip the analyzer cannot measure".
+- Tests that need an ABSTAINED run (`kind: 'low_confidence'`) can no longer
+  get one from the real engine: `__harness__/abstainingScorer.ts`
+  (`installAbstainingScorer`) turns `analyzeCapture`'s verdict into the exact
+  engine abstention for the fixtures' own marker (every frame confidence
+  ≤ 0.5, the old "visibility 0.5" trick); the suite must namespace-mock
+  `@pickle/analysis-pipeline` (`{ __esModule: true, ...actual }`).
+- Mobile jest needs Node ≥22 (`node:sqlite`); on this Mac use
+  `PATH=/opt/homebrew/opt/node@24/bin:$PATH npx jest`.
+
 ## First-swing capture and monitoring (2026-09-06)
 
-- The iOS trigger is `temporal-stroke-heuristic-5`. Each wrist has its own
+- The iOS trigger is `temporal-stroke-heuristic-6` (see the always-score
+  contract above for what v6 added). Each wrist has its own
   quiet onset; only qualified motion contributes to the event, and the
   selected wrist must supply its own observed settled tail. A hidden wrist
   cannot borrow the other hand's stillness. Stillness uses bounded adjacent
@@ -1050,17 +1577,19 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   The existing dev real-pose benchmark did not improve its aggregate labels;
   synthetic regression passes are not field-validation evidence.
 - `Production Monitor` runs bounded public probes every 15 minutes on main.
-  No mobile analytics/crash SDK was added: use Apple's opt-in crash reports
-  with verified dSYM symbolication and the owner procedure in
-  `docs/OBSERVABILITY.md`. Database readiness is explicitly unverified until
+  The monitor-only slice added no mobile SDK; the later Sentry foundation
+  remains disabled pending the approvals described above. Apple's opt-in
+  crash reports require verified dSYM symbolication and the owner procedure
+  in `docs/OBSERVABILITY.md`. Database readiness is explicitly unverified until
   the coordinated backend rollout is approved, deployed, and the repository
   variable `PRODUCTION_MONITOR_READINESS` is enabled. Never enable it against
   the old static health response. Workflow notification delivery and physical
   iPhone capture remain checks for the responsible owner.
 - Local full verification needs Node 22 for mobile and Bash 4+ for the
   security scanner; Bash 3.2 remains a separately tested script contract.
-  The video fixtures still use `-vsync`: select a compatible FFmpeg (for
-  example the keg-only `ffmpeg@7` on macOS), not FFmpeg 9, which removed it.
+  Timestamp fixtures updated by the readiness work use `-fps_mode passthrough`.
+  Check any remaining legacy `-vsync` callers against the installed FFmpeg;
+  FFmpeg 9 removed that option. Never weaken timestamp assertions.
   A Docker-free edge audit can use `PICKLE_AUDIT_MATRIX_PG_URL`, which must
   point to an empty, disposable loopback PostgreSQL database.
 - Pin `PICKLE_CI_SIMULATOR_UDID` (or the Mac workflow's `simulator_udid`
@@ -1068,3 +1597,50 @@ supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/`.
   disables other-device cleanup and fails instead of falling back when the
   chosen device is unavailable. The launch check reinstalls its selected app;
   never point it at a simulator whose app data should be kept.
+- iPhone clip storage (2026-09-10): `GuardedClipFile.withParent` opens the
+  OS-provided app home or process temp directory directly, then applies
+  `O_NOFOLLOW` to each child. Never walk from `/`: the simulator can permit
+  ancestor reads that the physical iPhone sandbox denies. Provider imports
+  copy into operation-owned Captures storage before guarded metadata checks;
+  file access, protected content, unsupported movies and missing video tracks
+  have distinct failures. `tools/macos-ci/test-clip-storage.py <new-output-dir>`
+  compiles the shipping storage code and tests it in a root-read-denied macOS
+  process with disposable home/temp directories. The canonical Mac
+  `swift-native` stage runs it; this is not physical-device acceptance.
+- React Native 0.87's `URL.pathname` parses HTTP(S), not `file://`: it returns
+  `/` for a capture URI. Saved-analysis validation and confirmation hashes use
+  `captureArtifactFileName` from `camera/nativeMediaIdentity.ts`, the existing
+  strict non-normalizing parser. Do not replace it with the global URL parser
+  or synthesize missing byte proof. `originalAnalysisRetry.test.ts` exercises
+  the installed React Native URL class as well as Node's implementation.
+- The shipping import review uses `TargetSelector automaticOnly`: one enabled
+  Analyze video action, no player tap or fabricated seed. Persisted selections
+  on older analyses and the native target-tracking contract remain unchanged.
+- Launch audio uses the app's `.ambient` / `.default` session before React
+  starts. The installed react-native-video 6.19.2 manager otherwise combines
+  `.ambient` with `.moviePlayback` and repeatedly fails with OSStatus -50.
+  Its public management-disable API and the splash's matching prop prevent
+  those category rewrites without muting the original intro or ignoring the
+  silent switch. Import copies finish inside the provider callback; metadata
+  work then runs asynchronously at enforced default QoS, matching AVFoundation
+  completion work rather than blocking a user-initiated picker callback.
+- Production state checked 2026-09-10 (read-only): Edge `api` v35 deployed
+  2026-09-06 08:52 UTC, migrations applied through `20260905190106`. That API
+  predates `GET /v1/analysis/release-policy` (its uncoded 404 reaches the app
+  as 502 `network.invalid_response`), so every fresh original analysis from
+  this client ends `unavailable` at `requireReleaseAuthority` BEFORE any
+  permit is reserved. The original-analysis held screen now prefixes the
+  run's own `unavailable` reason to the recovery copy (`showOriginalRecovery`
+  `reason`); only `recovery_pending` keeps the bare recovery sentence.
+  `analyzeScreenFullFlowE2E` "predates the release-policy route" pins it.
+  Even after the coordinated rollout, a verified `policy: null` is a
+  mechanics-only partial: numeric scores need an installed, approved,
+  activated release policy (database-owner RPCs in
+  `20260908020000_analysis_release_authority.sql`).
+- Settings "N free ratings left" is the server's count of SYNCED scored
+  shots. A score that only exists on the device (its `shot.sync` row refused
+  and exhausted, e.g. production's pre-`20260906130000` 24-hour permit cutoff
+  → `access.permit_expired`) never moves it. Exhausted rows are re-armed ONLY
+  by the explicit "Retry saving" on the Result score page (`retryShotSync`
+  also matches `attempts >= OUTBOX_MAX_ATTEMPTS`); the drain never retries
+  them by itself (`syncIntegrity.integration.test.ts`).

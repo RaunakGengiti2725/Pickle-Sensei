@@ -1,0 +1,209 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-P0-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "48187e3d2e6f22ac6084fa728f4c0e57a514981ebb3cd019e4a61df63499dfa7",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-P0-03-r1",
+      "phase": "review",
+      "prompt_sha256": "53866bd8e1c0521e157aff726abc63d920d5579e9a5041286f83df099119723e",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-P0-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "b5f0808734957e1154a6c2c251ae5f5bb83110bc3b57ec352e3d70031fb15ddf",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/p0-03/impl-r1",
+    "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "P0-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b0231dcf-32cc-4f02-8f93-2aa1ec57816a/report.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/709bece9-a7fe-450d-8f6b-29c30c0331d7/p0-03-attack-logs.tgz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3547207e-e5ba-447f-afdb-a96e126d40f5/attack-run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31b263da-934d-4101-83ad-03b72ef627ad/ac1-with-attacks-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/edec6de3-6928-415a-8a89-521cf31d182f/ac1-candidate-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b56ec31-4102-44f1-b3b5-418774b28aef/ac2-frozen-check-final.log"
+        ],
+        "attack_branch": "devin/pp/p0-03/attack-d8e5db3e",
+        "attack_branch_sha": "78a9a254eb39d071918d914473d85e20b6293466",
+        "attacked_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "Parser and schema agree at the bound: reject (400 shot.invalid) any instant that rounds to >= 2100-01-01 or truncate to ms before forwarding; a permanently invalid payload must not get a transient code.",
+            "observed": "VERIFIED: capturedAt=2099-12-31T23:59:59.9999999Z passes ISO_UTC_INSTANT_RE ((?:\\.\\d{1,9})?) and is forwarded unchanged; the harness route echoed the id in acceptedIds, while the real RPC rounds it to 2100-01-01 00:00:00+00, shots_captured_at_bounds fires and apply_synced_shot answers shot.write_failed:23514. Mobile treats shot.write_failed as transient (sync.ts TRANSIENT_SYNC_REJECTION_CODES, no attempt budget) so the row is retried indefinitely. INFERRED: the shipping client emits 3 fractional digits (Date#toISOString), so only a crafted/third-party client reaches this.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'ATK-2b' attack_p0_03_sync_boundaries.test.ts (disposable postgres:16 from ./xc_pg_up.sh)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_p0_03_sync_boundaries.test.ts (ATK-2b, line 436)",
+            "title": "Edge parser accepts capturedAt with 7..9 fractional digits that the schema refuses after timestamptz rounding (parser/schema contract disagreement → permanently invalid row answered with transient shot.write_failed)"
+          },
+          {
+            "expected": "Text fields forwarded to a jsonb RPC reject U+0000 (400 shot.invalid, e.g. via sanitizeUserText) so an unstorable payload is a permanent client error, not a transient write failure.",
+            "observed": "VERIFIED: shotType='dink\\u0000x' passes the parser (index.ts:1812 checks only trim/length<=64), the route returned 200 with the id in acceptedIds; converting the exact forwarded argument with ($1::text::json -> 'shot')::jsonb on PostgreSQL 16 raises 22P05 'unsupported Unicode escape sequence'. The edge maps every RPC error to shot.write_failed (transient on mobile → retried forever). ATK-8c verified no error detail leaks into the body. INFERRED: the shipping client sends fixed shot-type identifiers, so this needs a crafted request.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'ATK-3' attack_p0_03_sync_boundaries.test.ts",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_p0_03_sync_boundaries.test.ts (ATK-3, line 470)",
+            "title": "Edge parser forwards a NUL (U+0000) inside shotType; the forwarded argument is not a valid jsonb value so apply_synced_shot cannot be invoked (SQLSTATE 22P05) → permanent shot.write_failed retry loop"
+          },
+          {
+            "expected": "acceptedIds is a set of settled ids (one entry per distinct id); a batch is de-duplicated by id before it is applied.",
+            "observed": "VERIFIED: batch [{id:X,permit:p1,scored},{id:X,permit:p2,partial}] → 2 apply_synced_shot calls (p1, p2) and acceptedIds=[X, X]. VERIFIED on the disposable DB (rolled-back psql probe): the 2nd RPC is an owner replay → 'accepted', one scored row, p2 stays reserved, lifetime_scored_count()=1 — no rating double-spent, no data lost. INFERRED: mobile reads acceptedIds into a Set (sync.ts:488) so the shipping app is unaffected; cost is a redundant RPC per duplicate and a non-set response shape.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATK-7' attack_p0_03_sync_boundaries.test.ts (route harness, no DB)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_p0_03_sync_boundaries.test.ts (ATK-7, line 853)",
+            "title": "Duplicate shot id inside one sync batch is forwarded as two RPC calls and echoed twice in acceptedIds"
+          }
+        ],
+        "package_id": "P0-03",
+        "summary": "Adversarial pass on P0-03 candidate d8e5db3eb346b651e4ce04cc997178abcbed56fe (attacked_sha = git rev-parse HEAD, VERIFIED). One attack-only file supabase/functions/api/__wf__/attack_p0_03_sync_boundaries.test.ts (977 lines) pushed on devin/pp/p0-03/attack-d8e5db3e @ 78a9a254eb39d071918d914473d85e20b6293466 (VERIFIED via git ls-remote; single commit on top of the candidate, no force-push, no PR, no candidate code/tests touched — `git diff --stat d8e5db3e HEAD` = 1 file added). 11 attacks across 8 categories: boundary values (ATK-1, held), far-past/far-future clock at ms bounds (ATK-2a, held) and sub-ms far-future (ATK-2b, BREAK P2), corrupt input NUL→jsonb (ATK-3, BREAK P2), free-rating conservation for partial/replay/terminal permit (ATK-4, held), concurrent double submit with divergent result kinds (ATK-5, held), unauthorised roles anon/owner-no-sub/other-user on permits/shots/sessions allowed+denied (ATK-6, held), duplicate identity in one batch (ATK-7, BREAK P3), network failure at each server step: replay-lookup 5xx, release-authority 5xx incl. partial bypass, per-shot 5xx/429+Retry-After/malformed RPC status with no detail leak (ATK-8a/b/c, held). No P0/P1: no money loss, data loss, leak, authz bypass or crash on a supported path; free ratings conserved under partial, replay and concurrency; RLS/EXECUTE isolation held. Acceptance on the candidate: AC1 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` exit 0, `ok | 796 passed (31 steps) | 0 failed`, 0 ignored (VERIFIED, ac1-candidate-only.log). Same command with the attack file present: exit 1, `804 passed (31 steps) | 3 failed`, 0 ignored — the 3 failures are the intentional reproducers ATK-2b/ATK-3/ATK-7 (VERIFIED, ac1-with-attacks-final.log). AC2 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (VERIFIED, ac2-frozen-check-final.log). Attack file: deno fmt --check 0, deno lint 0, deno check 0, root prettier --check 0, git diff --check 0 (VERIFIED). Attack-only run: `deno test -A --no-check --config deno.json attack_p0_03_sync_boundaries.test.ts` exit 1, 8 passed | 3 failed (attack-run3.log). Environment: official postgres:16 (digest sha256:f1c3376c…f94) via ./xc_pg_up.sh on loopback 127.0.0.1:55433, container removed afterwards; production Supabase untouched. artifacts/ is gitignored in this repo, so logs + report.json are uploaded as attachments instead of committed."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/436e3381-3346-4d04-bcaa-0e277a2ca7cb/base-with-pg.clean.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 796,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-03-AC1",
+            "note": "VERIFIED. Deno summary: `ok | 796 passed (31 steps) | 0 failed (1m44s)`; ignored == 0 (no test line reports `ignored`). Disposable DB: postgres:16 container pickle-xc-pg (image digest sha256:f1c3376c…, PostgreSQL 16.15) via xc_pg_up.sh with shim_auth.sql + all migrations. Local copy of the log also at artifacts/p0-03/base-with-pg.clean.log (artifacts/ is gitignored). Same command without XC_PG_URL on BASE_SHA: exit 1, 757 passed / 1 failed (docker audit: postgres:16 pull 429) / 38 ignored — https://la-hacks-rttothemoon.devinenterprise.com/attachments/982bfd5b-0e82-49ff-a49e-41a6b43b046d/base-no-pg.clean.log",
+            "passed": 796,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f243c9c-d423-41ce-a76b-dd75280c762b/ac2-deno-check.clean.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-03-AC2",
+            "note": "VERIFIED. `Check file:///…/supabase/functions/api/index.ts` succeeded; only the known workspace-root warnings for `lock`/`nodeModulesDir` fields printed. Run from repo root at BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Checked out BASE_SHA; ran the Edge __wf__ suite without a DB to enumerate ignored tests (38), pulled the official postgres:16 image via Docker Hub mirrors because registry-1.docker.io returned 429, booted the repo's own disposable helper (supabase/functions/api/__wf__/xc_pg_up.sh), ran the exact acceptance commands, root format check and git diff --check, pushed the required branch name at BASE_SHA.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/436e3381-3346-4d04-bcaa-0e277a2ca7cb/base-with-pg.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/982bfd5b-0e82-49ff-a49e-41a6b43b046d/base-no-pg.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f243c9c-d423-41ce-a76b-dd75280c762b/ac2-deno-check.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/11723b01-2d06-47f9-9324-c491aa591f56/format-check.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c750eb89-d779-499f-9042-b6f12e4bb07a/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06d091c5-9ff2-4d35-a5e0-66d7837c9107/postgres16-image.txt"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && deno task test (WITHOUT XC_PG_URL, BASE_SHA): exit 1 — db_migrations_rls_indexes.audit.test.ts:209 'db-migrations-rls-indexes audit matrix' FAILED because `docker run … postgres:16` could not resolve the image (Docker Hub HTTP 429 Too Many Requests); environmental, passes once the postgres:16 image is present locally (see AC1 run: 796 passed / 0 failed)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/p0-03/impl-r1",
+        "files_changed": [],
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "out_of_scope_files": [],
+        "package_id": "P0-03",
+        "regression_tests_added": [],
+        "residual_risks": [
+          "The postgres:16 image had to be obtained from Docker Hub mirrors (public.ecr.aws / mirror.gcr.io, identical digest) and tagged locally because registry-1.docker.io rate-limited this box; a CI/verify host hitting the same 429 will see the same single audit-test failure until the image is cached or pulled via a mirror.",
+          "No code changed: the 38 live-DB tests remain gated on XC_PG_URL/PICKLE_AUDIT_PG_URL by design and are ignored whenever no disposable database URL is exported (docs/devin/TEST_MATRIX.md documents this); AC1 evidence is from this session's run, not a repo-committed artifact (artifacts/ is gitignored)."
+        ],
+        "summary": "Objective already satisfied on BASE_SHA — no code change made (procedure step 1: do not invent work). VERIFIED: with XC_PG_URL pointing at a disposable postgres:16 container (xc_pg_up.sh: postgres:16 + supabase/tests/shim_auth.sql + all 34 migrations in order, loopback 127.0.0.1:55433) the exact AC1 command `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` exits 0 with `ok | 796 passed (31 steps) | 0 failed`, 0 ignored. All 6 route-shot tests in supabase/functions/api/__wf__/be-edge-routes-shots-rank.test.ts (gate at lines 31-32: `const PG_URL = Deno.env.get(\"XC_PG_URL\") ?? Deno.env.get(\"PICKLE_AUDIT_PG_URL\") ?? \"\"; const ignore = PG_URL === \"\";`) executed and passed (log lines 2390-2396), plus the other 32 live-DB tests (permit lifecycle R-1..R-5, ADV-1..ADV-17, xc PG1..PG7 + matrix.json) that are ignored without a URL. Without XC_PG_URL the same command on BASE_SHA reports `757 passed | 1 failed | 38 ignored` (artifacts/p0-03/base-no-pg.clean.log); the 1 failure there was db_migrations_rls_indexes.audit.test.ts:209 `docker run … postgres:16` failing because Docker Hub returned HTTP 429 for `postgres:16` in this environment — an environmental image-availability failure, not a code defect. Resolved without touching code by pulling the identical official image (digest sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94, PostgreSQL 16.15 Debian) from the public.ecr.aws/docker/library and mirror.gcr.io/library mirrors and tagging it locally as postgres:16 (artifacts/p0-03/postgres16-image.txt). AC2 frozen deno@2.5.6 check exit 0. Root `pnpm format:check` exit 0 and `git diff --check` exit 0. Branch devin/pp/p0-03/impl-r1 pushed at BASE_SHA (no commits; head_sha == base_sha). Disposable container removed afterwards; production Supabase untouched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/05187d86-739f-4b06-a8ac-838f812fad70/ac1-with-pg.clean.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 796,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-03-AC1",
+            "note": "VERIFIED (my own run). Deno summary `ok | 796 passed (31 steps) | 0 failed (1m44s)`; `grep -cE '\\.\\.\\. ignored'` == 0. Disposable DB: postgres:16 (digest sha256:f1c3376c…) via supabase/functions/api/__wf__/xc_pg_up.sh (shim_auth.sql + all migrations through 20260908100000, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/67f7129c-87f3-4d08-b486-8844eb624896/xc_pg_up.log), container removed afterwards. All tests in be-edge-routes-shots-rank.test.ts (`running 12 tests`, gate `ignore = PG_URL === \"\"` at line 32, 8 `ignore` registrations) ran `... ok`. Control run WITHOUT XC_PG_URL on the same SHA: exit 0, `758 passed | 0 failed | 38 ignored` (https://la-hacks-rttothemoon.devinenterprise.com/attachments/fe44a835-a239-41d9-9634-056d5fa9f873/base-no-pg.clean.log) — 758 + 38 == 796, so every live-DB test executed with the URL.",
+            "passed": 796,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34ebbffb-2ac1-4345-a3f8-d58594c6d2a1/ac2-deno-check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "P0-03-AC2",
+            "note": "VERIFIED (my own run, from repo root at d8e5db3). `Check file:///…/supabase/functions/api/index.ts` completed, exit 0; only the known `lock`/`nodeModulesDir` workspace-root warnings printed; no type errors.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/05187d86-739f-4b06-a8ac-838f812fad70/ac1-with-pg.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/34ebbffb-2ac1-4345-a3f8-d58594c6d2a1/ac2-deno-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fe44a835-a239-41d9-9634-056d5fa9f873/base-no-pg.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/67f7129c-87f3-4d08-b486-8844eb624896/xc_pg_up.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Candidate head == BASE_SHA (branch devin/pp/p0-03/impl-r1 carries no commits). The package objective was already satisfied on the continuation head; the deliverable is evidence only, and that evidence lives in gitignored artifacts/ and uploaded attachments, not in the repo.",
+          "The implementer's single baseline failure (db_migrations_rls_indexes.audit.test.ts `docker run … postgres:16` → Docker Hub HTTP 429) did not reproduce here: `docker pull postgres:16` succeeded directly (digest sha256:f1c3376c26f2609ab9f29f71f824103fe2fcd8ee0346485cb6122a4f93df6f94) and the no-URL run was `758 passed | 0 failed | 38 ignored`, exit 0. VERIFIED environmental, not a code defect.",
+          "AC1 was executed with the locally installed Deno 2.9.6 (the `deno task test` acceptance command is not version-pinned; deno.json in __wf__ sets lock:false). AC2 used the pinned deno@2.5.6 via npx as specified."
+        ],
+        "package_id": "P0-03",
+        "regression_fails_on_base": false,
+        "reviewed_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope: `git diff --stat d8e5db3..d8e5db3` and `git diff --stat d8e5db3 origin/devin/pp/p0-03/impl-r1` are both empty (0 lines) — the candidate is BASE_SHA itself, no files changed, scope_violation=false, no invariant surface touched (no tests weakened, no migrations, no grants/RLS, no copy, no comments). Objective re-verified as shipped behaviour: with a disposable postgres:16 the exact AC1 command exits 0 with 796 passed / 0 failed / 0 ignored (all route-shot tests in be-edge-routes-shots-rank.test.ts executed), and the control run without XC_PG_URL shows exactly the 38 gated live-DB tests ignored (758 passed / 0 failed / 38 ignored, exit 0) — consistent with the implementer's numbers except that their one environmental failure (postgres:16 pull rate-limited) did not reproduce here. AC2 frozen deno@2.5.6 check of index.ts exits 0. Regression proof: not applicable — the candidate adds no test files (regression_tests_added=[] confirmed by empty diff), so regression_fails_on_base is reported false as 'nothing to prove', not as a failure; the package has no kind=regress criterion. No blocking issues.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-4"
+}

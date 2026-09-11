@@ -25,7 +25,7 @@
 //
 // Run: cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json adjudicate_webhook.test.ts
 
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import {
   activeSubscriber,
   OTHER_USER_ID,
@@ -36,8 +36,10 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
+  VERDICT_URL,
   EVENTS_URL,
+  EVENT_CLAIM_URL,
+  EVENT_COMPLETE_URL,
   expiredSubscriber,
   simulate,
   sleep,
@@ -53,7 +55,7 @@ const genericBody = async (res: Response): Promise<void> => {
 // ── A. entitlement persistence failures ─────────────────────────────────────
 
 Deno.test(
-  "ADJ-A1: EXPIRATION whose billing_entitlements write fails (503) is a retryable 503 with NO audit row; the redelivery re-verifies and lands premium:false",
+  "ADJ-A1: EXPIRATION whose billing_entitlements write fails (503) is a retryable 503 with NO completion marker; the redelivery re-verifies and lands premium:false",
   async () => {
     const sim = await simulate();
     try {
@@ -65,7 +67,7 @@ Deno.test(
       });
       sim.h.subscriber = expiredSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -84,7 +86,8 @@ Deno.test(
         sim.errors.some((e) => /webhook verdict persist/i.test(e)),
         `persist failure is logged: ${JSON.stringify(sim.errors)}`,
       );
-      assertEquals(sim.auditRows.has("adj-exp-1"), false, "no audit row for a failed delivery");
+      assertEquals(sim.auditRows.get("adj-exp-1")?.processed_at, null, "no completion marker");
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null, "lease released");
       assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, true, "DB untouched so far");
 
       // RevenueCat retries on 5xx: the redelivery is fully re-processed.
@@ -111,7 +114,7 @@ Deno.test(
       sim.h.subscriber = expiredSubscriber();
       sim.h.rpcs["access_state"] = ACCESS_ROW;
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -127,7 +130,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ADJ-A3: TRANSFER whose destination has no profiles row (FK 23503) keeps the documented 200 {verified:false} ack, the source revoke, and the audit row",
+  "ADJ-A3: TRANSFER whose destination has FK 23503 plus authoritative Auth absence keeps the 200 {verified:false} ack, the source revoke, and the audit row",
   async () => {
     const sim = await simulate();
     try {
@@ -149,11 +152,18 @@ Deno.test(
       // Destination has never bootstrapped → FK violation on ITS upsert only.
       sim.faults.push({
         match: (m, u) =>
-          m === "POST" && u.startsWith(ENTITLEMENTS_URL) && sim.entitlementUpserts() === 2,
+          m === "POST" && u.startsWith(VERDICT_URL) && sim.entitlementUpserts() === 2,
         status: 409,
         body: { code: "23503", message: "violates foreign key constraint" },
         times: 1,
       });
+      sim.h.respond = (call) => {
+        if (call.url.endsWith("/auth/v1/admin/users/" + OTHER_USER_ID)) {
+          sim.h.billingMissingUsers = [OTHER_USER_ID];
+          return Response.json({ code: "user_not_found" }, { status: 404 });
+        }
+        return null;
+      };
       const event = {
         id: "adj-transfer-1",
         type: "TRANSFER",
@@ -169,8 +179,8 @@ Deno.test(
       assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, false, "source revoked");
       assertEquals(sim.entitlementRows.has(OTHER_USER_ID), false, "destination never written");
       assert(
-        sim.errors.some((e) => /webhook verdict persist/i.test(e)),
-        "23503 is logged",
+        sim.h.callsTo("/auth/v1/admin/users/").length === 1,
+        "authoritative Auth absence is checked",
       );
       const audit = sim.auditRows.get("adj-transfer-1");
       assert(audit && typeof audit.processed_at === "string", "audit row written and processed");
@@ -195,7 +205,7 @@ Deno.test(
     try {
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(EVENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(EVENT_CLAIM_URL),
         status: 500,
         body: { code: "XX000", message: "internal" },
         times: 3,
@@ -263,7 +273,7 @@ Deno.test(
     try {
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "POST" && u.startsWith(EVENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(EVENT_CLAIM_URL),
         status: 500,
         body: { code: "XX000", message: "internal" },
         times: 1,
@@ -295,13 +305,13 @@ Deno.test(
 );
 
 Deno.test(
-  "ADJ-B2b: completion marker (PATCH) failure after a persisted verdict → 503; the row stays reserved so the in-lease redelivery is retryable, not re-verified",
+  "ADJ-B2b: completion marker RPC failure after a persisted verdict → 503; the row stays reserved so the in-lease redelivery is retryable, not re-verified",
   async () => {
     const sim = await simulate();
     try {
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "PATCH" && u.startsWith(EVENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(EVENT_COMPLETE_URL),
         status: 500,
         body: { code: "XX000", message: "internal" },
         times: 1,
@@ -320,7 +330,7 @@ Deno.test(
       const row = sim.auditRows.get("adj-audit-2");
       assert(row, "reservation kept (the verdict IS persisted)");
       assertEquals(row.processed_at, null);
-      assert(sim.errors.some((e) => /webhook event completion/i.test(e)));
+      assert(sim.errors.some((e) => /webhook audit/i.test(e)));
 
       const retry = await sim.h.handler(webhookRequest(event));
       assertEquals(
@@ -418,18 +428,18 @@ Deno.test(
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, false, "the newer (expired) verdict stands");
       const fastWrite = sim.h
-        .callsTo(ENTITLEMENTS_URL)
-        .map((c) => c.body as Record<string, unknown>)
+        .callsTo(VERDICT_URL)
+        .map((c) => (c.body as { p_verdict: Record<string, unknown> }).p_verdict)
         .find((body) => body.premium === false);
       assert(fastWrite, "fast delivery wrote premium:false");
-      assertEquals(row?.verified_at, fastWrite.verified_at, "verified_at is the fast delivery's");
+      assertEquals(row?.verified_at, fastWrite.verifiedAt, "verified_at is the fast delivery's");
       const slowWrite = sim.h
-        .callsTo(ENTITLEMENTS_URL)
-        .map((c) => c.body as Record<string, unknown>)
+        .callsTo(VERDICT_URL)
+        .map((c) => (c.body as { p_verdict: Record<string, unknown> }).p_verdict)
         .find((body) => body.premium === true);
       assert(slowWrite, "slow delivery attempted premium:true");
       assert(
-        Date.parse(String(slowWrite.verified_at)) < Date.parse(String(fastWrite.verified_at)),
+        Date.parse(String(slowWrite.verifiedAt)) < Date.parse(String(fastWrite.verifiedAt)),
         "verified_at is taken BEFORE the RevenueCat round trip, so the slow verdict is older",
       );
     } finally {
@@ -450,7 +460,10 @@ Deno.test(
         provider: "revenuecat",
         event_type: "RENEWAL",
         app_user_id: TEST_USER_ID,
-        payload: {},
+        payload: {
+          api_version: "1.0",
+          event: { id: "adj-orphan-1", type: "RENEWAL", app_user_id: TEST_USER_ID },
+        },
         received_at: stale,
         claimed_at: stale,
         processed_at: null,
@@ -476,7 +489,10 @@ Deno.test(
         provider: "revenuecat",
         event_type: "RENEWAL",
         app_user_id: TEST_USER_ID,
-        payload: {},
+        payload: {
+          api_version: "1.0",
+          event: { id: "adj-orphan-2", type: "RENEWAL", app_user_id: TEST_USER_ID },
+        },
         received_at: live,
         claimed_at: live,
         processed_at: null,
@@ -521,7 +537,8 @@ Deno.test(
       assertEquals(res.status, 503);
       await res.text();
       assertEquals(sim.entitlementUpserts(), 0);
-      assertEquals(sim.auditRows.has("adj-rc401"), false, "reservation released");
+      assertEquals(sim.auditRows.get("adj-rc401")?.processed_at, null, "no completion marker");
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null, "lease released");
       const upstream = sim.errors.filter((e) => /revenuecat|401|api key/i.test(e));
       assertEquals(upstream, [], "observed: nothing is logged for the RevenueCat 4xx");
     } finally {
@@ -582,9 +599,10 @@ Deno.test(
       assertEquals(await replay.json(), { received: true, duplicate: true });
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
-      assertStringIncludes(
-        String(sim.h.callsTo(EVENTS_URL).find((c) => c.method === "POST")?.headers["prefer"]),
-        "resolution=ignore-duplicates",
+      assertEquals(sim.h.callsTo(EVENT_CLAIM_URL).length, 1);
+      assertEquals(
+        sim.h.callsTo(EVENTS_URL).filter((call) => call.method !== "GET"),
+        [],
       );
     } finally {
       sim.restore();

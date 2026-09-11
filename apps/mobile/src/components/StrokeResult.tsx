@@ -45,11 +45,17 @@ import {
  * record does not carry.
  *
  * Hierarchy (brief §1): (1) technique title + honest source subtitle,
- * (2) replay card with scrubber / defensible contact marker / phase strip
- * (from the record, else the analysis' measured phases), then the caller's
+ * (2) replay — the caller's `replaySlot` (the form-review player: real
+ * frames, exoskeleton, checkpoint stops) when it has one, else the replay
+ * card with scrubber / defensible contact marker / phase strip (from the
+ * record, else the analysis' measured phases), then the caller's
  * `reviewSlot` (form-review entry), (3) ONE insight, then the caller's
  * `fixSlot` (what to fix / drills), (4) measured rows with provenance
  * (collapse >4), (5) `children` (validated training), (6) CTA row.
+ *
+ * The surface is dark (2026-09-10): every host — the Result guide's
+ * not-scored page and the Full breakdown route — sits on the same dark
+ * green the guide's pages use, so a result never switches to a light sheet.
  */
 
 /** Replay clip reference — the real captured video file, when it exists. */
@@ -74,6 +80,17 @@ export interface StrokeResultProps {
   onDone: () => void;
   /** Optional score stage rendered first, directly under the header block. */
   scoreSlot?: React.ReactNode;
+  /**
+   * Optional replay that REPLACES the built-in replay card (the form-review
+   * player, with the exoskeleton and checkpoint stops). Absent → the card.
+   */
+  replaySlot?: React.ReactNode;
+  /**
+   * Recorded frame size of the clip, when known. The replay card sizes its
+   * stage from it so a portrait phone clip shows the whole body ('contain')
+   * instead of a 16:9 crop of the torso.
+   */
+  replayVideoSize?: { width: number; height: number } | null;
   /** Optional entry card rendered directly under the replay (form review). */
   reviewSlot?: React.ReactNode;
   /** Optional coaching content rendered right after the insight card
@@ -120,12 +137,52 @@ const SCRUB_ACTIONS = [
 
 // ─── §1.2 Replay card ───────────────────────────────────────────────────────
 
+/** Stage height for the landscape/unknown-size case (the historical card). */
+const REPLAY_STAGE_LANDSCAPE = 168;
+/** Tallest the stage grows for a portrait clip, so the card stays a card. */
+const REPLAY_STAGE_MAX = 420;
+
+/**
+ * Stage height for the replay card: a portrait clip gets the height its
+ * recorded aspect needs at the card's width (capped), so the whole body is
+ * in frame; landscape or unknown sizes keep the historical 168pt band.
+ */
+export function replayStageHeight(
+  videoSize: { width: number; height: number } | null | undefined,
+  stageWidth: number,
+): number {
+  if (
+    !videoSize ||
+    !Number.isFinite(videoSize.width) ||
+    !Number.isFinite(videoSize.height) ||
+    videoSize.width <= 0 ||
+    videoSize.height <= 0 ||
+    videoSize.height <= videoSize.width ||
+    !Number.isFinite(stageWidth) ||
+    stageWidth <= 0
+  ) {
+    return REPLAY_STAGE_LANDSCAPE;
+  }
+  return Math.round(
+    Math.min(
+      REPLAY_STAGE_MAX,
+      Math.max(
+        REPLAY_STAGE_LANDSCAPE,
+        (stageWidth * videoSize.height) / videoSize.width,
+      ),
+    ),
+  );
+}
+
 function ReplayCard(props: {
   analysis: ShotAnalysis | null;
   record: StrokeResultEvidenceRecord | null;
   clip: StrokeResultClip | null;
+  videoSize?: { width: number; height: number } | null;
 }) {
   const reduced = useReducedMotion();
+  const [stageWidth, setStageWidth] = useState(0);
+  const stageHeight = replayStageHeight(props.videoSize, stageWidth);
   const marker = contactMarkerPresentation(props.record?.contact);
   const analysis = props.analysis ?? props.record?.result ?? null;
   // Record-sourced phases first; else the analysis' own measured phases, so
@@ -266,11 +323,16 @@ function ReplayCard(props: {
         </Text>
       </View>
 
-      <View style={styles.posterShell}>
+      <View
+        style={[styles.posterShell, { height: stageHeight }]}
+        onLayout={event => setStageWidth(event.nativeEvent.layout.width)}
+        testID="stroke-result-replay-stage"
+      >
         {props.clip ? (
-          // Real frames from the real captured file. ClipPlayer degrades to
-          // the recorded poster still on builds without the native player —
-          // never a fabricated frame.
+          // Real frames from the real captured file, letterboxed so the whole
+          // recorded frame — the whole body — is visible. ClipPlayer degrades
+          // to the recorded poster still on builds without the native player
+          // — never a fabricated frame.
           <ClipPlayer
             uri={props.clip.uri}
             {...(props.clip.posterUri !== undefined
@@ -278,6 +340,7 @@ function ReplayCard(props: {
               : {})}
             playing={playing}
             seekMs={seekMs}
+            resizeMode="contain"
             onProgress={positionMs => {
               setPlayheadMs(base.startMs + positionMs);
             }}
@@ -490,7 +553,7 @@ export function StrokeResult(props: StrokeResultProps) {
         style={[
           type.micro,
           {
-            color: header.tone === 'attention' ? color.ink : color.inkSoft,
+            color: header.tone === 'attention' ? color.flame : color.volt,
           },
         ]}
       >
@@ -532,7 +595,7 @@ export function StrokeResult(props: StrokeResultProps) {
               <Text
                 style={[
                   type.caption,
-                  { color: chip.isCurrent ? color.onVolt : color.ink },
+                  { color: chip.isCurrent ? color.onVolt : color.onDark },
                 ]}
               >
                 {chip.label}
@@ -542,8 +605,20 @@ export function StrokeResult(props: StrokeResultProps) {
         </View>
       ) : null}
 
-      {/* §1.2 — REPLAY card. */}
-      <ReplayCard analysis={analysis} record={props.record} clip={props.clip} />
+      {/* §1.2 — REPLAY: the caller's player when it has one (exoskeleton,
+          checkpoint stops), else the card. */}
+      {props.replaySlot !== undefined ? (
+        <View style={styles.replaySlot} testID="stroke-result-replay-slot">
+          {props.replaySlot}
+        </View>
+      ) : (
+        <ReplayCard
+          analysis={analysis}
+          record={props.record}
+          clip={props.clip}
+          videoSize={props.replayVideoSize ?? null}
+        />
+      )}
 
       {/* Caller-owned entry into the guided form review (paused replay with
           the measured stops), directly under the replay it extends. */}
@@ -552,10 +627,10 @@ export function StrokeResult(props: StrokeResultProps) {
       {/* §1.3 — ONE INSIGHT: the strongest defensible evidence. For a scored
           analysis that is the engine's own worst measured checkpoint plus
           the cue that matches its measured direction. */}
-      <Card tone="soft" style={styles.insightCard} testID="stroke-insight">
+      <Card tone="dark" style={styles.insightCard} testID="stroke-insight">
         <View style={styles.insightHeader}>
-          <Icon name="stroke" size={17} color={color.court} />
-          <Text style={[type.micro, { color: color.court }]}>
+          <Icon name="stroke" size={17} color={color.volt} />
+          <Text style={[type.micro, { color: color.volt }]}>
             {insightMeasured ? 'WHAT THE CAMERA MEASURED' : 'MEASURED INSIGHT'}
           </Text>
         </View>
@@ -570,11 +645,11 @@ export function StrokeResult(props: StrokeResultProps) {
       {/* §4 — abstention is a designed state: what held / what we couldn't
           establish, in the same layout, with the retry CTA below. */}
       {ledger ? (
-        <Card style={styles.ledgerCard} testID="abstention-ledger">
-          <Text style={[type.micro, { color: color.inkSoft }]}>WHAT HELD</Text>
+        <Card tone="dark" style={styles.ledgerCard} testID="abstention-ledger">
+          <Text style={[type.micro, { color: color.mint }]}>WHAT HELD</Text>
           {ledger.held.map(item => (
             <View key={item} style={styles.ledgerRow}>
-              <Icon name="check" size={15} color={color.good} />
+              <Icon name="check" size={15} color={color.mint} />
               <Text style={[type.caption, styles.ledgerCopy]}>{item}</Text>
             </View>
           ))}
@@ -583,7 +658,7 @@ export function StrokeResult(props: StrokeResultProps) {
           </Text>
           {ledger.notEstablished.map(item => (
             <View key={item} style={styles.ledgerRow}>
-              <Icon name="close" size={15} color={color.inkSoft} />
+              <Icon name="close" size={15} color={color.flame} />
               <Text style={[type.caption, styles.ledgerCopy]}>{item}</Text>
             </View>
           ))}
@@ -605,7 +680,7 @@ export function StrokeResult(props: StrokeResultProps) {
               accessibilityLabel="Measurement scope"
               testID="abstention-ledger-scope"
             >
-              <Icon name="shield" size={15} color={color.inkSoft} />
+              <Icon name="shield" size={15} color={color.onDarkSubtle} />
               <Text style={[type.caption, styles.ledgerScopeCopy]}>
                 {ledger.scope}
               </Text>
@@ -623,19 +698,19 @@ export function StrokeResult(props: StrokeResultProps) {
 
       {/* §1.4 — measured rows, provenance-labeled, collapsed beyond 4. */}
       {rows.length > 0 ? (
-        <Card style={styles.rowsCard} testID="measured-rows">
+        <Card tone="dark" style={styles.rowsCard} testID="measured-rows">
           {visible.map(row => (
             <View key={row.key} style={styles.measuredRow}>
               <View style={styles.measuredCopy}>
-                <Text style={[type.bodyBold, { color: color.ink }]}>
+                <Text style={[type.bodyBold, { color: color.onDark }]}>
                   {row.label}
                 </Text>
-                <Text style={[type.caption, { color: color.inkSoft }]}>
+                <Text style={[type.caption, { color: color.onDarkMuted }]}>
                   {row.value}
                 </Text>
               </View>
               <View style={styles.provenancePill}>
-                <Text style={[type.micro, { color: color.inkSoft }]}>
+                <Text style={[type.micro, { color: color.onDarkMuted }]}>
                   {row.provenance}
                 </Text>
               </View>
@@ -649,7 +724,7 @@ export function StrokeResult(props: StrokeResultProps) {
               onPress={() => setRowsExpanded(current => !current)}
               style={styles.seeMore}
             >
-              <Text style={[type.caption, { color: color.court }]}>
+              <Text style={[type.caption, { color: color.volt }]}>
                 {rowsExpanded ? 'Show fewer' : `See ${hiddenCount} more`}
               </Text>
             </PressableScale>
@@ -748,8 +823,8 @@ export function StrokeResultAnalyzing(props: {
 }
 
 const styles = StyleSheet.create({
-  title: { color: color.ink, marginTop: space.sm },
-  subtitle: { color: color.inkSoft, marginTop: space.xs, maxWidth: 370 },
+  title: { color: color.onDark, marginTop: space.sm },
+  subtitle: { color: color.onDarkMuted, marginTop: space.xs, maxWidth: 370 },
   attemptRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -762,10 +837,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: color.line,
-    backgroundColor: color.surfaceElevated,
+    borderColor: color.lineDark,
+    backgroundColor: color.inkElevated,
   },
   attemptChipCurrent: { borderColor: color.volt, backgroundColor: color.volt },
+  replaySlot: { marginTop: space.lg },
   replayCard: { marginTop: space.lg, padding: space.md },
   replayHeader: {
     flexDirection: 'row',
@@ -775,7 +851,6 @@ const styles = StyleSheet.create({
   replayClock: { color: color.onDark, fontVariant: ['tabular-nums'] },
   replayEmpty: { color: color.onDarkMuted, marginTop: space.sm },
   posterShell: {
-    height: 168,
     marginTop: space.sm,
     borderRadius: radius.md,
     overflow: 'hidden',
@@ -871,7 +946,7 @@ const styles = StyleSheet.create({
   },
   insightCard: { marginTop: space.md, padding: space.lg },
   insightHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  insightSentence: { color: color.ink, marginTop: space.sm },
+  insightSentence: { color: color.onDark, marginTop: space.sm },
   ledgerCard: { marginTop: space.md, padding: space.lg },
   ledgerRow: {
     flexDirection: 'row',
@@ -879,14 +954,14 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: space.sm,
   },
-  ledgerCopy: { color: color.ink, flex: 1 },
-  ledgerGapLabel: { color: color.inkSoft, marginTop: space.md },
+  ledgerCopy: { color: color.onDark, flex: 1 },
+  ledgerGapLabel: { color: color.flame, marginTop: space.md },
   ledgerGuidance: {
-    color: color.inkSoft,
+    color: color.onDarkMuted,
     marginTop: space.md,
     paddingTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
+    borderTopColor: color.lineDark,
   },
   ledgerScope: {
     flexDirection: 'row',
@@ -895,9 +970,9 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     paddingTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
+    borderTopColor: color.lineDark,
   },
-  ledgerScopeCopy: { color: color.inkSoft, flex: 1 },
+  ledgerScopeCopy: { color: color.onDarkSubtle, flex: 1 },
   rowsCard: { marginTop: space.md, paddingHorizontal: space.lg },
   measuredRow: {
     minHeight: 56,
@@ -906,14 +981,14 @@ const styles = StyleSheet.create({
     gap: space.md,
     paddingVertical: space.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
+    borderBottomColor: color.lineDark,
   },
   measuredCopy: { flex: 1, gap: 2 },
   provenancePill: {
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: radius.pill,
-    backgroundColor: color.surfaceAlt,
+    backgroundColor: color.onDarkTint,
   },
   seeMore: { minHeight: 44, justifyContent: 'center' },
   ctaRow: { gap: 10, marginTop: space.xl },

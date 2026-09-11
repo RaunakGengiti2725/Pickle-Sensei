@@ -21,6 +21,8 @@ import {
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import type { RootStackParams } from '../navigation/params';
+import { DuprReadout } from '../progress/DuprReadout';
+import { duprAccessibilityLabel, formatDupr } from '../progress/duprEstimate';
 import {
   dayFromOrdinal,
   dayHeatLevel,
@@ -143,6 +145,18 @@ function localTodayKey(now: Date): string {
     // Fall through to the UTC key below.
   }
   return now.toISOString().slice(0, 10);
+}
+
+/** A day key is already a civil date in the snapshot's zone, not an instant
+ * to convert again. Format its UTC surrogate in UTC so +13/+14 (and DST)
+ * cannot move the selected label into tomorrow. */
+function calendarDayLabel(day: string): string {
+  return formatDayKey(day, {
+    calendar: 'gregory',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 }
 
 function monthOf(day: string): { year: number; month: number } {
@@ -323,6 +337,7 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
 
 export function StreakCalendarScreen() {
   const { fontScale, width } = useWindowDimensions();
+  const fullWidthStreakLabel = fontScale >= 2;
   const gridWidth =
     width - 2 * space.lg - 2 * space.sm - 2 * StyleSheet.hairlineWidth;
   const expandedCalendar = fontScale >= 1.8 || gridWidth / 7 < 44;
@@ -398,6 +413,19 @@ export function StreakCalendarScreen() {
           ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
           : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
 
+  // At accessibility sizes, let whole words wrap across the card rather than
+  // inside the narrow column beside the flame. Standard-size layout is unchanged.
+  const streakLabel = (
+    <Text
+      style={[
+        type.h3,
+        styles.heroStreakLabel,
+        fullWidthStreakLabel && styles.heroStreakLabelExpanded,
+      ]}
+    >
+      {plural(streak, 'DAY', 'DAY')} STREAK
+    </Text>
+  );
   const monthTitle = (
     <Text
       style={[
@@ -416,6 +444,7 @@ export function StreakCalendarScreen() {
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
           title="Consistency"
+          wrapTitle
           eyebrow="Training streak"
           onBack={() => navigation.goBack()}
         />
@@ -452,6 +481,7 @@ export function StreakCalendarScreen() {
       <StatusBar barStyle="dark-content" />
       <ScreenHeader
         title="Consistency"
+        wrapTitle
         eyebrow="Training streak"
         onBack={() => navigation.goBack()}
       />
@@ -467,11 +497,10 @@ export function StreakCalendarScreen() {
             </View>
             <View style={styles.heroCount}>
               <Text style={styles.heroStreak}>{streak}</Text>
-              <Text style={[type.h3, styles.heroStreakLabel]}>
-                {plural(streak, 'DAY', 'DAY')} STREAK
-              </Text>
+              {!fullWidthStreakLabel && streakLabel}
             </View>
           </View>
+          {fullWidthStreakLabel && streakLabel}
           <Text style={[type.caption, styles.heroStatus]}>{statusLine}</Text>
 
           <View style={styles.momentumBlock}>
@@ -527,7 +556,7 @@ export function StreakCalendarScreen() {
                   : {})}
                 rarity={next.rarity}
                 earned={false}
-                size={40}
+                size={48}
               />
               <Text style={[type.caption, styles.nextRewardText]}>
                 Next reward: {next.title} — {next.daysAway}{' '}
@@ -639,11 +668,7 @@ export function StreakCalendarScreen() {
             testID="streak-day-detail"
           >
             <Text style={[type.h3, { color: color.ink }]}>
-              {formatDayKey(selectedDay, {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {calendarDayLabel(selectedDay)}
             </Text>
             {selectedLog ? (
               selectedLog.shielded ? (
@@ -668,8 +693,13 @@ export function StreakCalendarScreen() {
                       )}
                     </Text>
                     {selectedLog.scoreAvg !== null ? (
-                      <Text style={[type.micro, styles.dayChip]}>
-                        AVG {selectedLog.scoreAvg.toFixed(1)}
+                      <Text
+                        accessibilityLabel={`Average ${duprAccessibilityLabel(
+                          selectedLog.scoreAvg,
+                        )}`}
+                        style={[type.micro, styles.dayChip]}
+                      >
+                        AVG {formatDupr(selectedLog.scoreAvg)} DUPR
                       </Text>
                     ) : null}
                     <Text style={[type.micro, styles.dayChipVolt]}>
@@ -710,11 +740,14 @@ export function StreakCalendarScreen() {
                               : ''}
                         </Text>
                       </View>
-                      <Text style={styles.activityScore}>
-                        {activity.score === null
-                          ? '—'
-                          : activity.score.toFixed(1)}
-                      </Text>
+                      {activity.score === null ? (
+                        <Text style={styles.activityScore}>—</Text>
+                      ) : (
+                        <DuprReadout
+                          score={activity.score}
+                          valueStyle={styles.activityScore}
+                        />
+                      )}
                     </View>
                   ))}
                 </>
@@ -736,7 +769,8 @@ export function StreakCalendarScreen() {
           A day counts when you complete a stroke analysis, a session stroke, or
           a prescribed drill — opening the app never counts. Streaks earn
           identity and Momentum XP only; your skill rating moves on scored
-          evidence alone.
+          evidence alone. This calendar and Momentum XP use training saved on
+          this device.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -773,6 +807,11 @@ const styles = StyleSheet.create({
     color: color.onDark,
   },
   heroStreakLabel: { color: color.onDarkMuted, letterSpacing: 2 },
+  heroStreakLabelExpanded: {
+    alignSelf: 'stretch',
+    marginTop: space.sm,
+    letterSpacing: type.h3.letterSpacing,
+  },
   heroStatus: { color: color.onDarkSubtle, marginTop: space.md },
   momentumBlock: { marginTop: space.md },
   momentumHeader: {

@@ -3,6 +3,7 @@ import { Dimensions, StyleSheet, Text } from 'react-native';
 import { FlameIcon } from '../src/consistency/FlameIcon';
 import { color } from '../src/design/tokens';
 import TestRenderer, { act } from 'react-test-renderer';
+import { type } from '../src/design/tokens';
 
 jest.mock('react-native-linear-gradient', () => {
   const ReactModule = require('react');
@@ -59,6 +60,190 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     )
     .join(' ');
 }
+
+describe('PlayerRankBanner large-text layout contracts (not native glyph proof)', () => {
+  test.each([
+    { width: 375, height: 667, fontScale: 1, stacked: false },
+    { width: 390, height: 844, fontScale: 1, stacked: false },
+    { width: 375, height: 667, fontScale: 1.353, stacked: true },
+    { width: 375, height: 667, fontScale: 3.12, stacked: true },
+    { width: 375, height: 667, fontScale: 3.571, stacked: true },
+    { width: 320, height: 568, fontScale: 3.571, stacked: true },
+    { width: 667, height: 375, fontScale: 3.571, stacked: true },
+  ])(
+    'reserves rank and streak independently at $width×$height / $fontScale',
+    async ({ width, height, fontScale, stacked }) => {
+      const previous = {
+        window: Dimensions.get('window'),
+        screen: Dimensions.get('screen'),
+      };
+      Dimensions.set({
+        window: { width, height, fontScale, scale: 2 },
+        screen: { width, height, fontScale, scale: 2 },
+      });
+      let renderer!: TestRenderer.ReactTestRenderer;
+      try {
+        await act(async () => {
+          renderer = TestRenderer.create(
+            <PlayerRankBanner
+              shots={[
+                {
+                  id: 'aaaaaaaa-0000-4000-8000-000000000002',
+                  shotType: 'forehand_drive',
+                  capturedAt: '2026-09-07T08:00:00.000Z',
+                  overallScore: 7.02,
+                  resultKind: 'scored',
+                  source: 'real',
+                },
+              ]}
+              streakDays={365}
+              streakAtRisk
+              onPressStreak={() => {}}
+            />,
+          );
+        });
+        expect(
+          StyleSheet.flatten(
+            nodeByTestId(renderer, 'player-rank-banner-toggle').props.style,
+          ),
+        ).toMatchObject({
+          flexDirection: stacked ? 'column' : 'row',
+          minHeight: 44,
+        });
+        const host = (testID: string) =>
+          renderer.root.findAll(
+            node =>
+              node.props.testID === testID && typeof node.type === 'string',
+          )[0]!;
+        const style = (testID: string) =>
+          StyleSheet.flatten(host(testID).props.style);
+        expect(style('player-rank-banner-row')).toMatchObject({
+          flexDirection: stacked ? 'column' : 'row',
+        });
+        expect(style('player-rank-banner-toggle')).toMatchObject({
+          flexBasis: stacked ? 'auto' : 200,
+          flexDirection: stacked ? 'column' : 'row',
+          minHeight: 44,
+        });
+        if (stacked) {
+          expect(style('player-rank-banner-toggle')).toMatchObject({
+            width: '100%',
+            flexGrow: 0,
+          });
+          expect(style('player-rank-banner-body')).toMatchObject({
+            width: '100%',
+            flex: 0,
+          });
+          expect(style('player-rank-banner-streak')).toMatchObject({
+            width: '100%',
+            marginLeft: 0,
+          });
+          expect(style('player-rank-banner-tier')).toMatchObject({
+            flexDirection: 'column',
+            alignItems: 'stretch',
+          });
+        }
+        const texts = renderer.root.findAllByType(Text);
+        const tier = texts.find(node => node.props.children === 'Platinum II')!;
+        expect(tier.props.numberOfLines).toBeUndefined();
+        expect(StyleSheet.flatten(tier.props.style)).toMatchObject(type.h3);
+        // D-046: the headline rating is the estimated DUPR (7.02 → 3.35) with
+        // the unit beside it; the 0–10 rating is the smaller line.
+        const rating = texts.find(
+          node => node.props.testID === 'player-rank-banner-rating',
+        )!;
+        expect(rating.props).toMatchObject({
+          accessibilityLabel:
+            'Estimated DUPR 3.35, technique rating 7.02 out of 10',
+        });
+        expect(rating.props.numberOfLines).toBeUndefined();
+        expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
+        expect(rating.props.children[0]).toBe('3.35');
+        expect(
+          rating
+            .findAllByType(Text)
+            .some(node => node.props.children === ' DUPR'),
+        ).toBe(true);
+        expect(StyleSheet.flatten(rating.props.style)).toMatchObject({
+          ...type.bodyBold,
+          maxWidth: '100%',
+        });
+        const technique = texts.find(
+          node => node.props.testID === 'player-rank-banner-technique-rating',
+        )!;
+        expect(technique.props.children).toBe('7.02 /10');
+        expect(StyleSheet.flatten(technique.props.style)).toMatchObject(
+          type.micro,
+        );
+        expect(allText(renderer)).not.toMatch(/≈/);
+        // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
+        expect(allText(renderer)).toContain('0.32 to Diamond');
+        expect(allText(renderer)).toContain('KEEP IT ALIVE');
+        expect(
+          style('player-rank-banner-streak').minHeight,
+        ).toBeGreaterThanOrEqual(44);
+        await act(async () =>
+          nodeByTestId(renderer, 'player-rank-banner-toggle').props.onPress(),
+        );
+        if (stacked) {
+          expect(style('player-rank-banner-tier-platinum')).toMatchObject({
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+          });
+        }
+        expect(allText(renderer)).toContain('Current form');
+        expect(allText(renderer)).toContain('forehand drive');
+        for (const text of renderer.root.findAllByType(Text)) {
+          expect(text.props.allowFontScaling).not.toBe(false);
+          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+          if (text.props.testID !== 'player-rank-banner-rating') {
+            expect(text.props.numberOfLines).toBeUndefined();
+          }
+        }
+      } finally {
+        if (renderer) act(() => renderer.unmount());
+        Dimensions.set(previous);
+      }
+    },
+  );
+
+  it('keeps the unranked label and zero streak without inventing a fitted score', async () => {
+    const previous = {
+      window: Dimensions.get('window'),
+      screen: Dimensions.get('screen'),
+    };
+    Dimensions.set({
+      window: { width: 375, height: 667, fontScale: 3.571, scale: 2 },
+      screen: { width: 375, height: 667, fontScale: 3.571, scale: 2 },
+    });
+    const renderer = await renderBanner(0);
+    try {
+      const tier = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === 'Unranked')!;
+      expect(tier.props.numberOfLines).toBeUndefined();
+      expect(
+        renderer.root.findAll(
+          node => node.props.testID === 'player-rank-banner-rating',
+        ),
+      ).toHaveLength(0);
+      expect(allText(renderer)).toContain(
+        'Your first scored analysis places you.',
+      );
+      const streak = renderer.root.findAll(
+        node =>
+          node.props.testID === 'player-rank-banner-streak' &&
+          typeof node.type === 'string',
+      )[0]!;
+      expect(streak.props.accessibilityLabel).toContain(
+        '0 days training streak',
+      );
+    } finally {
+      act(() => renderer.unmount());
+      Dimensions.set(previous);
+    }
+  });
+});
 
 describe('PlayerRankBanner streak block', () => {
   it('uses the dark zero-state flame and readable streak metadata', async () => {
@@ -171,10 +356,13 @@ describe('PlayerRankBanner in-place expansion', () => {
     }
     expect(copy).toContain('YOU');
     expect(copy).toContain('Current form');
+    // Tier bands print in estimated DUPR: Silver 3.5–4.99 → 2.54 – 2.76.
     const range = renderer.root
       .findAllByType(Text)
-      .find(node => node.props.children === '3.5 – 4.99')!;
+      .find(node => node.props.children === '2.54 – 2.76')!;
     expect(StyleSheet.flatten(range.props.style).color).toBe(color.onDarkMuted);
+    expect(allText(renderer)).toContain('3.67+');
+    expect(allText(renderer)).toContain('Not an official DUPR rating.');
     act(() => renderer.unmount());
   });
 });

@@ -1,25 +1,29 @@
+import {
+  createCaptureAnalysisDb,
+  captureDbState,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../testSupport/captureAnalysisHarness';
 /**
- * MAC-01 permit contract (runCaptureAnalysis.ts, "Entitlement: reserve before
- * inference"): after `permits.reserve` resolves, EVERY exit either consumes
- * the permit or releases it exactly once, and a permit that cannot be
- * finalized must never gate inference or a durable write — it is turned into
- * a typed `unavailable` outcome, never a thrown exception. A reserve body
- * whose `permit.id` is not a non-empty string is rejected by the api client
- * (`parseReservedPermit`) before inference.
- *
- * The real pipeline, repository and permit client run; only SQLite, the
- * sidecar reader and `fetch` are simulated.
+ * Permit contract through the real pipeline, migrated SQLite and HTTP client.
+ * A reservation intent precedes the network. Successful scores commit once;
+ * failures either release once or retain a release_pending journal for
+ * recovery. Malformed replies never enter inference or produce a rating.
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../../src/data/db';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  setActiveDataOwner,
-} from '../../src/data/accountScope';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../testSupport/releasePolicyFixture';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
+import { installAbstainingScorer } from '../../__harness__/abstainingScorer';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -41,25 +45,8 @@ let mockReadArtifact: (uri: string) => Promise<string> = async () => {
 const owner = '55555555-5555-4555-8555-555555555555';
 const LOW_CONFIDENCE_VISIBILITY = 0.5;
 
-interface RecordedCall {
-  sql: string;
-  params: unknown[];
-}
-
-function recordingDb(fault?: (sql: string, index: number) => void): {
-  db: LocalDb;
-  calls: RecordedCall[];
-} {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      fault?.(sql, calls.length - 1);
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb(fault?: (sql: string, index: number) => void) {
+  return createCaptureAnalysisDb(fault);
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -86,7 +73,7 @@ function permitServer(options: PermitServerOptions = {}) {
       reserveBodies.push(JSON.parse(String(init?.body)));
       return jsonResponse({
         permit: options.permit ?? {
-          id: 'permit-fix2-1',
+          id: fixtureUuid('permit-fix2-1'),
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-09-04T20:00:00.000Z',
@@ -94,8 +81,9 @@ function permitServer(options: PermitServerOptions = {}) {
       });
     }
     if (url.includes('/finalize')) {
+      const body: unknown = JSON.parse(String(init?.body));
       finalizeUrls.push(url);
-      finalizeBodies.push(JSON.parse(String(init?.body)));
+      finalizeBodies.push(body);
       switch (options.release ?? 'ok') {
         case 'reject_network':
           throw new TypeError('Network request failed');
@@ -105,9 +93,11 @@ function permitServer(options: PermitServerOptions = {}) {
             500,
           );
         default:
-          return jsonResponse({ ok: true });
+          return jsonResponse(finalizeAcknowledgement(url, body));
       }
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalizeUrls, finalizeBodies, reserveBodies };
@@ -133,9 +123,9 @@ function swingClipWithSidecar(visibility: number | null = null): {
   const clip: CapturedClip = {
     uri: 'file:///captures/fix2.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-04T12:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -154,13 +144,13 @@ function swingClipWithSidecar(visibility: number | null = null): {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -187,7 +177,7 @@ function swingClipWithSidecar(visibility: number | null = null): {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -196,9 +186,10 @@ function swingClipWithSidecar(visibility: number | null = null): {
 function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-fix2') {
   return {
     db,
-    captureId,
+    ...seedCaptureRequest(db, clip, captureId),
     clip,
     declaredStroke: 'forehand_drive' as const,
+    declaredCanonical: 'FOREHAND_DRIVE' as const,
     handedness: 'right' as const,
     cameraView: 'side' as const,
     apiConfig: { baseUrl: 'https://api.test', token: 'token-fix2' },
@@ -210,9 +201,15 @@ function setFetch(fetchMock: unknown) {
   (globalThis as { fetch?: unknown }).fetch = fetchMock;
 }
 
-beforeEach(() => setActiveDataOwner(owner));
+// The 0.5-visibility fixture used to trip the engine's confidence floor;
+// since 2026-09-10 it scores, so the abstaining verdict is a test double
+// keyed on that fixture (see __harness__/abstainingScorer.ts).
+beforeEach(() => {
+  signInCaptureOwner(owner);
+  installAbstainingScorer();
+});
 afterEach(() => {
-  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  closeCaptureHarness();
   setFetch(undefined);
   jest.restoreAllMocks();
 });
@@ -225,9 +222,9 @@ describe('A1 — reserve 200 whose permit.id is not a string', () => {
     ['null', { id: null }],
     ['numeric', { id: 42 }],
   ])(
-    'permit.id %s → typed `unavailable` (no inference, no writes, nothing to finalize)',
+    'permit.id %s → typed `unavailable` (no inference or analysis products; recovery intent retained)',
     async (_label, idField) => {
-      const { db, calls } = recordingDb();
+      const { db } = recordingDb();
       const { clip, sidecarJson } = swingClipWithSidecar();
       mockReadArtifact = async () => sidecarJson;
       const server = permitServer({
@@ -248,7 +245,12 @@ describe('A1 — reserve 200 whose permit.id is not a string', () => {
       if (outcome.kind !== 'unavailable') return;
       expect(outcome.reason).toContain('invalid analysis permit');
       expect(analyzeSpy).not.toHaveBeenCalled();
-      expect(calls).toHaveLength(0);
+      expect(captureDbState(db)).toMatchObject({
+        shots: 0,
+        records: 0,
+        outbox: 0,
+        journal: [expect.objectContaining({ release_outcome: 'failed' })],
+      });
       expect(server.finalizeUrls).toHaveLength(0);
     },
   );
@@ -258,7 +260,7 @@ describe('A1 — reserve 200 whose permit.id is not a string', () => {
 
 describe('controls — release boundary variants', () => {
   it('evaluatePreAnalysisGate throws after reservation → exactly one finalize(failed), original error escapes', async () => {
-    const { db, calls } = recordingDb();
+    const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -272,7 +274,12 @@ describe('controls — release boundary variants', () => {
     expect(server.finalizeBodies).toEqual([
       { outcome: 'failed', ratingId: null },
     ]);
-    expect(calls).toHaveLength(0);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ release_outcome: 'failed' })],
+    });
   });
 
   it('analyzeCapture throws AND finalize rejects → the ORIGINAL error escapes (release failure never masks it)', async () => {
@@ -288,9 +295,20 @@ describe('controls — release boundary variants', () => {
       'inference exploded',
     );
     expect(server.finalizeBodies).toHaveLength(1);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [
+        expect.objectContaining({
+          state: 'release_pending',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
   });
 
-  it('saveLocalOnlyAnalysis throws AFTER the low_confidence release → no second finalize (no failed-after-low_confidence double release)', async () => {
+  it('saveLocalOnlyAnalysis throws before the atomic abstention commit → one failed release and no partial record', async () => {
     const { db } = recordingDb(sql => {
       if (sql.includes('INSERT OR REPLACE INTO local_shot')) {
         throw new Error('disk full');
@@ -305,8 +323,19 @@ describe('controls — release boundary variants', () => {
     await expect(runCaptureAnalysis(request(db, clip))).rejects.toThrow(
       'disk full',
     );
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     expect(server.finalizeBodies).toEqual([
-      { outcome: 'low_confidence', ratingId: null },
+      { outcome: 'failed', ratingId: null },
     ]);
   });
 
@@ -340,7 +369,7 @@ describe('controls — release boundary variants', () => {
           reserveCount += 1;
           return jsonResponse({
             permit: {
-              id: `permit-c${reserveCount}`,
+              id: fixtureUuid(`permit-c${reserveCount}`),
               accessSource: 'free',
               status: 'reserved',
               expiresAt: '2026-09-04T20:00:00.000Z',
@@ -348,9 +377,12 @@ describe('controls — release boundary variants', () => {
           });
         }
         if (url.includes('/finalize')) {
-          finalizeBodies.push({ url, body: JSON.parse(String(init?.body)) });
-          return jsonResponse({ ok: true });
+          const body: unknown = JSON.parse(String(init?.body));
+          finalizeBodies.push({ url, body });
+          return jsonResponse(finalizeAcknowledgement(url, body));
         }
+        if (isReleasePolicyRequest(url))
+          return jsonResponse(activeReleaseAuthority());
         throw new Error(`Unexpected fetch: ${url}`);
       }),
     );

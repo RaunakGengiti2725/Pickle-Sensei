@@ -25,6 +25,7 @@ export function createBillingAccessDependencies(
   config: BillingAccessConfig,
 ): BillingAccessDependencies {
   return {
+    canonicalAppUserId: config.canonicalAppUserId,
     store: createRevenueCatBillingClient(
       {
         publicSdkKey: config.revenueCatPublicSdkKey,

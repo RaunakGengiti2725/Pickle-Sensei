@@ -1,0 +1,656 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W05-04-r5",
+      "phase": "implement",
+      "prompt_sha256": "8bcb1b104e0a34be1509ddce78e4c6e64715902e703e017f5060e4043d501399",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W05-04-r5-c2",
+      "phase": "implement",
+      "prompt_sha256": "26ad260e7f52f4b42273b49256878f9fd98f2cc221668686e24ad9cc4527fffa",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W05-04-r5",
+      "phase": "review",
+      "prompt_sha256": "8045a847953eb6c96591851aab42488f27a538f549e079a06f58f175416dd235",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-04-r5",
+      "phase": "adversary",
+      "prompt_sha256": "7096ef628f702620cbd0c4f34a2e27a5b66da8f658511bf356b7e06d60e6eff2",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "review-W05-04-r5-c2",
+      "phase": "review",
+      "prompt_sha256": "44abef6432847703bb22e69f0b38ce786a385df7b580f787c8c6a7854e846540",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-04-r5-c2",
+      "phase": "adversary",
+      "prompt_sha256": "16db1b11626f20a50702f7973199ebf6ee6afdd6033ee79a452d16ef3c3d05ca",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "candidate": {
+    "branch": "devin/pp/w05-04/impl-r5",
+    "head_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+    "lane": 1,
+    "round": 5
+  },
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-04",
+  "requeued_from": {
+    "branch": "devin/pp/w05-04/impl-r4",
+    "findings": {
+      "adversary_branch": "devin/pp/w05-04/attack-fda1aeff",
+      "adversary_breaks": [
+        {
+          "expected": "Remaining allocation is stated regardless of a lapsed Pro row: '2 of 2 unspent' with the held-free-tickets allocation-retention note; the wallet is not labelled a Pro pass when the Pro entitlement has lapsed.",
+          "observed": "With a lapsed verified_store grant (issued 14d before, expired 7d before the free allocation) plus the free allocation, both expired under anchored trusted time (ledger: spendableTickets=2, both verdicts 'expired'), Settings renders: 'EXPIRED | Offline pass expired | Allocation: Pro pass | Pass ends: Expired | Waiting to sync: Nothing | The pass end is measured by time confirmed with the server…'. The identical wallet without the lapsed Pro row renders '2 of 2 unspent' + 'stay allocated to this phone … never taken back automatically'. summarizeLease() prefers pro in the expired branch (`expired === null || (pro && !expired.pro)`) and the presenter then treats the whole wallet as a Pro lease (proLease => allocation row 'Pro pass', allocationNote null), so the free-ticket count and retention copy disappear.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A1 '",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Lapsed Pro lease hides the expired free allocation: card says 'Pro pass / Expired' and omits the 2 allocated free tickets and the allocation-retention statement"
+        },
+        {
+          "expected": "The card states the held free allocation ('2 of 2 unspent') and that it stays allocated until sync, in addition to the unconfirmed-time explanation; a Pro lease that cannot be confirmed does not erase the free allocation facts.",
+          "observed": "Free allocation (2 tickets) + a verified_store lease issued one day later; trusted time reading authority 'none' (ledger: spendableTickets=2, both verdicts reconcile_required/no_trusted_time). Settings renders 'CONFIRM ONLINE | Offline pass needs an online check | Allocation: Pro pass | Pass ends: Unconfirmed | Waiting to sync: Nothing | This phone has not confirmed the time…'. The 2 allocated free tickets and the 'stay allocated' statement are absent because the first grant in generation/issued_at DESC order is the Pro lease and summarizeLease() keeps the first reconcile entry, making proLease=true for the whole wallet.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A2 '",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Pro lease issued after the free allocation, under no trusted time, hides the held free tickets (CONFIRM ONLINE shows 'Pro pass' and no allocation count)"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Copy for a hold without a matching pending receipt should not state facts the ledger contradicts, e.g. 'names no receipt that is still waiting on this phone' rather than 'was never recorded on this phone'. Corruption-only path; classified minor.",
+          "observed": "After a receipt is accepted (settlement='accepted'), an in_flight offline_wallet_journal row naming that receipt id (corrupt/partial state) yields wallet.hold=true, pending=[] and the card renders UNIDENTIFIED_HOLD_RULE: 'A result submission is on record, but the receipt it names was never recorded on this phone, so its outcome cannot be read here…'. The receipt is recorded, and its outcome is readable (accepted).",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A4 '",
+          "severity": "P3",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "Unidentified-hold copy asserts the receipt 'was never recorded on this phone' even when the receipt IS on file (settled accepted)"
+        },
+        {
+          "expected": "Plural agreement: 'The spent analyses stay recorded until the server confirms them.' when more than one receipt is pending.",
+          "observed": "With grant/ticket rows deleted and two receipts (one in-flight journal) remaining, Settings renders 'ON HOLD | 2 results awaiting confirmation | Waiting to sync: 2 on hold | … | The spent analysis stays recorded until the server confirms it.' Count and noun disagree. Partial-state path only (no shipping code deletes offline_grant rows); classified minor.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A6 '",
+          "severity": "P3",
+          "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+          "title": "HOLD with no grant rows and 2 pending receipts: title says '2 results awaiting confirmation' but the note says 'The spent analysis stays recorded…' (singular)"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "fda1aeff47a691028b8db67e2224ab0193bf4ce2"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7773deae-d2df-4dd9-9530-9deb76a6e99c/attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc4d5fc6-0836-49fe-8a5f-c9fcaf4d2f53/attack-run5.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7beb8747-eee9-4bd4-8379-ce48603d055e/attack-run4.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc6fe1ee-6f48-4f26-870a-c79458ea1312/ac1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cdfdd4a4-8a49-4f9c-8d18-b7fecc6ee0bd/tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a39b601d-82dc-45db-90ed-d40e68777b1e/eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/abd109bc-612f-4d06-86fa-78601c3052b7/prettier.log"
+        ],
+        "attack_branch": "devin/pp/w05-04/attack-45e8ad41",
+        "attack_branch_sha": "81c236f81362003969d0b699327aa19757cc6e4c",
+        "attacked_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+        "attacks_tried": 42,
+        "breaks": [],
+        "package_id": "W05-04",
+        "summary": "ADVERSARY W05-04 against candidate devin/pp/w05-04/impl-r5 @ 45e8ad41a0475f318628770881b39df59d6803a5 (base 7cfeacbb). NO CONFIRMED BREAK.\n\nAttack suite (VERIFIED): apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx, 42 Jest tests, one new file, no production code and no candidate test modified (git status: only the new file). Pushed as commit 81c236f81362003969d0b699327aa19757cc6e4c on devin/pp/w05-04/attack-45e8ad41 (no force, no PR, no main/ci/mac-*).\n  cmd: cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourneyAttack.test.tsx -> exit 0, Test Suites 1/1, Tests 42 passed / 0 failed / 0 skipped (attack-final.log).\n\nAttack classes (all through real ledger/wallet/UI paths, SQLite test DB + mocked fetch):\n 1 Concurrency/reentrancy (5): account A->B switch while A's gated ledger read is in flight (SettingsScreen; stale read dropped, B never sees A's 2 of 2); sign-out mid-read (card unmounts, no A copy leaks); signed-in -> localOnly transition mid-read; HOLD follow-up timer armed under A never reads A's or B's ledger after switching to B (fake timers, SQL call counting); two concurrent reconcileOfflineWallet drains present each receipt once and settle once; uppercase canonical id addresses the same ledger.\n 2 Crash/commit boundaries (2): SQLite commit acknowledgement lost after durable write -> next read shows the truth, no double-spend; commit failure before durability -> ticket remains unspent, no journal ghost.\n 3 Replay/duplicate identities (4): duplicate verdict for the same receipt in one 200 body; foreign receipt id in the verdict list; extra foreign verdicts beside the real one; per-receipt refused outcome — every receipt accounted exactly once, no fabricated settlement.\n 4 Network failure at each step (6): captive-portal HTML 200, 302 redirect, 503+Retry-After, empty-body 500, hanging request (timeout), unknown verdict status -> all keep the receipt pending/HOLD with retry of the same receipt id; nothing charged twice, nothing refunded.\n 5 Time boundaries (13 it.each): NaN nowMs, far-future clock, trusted time before issue (lease_ahead_of_clock), exact expiry, expiry-1ms, rollbackDetected, wall-clock 1970 beside anchored reading, authority none/storage invalid, floor+unmeasured, 1-day/23h/under-an-hour phrasing, 30-day lease capped at 7 days.\n 6 Corrupt persisted state (8): missing ticket row, receipt settled_at without status, in-flight journal with invalid closure, grant/ticket generation mismatch, truncated receipt JSON, consumed ticket without receipt, journal receipt list not an array, expires_at <= issued_at -> UNAVAILABLE, never fabricated NONE HELD/READY.\n 7 Copy/accessibility (2 + sweep): exhaustive presentOfflineJourney sweep over every grant-set x wallet combination (free 2/2..1/0, Pro-only, Pro+free, two free generations, none) x 7 lease verdicts x 6 wallet states: docs/APP_STORE_SUBMISSION.md forbidden vocabulary, render artefacts (NaN/undefined/Infinity/null/[object), singular/plural agreement, no 'Your 0'/'0 held', unique row/note keys, badge matches facts (READY iff live tickets/Pro & no hold; ON HOLD iff hold; Pro pass only with live Pro lease or Pro-only wallet; allocation count 'N of M unspent' always present when not Pro; stranded 'N held analyses' beside READY when applicable).\n 8 Allocation semantics (2): live Pro lease beside a newer free generation: ledger charges the free generation (generation order) and card reports Pro pass + 'Free analyses: 0 of 1 unspent' — consistent with ledger truth; free tickets never double-counted across generations.\n\nTwo attack expectations initially failed and were corrected as author errors, not candidate defects: (a) anchored reading with storage:'invalid' / continuity:'unmeasured' -> candidate shows READY; evaluateLease() trusts any 'anchored' reading by contract (trustedTime.ts docs: an anchor with unmeasured elapsed time is reported as 'floor', never 'anchored'), so the readings were impossible producer states; re-encoded as authority none/floor -> CONFIRM ONLINE with the right reason copy, passes. (b) rollback copy phrase 'set back' vs actual 'moved backwards' (copy is dossier-compliant).\n\nObservation (not a break, INFERRED): React 'not wrapped in act' console noise on SettingsScreen mount originates from SettingsScreen's own state and also appears 3x in the candidate's own w05OfflineJourney suite; no assertion depends on it.\n\nCandidate acceptance re-verified on 45e8ad41 (VERIFIED):\n  AC1: cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx -> exit 0, 6/6 suites, 136 passed / 0 failed / 0 skipped (ac1.log).\n  AC2: cd apps/mobile && npx tsc --noEmit -> exit 0, 0 errors after `npm ci` (first run failed only on missing @sentry/react-native node_modules in this VM, plus 7 type errors in the attack file that were fixed) (tsc.log).\n  AC3 on the attack file: npx eslint apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx -> exit 0; npx prettier --check same -> exit 0; git diff --cached --check -> exit 0 (eslint.log, prettier.log).\nNot run (UNKNOWN/out of scope): Mac/native verification, production Supabase, Deno/SQL surfaces (the package touches no SQL/Edge surface)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c56b48f6-cf4f-4e28-8dfe-7458d509abc3/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+            "executed": 136,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC1",
+            "note": "VERIFIED at HEAD 45e8ad41: 6 suites, 136 tests passed. Regression proof: the 8 new/updated round-5 tests were run BEFORE the fix (test commit 1acebe5d on top of the r4 code) with `cd apps/mobile && npx jest --ci __tests__/w05OfflineJourney.test.tsx -t 'round 5|names no receipt on file'` -> exit 1, 8 failed / 51 skipped (filter) / 59 total; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/c74b008b-9779-4a64-948d-25afffd45065/regress-prefix.log. On BASE_SHA itself neither w05OfflineJourney.test.tsx nor OfflineAllocationCard.tsx exists (both are r4 additions), so the pre-fix candidate is the meaningful base. Additionally the adversary's full file apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx (branch devin/pp/w05-04/attack-fda1aeff, materialised temporarily, NOT committed) was rerun against HEAD: `npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx` -> exit 0, 27/27 passed incl. A1, A2, A3, A4, A6, A19; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/e449b138-8a2a-4857-b343-caad5955d880/adversary-rerun.log",
+            "passed": 136,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf972a0e-62cb-479b-ab05-176c99159c7e/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC2",
+            "note": "VERIFIED at HEAD 45e8ad41, exit 0 with no diagnostics. A first run failed (exit 2) solely because the VM's apps/mobile/node_modules was stale (missing @sentry/react-native, which package.json pins at 8.24.0 — src/diagnostics/* errors, none in write_paths); `cd apps/mobile && npm ci` (the mandated mobile install) fixed it and the check was rerun clean. Environment issue, not a code defect on BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bcd4d31-b595-49e8-b8d3-96f7c26116a2/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC3",
+            "note": "VERIFIED at HEAD 45e8ad41 from the repo root: eslint exit 0 (no output), prettier --check exit 0 ('All matched files use Prettier code style!'). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/35bdc62e-b6d7-4504-898f-abf15803afaa/format-check.log) and `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: mirrored adversary A1/A2/A3/A4/A6 in the frozen test path (plus a 200-combination presenter sweep over every not-live verdict pair and grant order, and a no-grant HOLD count test), ran them pre-fix (8 failed), committed, then made the minimal presenter change: drop the Pro flag from non-live lease summaries and decide the 'Pro pass' label from ledger facts (live Pro governs, or wallet holds only Pro rows), add the Free-analyses row under a live Pro pass, reword the unidentified-HOLD constant to what the card can actually read, pluralise the no-grant HOLD note by pending receipt count.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c56b48f6-cf4f-4e28-8dfe-7458d509abc3/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf972a0e-62cb-479b-ab05-176c99159c7e/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bcd4d31-b595-49e8-b8d3-96f7c26116a2/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c74b008b-9779-4a64-948d-25afffd45065/regress-prefix.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e449b138-8a2a-4857-b343-caad5955d880/adversary-rerun.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35bdc62e-b6d7-4504-898f-abf15803afaa/format-check.log"
+        ],
+        "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w05-04/impl-r5",
+        "files_changed": [
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+          "apps/mobile/src/components/OfflineAllocationCard.tsx",
+          "apps/mobile/src/screens/AnalyzeScreen.tsx",
+          "apps/mobile/src/screens/SettingsScreen.tsx"
+        ],
+        "head_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+        "out_of_scope_files": [],
+        "package_id": "W05-04",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a lapsed Pro lease does not hide the expired free allocation this phone still holds (A1)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a Pro lease issued after the free allocation, under no trusted time, does not hide the held free tickets (A2)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a live Pro lease beside a live free allocation is stated as a Pro pass AND states the free tickets still held (A3)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: presenter: a Pro lease that is not live never relabels held free tickets as a Pro pass, whatever its verdict or position (10 verdicts x 10 verdicts x 2 orders)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: an in-flight journal entry naming a receipt that IS on file (already accepted) is not described as a receipt that was never recorded (A4)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a HOLD whose grant rows are gone (receipts only) keeps count and noun in agreement for two pending receipts (A6)",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: presenter: a HOLD with no grant rows names one spent analysis for one receipt and none for a journal entry naming no pending receipt",
+          "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: (updated) never announces a zero count for a HOLD whose journal entry names no receipt on file — now asserts the new contract 'names no receipt that is still waiting' and not 'never recorded'"
+        ],
+        "residual_risks": [
+          "INFERRED: when a live free grant is NEWER than a live Pro lease (free ticket ordered first), consumeOfflineAllocation() in src/data/offlineCapabilities.ts spends the free ticket while the card (unchanged r4 rule, adversary A3-validated) names the live Pro pass as governing. Not reachable from the observed server issuance order (Pro lease issued after the free allocation) and outside this round's findings; a presenter that mirrors selectExecutableGrant() order would remove it but changes A3-validated semantics.",
+          "INFERRED: a Pro-only wallet with a corrupt zero-ticket free row (total===0 with a free grant present) is labelled 'Pro pass' via the total===0 rule; no shipping path writes a free grant with zero allocated tickets.",
+          "The adversary's attack test file is not committed to the candidate (outside write_paths); its coverage is reproduced by the round-5 tests in w05OfflineJourney.test.tsx."
+        ],
+        "summary": "W05-04 round 5 on devin/pp/w05-04/impl-r5 (HEAD 45e8ad41, base 7cfeacbb). The r4 commits (ecd07454 test, a448d54b impl) were cherry-picked unchanged, then two round-5 commits added: 1acebe5d (tests first, proven failing 8/8 pre-fix) and 45e8ad41 (fix). Defects found in the r4 candidate, apps/mobile/src/components/OfflineAllocationCard.tsx: (P1 A1/A2) summarizeLease() carried a `pro` flag on its expired/reconcile_required summaries, preferring the Pro row (`expired === null || (pro && !expired.pro)`, and first-reconcile-wins with the Pro lease listed first by generation/issued_at), and the presenter derived `proLease = lease.kind !== 'none' && lease.pro` — so a lapsed or unconfirmed Pro row beside 2 free tickets rendered 'Allocation: Pro pass' and dropped both the count and the ALLOCATION_STAYS retention note. (P3 A4) `unidentifiedHold = wallet.hold && onHold === 0` emitted UNIDENTIFIED_HOLD_RULE claiming the named receipt 'was never recorded on this phone' even when the receipt is on file and settled (wallet.pending excludes settled receipts). (P3 A6) the lease.kind==='none' HOLD note was hard-coded singular. Fix (all inside write_paths): LeaseSummary's expired/reconcile_required variants no longer carry `pro`; only a LIVE grant lends its entitlement. Presenter: `proLease = lease.kind==='active' ? lease.pro : lease.kind!=='none' && total===0 && grants.some(isProGrant)` — Pro-only wallets (no ticket ever allocated) still read 'Pro pass' under every verdict (r4 tests unchanged and passing), while a not-live Pro row beside allocated tickets leaves '2 of 2 unspent' + retention note exactly as without it. A live Pro pass beside held free tickets adds a 'Free analyses: N of M unspent' row (no retention note, per adversary A3). UNIDENTIFIED_HOLD_RULE now reads 'A result submission is on record, but it names no receipt that is still waiting on this phone, so its outcome cannot be read here. The next online sync closes it; nothing is charged twice.' With no grant rows the spent-analysis sentence agrees in number with wallet.pending.length (singular / plural) and is omitted when the HOLD names no pending receipt. Copy checked against docs/APP_STORE_SUBMISSION.md forbidden terms by expectDossierCompliant in every new test. Acceptance: AC1 136/136 (6 suites) exit 0; AC2 tsc exit 0; AC3 eslint+prettier exit 0; root pnpm format:check exit 0; git diff --check exit 0. Adversary suite (27 tests, not committed) also passes 27/27 against HEAD. No PR opened; no push to main or ci/mac-*; no production/native/backend/data-layer files touched."
+      },
+      "lanes": [
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7773deae-d2df-4dd9-9530-9deb76a6e99c/attack-final.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc4d5fc6-0836-49fe-8a5f-c9fcaf4d2f53/attack-run5.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7beb8747-eee9-4bd4-8379-ce48603d055e/attack-run4.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dc6fe1ee-6f48-4f26-870a-c79458ea1312/ac1.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cdfdd4a4-8a49-4f9c-8d18-b7fecc6ee0bd/tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a39b601d-82dc-45db-90ed-d40e68777b1e/eslint.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/abd109bc-612f-4d06-86fa-78601c3052b7/prettier.log"
+            ],
+            "attack_branch": "devin/pp/w05-04/attack-45e8ad41",
+            "attack_branch_sha": "81c236f81362003969d0b699327aa19757cc6e4c",
+            "attacked_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+            "attacks_tried": 42,
+            "breaks": [],
+            "package_id": "W05-04",
+            "summary": "ADVERSARY W05-04 against candidate devin/pp/w05-04/impl-r5 @ 45e8ad41a0475f318628770881b39df59d6803a5 (base 7cfeacbb). NO CONFIRMED BREAK.\n\nAttack suite (VERIFIED): apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx, 42 Jest tests, one new file, no production code and no candidate test modified (git status: only the new file). Pushed as commit 81c236f81362003969d0b699327aa19757cc6e4c on devin/pp/w05-04/attack-45e8ad41 (no force, no PR, no main/ci/mac-*).\n  cmd: cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourneyAttack.test.tsx -> exit 0, Test Suites 1/1, Tests 42 passed / 0 failed / 0 skipped (attack-final.log).\n\nAttack classes (all through real ledger/wallet/UI paths, SQLite test DB + mocked fetch):\n 1 Concurrency/reentrancy (5): account A->B switch while A's gated ledger read is in flight (SettingsScreen; stale read dropped, B never sees A's 2 of 2); sign-out mid-read (card unmounts, no A copy leaks); signed-in -> localOnly transition mid-read; HOLD follow-up timer armed under A never reads A's or B's ledger after switching to B (fake timers, SQL call counting); two concurrent reconcileOfflineWallet drains present each receipt once and settle once; uppercase canonical id addresses the same ledger.\n 2 Crash/commit boundaries (2): SQLite commit acknowledgement lost after durable write -> next read shows the truth, no double-spend; commit failure before durability -> ticket remains unspent, no journal ghost.\n 3 Replay/duplicate identities (4): duplicate verdict for the same receipt in one 200 body; foreign receipt id in the verdict list; extra foreign verdicts beside the real one; per-receipt refused outcome — every receipt accounted exactly once, no fabricated settlement.\n 4 Network failure at each step (6): captive-portal HTML 200, 302 redirect, 503+Retry-After, empty-body 500, hanging request (timeout), unknown verdict status -> all keep the receipt pending/HOLD with retry of the same receipt id; nothing charged twice, nothing refunded.\n 5 Time boundaries (13 it.each): NaN nowMs, far-future clock, trusted time before issue (lease_ahead_of_clock), exact expiry, expiry-1ms, rollbackDetected, wall-clock 1970 beside anchored reading, authority none/storage invalid, floor+unmeasured, 1-day/23h/under-an-hour phrasing, 30-day lease capped at 7 days.\n 6 Corrupt persisted state (8): missing ticket row, receipt settled_at without status, in-flight journal with invalid closure, grant/ticket generation mismatch, truncated receipt JSON, consumed ticket without receipt, journal receipt list not an array, expires_at <= issued_at -> UNAVAILABLE, never fabricated NONE HELD/READY.\n 7 Copy/accessibility (2 + sweep): exhaustive presentOfflineJourney sweep over every grant-set x wallet combination (free 2/2..1/0, Pro-only, Pro+free, two free generations, none) x 7 lease verdicts x 6 wallet states: docs/APP_STORE_SUBMISSION.md forbidden vocabulary, render artefacts (NaN/undefined/Infinity/null/[object), singular/plural agreement, no 'Your 0'/'0 held', unique row/note keys, badge matches facts (READY iff live tickets/Pro & no hold; ON HOLD iff hold; Pro pass only with live Pro lease or Pro-only wallet; allocation count 'N of M unspent' always present when not Pro; stranded 'N held analyses' beside READY when applicable).\n 8 Allocation semantics (2): live Pro lease beside a newer free generation: ledger charges the free generation (generation order) and card reports Pro pass + 'Free analyses: 0 of 1 unspent' — consistent with ledger truth; free tickets never double-counted across generations.\n\nTwo attack expectations initially failed and were corrected as author errors, not candidate defects: (a) anchored reading with storage:'invalid' / continuity:'unmeasured' -> candidate shows READY; evaluateLease() trusts any 'anchored' reading by contract (trustedTime.ts docs: an anchor with unmeasured elapsed time is reported as 'floor', never 'anchored'), so the readings were impossible producer states; re-encoded as authority none/floor -> CONFIRM ONLINE with the right reason copy, passes. (b) rollback copy phrase 'set back' vs actual 'moved backwards' (copy is dossier-compliant).\n\nObservation (not a break, INFERRED): React 'not wrapped in act' console noise on SettingsScreen mount originates from SettingsScreen's own state and also appears 3x in the candidate's own w05OfflineJourney suite; no assertion depends on it.\n\nCandidate acceptance re-verified on 45e8ad41 (VERIFIED):\n  AC1: cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx -> exit 0, 6/6 suites, 136 passed / 0 failed / 0 skipped (ac1.log).\n  AC2: cd apps/mobile && npx tsc --noEmit -> exit 0, 0 errors after `npm ci` (first run failed only on missing @sentry/react-native node_modules in this VM, plus 7 type errors in the attack file that were fixed) (tsc.log).\n  AC3 on the attack file: npx eslint apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx -> exit 0; npx prettier --check same -> exit 0; git diff --cached --check -> exit 0 (eslint.log, prettier.log).\nNot run (UNKNOWN/out of scope): Mac/native verification, production Supabase, Deno/SQL surfaces (the package touches no SQL/Edge surface)."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c56b48f6-cf4f-4e28-8dfe-7458d509abc3/ac1-jest.log",
+                "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+                "executed": 136,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC1",
+                "note": "VERIFIED at HEAD 45e8ad41: 6 suites, 136 tests passed. Regression proof: the 8 new/updated round-5 tests were run BEFORE the fix (test commit 1acebe5d on top of the r4 code) with `cd apps/mobile && npx jest --ci __tests__/w05OfflineJourney.test.tsx -t 'round 5|names no receipt on file'` -> exit 1, 8 failed / 51 skipped (filter) / 59 total; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/c74b008b-9779-4a64-948d-25afffd45065/regress-prefix.log. On BASE_SHA itself neither w05OfflineJourney.test.tsx nor OfflineAllocationCard.tsx exists (both are r4 additions), so the pre-fix candidate is the meaningful base. Additionally the adversary's full file apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx (branch devin/pp/w05-04/attack-fda1aeff, materialised temporarily, NOT committed) was rerun against HEAD: `npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx` -> exit 0, 27/27 passed incl. A1, A2, A3, A4, A6, A19; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/e449b138-8a2a-4857-b343-caad5955d880/adversary-rerun.log",
+                "passed": 136,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf972a0e-62cb-479b-ab05-176c99159c7e/ac2-tsc.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC2",
+                "note": "VERIFIED at HEAD 45e8ad41, exit 0 with no diagnostics. A first run failed (exit 2) solely because the VM's apps/mobile/node_modules was stale (missing @sentry/react-native, which package.json pins at 8.24.0 — src/diagnostics/* errors, none in write_paths); `cd apps/mobile && npm ci` (the mandated mobile install) fixed it and the check was rerun clean. Environment issue, not a code defect on BASE_SHA.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bcd4d31-b595-49e8-b8d3-96f7c26116a2/ac3-eslint-prettier.log",
+                "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC3",
+                "note": "VERIFIED at HEAD 45e8ad41 from the repo root: eslint exit 0 (no output), prettier --check exit 0 ('All matched files use Prettier code style!'). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/35bdc62e-b6d7-4504-898f-abf15803afaa/format-check.log) and `git diff --check` exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Regression-first: mirrored adversary A1/A2/A3/A4/A6 in the frozen test path (plus a 200-combination presenter sweep over every not-live verdict pair and grant order, and a no-grant HOLD count test), ran them pre-fix (8 failed), committed, then made the minimal presenter change: drop the Pro flag from non-live lease summaries and decide the 'Pro pass' label from ledger facts (live Pro governs, or wallet holds only Pro rows), add the Free-analyses row under a live Pro pass, reword the unidentified-HOLD constant to what the card can actually read, pluralise the no-grant HOLD note by pending receipt count.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c56b48f6-cf4f-4e28-8dfe-7458d509abc3/ac1-jest.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf972a0e-62cb-479b-ab05-176c99159c7e/ac2-tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bcd4d31-b595-49e8-b8d3-96f7c26116a2/ac3-eslint-prettier.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c74b008b-9779-4a64-948d-25afffd45065/regress-prefix.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e449b138-8a2a-4857-b343-caad5955d880/adversary-rerun.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35bdc62e-b6d7-4504-898f-abf15803afaa/format-check.log"
+            ],
+            "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+            "baseline_failures_observed": [],
+            "blocked": false,
+            "blocked_reason": "",
+            "branch": "devin/pp/w05-04/impl-r5",
+            "files_changed": [
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+              "apps/mobile/src/components/OfflineAllocationCard.tsx",
+              "apps/mobile/src/screens/AnalyzeScreen.tsx",
+              "apps/mobile/src/screens/SettingsScreen.tsx"
+            ],
+            "head_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+            "out_of_scope_files": [],
+            "package_id": "W05-04",
+            "regression_tests_added": [
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a lapsed Pro lease does not hide the expired free allocation this phone still holds (A1)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a Pro lease issued after the free allocation, under no trusted time, does not hide the held free tickets (A2)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a live Pro lease beside a live free allocation is stated as a Pro pass AND states the free tickets still held (A3)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: presenter: a Pro lease that is not live never relabels held free tickets as a Pro pass, whatever its verdict or position (10 verdicts x 10 verdicts x 2 orders)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: an in-flight journal entry naming a receipt that IS on file (already accepted) is not described as a receipt that was never recorded (A4)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: a HOLD whose grant rows are gone (receipts only) keeps count and noun in agreement for two pending receipts (A6)",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: W05-04 round 5 :: presenter: a HOLD with no grant rows names one spent analysis for one receipt and none for a journal entry naming no pending receipt",
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx :: (updated) never announces a zero count for a HOLD whose journal entry names no receipt on file — now asserts the new contract 'names no receipt that is still waiting' and not 'never recorded'"
+            ],
+            "residual_risks": [
+              "INFERRED: when a live free grant is NEWER than a live Pro lease (free ticket ordered first), consumeOfflineAllocation() in src/data/offlineCapabilities.ts spends the free ticket while the card (unchanged r4 rule, adversary A3-validated) names the live Pro pass as governing. Not reachable from the observed server issuance order (Pro lease issued after the free allocation) and outside this round's findings; a presenter that mirrors selectExecutableGrant() order would remove it but changes A3-validated semantics.",
+              "INFERRED: a Pro-only wallet with a corrupt zero-ticket free row (total===0 with a free grant present) is labelled 'Pro pass' via the total===0 rule; no shipping path writes a free grant with zero allocated tickets.",
+              "The adversary's attack test file is not committed to the candidate (outside write_paths); its coverage is reproduced by the round-5 tests in w05OfflineJourney.test.tsx."
+            ],
+            "summary": "W05-04 round 5 on devin/pp/w05-04/impl-r5 (HEAD 45e8ad41, base 7cfeacbb). The r4 commits (ecd07454 test, a448d54b impl) were cherry-picked unchanged, then two round-5 commits added: 1acebe5d (tests first, proven failing 8/8 pre-fix) and 45e8ad41 (fix). Defects found in the r4 candidate, apps/mobile/src/components/OfflineAllocationCard.tsx: (P1 A1/A2) summarizeLease() carried a `pro` flag on its expired/reconcile_required summaries, preferring the Pro row (`expired === null || (pro && !expired.pro)`, and first-reconcile-wins with the Pro lease listed first by generation/issued_at), and the presenter derived `proLease = lease.kind !== 'none' && lease.pro` — so a lapsed or unconfirmed Pro row beside 2 free tickets rendered 'Allocation: Pro pass' and dropped both the count and the ALLOCATION_STAYS retention note. (P3 A4) `unidentifiedHold = wallet.hold && onHold === 0` emitted UNIDENTIFIED_HOLD_RULE claiming the named receipt 'was never recorded on this phone' even when the receipt is on file and settled (wallet.pending excludes settled receipts). (P3 A6) the lease.kind==='none' HOLD note was hard-coded singular. Fix (all inside write_paths): LeaseSummary's expired/reconcile_required variants no longer carry `pro`; only a LIVE grant lends its entitlement. Presenter: `proLease = lease.kind==='active' ? lease.pro : lease.kind!=='none' && total===0 && grants.some(isProGrant)` — Pro-only wallets (no ticket ever allocated) still read 'Pro pass' under every verdict (r4 tests unchanged and passing), while a not-live Pro row beside allocated tickets leaves '2 of 2 unspent' + retention note exactly as without it. A live Pro pass beside held free tickets adds a 'Free analyses: N of M unspent' row (no retention note, per adversary A3). UNIDENTIFIED_HOLD_RULE now reads 'A result submission is on record, but it names no receipt that is still waiting on this phone, so its outcome cannot be read here. The next online sync closes it; nothing is charged twice.' With no grant rows the spent-analysis sentence agrees in number with wallet.pending.length (singular / plural) and is omitted when the HOLD names no pending receipt. Copy checked against docs/APP_STORE_SUBMISSION.md forbidden terms by expectDossierCompliant in every new test. Acceptance: AC1 136/136 (6 suites) exit 0; AC2 tsc exit 0; AC3 eslint+prettier exit 0; root pnpm format:check exit 0; git diff --check exit 0. Adversary suite (27 tests, not committed) also passes 27/27 against HEAD. No PR opened; no push to main or ci/mac-*; no production/native/backend/data-layer files touched."
+          },
+          "lane": 1,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1f88b4f4-ee58-41e4-ac14-380ffffde1f4/ac1-jest-head.log",
+                "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+                "executed": 136,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC1",
+                "note": "VERIFIED on HEAD 45e8ad41 after `cd apps/mobile && npm ci` (exit 0): Test Suites 6 passed/6, Tests 136 passed/136, 0 skipped. Regression proof (kind=test package, reported here): BASE 7cfeacbb worktree + only apps/mobile/__tests__/w05OfflineJourney.test.tsx copied over -> `npx jest --ci __tests__/w05OfflineJourney.test.tsx` exit 1, 'Test suite failed to run: Cannot find module ../src/components/OfflineAllocationCard', 0 executed (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/338678ba-ce19-459e-9eac-3d6332fae984/regress-base.log). Pre-fix r4 commit a448d54b worktree + same test file -> exit 1, 8 failed / 51 passed / 59 total, the 8 failures being exactly the round-5 tests + the updated 'never announces a zero count' test (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/2662610d-7cf8-4d87-b437-60536a82b3d9/regress-r4-prefix.log). On HEAD the same 59 tests pass inside the 136.",
+                "passed": 136,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab6f25df-e44d-484c-af31-b3d454d55904/ac2-tsc-head.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC2",
+                "note": "VERIFIED on HEAD 45e8ad41: exit 0, no diagnostics emitted.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a28c0024-ad25-4544-890c-8b2398aea571/ac3-eslint-prettier-head.log",
+                "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC3",
+                "note": "VERIFIED on HEAD 45e8ad41 from repo root: eslint exit 0 (JSON format confirmed 0 errors/0 warnings on all 4 files), prettier --check exit 0 ('All matched files use Prettier code style!'). `git diff --check` exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1f88b4f4-ee58-41e4-ac14-380ffffde1f4/ac1-jest-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab6f25df-e44d-484c-af31-b3d454d55904/ac2-tsc-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a28c0024-ad25-4544-890c-8b2398aea571/ac3-eslint-prettier-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/338678ba-ce19-459e-9eac-3d6332fae984/regress-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2662610d-7cf8-4d87-b437-60536a82b3d9/regress-r4-prefix.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "Objective text names a Result surface, but the frozen write_paths only cover AnalyzeScreen/SettingsScreen; the card is rendered on Analyze (apps/mobile/src/screens/AnalyzeScreen.tsx:3025) and Settings (apps/mobile/src/screens/SettingsScreen.tsx:373) only, not on ResultScreen. Within declared scope, so not blocking.",
+              "apps/mobile/src/components/OfflineAllocationCard.tsx presentOfflineJourney: under a LIVE Pro pass, free tickets whose own grant is not live are listed in the 'Free analyses: N of M unspent' row without the stranded 'need an online check' note (the stranded note is emitted only when !proLease). Copy is still truthful ('unspent'), so not blocking.",
+              "The r5 commit rewrites doc comments that the r4 commit of the same candidate introduced in OfflineAllocationCard.tsx (summarizeLease JSDoc, LeaseSummary). Relative to BASE_SHA the whole file is new (0 deletions in the base..HEAD diff), so no pre-existing comment was modified.",
+              "Regression proof on BASE_SHA is a compile-time failure (Cannot find module '../src/components/OfflineAllocationCard', 0 tests executed) because both the component and the test file are additions of this candidate lineage; the behavioural proof for the round-5 changes was taken against the pre-fix r4 commit a448d54b (8 failed / 51 passed) — see regression note."
+            ],
+            "package_id": "W05-04",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+            "scope_violation": false,
+            "summary": "APPROVE W05-04 candidate devin/pp/w05-04/impl-r5 @ 45e8ad41 (base 7cfeacbb). Scope VERIFIED clean: `git diff --stat` shows exactly the four write_paths files (w05OfflineJourney.test.tsx, OfflineAllocationCard.tsx, AnalyzeScreen.tsx, SettingsScreen.tsx), 0 deletions, no out_of_scope_files, no serial-group paths touched. Shipped behaviour VERIFIED: OfflineAllocationCard + useOfflineJourneyOnFocus are called from AnalyzeScreen.tsx (lines 115-117, 756, 3025) and OfflineAllocationCard + useOfflineJourney from SettingsScreen.tsx (41-43, 251, 373, gated on syncedAccount). Acceptance re-run by me on HEAD: AC1 exit 0, 6 suites / 136 tests passed / 0 skipped; AC2 tsc exit 0; AC3 eslint exit 0 + prettier --check exit 0. Regression proof: candidate test file on BASE fails to compile (module OfflineAllocationCard absent, exit 1, 0 executed); on pre-fix r4 commit a448d54b the same file gives exit 1, 8 failed / 51 passed (exactly the 8 round-5/updated tests); 59/59 pass on HEAD. Invariant review (INFERRED from reading the whole diff): read-only presenter — trustedTime.read() then readOfflineAllocation + readOfflineWalletStatus in one withTransaction, no writes to grants/receipts/journal, no consumption or reclaim, no refund/retry paths; Pro/free labelling derived only from ledger facts and a LIVE trusted-time verdict (a lapsed/unconfirmed Pro row never relabels held free tickets; ambiguous receipts render ON HOLD with 'nothing is charged twice' copy); unreadable DB -> 'unavailable' state, never fabricated empty history; owner isolation via DataOwnerContext generation + isDataOwnerContextCurrent fencing, applicability requires a synced session whose canonicalAppUserId matches the owner key; no auth/token/persistence changes; no RLS/grant/migration/native/backend files touched; follow-up timers bounded to <=15s and only while a surface is mounted. Copy: every new test runs expectDossierCompliant against the docs/APP_STORE_SUBMISSION.md forbidden-term list; rendered copy inspected contains no Android/Google Play/guest mode/Live Court/DUPR/competitor/percentage/superlative/AI-coach claims. Test integrity: grep of the diff found no .skip/.only/xit/xdescribe, @ts-ignore/@ts-expect-error, any, eslint-disable, jest.setTimeout, forceExit, || true, --passWithNoTests; no pre-existing tests or comments modified (base..HEAD diff has 0 deletions). Zero blocking issues; non-blocking notes recorded. No PR opened, nothing pushed, no Mac run needed (no Apple/native paths changed).",
+            "verdict": "approve"
+          }
+        },
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8084d8af-ce0c-440f-a418-893a8ae2c654/baseline-jest.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0ca5118c-5a7e-49f2-9211-5d2114facac2/baseline-tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d319b25-fabc-4646-94be-9b21fa7927ec/attack-jest-run3.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bbdc1b19-6c15-44b7-becf-07286d33814f/attack-tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8e55fb96-d986-44dd-9c6e-3c11b303a4a9/attack-eslint.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/01ccde10-6cd1-4a77-b059-ec13f5aa3d23/attack-prettier.log"
+            ],
+            "attack_branch": "devin/pp/w05-04/attack-71967640",
+            "attack_branch_sha": "ebea20be08f4c8c6acb383bb817087952b186b08",
+            "attacked_sha": "719676408cb7a2ad76fcae2bb32711233671002a",
+            "attacks_tried": 26,
+            "breaks": [
+              {
+                "expected": "The card states every unanswered presentation the wallet reports: either '2 on hold' or the identified HOLD plus the candidate's own unidentified-HOLD note ('names no receipt still waiting on this phone'). Reachability caveat (INFERRED from openPresentation() superseding all in_flight rows inside one transaction): the shipping drain cannot produce two concurrent in_flight rows for one owner; the state requires a corrupt/foreign-written journal. The next drain supersedes both rows (A19/A4 verify no double charge), so the defect is presentation-only, hence P3.",
+                "observed": "With one identified in_flight journal row (receipt on file, HOLD) plus a second in_flight journal row naming a receipt id this phone never queued, readOfflineWalletStatus() reports unansweredPresentations=2 / hold=true, but presentOfflineJourney() renders 'Waiting to sync | 1 on hold' and only the identified-HOLD note; the unidentified submission is not stated anywhere on the card (the UNIDENTIFIED_HOLD_RULE copy is applied only when NO identified HOLD exists).",
+                "repro": "cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx -t 'A5'  (VERIFIED: exit 1; 1 failed / 37 passed / 38 total in the full-file run, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d319b25-fabc-4646-94be-9b21fa7927ec/attack-jest-run3.log)",
+                "severity": "P3",
+                "test_file": "apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx",
+                "title": "HOLD card understates ambiguous commitments when an in-flight journal row naming an unknown receipt sits beside an identified HOLD"
+              }
+            ],
+            "package_id": "W05-04",
+            "summary": "ADVERSARIAL TEST of W05-04 candidate 71967640 (branch devin/pp/w05-04/impl-r5-c2), attacked from devin/pp/w05-04/attack-71967640 @ ebea20be (one commit on top of the exact candidate SHA; only apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx added; no production file, no candidate test, no migration touched; no PR opened; nothing deployed).\n\nBASELINE (VERIFIED, candidate SHA): `cd apps/mobile && npm ci` exit 0; `npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx` exit 0, 6 suites passed, 140 tests passed / 0 failed / 0 skipped (baseline-jest.log); `npx tsc --noEmit` exit 0 (baseline-tsc.log).\n\nATTACK RUN (VERIFIED): `cd apps/mobile && npx jest --ci __tests__/w05OfflineJourneyAttack.test.tsx` exit 1; 38 tests executed, 37 passed, 1 failed (A5), 0 skipped (attack-jest-run3.log). `npx tsc --noEmit` exit 0 with the attack file (attack-tsc.log). `npx eslint apps/mobile/__tests__/w05OfflineJourneyAttack.test.tsx` exit 0; `npx prettier --check` same file exit 0 (attack-eslint.log / attack-prettier.log). All attacks are real Jest tests rendering the shipping AnalyzeScreen/SettingsScreen against a real node:sqlite ledger (createSqliteTestDb) with a mocked fetch for the grant/receipt routes; none use skip/only/passWithNoTests/inflated timeouts.\n\n26 attacks in 8 categories (38 cases incl. it.each): (1) concurrency/reentrancy A1 concurrent duplicate + conflicting spends, A2 racing drains present once/settle once, A3 HOLD follow-up timer never reads owner A after switch to B while B's first read is gated — all HELD; (2) replay/duplicate identities A4 duplicate in_flight rows = one HOLD/one spent ticket HELD, A5 unknown-receipt in_flight beside identified HOLD — BROKE (P3, see breaks), A6 replayed verdict after settlement charges nothing HELD; (3) trusted-time boundaries A7 exact expiry -1ms/0/+1ms, 1h, 1d, 1d-1ms; A8 epoch/negative/far-future/NaN/±Infinity anchored clocks never show a live pass or fabricated count; A9 clock rollback while HOLD; A10 zero-ticket grant; A26 Pro lease beside free tickets at free-expiry / both-expired / Pro-ends-in-1ms — all HELD; (4) corrupt/partial state A11 empty in_flight journal, A12 applied journal with NULL verdicts, A13 receipt body/row id mismatch, A14 consumed ticket with missing receipt row → all UNAVAILABLE with no writes; A15 unreadable quiet follow-up recovers — HELD; (5) network failure A16 response naming an extra receipt, A17 200 HTML redirect body, A18 request outstanding then answered — settle nothing/HOLD then READY — HELD; (6) process death A19 file-backed SQLite close/reopen after connection loss: HOLD on relaunch, same receipt re-presented, recovered=1, one charge — HELD; (7) lifecycle A20 two mounted surfaces share one timer, A21 foreground refresh vs stalled read no stale publish — HELD; (8) copy/accessibility A22 1,274-state presenter matrix clean of NaN/undefined/[object Object]/forbidden dossier vocabulary/plural errors/duplicate keys, A23 Pro label only under a live Pro lease and never hiding held tickets, A24 VoiceOver reading order, nothing hidden or clipped, A25 refused receipt states the ledger's counts — HELD.\n\nNot attacked (UNKNOWN): unauthorised-role SQL/Edge paths — the package adds no SQL/Edge surface (write_paths are mobile-only); no Postgres/Deno tests were run. Non-break observation (INFERRED, not a confirmed defect): label/value rows in the card are separate Text nodes, consistent with the rest of the app's Stat rows, so VoiceOver reads them as separate stops; no live region exists, but accessibilityLiveRegion is Android-only so this is not a violation for an iOS-only app.\n\nVerdict: no P0/P1/P2 found. One P3 presentation gap on a corrupt-journal-only path. Candidate's acceptance suites, tsc, ESLint and Prettier all pass; product invariants (offline allocation ≠ consumption, no auto-reclaim, HOLD never refunds/retries under a new id, replay never charges twice, corrupt state never becomes fabricated empty history) held under every attack."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a4788218-bb76-4bca-ac6f-7f4cc160a5e3/ac1-jest.log",
+                "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+                "executed": 140,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC1",
+                "note": "VERIFIED on HEAD 71967640: 6 suites (w05OfflineJourney + 5 analyzeScreen*) all pass. Regression proof: on BASE_SHA the suite fails to run (exit 1, 'Cannot find module ../src/components/OfflineAllocationCard', 0 tests) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/763519d3-b24c-4ea4-b7e9-a0eb40cd7260/regression-on-base.log ; on the r4 candidate's production files (fda1aeff) the round-5 block fails 8 of 11 for the reported defects (Allocation 'Pro pass' / no '2 of 2 unspent', 'never recorded', singular note with 2 on hold) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/56fa5cbf-be5c-4780-977c-35130bef8329/regression-on-r4-candidate.log . Extra: the adversary's attack suite (devin/pp/w05-04/attack-fda1aeff, copied transiently, not committed) passes 27/27 on this candidate — https://la-hacks-rttothemoon.devinenterprise.com/attachments/e152821d-d07b-4187-be32-58d563ad0001/attack-suite-on-candidate.log",
+                "passed": 140,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4bb857f4-5d06-4089-a862-d012a9f5bfa2/ac2-tsc.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC2",
+                "note": "VERIFIED. A first run failed with exit 2 only because the VM's apps/mobile/node_modules predated @sentry/react-native (environment staleness, not code); `cd apps/mobile && npm ci` (no tracked-file changes) then tsc exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04b6799d-6ab2-4ce0-931d-2678f27930df/ac3-eslint-prettier.log",
+                "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC3",
+                "note": "VERIFIED from repo root (root ESLint + root Prettier 3.x). Also `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf78d01e-c0fe-4104-829f-e30c0c53d8a5/format-check.log) and `git diff --check` exit 0 unstaged and --cached (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8b127da-7a7d-4e6d-8927-3f8810038fbe/git-diff-check.log).",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Started from BASE_SHA on the exact branch; reused the r4 test suite and card/screen wiring as the sound base; added the round-5 regression block first (committed separately after proving failure on BASE and, for the defect-specific cases, on the r4 production files); then changed only the presenter's lease/ticket separation and two copy strings in OfflineAllocationCard.tsx. Design rule: a Pro lease is a TIME lease (governs the verdict/badge/title/'Pass ends'), the free allocation is a TICKET ledger (governs the Allocation row and the retention note); only a live Pro lease suppresses the retention note because every analysis is then covered by the pass (matches the adversary's A3 expectation while still stating the held count).",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a4788218-bb76-4bca-ac6f-7f4cc160a5e3/ac1-jest.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4bb857f4-5d06-4089-a862-d012a9f5bfa2/ac2-tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04b6799d-6ab2-4ce0-931d-2678f27930df/ac3-eslint-prettier.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/763519d3-b24c-4ea4-b7e9-a0eb40cd7260/regression-on-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/56fa5cbf-be5c-4780-977c-35130bef8329/regression-on-r4-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e152821d-d07b-4187-be32-58d563ad0001/attack-suite-on-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bf78d01e-c0fe-4104-829f-e30c0c53d8a5/format-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d8b127da-7a7d-4e6d-8927-3f8810038fbe/git-diff-check.log"
+            ],
+            "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+            "baseline_failures_observed": [],
+            "blocked": false,
+            "branch": "devin/pp/w05-04/impl-r5-c2",
+            "files_changed": [
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+              "apps/mobile/src/components/OfflineAllocationCard.tsx",
+              "apps/mobile/src/screens/AnalyzeScreen.tsx",
+              "apps/mobile/src/screens/SettingsScreen.tsx"
+            ],
+            "head_sha": "719676408cb7a2ad76fcae2bb32711233671002a",
+            "out_of_scope_files": [],
+            "package_id": "W05-04",
+            "regression_tests_added": [
+              "apps/mobile/__tests__/w05OfflineJourney.test.tsx (63 tests; new round-5 describe block with 11 tests: A1 lapsed Pro + expired free allocation on Settings and Analyze; A2 unconfirmed later Pro + free allocation on Settings and Analyze; live Pro + live free states Pro pass AND the ticket count; presenter sweep of every non-live Pro verdict beside the free allocation; Pro alone under every non-live verdict; A4 HOLD naming an accepted receipt; A6 two pending receipts with no grant rows (plural) and one (singular); presenter sweep of every verdict/entitlement/count/pending/unidentified combination for count-noun agreement, render artifacts and dossier vocabulary)"
+            ],
+            "residual_risks": [
+              "Under a live Pro lease beside held free tickets the card states the count ('2 of 2 unspent') but omits the retention sentence — this follows the adversary's A3 expectation (no 'stay allocated' claim under a live Pro pass); a reviewer may prefer the sentence there too (UNKNOWN which wording the coordinator wants).",
+              "The Allocation row falls back to 'None' when the wallet has grants but neither tickets nor a Pro grant (a free grant with 0 allocated), a state the ledger does not produce today (INFERRED from offlineCapabilities.ts); pinned only via the presenter sweep for copy cleanliness.",
+              "Linux Jest/tsc evidence only; no iOS runtime rendering was exercised (package has no native write paths, cloud plane)."
+            ],
+            "summary": "Defect on BASE_SHA 7cfeacbb: there is no offline journey surface at all — apps/mobile/src/components/OfflineAllocationCard.tsx does not exist and neither apps/mobile/src/screens/AnalyzeScreen.tsx nor apps/mobile/src/screens/SettingsScreen.tsx reads readOfflineAllocation()/readOfflineWalletStatus(), so remaining allocation, lease expiry, pending receipts and HOLD are never shown (the regression suite cannot even load on base). Defects on the r4 candidate fda1aeff that this lane resolves (file:line in the r4 card): summarizeLease() line 190 `expired === null || (pro && !expired.pro)` let a lapsed Pro row name the whole wallet's expiry, and lines 187-189 kept the first reconcile entry (the later-issued Pro lease, listed first by issued_at DESC); the presenter then derived `proLease = lease.kind !== 'none' && lease.pro` (line 254) and used it for the Allocation row (line 288 'Pro pass') and to null the allocation note (line 339), erasing '2 of 2 unspent' and the retention statement (P1 A1, A2). UNIDENTIFIED_HOLD_RULE (lines 107-110) asserted the receipt 'was never recorded on this phone' even when it is on file and settled (P3 A4). The no-grant HOLD note (line 321) was singular for any count (P3 A6). Fix (all inside write_paths): LeaseSummary now carries an entitlement only on a LIVE lease (`expired` / `reconcile_required` variants have no `pro`); the presenter computes `proLive = lease.kind==='active' && lease.pro` and states the Allocation row from the ticket ledger whenever `held+spent > 0` ('N of M unspent'), falling back to 'Pro pass' only when the wallet holds a Pro grant and no tickets; the retention note is shown whenever tickets are held and no Pro lease is live (so EXPIRED / CONFIRM ONLINE keep '2 of 2 unspent' + 'stay allocated…never taken back' and the trusted-time explanation stays); unidentified-HOLD copy now reads 'it names no receipt still waiting on this phone'; the no-grant HOLD note pluralises by the on-hold count. Card is wired into the shipping paths: AnalyzeScreen ready surface via useOfflineJourneyOnFocus(navigation) (mount/focus/foreground/owner reads, dark card) and SettingsScreen via useOfflineJourney() for synced accounts. Commits: 7ac5c98b (regression test only) then 71967640 (implementation). Copy checked against docs/APP_STORE_SUBMISSION.md vocabulary via the FORBIDDEN_COPY sweep in the suite. No PR opened; pushed to devin/pp/w05-04/impl-r5-c2 only."
+          },
+          "lane": 2,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ba151ea3-36e2-4bf4-8745-43a67f0d3976/ac1-jest.log",
+                "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+                "executed": 140,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC1",
+                "note": "VERIFIED on HEAD 71967640 after `cd apps/mobile && npm ci` (exit 0; the snapshot's node_modules lacked @sentry/react-native). 6 suites passed (w05OfflineJourney 63 tests + analyzeScreenRearmSignals, analyzeScreenAutoDetect, analyzeScreenExtractionProgress, analyzeScreenAccessRefresh, analyzeScreenFullFlowE2E), 140/140, 0 skipped.",
+                "passed": 140,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3963c2b-b52e-47e7-9795-eb073f3453af/ac2-tsc.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC2",
+                "note": "VERIFIED on HEAD 71967640 after npm ci; no diagnostics emitted, exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29bd2681-b1a7-459a-976c-597396fff323/ac3-eslint-prettier.log",
+                "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-04-AC3",
+                "note": "VERIFIED from repo root with root ESLint and root Prettier 3.9.6 on all 4 changed files (exactly the write_paths): ESLint no output, Prettier 'All matched files use Prettier code style!', exit 0.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ba151ea3-36e2-4bf4-8745-43a67f0d3976/ac1-jest.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3963c2b-b52e-47e7-9795-eb073f3453af/ac2-tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29bd2681-b1a7-459a-976c-597396fff323/ac3-eslint-prettier.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3b425ef0-0323-4872-a747-ad0c7c4e53a9/regression-on-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c7c4b640-9f11-4070-8252-313dcb77d2a7/regression-on-r4.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d153bd57-2aa5-4efc-ab6a-df9737ba975d/attack-suite-on-candidate.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "INFERRED: under a live Pro lease beside held free tickets the card states '2 of 2 unspent' but omits the 'stay allocated ... never taken back' sentence (implementer's declared design; pinned by the round-5 test at apps/mobile/__tests__/w05OfflineJourney.test.tsx:2109). Coordinator may prefer the retention sentence there too; not a correctness defect.",
+              "INFERRED: OfflineAllocationCard.tsx:585 calls trustedTime.read(), which (per apps/mobile/src/data/trustedTime.ts:796-812) may persist a periodic time checkpoint. This is the existing canonical read API and writes no wallet state; the card itself never spends/releases/refunds (VERIFIED by reading refreshOfflineJourney: only readOfflineAllocation + readOfflineWalletStatus inside one transaction).",
+              "Linux Jest/tsc evidence only; iOS runtime rendering not exercised (no native write paths in this package)."
+            ],
+            "package_id": "W05-04",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "719676408cb7a2ad76fcae2bb32711233671002a",
+            "scope_violation": false,
+            "summary": "APPROVE W05-04 candidate 719676408cb7a2ad76fcae2bb32711233671002a (branch devin/pp/w05-04/impl-r5-c2, 2 commits on BASE 7cfeacbb). SCOPE (VERIFIED): `git diff --stat BASE..HEAD` touches exactly the 4 write_paths (w05OfflineJourney.test.tsx +2337, OfflineAllocationCard.tsx +773 new, AnalyzeScreen.tsx +13, SettingsScreen.tsx +13; 3136 insertions, 0 deletions); no serial-group paths touched; scope_violation=false. SHIPPED BEHAVIOUR (VERIFIED by reading the diff): the card is rendered by shipping code — AnalyzeScreen.tsx:756 `useOfflineJourneyOnFocus(navigation)` and :3024-3029 renders <OfflineAllocationCard dark> on the ready surface; SettingsScreen.tsx:251 `useOfflineJourney()` and :372-377 renders it for synced accounts — so remaining allocation ('N of M unspent'), lease expiry from the trusted-time verdict ('Pass ends: In N days / Expired / Unconfirmed'), pending receipt reconciliation ('N results waiting · N on hold') and HOLD states (ON HOLD badge, HOLD_RULE / SERVER_HOLD_RULE / UNIDENTIFIED_HOLD_RULE notes) are all on the shipping surfaces. ACCEPTANCE (all re-executed by me, exit 0): AC1 jest 6 suites 140/140 passed 0 skipped; AC2 tsc clean; AC3 root eslint + prettier clean on all changed files (logs attached). REGRESSION PROOF (VERIFIED): on BASE_SHA with only the candidate's test file copied over, `npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx` exits 1 ('Cannot find module ../src/components/OfflineAllocationCard', 0 tests run) — regression-on-base.log; on the candidate it passes 63/63. Because a load failure is a weak proof, I additionally ran the candidate's test file against the r4 candidate's production files (fda1aeff card + screens over BASE): exit 1, 9 failed / 54 passed of 63 — all 8 round-5 defect tests fail (lapsed/unconfirmed Pro hides '2 of 2 unspent' and prints 'Pro pass'; 'never recorded' copy; singular note for 2 held) plus the one earlier test whose expected copy was deliberately updated from 'never recorded' to 'no receipt still waiting on this phone' — regression-on-r4.log. That is the only changed pre-existing assertion (VERIFIED via diff fda1aeff..HEAD of the test file); it asserts new copy, not a weakening. EXTRA: the adversary's attack suite (devin/pp/w05-04/attack-fda1aeff, w05OfflineJourneyAttack.test.tsx, copied transiently and removed; working tree clean) passes 27/27 on the candidate — attack-suite-on-candidate.log. INVARIANTS (VERIFIED by reading): the card is read-only (refreshOfflineJourney reads trustedTime + readOfflineAllocation + readOfflineWalletStatus in ONE transaction; nested withTransaction is supported by transactions.ts scopedDatabase); unreadable wallet publishes {kind:'unavailable'} never an empty ledger; publications are fenced by monotonic read counter + owner key/generation + isDataOwnerContextCurrent (cross-account isolation, late reads dropped); nothing is drained, re-presented, refunded or reclaimed; no billing/RLS/migration/session code touched; no `any`/@ts-ignore/eslint-disable/skip/only/|| true in the diff (grep VERIFIED); no existing comments modified (screen diffs are pure additions); typography uses src/design/tokens roles (type.micro/h3/caption/bodyBold) and design Card/Pill. COPY: grep of the card for Android/Google Play/guest mode/Live Court/DUPR/competitors/%/superlatives finds nothing, and the suite's FORBIDDEN_COPY + RENDER_ARTIFACTS + PLURAL_DISAGREEMENT sweep covers every verdict/entitlement/count/pending combination. Implementer's claimed counts (140/140, exit 0 ×3) match my re-execution exactly.",
+            "verdict": "approve"
+          }
+        }
+      ],
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1f88b4f4-ee58-41e4-ac14-380ffffde1f4/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05OfflineJourney.test.tsx __tests__/analyzeScreen*.test.tsx",
+            "executed": 136,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC1",
+            "note": "VERIFIED on HEAD 45e8ad41 after `cd apps/mobile && npm ci` (exit 0): Test Suites 6 passed/6, Tests 136 passed/136, 0 skipped. Regression proof (kind=test package, reported here): BASE 7cfeacbb worktree + only apps/mobile/__tests__/w05OfflineJourney.test.tsx copied over -> `npx jest --ci __tests__/w05OfflineJourney.test.tsx` exit 1, 'Test suite failed to run: Cannot find module ../src/components/OfflineAllocationCard', 0 executed (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/338678ba-ce19-459e-9eac-3d6332fae984/regress-base.log). Pre-fix r4 commit a448d54b worktree + same test file -> exit 1, 8 failed / 51 passed / 59 total, the 8 failures being exactly the round-5 tests + the updated 'never announces a zero count' test (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/2662610d-7cf8-4d87-b437-60536a82b3d9/regress-r4-prefix.log). On HEAD the same 59 tests pass inside the 136.",
+            "passed": 136,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab6f25df-e44d-484c-af31-b3d454d55904/ac2-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC2",
+            "note": "VERIFIED on HEAD 45e8ad41: exit 0, no diagnostics emitted.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a28c0024-ad25-4544-890c-8b2398aea571/ac3-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx && npx prettier --check apps/mobile/src/screens/AnalyzeScreen.tsx apps/mobile/src/screens/SettingsScreen.tsx apps/mobile/src/components/OfflineAllocationCard.tsx apps/mobile/__tests__/w05OfflineJourney.test.tsx",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-04-AC3",
+            "note": "VERIFIED on HEAD 45e8ad41 from repo root: eslint exit 0 (JSON format confirmed 0 errors/0 warnings on all 4 files), prettier --check exit 0 ('All matched files use Prettier code style!'). `git diff --check` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1f88b4f4-ee58-41e4-ac14-380ffffde1f4/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab6f25df-e44d-484c-af31-b3d454d55904/ac2-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a28c0024-ad25-4544-890c-8b2398aea571/ac3-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/338678ba-ce19-459e-9eac-3d6332fae984/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2662610d-7cf8-4d87-b437-60536a82b3d9/regress-r4-prefix.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Objective text names a Result surface, but the frozen write_paths only cover AnalyzeScreen/SettingsScreen; the card is rendered on Analyze (apps/mobile/src/screens/AnalyzeScreen.tsx:3025) and Settings (apps/mobile/src/screens/SettingsScreen.tsx:373) only, not on ResultScreen. Within declared scope, so not blocking.",
+          "apps/mobile/src/components/OfflineAllocationCard.tsx presentOfflineJourney: under a LIVE Pro pass, free tickets whose own grant is not live are listed in the 'Free analyses: N of M unspent' row without the stranded 'need an online check' note (the stranded note is emitted only when !proLease). Copy is still truthful ('unspent'), so not blocking.",
+          "The r5 commit rewrites doc comments that the r4 commit of the same candidate introduced in OfflineAllocationCard.tsx (summarizeLease JSDoc, LeaseSummary). Relative to BASE_SHA the whole file is new (0 deletions in the base..HEAD diff), so no pre-existing comment was modified.",
+          "Regression proof on BASE_SHA is a compile-time failure (Cannot find module '../src/components/OfflineAllocationCard', 0 tests executed) because both the component and the test file are additions of this candidate lineage; the behavioural proof for the round-5 changes was taken against the pre-fix r4 commit a448d54b (8 failed / 51 passed) — see regression note."
+        ],
+        "package_id": "W05-04",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "45e8ad41a0475f318628770881b39df59d6803a5",
+        "scope_violation": false,
+        "summary": "APPROVE W05-04 candidate devin/pp/w05-04/impl-r5 @ 45e8ad41 (base 7cfeacbb). Scope VERIFIED clean: `git diff --stat` shows exactly the four write_paths files (w05OfflineJourney.test.tsx, OfflineAllocationCard.tsx, AnalyzeScreen.tsx, SettingsScreen.tsx), 0 deletions, no out_of_scope_files, no serial-group paths touched. Shipped behaviour VERIFIED: OfflineAllocationCard + useOfflineJourneyOnFocus are called from AnalyzeScreen.tsx (lines 115-117, 756, 3025) and OfflineAllocationCard + useOfflineJourney from SettingsScreen.tsx (41-43, 251, 373, gated on syncedAccount). Acceptance re-run by me on HEAD: AC1 exit 0, 6 suites / 136 tests passed / 0 skipped; AC2 tsc exit 0; AC3 eslint exit 0 + prettier --check exit 0. Regression proof: candidate test file on BASE fails to compile (module OfflineAllocationCard absent, exit 1, 0 executed); on pre-fix r4 commit a448d54b the same file gives exit 1, 8 failed / 51 passed (exactly the 8 round-5/updated tests); 59/59 pass on HEAD. Invariant review (INFERRED from reading the whole diff): read-only presenter — trustedTime.read() then readOfflineAllocation + readOfflineWalletStatus in one withTransaction, no writes to grants/receipts/journal, no consumption or reclaim, no refund/retry paths; Pro/free labelling derived only from ledger facts and a LIVE trusted-time verdict (a lapsed/unconfirmed Pro row never relabels held free tickets; ambiguous receipts render ON HOLD with 'nothing is charged twice' copy); unreadable DB -> 'unavailable' state, never fabricated empty history; owner isolation via DataOwnerContext generation + isDataOwnerContextCurrent fencing, applicability requires a synced session whose canonicalAppUserId matches the owner key; no auth/token/persistence changes; no RLS/grant/migration/native/backend files touched; follow-up timers bounded to <=15s and only while a surface is mounted. Copy: every new test runs expectDossierCompliant against the docs/APP_STORE_SUBMISSION.md forbidden-term list; rendered copy inspected contains no Android/Google Play/guest mode/Live Court/DUPR/competitor/percentage/superlative/AI-coach claims. Test integrity: grep of the diff found no .skip/.only/xit/xdescribe, @ts-ignore/@ts-expect-error, any, eslint-disable, jest.setTimeout, forceExit, || true, --passWithNoTests; no pre-existing tests or comments modified (base..HEAD diff has 0 deletions). Zero blocking issues; non-blocking notes recorded. No PR opened, nothing pushed, no Mac run needed (no Apple/native paths changed).",
+        "verdict": "approve"
+      },
+      "round": 5,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 5,
+  "status": "ACCEPTED",
+  "wave_id": "wave-24-keep"
+}

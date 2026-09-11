@@ -1,0 +1,131 @@
+{
+  "area": "ui-flows-a11y",
+  "breaks": [
+    {
+      "expected": "A valid press received before readiness is queued and dispatched exactly once after onReady (the whole point of tapping a notification on a cold/warm start is to land on the target tab).",
+      "observed": "RootNavigator.useNotificationPressRouting returns early when navigationRef.isReady() is false and never replays the press: a PRESS delivered before onReady and a cold-start initial notification whose read resolves before onReady both produce 0 navigate('Tabs',{screen:'Performance'}) calls after readiness (expected 1). Dedupe and unmount-cleanup attacks pass.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/notificationEarlyPress.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/notificationEarlyPress.log)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/notificationEarlyPress.test.tsx",
+      "title": "Notification tap before navigation readiness is silently dropped (warm press and cold-start initial notification)"
+    },
+    {
+      "expected": "The advertised range always contains the playhead (durationMs >= max(clip.durationMs, measured analysis extent, initial stop)) and increment never moves the playhead backwards.",
+      "observed": "FormReviewPlayer seeds durationMs from clip.durationMs (1000 ms, corrupt) while the deep-linked initial stop is at 1900 ms: timeline accessibilityValue reports now=1900, max=1000; an 'increment' action clamps to max and jumps the playhead from 1900 to 1000 (backwards). Missing clip / missing pose sequence / unreadable clip attacks pass with honest captions and bounded seeks.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/formReviewSeekCorruptEvidence.test.tsx  (exit 1; 5 executed, 3 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/formReviewSeekCorruptEvidence.log)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/formReviewSeekCorruptEvidence.test.tsx",
+      "title": "Form Review accessible seek: corrupt (too short) clip duration yields accessibilityValue now > max and a VoiceOver increment moves the playhead backwards"
+    },
+    {
+      "expected": "No Android / Google Play reference anywhere in user-facing copy of the iPhone-only app; the deletion notice should mention only the App Store subscription.",
+      "observed": "AST scan of apps/mobile/src/{screens,components,navigation,design} string literals finds 3 'Google Play' hits in src/screens/ManageAccountScreen.tsx: storeName 'Google Play' (line 77) and accessibilityLabel 'Manage subscription in Google Play' (line 78, Platform.OS==='android' branch), plus the post-deletion BrandNotice detail '...does not cancel an App Store or Google Play subscription.' (line 992) which is shown on iOS: the runtime test under Platform.OS='ios' renders the confirmed-deletion notice and it matches /Google Play/.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/userFacingCopyScan.test.ts  (exit 1; 1 executed, 0 passed, 1 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/userFacingCopyScan.log) and cd apps/mobile && npx jest --ci __tests__/adv/manageAccountDeletionCopy.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed; the copy test is 1 of the 2 failures)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/userFacingCopyScan.test.ts",
+      "title": "Prohibited 'Google Play' copy in ManageAccountScreen (APP_STORE_SUBMISSION.md rule), including the iOS account-deleted notice"
+    },
+    {
+      "expected": "A synchronous in-flight guard (ref) so a double tap confirms deletion exactly once.",
+      "observed": "ManageAccountScreen derives busy from React state (step.phase === 'deleting'); confirmDeletion() calls setStep then awaits confirmAccountDeletion(), so a second press in the same tick sees the stale phase and issues a second API call (received 2 calls, expected 1).",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/manageAccountDeletionCopy.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/manageAccountDeletionCopy.log)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionCopy.test.tsx",
+      "title": "Two same-tick presses on 'Permanently delete' send two confirmAccountDeletion API calls"
+    },
+    {
+      "expected": "After a permission denial the recovery offers 'Open Settings' (Linking.openSettings) since 'Try again' cannot re-prompt on iOS.",
+      "observed": "With importStrokeVideo rejecting with native code camera.permission_denied, AnalyzeScreen renders the error phase with 'Try again' and 'Close' only; no control matching /settings/i exists and Linking.openSettings is never reachable (received undefined). Fail-closed copy ('Nothing was rated.', no analysis started, no spinner) and 'Try again' double-tap → exactly one new import both PASS.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/analyzePermissionDeniedRecovery.test.tsx  (exit 1; 3 executed, 2 passed, 1 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/analyzePermissionDeniedRecovery.log)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analyzePermissionDeniedRecovery.test.tsx",
+      "title": "Camera/Photos permission denial on Analyze offers only 'Try again' / 'Close' — no route to iOS Settings although iOS never re-prompts"
+    },
+    {
+      "expected": "Go back is idempotent per error surface; a malformed/param-less route renders the missing state instead of a render exception.",
+      "observed": "(a) When loadStrokeResultEvidence rejects (corrupt row) the ErrorState 'Go back' control forwards every press: 2 same-tick presses → goBack called 2 times (expected 1). (b) Rendering ResultDetailsScreen with route.params undefined throws TypeError: Cannot read properties of undefined (reading 'analysisId') instead of showing 'Result missing'. Slow-A-then-repoint-to-B, corrupt pose sidecar, and deleted-attempt attacks PASS (stale evidence never paints, breakdown survives sidecar failure).",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/resultDetailsRouting.test.tsx  (exit 1; 5 executed, 3 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/resultDetailsRouting.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/resultDetailsRouting.test.tsx",
+      "title": "ResultDetails 'Result missing' → double tap on 'Go back' calls navigation.goBack twice; route without params throws during render"
+    },
+    {
+      "expected": "Headers wrap (wrapTitle behaviour) or otherwise fit at fontScale >= 2 so the screen name is never truncated to an ellipsis for AX users.",
+      "observed": "At fontScale 3.571 (AX5) ScreenHeader renders every non-wrapTitle title ('Stroke analysis', 'Saved capture', 'Full breakdown', 'Form review', 'Consistency', 'Notifications', 'Manage account', 'Drill Library', 'Data & consent', 'Confirm technique', 'Capture complete', 'Auto Analyze') with numberOfLines={1}, no adjustsFontSizeToFit, no maxFontSizeMultiplier, no wrap; the estimated title width (chars x 0.5em x 17pt x 3.571) exceeds the ~245pt centre column on a 393pt iPhone for all 12. INFERRED clipping — actual pixel truncation is NOT_YET_VERIFIABLE on Linux (needs a simulator run at AX5). The wrapTitle control (StreakCalendar) and default-size control PASS.",
+      "repro": "cd apps/mobile && npx jest --ci __tests__/adv/screenHeaderDynamicType.test.tsx  (exit 1; 15 executed, 3 passed, 12 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/screenHeaderDynamicType.log)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/screenHeaderDynamicType.test.tsx",
+      "title": "ScreenHeader titles are hard-capped to one line at accessibility Dynamic Type sizes (12 shipping headers without wrapTitle)"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-ui-flows-a11y-30a40650",
+  "result": {
+    "attachment_urls": [],
+    "attack_branch": "devin/pp/adv/ui-flows-a11y-30a40650",
+    "attack_branch_sha": "95ad8e7527d9d2f5932b0ddebebc0596146ff980",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 42,
+    "breaks": [
+      {
+        "expected": "A valid press received before readiness is queued and dispatched exactly once after onReady (the whole point of tapping a notification on a cold/warm start is to land on the target tab).",
+        "observed": "RootNavigator.useNotificationPressRouting returns early when navigationRef.isReady() is false and never replays the press: a PRESS delivered before onReady and a cold-start initial notification whose read resolves before onReady both produce 0 navigate('Tabs',{screen:'Performance'}) calls after readiness (expected 1). Dedupe and unmount-cleanup attacks pass.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/notificationEarlyPress.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/notificationEarlyPress.log)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/notificationEarlyPress.test.tsx",
+        "title": "Notification tap before navigation readiness is silently dropped (warm press and cold-start initial notification)"
+      },
+      {
+        "expected": "The advertised range always contains the playhead (durationMs >= max(clip.durationMs, measured analysis extent, initial stop)) and increment never moves the playhead backwards.",
+        "observed": "FormReviewPlayer seeds durationMs from clip.durationMs (1000 ms, corrupt) while the deep-linked initial stop is at 1900 ms: timeline accessibilityValue reports now=1900, max=1000; an 'increment' action clamps to max and jumps the playhead from 1900 to 1000 (backwards). Missing clip / missing pose sequence / unreadable clip attacks pass with honest captions and bounded seeks.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/formReviewSeekCorruptEvidence.test.tsx  (exit 1; 5 executed, 3 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/formReviewSeekCorruptEvidence.log)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/formReviewSeekCorruptEvidence.test.tsx",
+        "title": "Form Review accessible seek: corrupt (too short) clip duration yields accessibilityValue now > max and a VoiceOver increment moves the playhead backwards"
+      },
+      {
+        "expected": "No Android / Google Play reference anywhere in user-facing copy of the iPhone-only app; the deletion notice should mention only the App Store subscription.",
+        "observed": "AST scan of apps/mobile/src/{screens,components,navigation,design} string literals finds 3 'Google Play' hits in src/screens/ManageAccountScreen.tsx: storeName 'Google Play' (line 77) and accessibilityLabel 'Manage subscription in Google Play' (line 78, Platform.OS==='android' branch), plus the post-deletion BrandNotice detail '...does not cancel an App Store or Google Play subscription.' (line 992) which is shown on iOS: the runtime test under Platform.OS='ios' renders the confirmed-deletion notice and it matches /Google Play/.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/userFacingCopyScan.test.ts  (exit 1; 1 executed, 0 passed, 1 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/userFacingCopyScan.log) and cd apps/mobile && npx jest --ci __tests__/adv/manageAccountDeletionCopy.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed; the copy test is 1 of the 2 failures)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/userFacingCopyScan.test.ts",
+        "title": "Prohibited 'Google Play' copy in ManageAccountScreen (APP_STORE_SUBMISSION.md rule), including the iOS account-deleted notice"
+      },
+      {
+        "expected": "A synchronous in-flight guard (ref) so a double tap confirms deletion exactly once.",
+        "observed": "ManageAccountScreen derives busy from React state (step.phase === 'deleting'); confirmDeletion() calls setStep then awaits confirmAccountDeletion(), so a second press in the same tick sees the stale phase and issues a second API call (received 2 calls, expected 1).",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/manageAccountDeletionCopy.test.tsx  (exit 1; 4 executed, 2 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/manageAccountDeletionCopy.log)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/manageAccountDeletionCopy.test.tsx",
+        "title": "Two same-tick presses on 'Permanently delete' send two confirmAccountDeletion API calls"
+      },
+      {
+        "expected": "After a permission denial the recovery offers 'Open Settings' (Linking.openSettings) since 'Try again' cannot re-prompt on iOS.",
+        "observed": "With importStrokeVideo rejecting with native code camera.permission_denied, AnalyzeScreen renders the error phase with 'Try again' and 'Close' only; no control matching /settings/i exists and Linking.openSettings is never reachable (received undefined). Fail-closed copy ('Nothing was rated.', no analysis started, no spinner) and 'Try again' double-tap → exactly one new import both PASS.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/analyzePermissionDeniedRecovery.test.tsx  (exit 1; 3 executed, 2 passed, 1 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/analyzePermissionDeniedRecovery.log)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analyzePermissionDeniedRecovery.test.tsx",
+        "title": "Camera/Photos permission denial on Analyze offers only 'Try again' / 'Close' — no route to iOS Settings although iOS never re-prompts"
+      },
+      {
+        "expected": "Go back is idempotent per error surface; a malformed/param-less route renders the missing state instead of a render exception.",
+        "observed": "(a) When loadStrokeResultEvidence rejects (corrupt row) the ErrorState 'Go back' control forwards every press: 2 same-tick presses → goBack called 2 times (expected 1). (b) Rendering ResultDetailsScreen with route.params undefined throws TypeError: Cannot read properties of undefined (reading 'analysisId') instead of showing 'Result missing'. Slow-A-then-repoint-to-B, corrupt pose sidecar, and deleted-attempt attacks PASS (stale evidence never paints, breakdown survives sidecar failure).",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/resultDetailsRouting.test.tsx  (exit 1; 5 executed, 3 passed, 2 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/resultDetailsRouting.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/resultDetailsRouting.test.tsx",
+        "title": "ResultDetails 'Result missing' → double tap on 'Go back' calls navigation.goBack twice; route without params throws during render"
+      },
+      {
+        "expected": "Headers wrap (wrapTitle behaviour) or otherwise fit at fontScale >= 2 so the screen name is never truncated to an ellipsis for AX users.",
+        "observed": "At fontScale 3.571 (AX5) ScreenHeader renders every non-wrapTitle title ('Stroke analysis', 'Saved capture', 'Full breakdown', 'Form review', 'Consistency', 'Notifications', 'Manage account', 'Drill Library', 'Data & consent', 'Confirm technique', 'Capture complete', 'Auto Analyze') with numberOfLines={1}, no adjustsFontSizeToFit, no maxFontSizeMultiplier, no wrap; the estimated title width (chars x 0.5em x 17pt x 3.571) exceeds the ~245pt centre column on a 393pt iPhone for all 12. INFERRED clipping — actual pixel truncation is NOT_YET_VERIFIABLE on Linux (needs a simulator run at AX5). The wrapTitle control (StreakCalendar) and default-size control PASS.",
+        "repro": "cd apps/mobile && npx jest --ci __tests__/adv/screenHeaderDynamicType.test.tsx  (exit 1; 15 executed, 3 passed, 12 failed, 0 skipped; log apps/mobile/__tests__/adv/evidence/screenHeaderDynamicType.log)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/screenHeaderDynamicType.test.tsx",
+        "title": "ScreenHeader titles are hard-capped to one line at accessibility Dynamic Type sizes (12 shipping headers without wrapTitle)"
+      }
+    ],
+    "package_id": "INT-ui-flows-a11y",
+    "summary": "INT-ui-flows-a11y adversary pass against 30a4065036a917514fb4984fde73f87867f38619 (verified `git rev-parse HEAD`). Branch devin/pp/adv/ui-flows-a11y-30a40650 pushed at 95ad8e7527d9d2f5932b0ddebebc0596146ff980 (one commit on top of HEAD_SHA; no PR; no production code or existing tests touched). 8 attack files / 42 tests under apps/mobile/__tests__/adv/, per-file logs with command + SHA + exit code in apps/mobile/__tests__/adv/evidence/*.log and an index in evidence/README.md. Totals: 42 executed, 20 passed, 22 failed, 0 skipped — failures are the confirmed breaks left failing on purpose.\n\nCONFIRMED BREAKS (VERIFIED, see `breaks`): P1 early notification press dropped (warm + cold start); P1 Form Review accessible seek range/backward jump on corrupt clip duration; P1 'Google Play' copy in ManageAccountScreen incl. iOS deletion notice; P1 same-tick double 'Permanently delete' → 2 API calls; P2 permission denial has no Settings route; P2 ScreenHeader one-line cap at AX Dynamic Type (INFERRED clip, structural evidence); P3 ResultDetails Go back double-pop + param-less route render throw.\n\nPASSING ATTACKS (VERIFIED, evidence too): `npx jest --ci __tests__/adv/consentAccountSwitchDoubleAction.test.ts` exit 0, 5/5 passed — same-tick double toggle sends one grant; network loss during grant leaves consent off/busy cleared/error visible; owner A's slow grant landing after owner B is live neither flips B on nor leaves B busy; offline hydrate for a signed-in owner → 'unavailable' with honest error; toggle while signed out changes nothing. In notificationEarlyPress: dedupe of two pre-ready presses and no dispatch after navigator unmount pass. In formReviewSeekCorruptEvidence: no clip + no pose → honest caption + bounded seek; clip unreadable after seek → honest caption, playhead kept; clip without verified pose → honest caption pass. In analyzePermissionDeniedRecovery: fail-closed denial (copy 'Nothing was rated.', no analysis, no spinner) and 'Try again' double tap → exactly one import pass. In resultDetailsRouting: slow attempt-A evidence landing after repoint to B never paints A; corrupt pose sidecar keeps the breakdown with sequence=null; deleted attempt → 'Result missing' pass. In manageAccountDeletionCopy: iOS platform precondition and default ManageAccount surface free of Android/Google Play pass. In screenHeaderDynamicType: wrapTitle header wraps at >=2x and default-size single line is intended pass.\n\nQUALITY GATES on the new tests (VERIFIED): `cd apps/mobile && npx prettier --check __tests__/adv/` exit 0; `pnpm exec eslint apps/mobile/__tests__/adv` (repo root; the apps/mobile-local eslint 8 binary crashes on the root eslint-9 plugin config — pre-existing tooling mismatch, not introduced here) exit 0; `cd apps/mobile && npm ci && npx tsc --noEmit` exit 0 (node_modules needed `npm ci` because HEAD adds @sentry/react-native; before that tsc reported 20 pre-existing module-resolution errors in src/diagnostics, none in __tests__/adv).\n\nNOT_YET_VERIFIABLE on Linux (no verdict guessed): real VoiceOver spoken values for the timeline slider, actual Dynamic Type pixel clipping of ScreenHeader titles, iOS Settings deep link, real notification taps on cold start, and reduced-motion runtime behaviour. Mac/device command: `scripts/mac-full-verify.sh` on the M4 runner (coordinator-owned; not run from this session) / `xcodebuild test -workspace apps/mobile/ios/PickleSensei.xcworkspace -scheme PickleSensei -destination 'platform=iOS Simulator,name=iPhone 16'` with Accessibility → Larger Text set to AX5 and VoiceOver enabled.\n\nUNKNOWN / not attacked in depth (out of time budget, no claims made): PremiumTabBar action dropped when the FAB is reopened during the 210 ms close window (pendingAction is cleared by openMenu — INFERRED from code, no test written); Home/Library/Performance tab screens' offline/empty states."
+  },
+  "status": "DONE"
+}

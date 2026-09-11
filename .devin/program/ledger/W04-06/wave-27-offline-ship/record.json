@@ -1,0 +1,262 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W04-06-r1",
+      "phase": "implement",
+      "prompt_sha256": "a320e93e7eb4f33775081fef8b48fa9e03bd5cf77050243ae9a0b434cad62645",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-06-r1",
+      "phase": "review",
+      "prompt_sha256": "f7d7e51d81888357748b39c8b0994a484bcc2acf798442e3c0c41a4a1920f92d",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-06-r1",
+      "phase": "adversary",
+      "prompt_sha256": "cc7d597de1d7ff94eb9d6f4e1c17e5a88761ce5ec08568e4ef24cb4b87d12067",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4",
+  "candidate": {
+    "branch": "devin/pp/w04-06/impl-r1",
+    "head_sha": "fbc1cc99aec55b0ee596a000aec167e88405d617",
+    "lane": 1,
+    "round": 1
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.10",
+  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-06",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5267506-3e41-4eeb-b438-120f5f2aef06/clean_atk_live_run5.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fe69fed8-243a-41f1-bcc9-22551f952d0d/clean_atk_routes_run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/937352a7-be99-4d88-9e1d-7f174e37091c/clean_atk_sql_run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b75f6636-b5e3-4f86-b5a7-7c28fca4b19c/clean_ac1_rls_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9701e39b-9b86-4c98-835c-04035e5e3d5b/clean_ac3_edge_candidate_full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5db2c659-4c5b-4def-abc6-125e991878d0/clean_ac4_base_regress_nodb.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4bba5d58-1b4d-4f29-83c4-d41920e9d9e2/clean_ac4_head_regress.log"
+        ],
+        "attack_branch": "devin/pp/w04-06/attack-fbc1cc99",
+        "attack_branch_sha": "a36742a6c4b402fa9d2823e3515879a7bf9de383",
+        "attacked_sha": "fbc1cc99aec55b0ee596a000aec167e88405d617",
+        "attacks_tried": 25,
+        "breaks": [
+          {
+            "expected": "Once both transactions commit, no grant row exists for a revoked device whose revoked_at precedes the grant's issued_at (objective: 'a revoked device stays refused'); the phone is answered offline.device_revoked. Fix shape (implementer): lock the device row (`for share`) or take the per-identity advisory lock before reading it, and have the revocation path take the same lock. Impact is bounded: revocation does not recall grants already signed, so the window equals the revoking transaction's duration; not a client-controllable path (offline_devices has no client UPDATE grant — ATK-S1).",
+            "observed": "VERIFIED 5/5 runs: phone's request answered 'accepted'; committed row offline_grants.issued_at 2026-09-10T01:42:27.290Z > offline_devices.revoked_at 2026-09-10T01:42:27.281Z; the revoked device holds a live grant row (exit 1, clean_atk_live_run5.log). Root cause INFERRED from 20260910140000 migration: `select * into v_device from public.offline_devices ... ` (no FOR SHARE/FOR UPDATE) before pg_advisory_xact_lock; guard_offline_grant re-reads under READ COMMITTED and cannot see the uncommitted revocation.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json attack_w04_06_live.test.ts  (test 'ATK-L1'; owner tx: UPDATE offline_devices SET revoked_at=now() parked before COMMIT; phone tx: issue_offline_grant(key,2) commits; owner commits)",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_06_live.test.ts",
+            "title": "Grant is issued and committed for a device whose revocation is in flight: issue_offline_grant() reads offline_devices without FOR SHARE, so after both commit the device is revoked yet holds a grant with issued_at > revoked_at"
+          },
+          {
+            "expected": "The function reads v_device BEFORE acquiring the lock and never re-reads it; the guard's fresh read then disagrees and raises. Expected: re-read the device after the advisory lock (or lock first) so the phone receives the mapped result row offline.device_revoked → 403 with the categorical audit line. Fails closed (no grant), so minor; the phone's retry gets the 403.",
+            "observed": "VERIFIED 5/5 runs: issue_offline_grant() raised SQLSTATE 23514 'offline grants are refused for a revoked device' (no result row, no grant row). Edge consequence INFERRED from index.ts issueOfflineGrant(): `if (issued.error) return serviceUnavailable(...)` before any emitOfflineGrantAudit — VERIFIED by ATK-E3 that a 4xx RPC error body becomes a generic 503 with no coded error.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json attack_w04_06_live.test.ts  (test 'ATK-L2'; owner tx holds pg_advisory_xact_lock(access_lock_key(uid)); phone calls issue_offline_grant; support path commits revoked_at=now(); owner releases)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_06_live.test.ts",
+            "title": "Revocation committed while the phone's grant request waits on access_lock_key(): the guard RAISES 23514 instead of the function answering offline.device_revoked — the Edge maps the RPC error to a generic 503 (no 403, no offline_grant_audit line)"
+          },
+          {
+            "expected": "The grant is issued and stamped with the device's state as of the locked read (either value is truthful at issuance); a legitimate attestation upgrade must not turn the phone's grant request into a 503. Same root cause and fix as ATK-L2 (read the device row after taking access_lock_key, or FOR SHARE).",
+            "observed": "VERIFIED 5/5 runs: SQLSTATE 23514 'an offline grant records the attestation state it was issued under'; no grant row. Not reachable in 1.0 (App Attest is not wired; attestation_state changes only through owner SQL), so latent.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=<disposable pg> deno test -A --no-check --config deno.json attack_w04_06_live.test.ts  (test 'ATK-L5'; same lock choreography as L2 with UPDATE offline_devices SET attestation_state='attested' committed while the phone waits)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w04_06_live.test.ts",
+            "title": "Device attested (owner / future App Attest path) while the grant request waits on the per-identity lock: the stale pre-lock v_device.attestation_state is stamped, guard re-reads 'attested', mismatch RAISES 23514 — grant request fails with a generic 503 instead of issuing a truthfully-stamped grant"
+          }
+        ],
+        "package_id": "W04-06",
+        "summary": "W04-06 adversary vs candidate fbc1cc99 (attack branch devin/pp/w04-06/attack-fbc1cc99 @ a36742a6, pushed; candidate code/tests untouched). 25 attacks in 3 files, 3 confirmed breaks (1×P2, 2×P3), no P0/P1. (1) SQL `docker exec -i pickle-xc-pg psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/attack_w04_06.sql` exit 0 — 6 groups ALL HOLD: S1 roles/sessions (sub≠device owner, expired/malformed session, missing API key, client INSERT/UPDATE/DELETE on grants/devices, anon+service EXECUTE, banned user); S2 input boundaries (128-char key ok, 129/CR/LF/unicode/slash/empty/-1/3 → offline.invalid_input, nothing persisted); S3 time extremes (entitlement expiry past/far-future, revoked_at future/-infinity refused); S4 per-grant attestation history + CHECK, deletion reclaims no holds; S5 conservation across installations/revocation/live online reservation/replay; S6 same key under two owners isolated. (2) Edge `deno test ... attack_w04_06_routes.test.ts` exit 0, 13 passed/0 failed/0 ignored — E1 raw-JSON bodies (1e999, NaN, 2.5, -0, 2.0, null, arrays, >64KiB→413, key boundaries) refused before any RPC or forwarded exactly; E2 attestation smuggling via body never reaches the RPC/response/signed payload; E3 network failure at each step (no signing key, policy RPC 5xx, grant RPC 500/429/503/502/4xx, 302, thrown fetch error, empty/2 rows) → generic 503, nothing signed, no generation spent before the RPC; E4 only exact 'attested'/'unattested' echoed, others 503+row_malformed audit; E5 rollout skew (BASE DB answering offline.device_not_attested) fails closed 503; E6 refusal copy obeys APP_STORE_SUBMISSION.md. (3) Live `XC_PG_URL=... deno test ... attack_w04_06_live.test.ts` exit 1, 3 passed/3 failed/0 ignored, deterministic across 5 runs: L3 8-lane burst conservation HOLDS, L4 process death before COMMIT HOLDS, L6 double-submit replay HOLDS; L1/L2/L5 FAIL — issue_offline_grant() reads the device row before pg_advisory_xact_lock and without FOR SHARE, so a concurrent revocation (L1: grant committed with issued_at > revoked_at, P2) or a concurrent revocation/attestation change during lock wait (L2/L5: guard raises 23514 → Edge generic 503 without audit instead of the mapped 403 / a stamped grant, P3) races the grant. All fail-closed except L1, whose impact equals a grant issued milliseconds earlier (revocation does not recall signed grants; offline_devices has no client UPDATE path). Baselines VERIFIED on candidate: AC1 ./supabase/tests/run_rls_tests.sh exit 0 (4 histories); AC2 npx --yes deno@2.5.6 check ... exit 0; AC3 deno task test with XC_PG_URL+PICKLE_AUDIT_PG_URL exit 0, 1010 passed/0 failed/0 ignored. AC4 spot-check VERIFIED: candidate's offline_grants_routes.test.ts + db_migrations_rls_indexes.test.ts copied onto BASE d446dcdd → exit 1, 40 passed/4 failed/6 ignored (harness-only; a run with the candidate-migrated DB exercises the candidate schema, not base, so is not evidence); on HEAD → exit 0, 50 passed/0 failed. Mobile parseIssuedOfflineGrant() does not read the new attestationState field — INFERRED, not a W04-06 break (field is additive). Attack-test defects fixed during the run were test-only (per-user route budget 10/60s required a fresh user per request; chr(0) not representable in text). Test names in the pushed branch are 'ATK-*' and report the desired behaviour, so L1/L2/L5 fail against the candidate by design."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3b0477c-0d9d-4ac7-8074-dd83d7f8ba6f/ac1_rls_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC1",
+            "note": "VERIFIED on HEAD fbc1cc99 (also repo-local artifacts/w04-06/ac1_rls_head.log). executed = 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 SQL suites (security_regression.sql incl. new section W + T1 change, account_deletion_operations.sql, analysis_release_policy.sql); each printed 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' / 'W07 ... PASSED' / 'W08 ... PASSED' / 'Analysis release policy authority: PASS'. Forward migration 20260910140000 applied on every history.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a281f2a5-8e23-46cf-bd41-c20a864774d8/ac2_deno_check_head.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC2",
+            "note": "VERIFIED on HEAD; frozen lockfile untouched (only the two pre-existing workspace-root 'lock'/'nodeModulesDir' warnings).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c664daf1-f8e3-41a4-ab17-ba4ac253e31a/ac3_edge_head.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 1010,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC3",
+            "note": "VERIFIED on HEAD: 'ok | 1010 passed (31 steps) | 0 failed' with ignored == 0. Disposable Postgres = ./supabase/functions/api/__wf__/xc_pg_up.sh (postgres:16 + shim_auth.sql + every migration incl. 20260910140000). PICKLE_AUDIT_PG_URL pointed at the same disposable DB so the 12 w06_01_golden_parity live tests (which ignore on that variable, not XC_PG_URL) also ran; with XC_PG_URL alone the earlier run was 998 passed / 0 failed / 12 ignored (artifacts/w04-06/ac3_edge_run1.log).",
+            "passed": 1010,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/36dfae8d-2be8-4998-a549-eae0ab6ae01b/ac4_head_edge.log",
+            "command": "git worktree add ps-base d446dcdd; cp supabase/tests/security_regression.sql supabase/functions/api/__wf__/offline_grants_routes.test.ts supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts into it; BASE: ./supabase/tests/run_rls_tests.sh && (cd supabase/functions/api/__wf__ && XC_PG_URL=<base-migrated disposable pg> deno test -A --no-check --config deno.json offline_grants_routes.test.ts db_migrations_rls_indexes.test.ts); HEAD: same deno command against the HEAD-migrated disposable pg (SQL side covered by AC1)",
+            "executed": 50,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC4",
+            "note": "PROOF VERIFIED. BASE d446dcdd + new tests: SQL matrix exit 3 — 'psql:/tests/security_regression.sql:4740: ERROR: T1: ... (got offline.device_not_attested)' on the fresh history (https://la-hacks-rttothemoon.devinenterprise.com/attachments/a700d3d1-9a35-4224-b32f-839ad09e7fb8/ac4_base_rls.log); Edge new-test files exit 1 — 43 passed / 7 failed, the 7 failures being exactly the new tests (register->grant end to end, malformed attestation_state row, offline.device_revoked mapping, 3 live-DB tests: unattested free grant bounded+recorded, unattested Pro lease capped at entitlement expiry / attested recorded, revoked refused + deletion refused + no reclaim, and the 20260910140000 migration audit) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0417a69e-da2e-48cd-9a82-a5a6fab0be5e/ac4_base_edge.log). HEAD fbc1cc99: Edge new-test files exit 0 — 50 passed / 0 failed; SQL section W passes on all 4 histories under AC1.",
+            "passed": 50,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Defect on BASE (VERIFIED by the base run): supabase/functions/api/index.ts registerOfflineDevice() calls register_offline_device(..., p_attested: false) so every 1.0 installation is 'unattested'; supabase/migrations/20260908160000_offline_device_grants.sql issue_offline_grant() lines ~1535-1539 return 'offline.device_not_attested' for any device whose attestation_state <> 'attested', and guard_offline_grant() lines ~221-227 refuse any grant row whose device is not 'attested'; the Edge route mapped that result to 403 'Offline grants are issued only to attested installations.' Fix: forward migration 20260910140000 (never edits the applied one): offline_grants.attestation_state text not null check in ('attested','unattested'), backfilled 'attested' (the only state the old guard ever admitted) with the default dropped; offline_devices.revoked_at timestamptz; guard_offline_grant() looks the device up by (id, user_id) as before, refuses revoked_at, fails closed on an unknown state, stamps new.attestation_state from the device row and refuses a caller-supplied mismatch (so no grant claims a state the server did not record), keeps the Pro-entitlement and immutability checks verbatim; issue_offline_grant() dropped/recreated (return table gains attestation_state) with the 20260908160000 body verbatim except 'unattested' is no longer a refusal and revoked_at -> 'offline.device_revoked' (owner+installation lookup, api_private.is_active_session(), access_lock_key(uid), Pro lease = min(now+7d, verified expiry), free tickets within lifetime_scored_count()+online_reservation_count()+offline_hold_count() <= 2, original-installation recovery; EXECUTE re-granted to authenticated only). Edge: OFFLINE_GRANT_REFUSALS maps offline.device_revoked -> 403; an accepted row without attestation_state in {attested, unattested} is refused with a generic 503 + row_malformed audit; attestationState is echoed in the clear response/audit; the signed claims contract (packages/shared-types offlineAuthorization) is untouched and carries no attestation claim (asserted on the decoded JWS payload). Mobile parseIssuedOfflineGrant() ignores the extra clear field (INFERRED from apps/mobile/src/data/api.ts:607-653). Commits: 4645f62a regression tests (fail on base), f3eaa2ea prettier of those tests, fbc1cc99 migration + Edge wiring + fixture.",
+        "base_sha": "d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4",
+        "baseline_failures_observed": [
+          "pnpm format:check on BASE_SHA-with-new-tests flagged only the two new test files (fixed in f3eaa2ea); the rest of the repo is Prettier-clean on base and on HEAD (exit 0)."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w04-06/impl-r1",
+        "files_changed": [
+          "supabase/migrations/20260910140000_offline_grants_unattested_installations.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/offline_grants_routes.test.ts",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts",
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts"
+        ],
+        "head_sha": "fbc1cc99aec55b0ee596a000aec167e88405d617",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/offline_key_rotation.test.ts — 2 additive lines: the local GrantRow fixture type/proRow() gain the new `attestation_state` RPC row field, because the shipping route now fails closed (503) on an accepted row that does not record a known attestation state; not under any serial_group_paths prefix, no assertion changed."
+        ],
+        "package_id": "W04-06",
+        "regression_tests_added": [
+          "supabase/tests/security_regression.sql — section W (W1 unattested registration -> issue_offline_grant accepted, generation 1, expires = issued + 7d, attestation_state 'unattested' recorded, owner/device bound, ticket conservation and refresh; W2 unattested Pro lease capped at verified entitlement expiry + attested device records 'attested'; W3 revoked_at -> offline.device_revoked at RPC and guard, re-registration never clears it, deletion -> offline.device_not_registered, held tickets not reclaimed; W4 direct grant insert with a mismatched state / another owner's device refused, recorded state immutable, client cannot update offline_devices/offline_grants, anon and service_role cannot execute issue_offline_grant) and the T1 assertion that an unattested registration is not a refusal reason",
+          "supabase/functions/api/__wf__/offline_grants_routes.test.ts — 'POST /v1/devices/register then POST /v1/offline/grants issues a fresh unattested installation a grant recorded as unattested, with no attestation claim signed'; 'refuses an accepted row that does not record a known attestation state' (503); 'maps the RPC refusals to coded errors' now covers offline.device_revoked -> 403 and stale offline.device_not_attested -> 503; 3 live-DB (XC_PG_URL) tests: unattested free grant bounded + recorded + no attestation claim in the signed JWS; unattested Pro lease <= verified entitlement expiry and attested device recorded 'attested'; revoked refused (RPC + table), re-registration keeps revocation, deleted installation not registered, no reclaim of a held ticket",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts — 'offline grants (W04-06)' static audit of 20260910140000: columns/constraints, guard binds owner+device and refuses revoked, records device state, no d.attestation_state = 'attested' requirement, RPC drop+recreate with attestation_state in the return table, session/lock/lease/conservation bodies preserved, EXECUTE authenticated-only, no policy/RLS/grant widening, nothing clears revoked_at"
+        ],
+        "residual_risks": [
+          "Rollout order: an Edge deploy that reaches a DB without 20260910140000 gets 'offline.device_not_attested' from the old RPC, which the route now answers with a generic 503 (fail closed, no attestation requirement advertised) rather than 403 — apply `supabase db push` before `supabase functions deploy api` (the existing documented order).",
+          "revoked_at is a new server/support-set column with no RPC or UI to set it in this package (clients hold no UPDATE on offline_devices, so it cannot be self-cleared); the revocation refusal paths are proven live via a superuser UPDATE in the tests.",
+          "Backfill assumption: every pre-existing offline_grants row is stamped 'attested' because the previous guard admitted only attested devices — INFERRED from 20260908160000; production has no offline grants yet on the 1.0 path by construction of this defect.",
+          "AC3's ignored == 0 requires PICKLE_AUDIT_PG_URL in addition to XC_PG_URL (the 12 w06_01_golden_parity live tests gate on the former); with the manifest's literal XC_PG_URL-only command the suite is 998 passed / 12 ignored — pre-existing, not from this package."
+        ],
+        "summary": "W04-06 implemented on devin/pp/w04-06/impl-r1 (HEAD fbc1cc99aec55b0ee596a000aec167e88405d617, base d446dcdd preserved, no PR). Defect on base: index.ts registers with p_attested=false while 20260908160000's issue_offline_grant() (~L1535, 'offline.device_not_attested') and guard_offline_grant() (~L221, d.attestation_state = 'attested') refuse any non-attested device, so no shipping installation could hold a grant. Forward migration 20260910140000 lets a registered 'unattested' or 'attested' installation receive a grant (still owner+device bound, <= 7d, Pro <= verified entitlement expiry, free tickets within the lifetime allowance, revoked_at/deleted refused) and records the issuing attestation state on public.offline_grants (stamped by the guard from the device row, mismatches refused); Edge route maps offline.device_revoked -> 403, fails closed on a row without a known state, and signs no attestation claim. Regression tests committed first (4645f62a) and proven failing on base (SQL matrix exit 3 at T1 'got offline.device_not_attested'; 7/50 new Edge tests fail) and passing on HEAD. AC1 RLS matrix exit 0 across 4 histories; AC2 frozen deno check exit 0; AC3 1010 passed / 0 failed / 0 ignored with a disposable Postgres; pnpm format:check and git diff --check exit 0. One out-of-scope 2-line additive fixture edit in offline_key_rotation.test.ts is listed with justification."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/review-w04-06/ac1_rls_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC1",
+            "note": "VERIFIED on HEAD fbc1cc99. 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 SQL suites (security_regression.sql, account_deletion_operations.sql, analysis_release_policy.sql) = 12; each history printed 'SECURITY REGRESSION MATRIX: ALL CASES PASSED', 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED', 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED', 'Analysis release policy authority: PASS'. Forward migration 20260910140000 applied on every history.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w04-06/ac2_deno_check_head.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC2",
+            "note": "VERIFIED on HEAD; 'Check file:///.../supabase/functions/api/index.ts' completed, only the two pre-existing workspace-root 'lock'/'nodeModulesDir' warnings. deno.lock not modified by the candidate (git diff --stat shows no lockfile change).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w04-06/ac3_edge_head.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 1010,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC3",
+            "note": "VERIFIED on HEAD: 'ok | 1010 passed (31 steps) | 0 failed', ignored == 0 (grep for 'ignored (' in the log = 0 test lines). Disposable Postgres via ./supabase/functions/api/__wf__/xc_pg_up.sh (postgres:16 container pickle-xc-pg on port 55433, shim_auth.sql + every migration incl. 20260910140000). PICKLE_AUDIT_PG_URL pointed at the same DB so the golden-parity live tests also executed.",
+            "passed": 1010,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w04-06/ac4_head_edge.log",
+            "command": "git worktree add /home/ubuntu/repos/ps-base d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4; cp (from candidate) supabase/tests/security_regression.sql supabase/functions/api/__wf__/offline_grants_routes.test.ts supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts into ps-base; BASE: ./supabase/tests/run_rls_tests.sh && (cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_grants_routes.test.ts db_migrations_rls_indexes.test.ts); HEAD: (cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_grants_routes.test.ts db_migrations_rls_indexes.test.ts)",
+            "executed": 50,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-06-AC4",
+            "note": "PROOF VERIFIED (new tests FAIL on BASE, PASS on HEAD). BASE d446dcdd + only the 3 test files copied: SQL matrix exit 3 on the fresh history — 'psql:/tests/security_regression.sql:4740: ERROR: T1: an unattested registration is not a refusal reason ... (got offline.device_not_attested)' (artifacts/review-w04-06/ac4_base_rls.log); Edge new-test files exit 1 — 43 passed / 7 failed, the 7 failures being exactly the new tests: db_migrations_rls_indexes.test.ts:2304 (W04-06 migration audit), offline_grants_routes.test.ts:527 (register->issue end to end), :593 (malformed attestation_state row -> 503), :710 (offline.device_revoked mapping), :1190/:1257/:1318 (live-DB unattested free grant, Pro lease cap + attested recorded, revoked/deleted refused + no reclaim); failure output shows the base RPC returning 'offline.device_not_attested' and an accepted row with attestation_state null (artifacts/review-w04-06/ac4_base_edge.log). HEAD fbc1cc99: same two files exit 0 — 50 passed / 0 failed, 0 ignored; SQL section W passes on all 4 histories under AC1.",
+            "passed": 50,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AC3's ignored==0 needs PICKLE_AUDIT_PG_URL in addition to XC_PG_URL (the w06_01_golden_parity live tests gate on the former); with XC_PG_URL alone the manifest command leaves 12 tests ignored. Pre-existing suite convention, not introduced by this package; recorded here so the manifest command can be amended.",
+          "Rollout order dependency (INFERRED from index.ts OFFLINE_GRANT_REFUSALS): an Edge deploy against a DB without 20260910140000 gets the old 'offline.device_not_attested' RPC result, which the route now answers with a generic 503 (fails closed) instead of 403. Apply `supabase db push` before `supabase functions deploy api`.",
+          "offline_devices.revoked_at has no RPC/UI writer in this package (support-only via superuser); revocation refusal paths are proven live via a direct UPDATE in the tests."
+        ],
+        "package_id": "W04-06",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "fbc1cc99aec55b0ee596a000aec167e88405d617",
+        "scope_violation": false,
+        "summary": "APPROVE W04-06 candidate fbc1cc99 (base d446dcdd). Scope: 5 files under write_paths plus a 2-line additive fixture edit in supabase/functions/api/__wf__/offline_key_rotation.test.ts (GrantRow type + proRow() gain attestation_state) — judged justified wiring: __wf__ is not under any serial_group_paths prefix, no assertion changed, and it is the minimum needed because the shipping route now fails closed (503) on an accepted row without a known attestation state. Behaviour is shipped, not dead code: index.ts issueOfflineGrant() consumes the new RPC column, maps offline.device_revoked -> 403, refuses malformed rows with a generic 503 + row_malformed audit, echoes attestationState only in the clear response, and the signed JWS claims builder is untouched (tests assert no 'attest' key/value in the decoded payload). Migration 20260910140000 is a new forward file with the latest timestamp; no applied migration or existing comment edited; guard_offline_grant() (create or replace, trigger binding preserved) binds device to (id, user_id), refuses revoked_at, fails closed on unknown state, stamps attestation_state from the device row and refuses caller mismatches, keeps Pro entitlement + immutability checks; issue_offline_grant() dropped/recreated with the 20260908160000 body preserved (api_private.is_active_session(), pg_advisory_xact_lock(access_lock_key(uid)), lease = least(now+7d, verified expiry), free tickets within lifetime_scored_count()+online_reservation_count()+offline_hold_count() <= 2) with 'unattested' no longer a refusal and revoked_at -> offline.device_revoked; EXECUTE grants identical to base (revoke all from public/anon/service_role, grant to authenticated; guard revoked from public/anon/authenticated). No RLS/grant widening, no session-check weakening, no test weakening (the only removed test line is the obsolete 403 mapping for device_not_attested, replaced by a stricter assertion that the stale result yields a generic 503 that does not advertise 'device_not_attested'), no ignore/only/any/@ts-ignore/eslint-disable/|| true markers in added lines, user-facing copy compliant. All four acceptance criteria re-executed by me: AC1 exit 0 (12/12 suites across 4 histories), AC2 exit 0, AC3 exit 0 (1010 passed / 0 failed / 0 ignored), AC4 proof holds (base: SQL exit 3 at T1 'got offline.device_not_attested', Edge 43 passed / 7 failed with exactly the 7 new tests failing; HEAD: 50 passed / 0 failed). Non-blocking notes: AC3 ignored==0 requires PICKLE_AUDIT_PG_URL alongside XC_PG_URL (pre-existing suite convention); deploy DB migration before the Edge function; revoked_at has no client-facing writer yet.",
+        "verdict": "approve"
+      },
+      "round": 1,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-27-offline-ship"
+}

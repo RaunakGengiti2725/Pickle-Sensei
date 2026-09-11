@@ -1,3 +1,4 @@
+import { setActiveDataOwner } from '../src/data/accountScope';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { DrillDetail, SavedDrill } from '../src/training/types';
@@ -119,6 +120,7 @@ async function renderLibrary(): Promise<TestRenderer.ReactTestRenderer> {
 
 describe('Library saved drills visibility', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     mockNavigate.mockClear();
     mockListShots.mockReset().mockImplementation(async () => []);
     useTrainingStore.setState({
@@ -191,6 +193,7 @@ describe('Library saved drills visibility', () => {
 
 describe('Library reads tab repository failure', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     mockNavigate.mockClear();
     mockListShots.mockReset().mockImplementation(async () => []);
     useTrainingStore.setState({

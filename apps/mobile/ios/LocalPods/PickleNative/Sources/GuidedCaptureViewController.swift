@@ -526,6 +526,8 @@ final class GuidedCaptureViewController: UIViewController {
   var onComplete: Completion?
 
   private let engine: CameraEngine
+  private let captureOperation: ClipMediaOperation
+  private var finishedObservation: (url: URL, snapshot: ClipFileSnapshot)?
   private let poseProvider = ApplePoseProvider()
   private let handedness: TemporalStrokeDetector.Handedness?
   private let detector: TemporalStrokeDetector
@@ -587,7 +589,8 @@ final class GuidedCaptureViewController: UIViewController {
   /// image tinted white). Where to stand and how big to be in frame — laid
   /// out in the GUIDE BAND between the status card and the shutter row (see
   /// viewDidLayoutSubviews), so it can never sit under any chrome. Fades as
-  /// the live exoskeleton takes over, hidden once locked.
+  /// the live exoskeleton takes over, gone the moment the athlete matches it
+  /// (readiness `ready`) and once locked.
   private let silhouetteView = UIImageView()
   /// Status card: state dot + kicker on the first row, the instruction on
   /// the second. Fixed height so the guide band below it never jitters as
@@ -676,9 +679,14 @@ final class GuidedCaptureViewController: UIViewController {
   /// until it expires or the user acts; readiness copy resumes after.
   private var transientNotice: (text: String, until: Date)?
   private var lastComposingSnapshot: PoseReadinessEvaluator.Snapshot?
+  /// True from the frame the athlete matched the outline (readiness `ready`)
+  /// until the framing is actually lost again. Presentation only — drives
+  /// nothing but `silhouetteView.alpha`; main thread only.
+  private var silhouetteDismissedByFraming = false
 
-  init(engine: CameraEngine, handedness: TemporalStrokeDetector.Handedness? = nil) {
+  init(engine: CameraEngine, operation: ClipMediaOperation, handedness: TemporalStrokeDetector.Handedness? = nil) {
     self.engine = engine
+    self.captureOperation = operation
     self.handedness = handedness
     self.detector = TemporalStrokeDetector(config: .init(handedness: handedness))
     super.init(nibName: nil, bundle: nil)
@@ -735,17 +743,29 @@ final class GuidedCaptureViewController: UIViewController {
   }
 
   deinit {
+    captureOperation.cancel()
+    captureOperation.cleanupOwnedOutputs()
+    if !captureOperation.isWorking, let observation = finishedObservation {
+      ClipMediaStore.removeOwnedObservation(observation.url, expected: observation.snapshot)
+    }
     NotificationCenter.default.removeObserver(self)
     observationTimer?.invalidate()
     recTimer?.invalidate()
   }
 
   func cancelFromBridge() {
-    stateLock.lock()
-    let isPreparingSavedClip = processingClip
-    stateLock.unlock()
-    guard !isPreparingSavedClip else { return }
+    // Saving/dismissal are still cancellable until the bridge commits. The
+    // operation owns cleanup even if this controller has already gone terminal.
+    captureOperation.cancel()
+    captureOperation.cleanupOwnedOutputs()
     finishFailure(code: "camera.cancelled", message: "Guided capture was canceled.", abstention: "user_cancelled")
+  }
+
+  func didPublishClip(_ payload: [String: Any]) {
+    if let observation = finishedObservation {
+      ClipMediaStore.removeOwnedObservation(observation.url, expected: observation.snapshot)
+    }
+    emit(type: "completed", values: ["recognition": payload["recognition"] as Any])
   }
 
   // ── Layout ────────────────────────────────────────────────────────────────
@@ -1507,8 +1527,13 @@ final class GuidedCaptureViewController: UIViewController {
 
   /// Offline pass over the retained history: only poses inside the current
   /// file (a rolling restart may have replaced it) and older than the
-  /// approach window count. The strongest event wins; nil when nothing moved
-  /// like a swing.
+  /// approach window count. The strongest completed event wins; when no
+  /// candidate completed (the athlete never settled, a dropped frame split
+  /// the swing, no still ready position), the window around the fastest
+  /// deliberate hip-relative wrist movement stands in
+  /// (`TemporalStrokeDetector.fallbackMotionWindow`) — the athlete pressed
+  /// STOP because a swing happened, and the recording is only discarded when
+  /// nothing in it moved like one. nil in that case.
   private static func manualStopEvent(
     history: [PoseFrame], fileStartMs: Int?, stopMs: Int,
     handedness: TemporalStrokeDetector.Handedness?
@@ -1518,6 +1543,7 @@ final class GuidedCaptureViewController: UIViewController {
     let usable = history.filter { $0.timestampMs >= lowerBound && $0.timestampMs <= cutoff }
     guard usable.count >= 8 else { return nil }
     return TemporalStrokeDetector.strongestEvent(in: usable, handedness: handedness)
+      ?? TemporalStrokeDetector.fallbackMotionWindow(in: usable, handedness: handedness)
   }
 
   /// Stop pressed with no swing in the history: the spool is discarded
@@ -1966,17 +1992,20 @@ final class GuidedCaptureViewController: UIViewController {
     let event = pendingStroke
     let captureEvidence = pendingCaptureEvidence
     let isTerminal = terminal
+    let processingSource = processingClip ? finishedObservation?.url : nil
     let discard = discardRecordingOnFinish
     discardRecordingOnFinish = false
     stateLock.unlock()
     guard !isTerminal else {
-      if case .success(let artifact) = result { ClipMediaStore.removeIfPresent(artifact.url) }
+      if case .success(let artifact) = result, artifact.url != processingSource {
+        ClipMediaStore.removeOwnedObservation(artifact.url)
+      }
       return
     }
     if discard {
       // A stop/timeout already returned the UI to composing (and normally
       // the engine suppressed this callback). Nothing to keep.
-      if case .success(let artifact) = result { ClipMediaStore.removeIfPresent(artifact.url) }
+      if case .success(let artifact) = result { ClipMediaStore.removeOwnedObservation(artifact.url) }
       return
     }
     switch result {
@@ -2010,7 +2039,7 @@ final class GuidedCaptureViewController: UIViewController {
         // The movie output hit its hard duration cap without a stroke. The
         // recording is automatic, so this is not a state the athlete should
         // ever notice: the file is dropped and a fresh spool starts at once.
-        ClipMediaStore.removeIfPresent(artifact.url)
+        ClipMediaStore.removeOwnedObservation(artifact.url)
         emit(type: "session", values: ["state": "recording_stopped", "reason": "no_stroke_detected"])
         DispatchQueue.main.async { [weak self] in
           guard let self else { return }
@@ -2024,7 +2053,19 @@ final class GuidedCaptureViewController: UIViewController {
         }
         return
       }
+      let sourceSnapshot: ClipFileSnapshot
+      do { sourceSnapshot = try ClipFileSnapshot.at(artifact.url) } catch {
+        finishFailure(code: "camera.processing_failed", message: error.localizedDescription, abstention: "clip_processing_failure")
+        return
+      }
       stateLock.lock()
+      guard !terminal, !processingClip, !captureOperation.isCancelled else {
+        let alreadyProcessing = processingClip && finishedObservation?.url == artifact.url
+        stateLock.unlock()
+        if !alreadyProcessing { ClipMediaStore.removeOwnedObservation(artifact.url, expected: sourceSnapshot) }
+        return
+      }
+      finishedObservation = (artifact.url, sourceSnapshot)
       processingClip = true
       stateLock.unlock()
       DispatchQueue.main.async { [weak self] in
@@ -2083,13 +2124,21 @@ final class GuidedCaptureViewController: UIViewController {
         poseHistory: retainedPoseHistory,
         poseModelVersion: poseProvider.modelVersion,
         preRollMs: Self.preRollMs,
-        postRollMs: effectivePostRollMs
-      ) { [weak self] exportResult in
+        postRollMs: effectivePostRollMs,
+        operation: captureOperation
+      ) { [weak self, captureOperation] exportResult in
+        guard let self else {
+          captureOperation.cancel()
+          captureOperation.cleanupOwnedOutputs()
+          ClipMediaStore.removeOwnedObservation(artifact.url, expected: sourceSnapshot)
+          return
+        }
         switch exportResult {
-        case .success(let payload): self?.finishSuccess(payload)
+        case .success(let payload): self.finishSuccess(payload)
         case .failure(let error):
-          self?.finishFailure(
-            code: "camera.processing_failed",
+          ClipMediaStore.removeOwnedObservation(artifact.url, expected: sourceSnapshot)
+          self.finishFailure(
+            code: (error as? ImportMediaFailure)?.code ?? "camera.processing_failed",
             message: error.localizedDescription,
             abstention: "clip_processing_failure"
           )
@@ -2115,23 +2164,41 @@ final class GuidedCaptureViewController: UIViewController {
         payload["targetLock"] = targetLock
       }
     }
-    stateLock.lock()
-    guard !terminal else {
-      stateLock.unlock()
+    guard JSONSerialization.isValidJSONObject(payload) else {
+      finishFailure(code: "camera.processing_failed", message: ClipMediaStoreError.invalidEvidence.localizedDescription, abstention: "clip_processing_failure")
       return
     }
-    terminal = true
-    stateLock.unlock()
-
-    observationTimer?.invalidate()
-    observationTimer = nil
-    DispatchQueue.main.async { [weak self] in self?.recTimer?.invalidate() }
-    emit(type: "completed", values: ["recognition": payload["recognition"] as Any])
-    engine.stop()
-    DispatchQueue.main.async { [weak self] in self?.onComplete?(.success(payload)) }
+    DispatchQueue.main.async { [weak self, captureOperation] in
+      guard let self else {
+        captureOperation.cancel()
+        captureOperation.cleanupOwnedOutputs()
+        return
+      }
+      do { try captureOperation.checkActive() } catch {
+        self.finishFailure(code: (error as? ImportMediaFailure)?.code ?? "camera.cancelled", message: error.localizedDescription, abstention: "user_cancelled")
+        return
+      }
+      self.stateLock.lock()
+      guard !self.terminal else {
+        self.stateLock.unlock()
+        captureOperation.cleanupOwnedOutputs()
+        return
+      }
+      self.terminal = true
+      self.stateLock.unlock()
+      self.observationTimer?.invalidate()
+      self.observationTimer = nil
+      self.recTimer?.invalidate()
+      self.engine.stop()
+      // No committed/completed event yet. Native rollback ownership survives
+      // this handoff and the ensuing asynchronous modal dismissal.
+      self.onComplete?(.success(payload))
+    }
   }
 
   private func finishFailure(code: String, message: String, abstention: String) {
+    captureOperation.cancel(ImportMediaFailure(code: code, message: message))
+    captureOperation.cleanupOwnedOutputs()
     stateLock.lock()
     guard !terminal else {
       stateLock.unlock()
@@ -2140,15 +2207,17 @@ final class GuidedCaptureViewController: UIViewController {
     terminal = true
     stateLock.unlock()
 
-    observationTimer?.invalidate()
-    observationTimer = nil
-    DispatchQueue.main.async { [weak self] in self?.recTimer?.invalidate() }
+    DispatchQueue.main.async { [weak self] in
+      self?.observationTimer?.invalidate()
+      self?.observationTimer = nil
+      self?.recTimer?.invalidate()
+    }
     emit(type: "abstained", values: ["reason": abstention, "message": message])
     stateLock.lock()
     let hadActiveRecording = recordingStarted
     stateLock.unlock()
     engine.stop()
-    if !hadActiveRecording { ClipMediaStore.removeIfPresent(observationURL) }
+    if !hadActiveRecording, !captureOperation.isWorking { ClipMediaStore.removeOwnedObservation(observationURL) }
     DispatchQueue.main.async { [weak self] in
       self?.onComplete?(.failure(GuidedCaptureFailure(code: code, message: message)))
     }
@@ -2331,10 +2400,6 @@ final class GuidedCaptureViewController: UIViewController {
   }
 
   @objc private func appEnteredBackground() {
-    stateLock.lock()
-    let isPreparingSavedClip = processingClip
-    stateLock.unlock()
-    guard !isPreparingSavedClip else { return }
     finishFailure(
       code: "camera.backgrounded",
       message: "Guided capture stopped when the app left the foreground.",
@@ -2516,14 +2581,26 @@ final class GuidedCaptureViewController: UIViewController {
   }
 
   /// Silhouette opacity per stage: strongest while composing, softer once
-  /// the exoskeleton is tracking a body during recording, gone once locked.
+  /// the exoskeleton is tracking a body during recording, gone the moment
+  /// the athlete matches the outline — readiness `ready`: whole body in
+  /// frame at a usable size and still for 450 ms, the same verdict that
+  /// arms BODY TRACKED — and gone once locked. A framed body that is merely
+  /// moving (`holdStill`) keeps a dismissed outline away, so it does not
+  /// pulse back in on every weight shift or practice swing; it returns only
+  /// when the framing itself is lost (nobody, cropped, too near, too far).
   private func updateSilhouette(stage: CapturePresentationStage) {
-    let personVisible = (lastComposingSnapshot?.state ?? .noPerson) != .noPerson
+    let readiness = lastComposingSnapshot?.state ?? .noPerson
+    switch readiness {
+    case .ready: silhouetteDismissedByFraming = true
+    case .noPerson, .fullBodyRequired, .moveCloser, .moveFarther: silhouetteDismissedByFraming = false
+    case .holdStill: break
+    }
+    let personVisible = readiness != .noPerson
     let target: CGFloat
     switch stage {
     case .starting: target = 0
-    case .composing: target = personVisible ? 0.2 : 0.3
-    case .positioning: target = personVisible ? 0.14 : 0.26
+    case .composing: target = silhouetteDismissedByFraming ? 0 : (personVisible ? 0.2 : 0.3)
+    case .positioning: target = silhouetteDismissedByFraming ? 0 : (personVisible ? 0.14 : 0.26)
     case .bodyLocked, .capturing, .saving: target = 0
     }
     guard abs(silhouetteView.alpha - target) > 0.01 else { return }

@@ -105,7 +105,7 @@ export function WelcomeScreen(props: {
   const adaptive = height < 760 || fontScale > 1.2;
   const freeCopy = (
     <Text style={styles.privacy} testID="welcome-free-copy">
-      Two successful validated ratings free · Unscored attempts don’t count
+      One successful validated rating free · Unscored attempts don’t count
     </Text>
   );
 
@@ -210,6 +210,8 @@ export function WelcomeScreen(props: {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
   body: { flex: 1, minHeight: 0 },
+  // Fill a roomy screen as before, but let content grow and scroll on short
+  // phones or at accessibility text sizes instead of pushing CTAs offscreen.
   bodyContent: { flexGrow: 1 },
   bodyContentAdaptive: { paddingBottom: space.lg },
   topBarAdaptive: { flexWrap: 'wrap', gap: space.sm },
@@ -217,9 +219,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
+    minWidth: 0,
     maxWidth: '100%',
   },
-  brandName: { color: color.onDark, flexShrink: 1 },
+  brandName: { color: color.onDark, flexShrink: 1, minWidth: 0 },
   privacyBadge: {
     alignSelf: 'flex-start',
     maxWidth: '100%',
@@ -246,6 +249,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -258,6 +263,7 @@ const styles = StyleSheet.create({
   },
   courtStory: {
     flexGrow: 1,
+    flexShrink: 0,
     marginHorizontal: space.lg,
     marginTop: space.lg,
     paddingTop: 28,

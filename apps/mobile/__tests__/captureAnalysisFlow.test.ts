@@ -8,6 +8,20 @@ import {
 import type { CapturedClip } from '../src/camera/capture';
 import { attemptCaptureEnvelope } from '../src/camera/captureEnvelope';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  closeSqliteTestDatabases,
+  createSqliteTestDb,
+  seedSqliteCapture,
+} from '../testSupport/sqlite';
+import { finalizeAcknowledgement } from '../__harness__/analysisPermitRoute';
 
 /**
  * Capture → fusion analysis → durable records, with the entitlement system
@@ -28,30 +42,23 @@ let mockReadArtifact: (uri: string) => Promise<string> = async () => {
 
 const owner = '11111111-1111-4111-8111-111111111111';
 
-interface RecordedCall {
-  sql: string;
-  params: unknown[];
-}
-
-function recordingDb(): { db: LocalDb; calls: RecordedCall[] } {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      calls.push({ sql, params });
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+function recordingDb() {
+  return createSqliteTestDb();
 }
 
 function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
   const finalized: unknown[] = [];
+  const reservations = new Map<string, string>();
   const fetchMock = jest.fn(async (url: string, init?: RequestInit) => {
     if (url.endsWith('/v1/analysis-permits')) {
+      const key = String(JSON.parse(String(init?.body)).idempotencyKey);
+      const permitId =
+        reservations.get(key) ??
+        `66666666-6666-4666-8666-${String(reservations.size + 1).padStart(12, '0')}`;
+      reservations.set(key, permitId);
       return jsonResponse({
         permit: {
-          id: 'permit-1',
+          id: permitId,
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-08-27T20:00:00.000Z',
@@ -59,9 +66,12 @@ function permitServer(): { fetchMock: jest.Mock; finalized: unknown[] } {
       });
     }
     if (url.includes('/finalize')) {
-      finalized.push(JSON.parse(String(init?.body)));
-      return jsonResponse({ ok: true });
+      const body: unknown = JSON.parse(String(init?.body));
+      finalized.push(body);
+      return jsonResponse(finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url))
+      return jsonResponse(activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return { fetchMock, finalized };
@@ -108,7 +118,7 @@ function swingClipWithSidecar(
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
@@ -141,13 +151,18 @@ function swingClipWithSidecar(
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
 }
 
-function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-1') {
+function request(
+  db: LocalDb,
+  clip: CapturedClip,
+  captureId = '77777777-7777-4777-8777-777777777777',
+) {
+  seedSqliteCapture(db, owner, captureId, clip);
   return {
     db,
     captureId,
@@ -161,8 +176,18 @@ function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-1') {
 }
 
 describe('runCaptureAnalysis', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+  beforeEach(() => {
+    setActiveDataOwner(owner);
+    establishApiSession({
+      canonicalAppUserId: owner,
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token-1',
+      provider: 'apple',
+    });
+  });
   afterEach(() => {
+    closeSqliteTestDatabases();
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
@@ -243,7 +268,9 @@ describe('runCaptureAnalysis', () => {
       call.sql.includes('local_analysis_record'),
     );
     expect(recordInsert).toBeDefined();
-    expect(recordInsert!.params[2]).toBe('capture-1');
+    expect(recordInsert!.params[2]).toBe(
+      '77777777-7777-4777-8777-777777777777',
+    );
 
     const statusUpdate = calls.find(call =>
       call.sql.includes("SET status = 'analyzed'"),
@@ -259,20 +286,205 @@ describe('runCaptureAnalysis', () => {
     );
     expect(outboxInsert).toBeDefined();
     const outboxPayload = JSON.parse(String(outboxInsert!.params[1]));
-    expect(outboxPayload.analysisPermitId).toBe('permit-1');
+    expect(outboxPayload.analysisPermitId).toBe(
+      '66666666-6666-4666-8666-000000000001',
+    );
     // A scored run is consumed by shot sync, never explicitly finalized.
     expect(finalized).toHaveLength(0);
   });
 
-  it('supports multiple analyses of one capture without touching earlier records', async () => {
+  it('does not reserve or save an analysis after the owner changes while its sidecar loads', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    const { fetchMock } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    mockReadArtifact = async () => {
+      setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+      return sidecarJson;
+    };
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+
+    expect(outcome).toMatchObject({
+      kind: 'unavailable',
+      cause: 'account_changed',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('releases the original permit without writing into a different account after reservation', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = async (
+      url: string,
+      init?: RequestInit,
+    ) => {
+      const response = await fetchMock(url, init);
+      if (url.endsWith('/v1/analysis-permits')) {
+        setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+      }
+      return response;
+    };
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+
+    expect(outcome).toMatchObject({
+      kind: 'unavailable',
+      cause: 'account_changed',
+    });
+    expect(
+      calls.some(call =>
+        call.sql.includes('INSERT INTO local_analysis_record'),
+      ),
+    ).toBe(false);
+    expect(calls.some(call => call.sql.includes('INSERT INTO outbox'))).toBe(
+      false,
+    );
+    const journal = await db.execute(
+      'SELECT owner_key, state FROM analysis_run_journal',
+    );
+    expect(journal.rows).toEqual([{ owner_key: owner, state: 'released' }]);
+    expect(finalized).toEqual([{ outcome: 'cancelled', ratingId: null }]);
+  });
+
+  it('invalidates an earlier run even when the same owner signs back in before completion', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      setActiveDataOwner(owner);
+      return sidecarJson;
+    };
+    const { fetchMock } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+
+    expect(outcome).toMatchObject({
+      kind: 'unavailable',
+      cause: 'account_changed',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('releases a reserved permit when persisting the analysis fails', async () => {
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    const store = recordingDb();
+    const { db } = store;
+    store.failStatementOnce(
+      'INSERT INTO local_analysis_record',
+      new Error('local write failed'),
+    );
+
+    await expect(runCaptureAnalysis(request(db, clip))).rejects.toThrow(
+      'local write failed',
+    );
+    expect(finalized).toEqual([{ outcome: 'failed', ratingId: null }]);
+  });
+
+  it('commits the practice set, analysis and outbox together before returning a score', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    const sessionId = '33333333-3333-4333-8333-333333333333';
+
+    const outcome = await runCaptureAnalysis({
+      ...request(db, clip),
+      sessionId,
+      practiceSet: {
+        sessionId,
+        owner,
+        resumed: false,
+        shotType: 'forehand_drive',
+        startedAtIso: clip.capturedAtIso,
+        nowIso: clip.capturedAtIso,
+      },
+    });
+
+    expect(outcome.kind).toBe('scored');
+    const resultTransaction = calls.find(call =>
+      call.sql.includes('INSERT INTO local_analysis_record'),
+    )?.transaction;
+    const resultCalls = calls.filter(
+      call => call.transaction === resultTransaction,
+    );
+    expect(
+      resultCalls.filter(call => call.sql === 'BEGIN IMMEDIATE'),
+    ).toHaveLength(1);
+    expect(resultCalls.filter(call => call.sql === 'COMMIT')).toHaveLength(1);
+    const sessionWrite = calls.find(call =>
+      call.sql.includes('INSERT OR REPLACE INTO local_session'),
+    );
+    expect(sessionWrite?.params.slice(0, 2)).toEqual([owner, sessionId]);
+    const queued = calls.filter(call =>
+      call.sql.includes('INSERT INTO outbox'),
+    );
+    expect(queued).toHaveLength(2);
+    expect(queued[0]?.sql).toContain("'session.create'");
+    expect(queued[1]?.sql).toContain("'shot.sync'");
+    expect(calls.at(-1)?.sql).toBe('COMMIT');
+  });
+
+  it('rolls back the whole result when the owner changes during a write', async () => {
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock, finalized } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+    const store = recordingDb();
+    const { db, calls } = store;
+    store.observeStatements(call => {
+      if (call.sql.includes('INSERT INTO local_analysis_record')) {
+        setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+      }
+    });
+
+    const outcome = await runCaptureAnalysis(request(db, clip));
+
+    expect(outcome).toMatchObject({
+      kind: 'unavailable',
+      cause: 'account_changed',
+    });
+    const resultTransaction = calls.find(call =>
+      call.sql.includes('INSERT INTO local_analysis_record'),
+    )?.transaction;
+    const resultCalls = calls.filter(
+      call => call.transaction === resultTransaction,
+    );
+    expect(resultCalls[0]?.sql).toBe('BEGIN IMMEDIATE');
+    expect(resultCalls.at(-1)?.sql).toBe('ROLLBACK');
+    expect(resultCalls.some(call => call.sql === 'COMMIT')).toBe(false);
+    expect(store.count('local_analysis_record', owner)).toBe(0);
+    expect(store.count('local_shot', owner)).toBe(0);
+    expect(calls.some(call => call.sql.includes('INSERT INTO outbox'))).toBe(
+      false,
+    );
+    expect(finalized).toEqual([{ outcome: 'cancelled', ratingId: null }]);
+  });
+
+  it('supports explicitly distinct analyses of one capture without touching earlier records', async () => {
     const { db, calls } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const { fetchMock } = permitServer();
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
 
-    const first = await runCaptureAnalysis(request(db, clip));
-    const second = await runCaptureAnalysis(request(db, clip));
+    const first = await runCaptureAnalysis({
+      ...request(db, clip),
+      operationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    });
+    const second = await runCaptureAnalysis({
+      ...request(db, clip),
+      operationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    });
     expect(first.kind).toBe('scored');
     expect(second.kind).toBe('scored');
     if (first.kind !== 'scored' || second.kind !== 'scored') return;
@@ -312,7 +524,8 @@ describe('runCaptureAnalysis', () => {
     if (outcome.kind !== 'quality_blocked') return;
     expect(outcome.reason).toContain('resolution');
     expect(outcome.reason).toContain('Nothing was rated');
-    expect(outcome.envelope).toBe(envelope);
+    expect(outcome.envelope).toEqual(envelope);
+    expect(outcome.envelope).not.toBe(envelope);
     // Poor input never silently became analysis: no permit reserved, no
     // inference, no record, no rating.
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -340,7 +553,8 @@ describe('runCaptureAnalysis', () => {
     });
     expect(outcome.kind).toBe('scored');
     if (outcome.kind !== 'scored') return;
-    expect(outcome.record.captureEnvelope).toBe(envelope);
+    expect(outcome.record.captureEnvelope).toEqual(envelope);
+    expect(outcome.record.captureEnvelope).not.toBe(envelope);
 
     // The persisted record carries the verdict for downstream Result.
     const recordInsert = calls.find(call =>

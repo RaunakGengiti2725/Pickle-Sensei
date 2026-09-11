@@ -26,6 +26,7 @@ import postgres from "postgres";
 import { assert, assertEquals } from "@std/assert";
 import {
   envInt,
+  FREE_RATING_LIMIT,
   histogram,
   type Invariant,
   Prng,
@@ -398,11 +399,11 @@ Deno.test({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PG2 — N different keys, free account: never more than two reservations
+// PG2 — N different keys, free account: never more reservations than the allowance
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "xc PG2: reserve_analysis_permit different keys ×N concurrent — exactly 2 accepted, rest access.paywall_required, 2 rows",
+  name: "xc PG2: reserve_analysis_permit different keys ×N concurrent — exactly the allowance accepted, rest access.paywall_required, that many rows",
   ignore,
   async fn() {
     const report = await scenario(
@@ -428,17 +429,17 @@ Deno.test({
           const access = await accessState(sql, uid);
           inv(
             invariants,
-            `round ${r}: exactly 2 accepted + ${LANES - 2} paywall`,
-            h.accepted === 2 &&
-              h["access.paywall_required"] === LANES - 2 &&
+            `round ${r}: exactly ${FREE_RATING_LIMIT} accepted + ${LANES - FREE_RATING_LIMIT} paywall`,
+            h.accepted === FREE_RATING_LIMIT &&
+              h["access.paywall_required"] === LANES - FREE_RATING_LIMIT &&
               Object.keys(h).length === 2,
             JSON.stringify(h),
           );
           inv(
             invariants,
-            `round ${r}: exactly 2 reserved rows; access_state reserved=2 scored=0`,
-            counts.permits.join() === "reserved/=2" &&
-              access.reserved_count === 2 &&
+            `round ${r}: exactly ${FREE_RATING_LIMIT} reserved row(s); access_state reserved=${FREE_RATING_LIMIT} scored=0`,
+            counts.permits.join() === `reserved/=${FREE_RATING_LIMIT}` &&
+              access.reserved_count === FREE_RATING_LIMIT &&
               access.scored_count === 0,
             `permits=${counts.permits.join(",")} access=${JSON.stringify(access)}`,
           );
@@ -555,7 +556,7 @@ Deno.test({
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "xc PG4: free-limit backstop — N legacy-reserved permits, N concurrent DISTINCT scored shots → exactly 2 accepted, rest access.paywall_required + released",
+  name: "xc PG4: free-limit backstop — N legacy-reserved permits, N concurrent DISTINCT scored shots → exactly the allowance accepted, rest access.paywall_required + released",
   ignore,
   async fn() {
     const report = await scenario(
@@ -590,23 +591,25 @@ Deno.test({
           const access = await accessState(sql, uid);
           inv(
             invariants,
-            `round ${r}: exactly 2 accepted, ${LANES - 2} access.paywall_required`,
-            h.accepted === 2 &&
-              h["access.paywall_required"] === LANES - 2 &&
+            `round ${r}: exactly ${FREE_RATING_LIMIT} accepted, ${LANES - FREE_RATING_LIMIT} access.paywall_required`,
+            h.accepted === FREE_RATING_LIMIT &&
+              h["access.paywall_required"] === LANES - FREE_RATING_LIMIT &&
               Object.keys(h).length === 2,
             JSON.stringify(h),
           );
           inv(
             invariants,
-            `round ${r}: 2 scored shots, 2 finalized + ${
-              LANES - 2
-            } released/free_limit_exceeded permits, scored_count=2, ledger=2`,
-            counts.scoredShots === 2 &&
+            `round ${r}: ${FREE_RATING_LIMIT} scored shot(s), ${FREE_RATING_LIMIT} finalized + ${
+              LANES - FREE_RATING_LIMIT
+            } released/free_limit_exceeded permits, scored_count=${FREE_RATING_LIMIT}, ledger=${FREE_RATING_LIMIT}`,
+            counts.scoredShots === FREE_RATING_LIMIT &&
               counts.permits.join(",") ===
-                `finalized/scored=2,released/free_limit_exceeded=${LANES - 2}` &&
-              access.scored_count === 2 &&
+                `finalized/scored=${FREE_RATING_LIMIT},released/free_limit_exceeded=${
+                  LANES - FREE_RATING_LIMIT
+                }` &&
+              access.scored_count === FREE_RATING_LIMIT &&
               access.reserved_count === 0 &&
-              counts.ledger.join() === "2",
+              counts.ledger.join() === String(FREE_RATING_LIMIT),
             `shots=${counts.scoredShots} permits=${counts.permits.join(
               ",",
             )} access=${JSON.stringify(access)} ledger=${counts.ledger}`,
@@ -628,12 +631,12 @@ Deno.test({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PG5 — reserve racing apply: 1 scored + 1 reserved; apply the reserved permit
-//       WHILE N-1 lanes try to reserve new keys
+// PG5 — reserve racing apply: allowance-1 scored + 1 reserved; apply the
+//       reserved permit WHILE N-1 lanes try to reserve new keys
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "xc PG5: reserve_analysis_permit racing apply_synced_shot on the last free rating — no third reservation in either ordering",
+  name: "xc PG5: reserve_analysis_permit racing apply_synced_shot on the last free rating — no reservation past the allowance in either ordering",
   ignore,
   async fn() {
     const report = await scenario(
@@ -645,17 +648,19 @@ Deno.test({
           const uid = prng.uuid();
           users.push(uid);
           await createUser(sql, uid, { provider: "google", sub: `g-${uid}` });
-          // Spend rating #1, reserve permit #2.
+          // Spend every rating but the last, then reserve the last permit.
           let p2 = "";
           await sql.begin(async (tx) => {
             const t = tx as unknown as Tx;
             await asUser(t, uid);
-            const p1 = await reserveRpc(t, `p1-${r}`, "setup");
-            assertEquals(p1.result, "accepted");
-            assertEquals(
-              (await applyRpc(t, shotPayload(prng.uuid(), p1.permitId!), "setup")).result,
-              "accepted",
-            );
+            for (let i = 1; i < FREE_RATING_LIMIT; i++) {
+              const p1 = await reserveRpc(t, `p1-${r}-${i}`, "setup");
+              assertEquals(p1.result, "accepted");
+              assertEquals(
+                (await applyRpc(t, shotPayload(prng.uuid(), p1.permitId!), "setup")).result,
+                "accepted",
+              );
+            }
             const res = await reserveRpc(t, `p2-${r}`, "setup");
             assertEquals(res.result, "accepted");
             p2 = res.permitId!;
@@ -688,10 +693,10 @@ Deno.test({
           );
           inv(
             invariants,
-            `round ${r}: scored=2, reserved=0, exactly 2 finalized permits`,
-            access.scored_count === 2 &&
+            `round ${r}: scored=${FREE_RATING_LIMIT}, reserved=0, exactly ${FREE_RATING_LIMIT} finalized permit(s)`,
+            access.scored_count === FREE_RATING_LIMIT &&
               access.reserved_count === 0 &&
-              counts.permits.join() === "finalized/scored=2",
+              counts.permits.join() === `finalized/scored=${FREE_RATING_LIMIT}`,
             `access=${JSON.stringify(access)} permits=${counts.permits.join(",")}`,
           );
         }
@@ -716,7 +721,7 @@ Deno.test({
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.test({
-  name: "xc PG6: identity ledger — spend 2, delete account, re-create with the same provider subject → N concurrent reserves all paywalled, scored_count=2",
+  name: "xc PG6: identity ledger — spend the allowance, delete account, re-create with the same provider subject → N concurrent reserves all paywalled, scored_count at the allowance",
   ignore,
   async fn() {
     const report = await scenario(
@@ -731,7 +736,7 @@ Deno.test({
           await sql.begin(async (tx) => {
             const t = tx as unknown as Tx;
             await asUser(t, oldUid);
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < FREE_RATING_LIMIT; i++) {
               const p = await reserveRpc(t, `spend-${r}-${i}`, "setup");
               assertEquals(p.result, "accepted");
               assertEquals(
@@ -766,17 +771,18 @@ Deno.test({
           const access = await accessState(sql, newUid);
           inv(
             invariants,
-            `round ${r}: old account had 2 scored + ledger 2 before deletion`,
-            before.scoredShots === 2 && before.ledger.join() === "2",
+            `round ${r}: old account had ${FREE_RATING_LIMIT} scored + ledger ${FREE_RATING_LIMIT} before deletion`,
+            before.scoredShots === FREE_RATING_LIMIT &&
+              before.ledger.join() === String(FREE_RATING_LIMIT),
             JSON.stringify(before),
           );
           inv(
             invariants,
-            `round ${r}: recreated account — every concurrent reserve paywalled, 0 rows, access scored_count=2`,
+            `round ${r}: recreated account — every concurrent reserve paywalled, 0 rows, access scored_count=${FREE_RATING_LIMIT}`,
             h["access.paywall_required"] === LANES &&
               after.permits.length === 0 &&
-              access.scored_count === 2 &&
-              after.ledger.join() === "2",
+              access.scored_count === FREE_RATING_LIMIT &&
+              after.ledger.join() === String(FREE_RATING_LIMIT),
             `${JSON.stringify(h)} permits=${after.permits.join(",")} access=${JSON.stringify(
               access,
             )} ledger=${after.ledger}`,

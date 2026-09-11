@@ -7,12 +7,14 @@ import {
 } from '../src/data/accountScope';
 import {
   getAnalysis,
+  getKv,
   hasShotSyncReceipt,
   listRealAnalysisFacts,
   OWNER_SCOPED_KV_NAMESPACES,
   saveAnalysis,
 } from '../src/data/repository';
 import { practiceSetKeyForOwner } from '../src/analysis/practiceSet';
+import { walkthroughKeyForOwner } from '../src/walkthrough/walkthroughKey';
 
 const ownerA = '11111111-1111-4111-8111-111111111111';
 const permitId = '22222222-2222-4222-8222-222222222222';
@@ -48,6 +50,20 @@ const analysis: ShotAnalysis = {
 
 describe('account-scoped local repository', () => {
   afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
+
+  it('lets strict readers distinguish an existing blank KV value from absence', async () => {
+    const db: LocalDb = {
+      async execute(_sql, params = []) {
+        return { rows: params[0] === 'blank' ? [{ value: '' }] : [] };
+      },
+      close() {},
+    };
+    await expect(getKv(db, 'blank')).resolves.toBeNull();
+    await expect(getKv(db, 'blank', { preserveEmpty: true })).resolves.toBe('');
+    await expect(
+      getKv(db, 'absent', { preserveEmpty: true }),
+    ).resolves.toBeNull();
+  });
 
   it('atomically binds a real score and outbox entry to one owner', async () => {
     setActiveDataOwner(ownerA);
@@ -127,8 +143,14 @@ describe('account-scoped local repository', () => {
       'notifications',
       'consistency',
       'practice.set',
+      'billing.pending-fulfilment',
+      'analysis.release-policy',
+      'walkthrough.complete',
     ]);
     expect(practiceSetKeyForOwner(ownerA)).toBe(`practice.set:${ownerA}`);
+    expect(walkthroughKeyForOwner(ownerA)).toBe(
+      `walkthrough.complete:${ownerA}`,
+    );
   });
 
   it('exposes the practice-set tie, priority checkpoint, and applicable checkpoint scores as facts', async () => {

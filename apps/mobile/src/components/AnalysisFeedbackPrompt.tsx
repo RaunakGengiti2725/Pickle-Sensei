@@ -163,17 +163,18 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderColor: color.line,
+    borderColor: color.lineStrongDark,
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
     minHeight: 44,
     justifyContent: 'center',
+    backgroundColor: color.inkElevated,
   },
   chipLabel: {
-    color: color.ink,
+    color: color.onDark,
   },
   muted: {
-    color: color.inkSoft,
+    color: color.onDarkMuted,
   },
 });

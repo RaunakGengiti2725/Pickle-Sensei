@@ -1,0 +1,769 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W04-04-r3",
+      "phase": "implement",
+      "prompt_sha256": "bd9a8809df153cd68753e62dfb9753f315c68fecdd5c45049ea530cae940d7a7",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W04-04-r3-c2",
+      "phase": "implement",
+      "prompt_sha256": "d3bd6647adf0d71e3562fb0f723c6079829d6b2eab1a8e2c6f151ee762680ea1",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-04-r3",
+      "phase": "review",
+      "prompt_sha256": "613c790f353e094acbb066580d7be40bbbad0e75da7d64e89ccef35dc4242fc2",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-04-r3",
+      "phase": "adversary",
+      "prompt_sha256": "1d269223e8a49164ccb780322f8e33d043ff30f1fe614a5930a8df77d11bf618",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "review-W04-04-r3-c2",
+      "phase": "review",
+      "prompt_sha256": "6d790ac1bfa825d18cca2b6ae79884759141555005313da553f122171e0bbb29",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W04-04-r3-c2",
+      "phase": "adversary",
+      "prompt_sha256": "5f70be0ae91f0b261b29b402c277115416ae9186df6ff190882d4fb977f1cfdc",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "candidate": {
+    "branch": "devin/pp/w04-04/impl-r3",
+    "head_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+    "lane": 1,
+    "round": 3
+  },
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W04-04",
+  "requeued_from": {
+    "branch": "devin/pp/w04-04/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w04-04/attack-b214adf5",
+      "adversary_breaks": [
+        {
+          "expected": "Per-receipt verdicts: an already-consumed receipt replays its durable verdict (result_recorded/consumed); a receipt bound to a different approved lineage is judged against THAT lineage; a receipt under a withdrawn lineage is a grant_revoked HOLD; a not_chargeable abstention is recorded. Withdrawal of the active release must never make already-consumed offline receipts unreportable (the device cannot reconcile them and the message 'No rating was counted' is false for a consumed ticket).",
+          "observed": "HTTP 409 {\"error\":{\"code\":\"access.release_not_authorized\",\"message\":\"Validated ratings are not available right now. No rating was counted.\"},\"release\":{\"status\":\"ineligible\",\"reasonCode\":\"withdrawn\"}} for all three cases; settle_offline_receipt is never called (VERIFIED: attack_head_final.log lines 17-27, 498-528). Root cause INFERRED from index.ts reconcileOfflineReceipts: chargeableReleaseAdmission() runs once for the batch and returns releaseNotAuthorized() on 'ineligible' BEFORE per-receipt replay / offlineReceiptReleaseLineage(); the per-grant lineage logic (grant_revoked / evidence_ambiguous holds) is only reachable while the active policy is admitted.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A1'  (tests A1, A1b, A1c; A1 settles a receipt, then withdraws the active release via h.rpcs.read_analysis_release_policy = withdrawnReleasePolicyRow and redelivers the same receipt)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A1 / A1b / A1c)",
+          "title": "Withdrawing the CURRENT active release policy refuses the whole /v1/offline/receipts batch with 409 access.release_not_authorized before any receipt is judged — replays of already-consumed receipts, receipts whose grant names a different still-approved lineage, and not_chargeable abstentions are all turned away with 'No rating was counted' instead of reaching durable reconciliation"
+        },
+        {
+          "expected": "A grant that verifies at the instant it was live (exp-1 precedes the retirement, so the old key was the ACTIVE key then) must verify; the receipt settles and consumes exactly once. Instead the receipt is frozen as a durable hold that keeps the ticket reserved forever (no code path un-holds it), so every user whose device stayed offline across a rotation loses the rating they already executed. Same receipt on the un-rotated ring settles (control), proving the evidence is complete.",
+          "observed": "A3 control: settled. After rotation (previous key still inside its overlap): delivery=held, reconciliation.status=reconciliation_required, reasonCode=evidence_ambiguous, financialDisposition=reserved, and settle_offline_receipt was called with p_hold_reason='evidence_ambiguous' (durable). A3c (grant signed 5 min after retirement, inside the 15-min grace the ring honours, delivered after overlapEndsAt) is likewise held. A3b (old-key grant still inside its lease) settles — so only EXPIRED old-key grants are stranded. VERIFIED: attack_head_final.log lines 54-84, 558-574. Root cause INFERRED: offlineSignature.ts verifyOfflineExecutionGrant L579-585 (retired.retiredAtEpochSeconds > context.nowEpochSeconds + GRACE ⇒ retired_key) combined with index.ts offlineGrantVerificationInstant() (min(now, exp-1)).",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A3'  (A3: grant signed by the old key iat=now-10d exp=now-3d; control run with old key active settles; ring rotated at now-1d with the previous key retained for the full 7-day overlap; same receipt redelivered)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A3, A3c)",
+          "title": "Routine signing-key rotation permanently HOLDs (evidence_ambiguous, durable, ticket reserved) the delayed receipt of an old-key grant that EXPIRED before the rotation — the exact delayed-consumption case the package exists for — because offlineGrantVerificationInstant() back-dates verification to exp-1, and the ring's previous-key check then sees retiredAt > instant + grace and throws retired_key"
+        },
+        {
+          "expected": "delivery=held, status=reconciliation_required with an ambiguity/conflict reason (evidence_ambiguous or operation_conflict), ticket kept reserved — a receipt that says 'nothing to charge' beside an output that says 'scored rating delivered' is ambiguous commitment and must HOLD, not become a permanent 'recorded' verdict that the device treats as reconciled.",
+          "observed": "{\"result\":\"accepted\",\"delivery\":\"settled\",\"status\":\"result_recorded\",\"reason_code\":null,\"financial_disposition\":\"reserved\",...} — a durable result_recorded row that later replays forever; no ticket consumed, no shot written (VERIFIED: attack_head_final.log line 490, 590). Root cause INFERRED from migration 20260909220000: the v_billing='not_chargeable' branch records the result without checking the output's resultKind.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK L4b'  (live SQL: authenticated session, receipt.billingDisposition='not_chargeable', output.resultKind='scored' with a score, p_hold_reason=null)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK L4b (live))",
+          "title": "settle_offline_receipt() records a not_chargeable receipt whose delivered output claims resultKind='scored' as delivery=settled / status=result_recorded (durable) instead of HOLDing contradictory evidence — the mirror case (chargeable receipt + abstention output) is held, so the durable ledger accepts an internally inconsistent receipt/output pair"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Corrupt/unknown SERVER state must not become a durable decision (the implementer's own summary: 'transport failure → 503, never a durable decision on missing data'); an integrity failure of the authority row is a server fault and should answer 503 (or a non-durable pending) so the identical redelivery settles once the row is repaired. The receipt's own evidence is complete — only the server's copy of the release policy is corrupt.",
+          "observed": "HTTP 200, delivery=held, reconciliation_required, evidence_ambiguous, financialDisposition=reserved, durable stand-in holds the receipt (VERIFIED: attack_head_final.log line 28, 543). Root cause INFERRED: index.ts offlineReceiptReleaseLineage catches ReleasePolicyError failure==='integrity' and sets policy=null → evidence_ambiguous, while every other lineage-read failure is thrown → 503.",
+          "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --config deno.json attack_w04_04_b214adf5.test.ts --filter 'ATTACK A2'  (active policy rotated; the grant's named lineage row is served with a tampered canonicalDocument so readVerifiedReleasePolicy throws ReleasePolicyError('integrity'))",
+          "severity": "P2",
+          "test_file": "supabase/functions/api/__wf__/attack_w04_04_b214adf5.test.ts (ATTACK A2)",
+          "title": "A release-lineage row that fails integrity verification (server-side corrupt authority state) is converted into a DURABLE evidence_ambiguous hold; repairing the row can never settle the receipt because the hold replays"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "b214adf57f90d6a43de0b344c1ece775f8aee467"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bc5c1ba4-fe20-4529-9a90-cbc33f778198/attack_candidate_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18c542aa-8c20-425d-8fc0-6abab780bdc7/attack_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a4509d90-44ea-4e8b-81f0-3eb8ce1ab6a0/ac2_full_edge_with_attacks.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a12df74-120b-410a-b5b9-8cc6e270e7c6/ac3_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0fad677a-44b7-4e7b-8b66-ee26c4f9eeb1/ac1_check.log"
+        ],
+        "attack_branch": "devin/pp/w04-04/attack-14c0f7e8",
+        "attack_branch_sha": "5607689d49f01e41bd32f63b76730c424e8cc43f",
+        "attacked_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+        "attacks_tried": 17,
+        "breaks": [
+          {
+            "expected": "delivery='held', status='reconciliation_required', reason_code='evidence_ambiguous' (the same verdict the ticketed contradictory-evidence branch returns), replayable, never result_recorded.",
+            "observed": "REAL SQL (A13): both receipts → {result:'accepted', delivery:'settled', status:'result_recorded', reason_code:null, financial_disposition:'not_applicable', result_id:<uuid>}. Edge route (A5): both entries delivery='settled', reconciliation.status='result_recorded', financialDisposition='not_applicable'. Exit 1, AssertionError with the observed rows printed (artifact attack_candidate_final.log).",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A13' offline_receipt_attack_14c0f7e8.test.ts   (same at the Edge layer: --filter 'A5')",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/offline_receipt_attack_14c0f7e8.test.ts (tests A5 and A13)",
+            "title": "Pro (no-ticket) lease branch of settle_offline_receipt() records contradictory evidence as result_recorded: a not_chargeable receipt beside a resultKind='scored' output, and a chargeable receipt beside an abstention output, both become permanent result_recorded / not_applicable verdicts instead of HOLD (reconciliation_required / evidence_ambiguous). The L4b fix in migration 20260909230000 hardened only the ticketed `v_billing='not_chargeable'` branch; the `elsif v_ticket_id is null` branch still does `v_recorded_result := v_result_id` without inspecting the output. No money moves (Pro lease has no ticket), but the durable ledger gets a contradictory verdict the objective says must HOLD."
+          },
+          {
+            "expected": "First delivery a durable HOLD (reconciliation_required / evidence_ambiguous), later deliveries `replayed`; ticket reserved, nothing consumed (the no-consumption half of the test holds on the candidate).",
+            "observed": "3 deliveries → [pending, pending, pending], each {result:'accepted', status:'pending', reason_code:null, financial_disposition:'reserved', result_id:null}; settlement rows: 0; ledger [allocated]; shots 0.",
+            "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A16' offline_receipt_attack_14c0f7e8.test.ts",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/offline_receipt_attack_14c0f7e8.test.ts (test A16)",
+            "title": "A receipt whose output names a session id owned by ANOTHER account is an endless `pending`, never a durable verdict: consume_offline_ticket() reports shot.session_not_found for a foreign session exactly as for this account's not-yet-synced session, so settle_offline_receipt() returns pending / reserved on every redelivery forever (no settlement row, ticket stays allocated, nothing consumed). Safe financially (ticket reserved, nothing charged) and the ambiguity is defensible as an anti-oracle choice, but the objective's 'ambiguous receipts HOLD' is not met — the client re-sends this receipt on every sync forever with no terminal state."
+          }
+        ],
+        "package_id": "W04-04",
+        "summary": "Adversarial suite offline_receipt_attack_14c0f7e8.test.ts (17 Deno tests: 7 Edge-route tests through routesHarness with a stateful settle stand-in, 10 live-PostgreSQL tests against the REAL settle_offline_receipt()/consume_offline_ticket()/release_offline_ticket() on a disposable postgres:16 with every migration applied) pushed as the only change on devin/pp/w04-04/attack-14c0f7e8 @ 5607689d. Candidate 14c0f7e8 run (VERIFIED): `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_attack_14c0f7e8.test.ts` → exit 1, 14 passed / 3 failed / 0 ignored (A5, A13, A16 = the 2 breaks above; A5/A13 are the same defect at the Edge and SQL layers). Base 7cfeacbb regression (VERIFIED, worktree + base-migrated disposable DB): same command → exit 1, 0 passed / 17 failed (route 404 'Unknown endpoint: POST /v1/offline/receipts', function public.settle_offline_receipt does not exist). HELD on the candidate (no break): A1 crash mid-batch (503, redelivery replays 1 + settles 1); A2 transport faults on the settle hop (302, HTML 502, thrown fetch, 0/2/foreign rows) and active-authority integrity/storage faults are 503 with no settle call/verdict; A3 malformed numerics/ids rejected before any RPC, 25-entry max batch (13 grants × 2 tickets) settles each ticket once, 25 duplicates consume once, 0 and 26 entries → 400; A4 corrupt-first-delivery hold is durable against the corrected redelivery (receipt_conflict), settled-first replays; A6 interleaved account switch (owner_mismatch under the caller, own receipts settle, tickets consumed once); A7 8 concurrent first deliveries → 1 settled + 7 replayed, one consumed event, one shot; A8 6 concurrent different receipts for one ticket → 1 consumed + 5 conflicting_receipt holds, one shot; A9 one operation/result raced across two tickets consumes exactly one, the other stays allocated; A10 settle vs release_offline_ticket race → exactly one terminal ledger event; A11 other-account / no-session / no-api-key / anon / service_role / second-installation deliveries never touch the ticket, cross-user result-id collision leaves the victim's shot untouched, offline_receipt_settlements is client-opaque (authenticated/anon/service_role SELECT+DELETE denied, owner UPDATE refused by the append-only guard), read_analysis_release_policy_lineage authenticated-denied/service_role-allowed; A12 13 outputs the shots table refuses (bad casts, overflow, NOT NULL, phases shape, size cap, score/confidence bounds, capturedAt bound, bad cameraView, non-uuid sessionId) are durable reserved holds (never a consumption, never an exception) and the corrected redelivery is a conflict; A14 raw-signed grant clock boundaries (exp 2200, expired 1y ago settle; iat>=exp, exp 0, negative iat, exp 2^53 are holds, never 503); A15 transaction death after the RPC returned leaves no partial state and the redelivery settles exactly once; A17 anonymous/garbage bearer → 401, GET → 404, non-object bodies → 400 with zero settle calls. Free-rating conservation held everywhere (lifetime scored count == consumed tickets == shots in A7–A12, A15). Acceptance on the candidate with the attack file present (VERIFIED): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0; AC2 `deno task test` with XC_PG_URL+PICKLE_AUDIT_PG_URL → exit 1, 1018 passed (31 steps) / 3 failed / 0 ignored — the 3 failures are exactly the attack tests A5/A13/A16 (the candidate's own 1004 tests all pass); AC3 `./supabase/tests/run_rls_tests.sh` exit 0, 4 installs (fresh + historical upgrades) × 3 matrices ALL CASES PASSED. Attack file: prettier --check exit 0, `deno check` exit 0, `deno lint` exit 0, `git diff --check` clean. No production code, candidate tests, or migrations modified; no PR opened; no production Supabase touched. Rating rationale: the Pro-branch contradiction (P2) writes a wrong durable verdict but moves no money (Pro lease has no ticket to consume); the foreign-session pending (P3) is financially safe but leaves the client retrying forever with no terminal state — both are below P1 because the money/ticket invariants hold on every path tried."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/468d9ed4-6e5c-44c4-8f64-e8e9c79a5628/ac1_typecheck_r3.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC1",
+            "note": "VERIFIED on HEAD 14c0f7e8. Output contains only the pre-existing warnings that `lock`/`nodeModulesDir` are set in a non-root deno.json; no type errors.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce2543bc-1147-4529-8b6d-03e9eedd8290/ac2_edge_suite_r3_full.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 1004,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC2",
+            "note": "VERIFIED on HEAD 14c0f7e8: `ok | 1004 passed (31 steps) | 0 failed` with ignored == 0. The disposable PostgreSQL 16 (pickle-xc-pg, started by supabase/functions/api/__wf__/xc_pg_up.sh from the HEAD checkout: shim_auth.sql + every migration in order incl. 20260909230000) is passed under BOTH env names the suite reads: every W04 live-DB file reads XC_PG_URL ?? PICKLE_AUDIT_PG_URL, but w06_01_golden_parity.test.ts (not in this package) reads only PICKLE_AUDIT_PG_URL. With XC_PG_URL alone (the manifest's literal form) the run is `992 passed | 0 failed | 12 ignored`, all 12 being W06-01 golden SQL-parity tests — log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/15b5ce6e-abcd-4160-a196-fbda096e71bb/ac2_edge_suite_r3.log. Pointing both variables at the same disposable DB is what satisfies the criterion (ignored == 0).",
+            "passed": 1004,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a0757b3-42a9-499d-8dd5-2e561761429f/ac3_rls_r3.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC3",
+            "note": "VERIFIED on HEAD 14c0f7e8. The runner executes the security matrix 4 times (fresh install + 3 historical-upgrade orderings incl. ordered_20260907): each prints `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` (244 W08 SQL assertions) and `Analysis release policy authority: PASS` — 4/4 each. Section U (settlement matrix incl. new rcpt-10b contradictory-evidence hold) runs inside security_regression.sql on every pass. Docker postgres:16.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f27ba5bb-6b00-47ba-ba73-05cfad113d35/ac4_head_r3.log",
+            "command": "git worktree add --detach /home/ubuntu/w0404-base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && (cd /home/ubuntu/w0404-base && XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh) && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts /home/ubuntu/w0404-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0404-base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts)  # BASE; then on HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC4",
+            "note": "PROOF exit 0: new tests FAIL on BASE_SHA and PASS on HEAD. BASE run (BASE_SHA checkout in a git worktree, only the new test file copied over, against a separate disposable PostgreSQL migrated from BASE's migrations): exit_code=1, executed=23, passed=1, failed=22, skipped=0 — `FAILED | 1 passed | 22 failed`; the 22 failures are POST /v1/offline/receipts answering 404 (route `/v1/offline/:id` absent on BASE) and the live-SQL test finding no settle_offline_receipt(); the single pass is the auth guard (401 precedes route dispatch). BASE log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7a3ef23-c133-494d-b01c-49a17f54f814/ac4_base_r3.log. HEAD run: exit_code=0, `ok | 23 passed | 0 failed`, including 'a duplicate batch (and a duplicate inside a batch) replays the durable verdict — the receipt settles once' and the evidence_ambiguous / grant_revoked / evidence_missing HOLD tests. Additionally VERIFIED against the r2 candidate state before the r3 fixes (same file, same DB): the r3 tests A1/A1b/A1c (409 whole-batch refusal), A2 (durable hold instead of 503), A3/A3c (held instead of settled) and L4b (result_recorded instead of held) failed — 6 route failures pre-implementation, then the L4b live-SQL failure alone until migration 20260909230000 was applied. The SQL-plane rcpt-10b assertion in security_regression.sql cannot be run on BASE in isolation (settle_offline_receipt() does not exist there); it is exercised 4x under AC3.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Start from BASE_SHA; cherry-pick the sound r1/r2 commits (route, migration 20260909220000, SQL matrix, tests); write the r3 regressions FIRST (A1/A1b/A1c, A2, A3/A3c/negatives, L4b route + live SQL, rcpt-10b SQL) and confirm they fail on the r2 state; commit them separately (adc2cc87). Then the minimal fix inside write_paths: per-receipt named-lineage judgment replacing the batch admission gate, integrity failures propagate to 503, a historical verification view for delayed old-key grants (verifier untouched), and a LATER migration replacing settle_offline_receipt() for the contradictory not_chargeable+scored case. Run AC1-AC4 exactly (AC2 additionally with PICKLE_AUDIT_PG_URL so ignored == 0), pnpm format:check, git diff --check; push the single branch.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/468d9ed4-6e5c-44c4-8f64-e8e9c79a5628/ac1_typecheck_r3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce2543bc-1147-4529-8b6d-03e9eedd8290/ac2_edge_suite_r3_full.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/15b5ce6e-abcd-4160-a196-fbda096e71bb/ac2_edge_suite_r3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a0757b3-42a9-499d-8dd5-2e561761429f/ac3_rls_r3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7a3ef23-c133-494d-b01c-49a17f54f814/ac4_base_r3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f27ba5bb-6b00-47ba-ba73-05cfad113d35/ac4_head_r3.log"
+        ],
+        "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w04-04/impl-r3",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts",
+          "supabase/migrations/20260909220000_offline_receipt_settlement.sql",
+          "supabase/migrations/20260909230000_offline_receipt_contradictory_evidence.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/accountDeletionOperations.ts",
+          "supabase/functions/api/__wf__/http_test.ts"
+        ],
+        "head_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+        "out_of_scope_files": [
+          "supabase/functions/api/accountDeletionOperations.ts — additive one-line entry `offline_receipt_settlements: \"cascade_only\"` in ACCOUNT_DELETION_UNREAD_TABLES (the deletion inventory test fails for any new user-owned table that is not classified); carried from r1/r2, not under any serial group this package does not hold",
+          "supabase/functions/api/__wf__/http_test.ts — console-sink pin `index.ts: 19 -> 20` for the one new structured log line in reconcileOfflineReceipts (static pin test, no behavioural change); carried from r1/r2, not under any serial group this package does not hold"
+        ],
+        "package_id": "W04-04",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (23 tests: r1/r2 settlement/replay/hold/lineage suite + r3: A1 replay of a consumed receipt after the ACTIVE release is withdrawn; A1b receipt naming another approved lineage under a withdrawn active; A1c not_chargeable abstention under a withdrawn active is recorded; A2 corrupt (integrity-failing) lineage row -> generic 503, settle_offline_receipt never called, nothing durable; A3 old-key grant expired before routine rotation settles once (control + rotated ring); A3c grant signed inside propagation grace, delivered after overlap boundary, settles; A3-neg old-key grant signed after grace stays held; A3-drop dropped previous key stays held; L4b live SQL: settle_offline_receipt() HOLDs not_chargeable + resultKind=scored as evidence_ambiguous, ticket reserved, replay returns the same hold)",
+          "supabase/tests/security_regression.sql (section U rcpt-1..rcpt-13 settlement matrix incl. rcpt-10b: not_chargeable receipt beside a scored output is held evidence_ambiguous, no shot, ledger unchanged, replay returns the hold; settlement count expectations 15 -> 16)"
+        ],
+        "residual_risks": [
+          "AC2 as literally written (XC_PG_URL only) leaves 12 W06-01 golden SQL-parity tests ignored because that file (outside this package) reads only PICKLE_AUDIT_PG_URL; the criterion (ignored == 0) is met by also exporting PICKLE_AUDIT_PG_URL to the same disposable DB, which is recorded in the AC2 command.",
+          "The write_paths entry names the migration `20260908130000_offline_receipt_settlement.sql`; on BASE_SHA migrations already run to 20260909210000, so the settlement migration is `20260909220000_offline_receipt_settlement.sql` (r1/r2) and the r3 fix is `20260909230000_offline_receipt_contradictory_evidence.sql` — both under the `sql` serial group this package holds, both later than every existing file.",
+          "Two files outside write_paths carry the minimum additive wiring from r1 (accountDeletionOperations.ts deletion-inventory entry for the new table; http_test.ts console-sink pin 19->20); listed in out_of_scope_files.",
+          "A delayed old-key grant is verified at its historical instant only while the ring still honours the previous key (retiredAt <= now + grace); once the previous key is dropped from the ring the receipt holds evidence_ambiguous (tested as the intended behaviour — a key no longer in the ring cannot vouch for anything).",
+          "Pro-lease (no-ticket) receipts are recorded by settle_offline_receipt() without the SQL-side billing/output consistency check (unchanged r2 behaviour; the edge verifies output id and digest before the RPC). Only the ticketed branch was changed for L4b to keep the migration minimal."
+        ],
+        "summary": "W04-04 round 3 on branch devin/pp/w04-04/impl-r3 (HEAD 14c0f7e8, base 7cfeacbb). The r1/r2 work (route POST /v1/offline/receipts, migration 20260909220000, the settlement matrix) was cherry-picked from the prior candidate, then two new commits: adc2cc87 (regression tests only) and 14c0f7e8 (fixes). Defects on the r2 candidate (BASE has no route at all — every receipt test 404s):\n\nA1 (P1) index.ts reconcileOfflineReceipts: `chargeableReleaseAdmission()` ran ONCE per batch and returned `releaseNotAuthorized()` (409 access.release_not_authorized, 'No rating was counted') on 'ineligible' BEFORE any receipt reached settle_offline_receipt(), so withdrawing the ACTIVE release made already-consumed receipts unreplayable, receipts naming another approved lineage unjudged and abstentions unrecordable. Fix: the batch gate is removed; the active policy is read once only as a cache seed (a read failure is 503). `offlineReceiptReleaseLineage()` reads and verifies the grant's NAMED lineage by digest (`read_analysis_release_policy_lineage`) and yields {release, hold: null | 'grant_revoked'} (withdrawnAt <= now or denyNewAuthorizations) or {release: null, hold: 'evidence_ambiguous'} (unknown lineage / malformed claim). `offlineReceiptHoldReason()` applies `grant_revoked` only to chargeable receipts, so a not_chargeable abstention under a withdrawn lineage is recorded (nothing to charge). Replay of a known receipt still happens inside settle_offline_receipt() before any lineage verdict matters.\n\nA2 (P2) index.ts offlineReceiptReleaseLineage caught ReleasePolicyError failure==='integrity' and set policy=null -> durable evidence_ambiguous hold. Fix: no catch — any ReleasePolicyError (integrity or storage) propagates to the batch-level generic 503 (`serviceUnavailable('Offline receipt settlement', error)`); settle_offline_receipt is never called; the identical redelivery settles once the authority row is repaired (tested: A2).\n\nA3 (P1) index.ts offlineGrantVerificationInstant() back-dated verification to min(now, exp-1) and passed the full key ring to verifyOfflineExecutionGrant(), whose retired-key check (offlineSignature.ts: retiredAt > now + GRACE => retired_key) then rejected every old-key grant that EXPIRED before the rotation. Fix: new `offlineReceiptVerificationView(grant, keyRing, now)` + `decodeJwsHeaderKid()`: when the previous key is still honoured by the ring (retiredAt <= now + grace) and the grant's historical instant precedes the retirement, the grant is verified against [active, previous-as-plain-key] at that instant (the key WAS the active key then, so no retirement window applies); a grant whose instant falls at/after retirement but that is signed by the previous kid is verified at min(instant, overlapEnd-1) with the retirement metadata retained, so the verifier's iat-within-grace rule still governs (A3c settles; a grant signed after the grace, or under a dropped key, still fails and HOLDs). offlineSignature.ts is untouched.\n\nL4b (P1) migration 20260909220000 settle_offline_receipt(): the `v_billing = 'not_chargeable'` branch recorded result_recorded without inspecting the output, so a receipt saying 'nothing to charge' beside an output claiming resultKind='scored' became a permanent recorded verdict. Fix: NEW migration 20260909230000_offline_receipt_contradictory_evidence.sql (later than every existing file; the applied migration is not edited) replaces the function body: not_chargeable + (no output, or an output naming this resultId and not scored) -> result_recorded, ticket outstanding; not_chargeable + scored output or another result's output -> reconciliation_required / evidence_ambiguous, ticket reserved, replay returns the hold. Every other branch (replay, conflict, owner, lineage, lease, chargeable evidence_missing/evidence_ambiguous, consume_offline_ticket paths), the comment, revokes and grants are reproduced unchanged.\n\nVerification (all VERIFIED on HEAD): AC1 frozen Deno 2.5.6 check exit 0; AC2 `deno task test` with the disposable PG under XC_PG_URL and PICKLE_AUDIT_PG_URL: 1004 passed / 0 failed / 0 ignored; AC3 run_rls_tests.sh exit 0, 4/4 matrices (fresh + historical upgrades) ALL CASES PASSED; AC4 new test file on BASE (worktree + BASE-migrated disposable DB): 1 passed / 22 failed, exit 1; on HEAD 23/23, exit 0. `pnpm format:check` exit 0 ('All matched files use Prettier code style!'); `git diff --check` exit 0 (working tree and 7cfeacbb..HEAD). Pushed only origin devin/pp/w04-04/impl-r3 (new branch, no force). No PR opened. No production resources touched."
+      },
+      "lanes": [
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bc5c1ba4-fe20-4529-9a90-cbc33f778198/attack_candidate_final.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18c542aa-8c20-425d-8fc0-6abab780bdc7/attack_base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a4509d90-44ea-4e8b-81f0-3eb8ce1ab6a0/ac2_full_edge_with_attacks.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a12df74-120b-410a-b5b9-8cc6e270e7c6/ac3_rls.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0fad677a-44b7-4e7b-8b66-ee26c4f9eeb1/ac1_check.log"
+            ],
+            "attack_branch": "devin/pp/w04-04/attack-14c0f7e8",
+            "attack_branch_sha": "5607689d49f01e41bd32f63b76730c424e8cc43f",
+            "attacked_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+            "attacks_tried": 17,
+            "breaks": [
+              {
+                "expected": "delivery='held', status='reconciliation_required', reason_code='evidence_ambiguous' (the same verdict the ticketed contradictory-evidence branch returns), replayable, never result_recorded.",
+                "observed": "REAL SQL (A13): both receipts → {result:'accepted', delivery:'settled', status:'result_recorded', reason_code:null, financial_disposition:'not_applicable', result_id:<uuid>}. Edge route (A5): both entries delivery='settled', reconciliation.status='result_recorded', financialDisposition='not_applicable'. Exit 1, AssertionError with the observed rows printed (artifact attack_candidate_final.log).",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A13' offline_receipt_attack_14c0f7e8.test.ts   (same at the Edge layer: --filter 'A5')",
+                "severity": "P2",
+                "test_file": "supabase/functions/api/__wf__/offline_receipt_attack_14c0f7e8.test.ts (tests A5 and A13)",
+                "title": "Pro (no-ticket) lease branch of settle_offline_receipt() records contradictory evidence as result_recorded: a not_chargeable receipt beside a resultKind='scored' output, and a chargeable receipt beside an abstention output, both become permanent result_recorded / not_applicable verdicts instead of HOLD (reconciliation_required / evidence_ambiguous). The L4b fix in migration 20260909230000 hardened only the ticketed `v_billing='not_chargeable'` branch; the `elsif v_ticket_id is null` branch still does `v_recorded_result := v_result_id` without inspecting the output. No money moves (Pro lease has no ticket), but the durable ledger gets a contradictory verdict the objective says must HOLD."
+              },
+              {
+                "expected": "First delivery a durable HOLD (reconciliation_required / evidence_ambiguous), later deliveries `replayed`; ticket reserved, nothing consumed (the no-consumption half of the test holds on the candidate).",
+                "observed": "3 deliveries → [pending, pending, pending], each {result:'accepted', status:'pending', reason_code:null, financial_disposition:'reserved', result_id:null}; settlement rows: 0; ledger [allocated]; shots 0.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'A16' offline_receipt_attack_14c0f7e8.test.ts",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/offline_receipt_attack_14c0f7e8.test.ts (test A16)",
+                "title": "A receipt whose output names a session id owned by ANOTHER account is an endless `pending`, never a durable verdict: consume_offline_ticket() reports shot.session_not_found for a foreign session exactly as for this account's not-yet-synced session, so settle_offline_receipt() returns pending / reserved on every redelivery forever (no settlement row, ticket stays allocated, nothing consumed). Safe financially (ticket reserved, nothing charged) and the ambiguity is defensible as an anti-oracle choice, but the objective's 'ambiguous receipts HOLD' is not met — the client re-sends this receipt on every sync forever with no terminal state."
+              }
+            ],
+            "package_id": "W04-04",
+            "summary": "Adversarial suite offline_receipt_attack_14c0f7e8.test.ts (17 Deno tests: 7 Edge-route tests through routesHarness with a stateful settle stand-in, 10 live-PostgreSQL tests against the REAL settle_offline_receipt()/consume_offline_ticket()/release_offline_ticket() on a disposable postgres:16 with every migration applied) pushed as the only change on devin/pp/w04-04/attack-14c0f7e8 @ 5607689d. Candidate 14c0f7e8 run (VERIFIED): `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_attack_14c0f7e8.test.ts` → exit 1, 14 passed / 3 failed / 0 ignored (A5, A13, A16 = the 2 breaks above; A5/A13 are the same defect at the Edge and SQL layers). Base 7cfeacbb regression (VERIFIED, worktree + base-migrated disposable DB): same command → exit 1, 0 passed / 17 failed (route 404 'Unknown endpoint: POST /v1/offline/receipts', function public.settle_offline_receipt does not exist). HELD on the candidate (no break): A1 crash mid-batch (503, redelivery replays 1 + settles 1); A2 transport faults on the settle hop (302, HTML 502, thrown fetch, 0/2/foreign rows) and active-authority integrity/storage faults are 503 with no settle call/verdict; A3 malformed numerics/ids rejected before any RPC, 25-entry max batch (13 grants × 2 tickets) settles each ticket once, 25 duplicates consume once, 0 and 26 entries → 400; A4 corrupt-first-delivery hold is durable against the corrected redelivery (receipt_conflict), settled-first replays; A6 interleaved account switch (owner_mismatch under the caller, own receipts settle, tickets consumed once); A7 8 concurrent first deliveries → 1 settled + 7 replayed, one consumed event, one shot; A8 6 concurrent different receipts for one ticket → 1 consumed + 5 conflicting_receipt holds, one shot; A9 one operation/result raced across two tickets consumes exactly one, the other stays allocated; A10 settle vs release_offline_ticket race → exactly one terminal ledger event; A11 other-account / no-session / no-api-key / anon / service_role / second-installation deliveries never touch the ticket, cross-user result-id collision leaves the victim's shot untouched, offline_receipt_settlements is client-opaque (authenticated/anon/service_role SELECT+DELETE denied, owner UPDATE refused by the append-only guard), read_analysis_release_policy_lineage authenticated-denied/service_role-allowed; A12 13 outputs the shots table refuses (bad casts, overflow, NOT NULL, phases shape, size cap, score/confidence bounds, capturedAt bound, bad cameraView, non-uuid sessionId) are durable reserved holds (never a consumption, never an exception) and the corrected redelivery is a conflict; A14 raw-signed grant clock boundaries (exp 2200, expired 1y ago settle; iat>=exp, exp 0, negative iat, exp 2^53 are holds, never 503); A15 transaction death after the RPC returned leaves no partial state and the redelivery settles exactly once; A17 anonymous/garbage bearer → 401, GET → 404, non-object bodies → 400 with zero settle calls. Free-rating conservation held everywhere (lifetime scored count == consumed tickets == shots in A7–A12, A15). Acceptance on the candidate with the attack file present (VERIFIED): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0; AC2 `deno task test` with XC_PG_URL+PICKLE_AUDIT_PG_URL → exit 1, 1018 passed (31 steps) / 3 failed / 0 ignored — the 3 failures are exactly the attack tests A5/A13/A16 (the candidate's own 1004 tests all pass); AC3 `./supabase/tests/run_rls_tests.sh` exit 0, 4 installs (fresh + historical upgrades) × 3 matrices ALL CASES PASSED. Attack file: prettier --check exit 0, `deno check` exit 0, `deno lint` exit 0, `git diff --check` clean. No production code, candidate tests, or migrations modified; no PR opened; no production Supabase touched. Rating rationale: the Pro-branch contradiction (P2) writes a wrong durable verdict but moves no money (Pro lease has no ticket to consume); the foreign-session pending (P3) is financially safe but leaves the client retrying forever with no terminal state — both are below P1 because the money/ticket invariants hold on every path tried."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/468d9ed4-6e5c-44c4-8f64-e8e9c79a5628/ac1_typecheck_r3.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC1",
+                "note": "VERIFIED on HEAD 14c0f7e8. Output contains only the pre-existing warnings that `lock`/`nodeModulesDir` are set in a non-root deno.json; no type errors.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce2543bc-1147-4529-8b6d-03e9eedd8290/ac2_edge_suite_r3_full.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 1004,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC2",
+                "note": "VERIFIED on HEAD 14c0f7e8: `ok | 1004 passed (31 steps) | 0 failed` with ignored == 0. The disposable PostgreSQL 16 (pickle-xc-pg, started by supabase/functions/api/__wf__/xc_pg_up.sh from the HEAD checkout: shim_auth.sql + every migration in order incl. 20260909230000) is passed under BOTH env names the suite reads: every W04 live-DB file reads XC_PG_URL ?? PICKLE_AUDIT_PG_URL, but w06_01_golden_parity.test.ts (not in this package) reads only PICKLE_AUDIT_PG_URL. With XC_PG_URL alone (the manifest's literal form) the run is `992 passed | 0 failed | 12 ignored`, all 12 being W06-01 golden SQL-parity tests — log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/15b5ce6e-abcd-4160-a196-fbda096e71bb/ac2_edge_suite_r3.log. Pointing both variables at the same disposable DB is what satisfies the criterion (ignored == 0).",
+                "passed": 1004,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a0757b3-42a9-499d-8dd5-2e561761429f/ac3_rls_r3.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 4,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC3",
+                "note": "VERIFIED on HEAD 14c0f7e8. The runner executes the security matrix 4 times (fresh install + 3 historical-upgrade orderings incl. ordered_20260907): each prints `SECURITY REGRESSION MATRIX: ALL CASES PASSED`, `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED`, `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` (244 W08 SQL assertions) and `Analysis release policy authority: PASS` — 4/4 each. Section U (settlement matrix incl. new rcpt-10b contradictory-evidence hold) runs inside security_regression.sql on every pass. Docker postgres:16.",
+                "passed": 4,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f27ba5bb-6b00-47ba-ba73-05cfad113d35/ac4_head_r3.log",
+                "command": "git worktree add --detach /home/ubuntu/w0404-base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && (cd /home/ubuntu/w0404-base && XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh) && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts /home/ubuntu/w0404-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0404-base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts)  # BASE; then on HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+                "executed": 23,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC4",
+                "note": "PROOF exit 0: new tests FAIL on BASE_SHA and PASS on HEAD. BASE run (BASE_SHA checkout in a git worktree, only the new test file copied over, against a separate disposable PostgreSQL migrated from BASE's migrations): exit_code=1, executed=23, passed=1, failed=22, skipped=0 — `FAILED | 1 passed | 22 failed`; the 22 failures are POST /v1/offline/receipts answering 404 (route `/v1/offline/:id` absent on BASE) and the live-SQL test finding no settle_offline_receipt(); the single pass is the auth guard (401 precedes route dispatch). BASE log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7a3ef23-c133-494d-b01c-49a17f54f814/ac4_base_r3.log. HEAD run: exit_code=0, `ok | 23 passed | 0 failed`, including 'a duplicate batch (and a duplicate inside a batch) replays the durable verdict — the receipt settles once' and the evidence_ambiguous / grant_revoked / evidence_missing HOLD tests. Additionally VERIFIED against the r2 candidate state before the r3 fixes (same file, same DB): the r3 tests A1/A1b/A1c (409 whole-batch refusal), A2 (durable hold instead of 503), A3/A3c (held instead of settled) and L4b (result_recorded instead of held) failed — 6 route failures pre-implementation, then the L4b live-SQL failure alone until migration 20260909230000 was applied. The SQL-plane rcpt-10b assertion in security_regression.sql cannot be run on BASE in isolation (settle_offline_receipt() does not exist there); it is exercised 4x under AC3.",
+                "passed": 23,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Start from BASE_SHA; cherry-pick the sound r1/r2 commits (route, migration 20260909220000, SQL matrix, tests); write the r3 regressions FIRST (A1/A1b/A1c, A2, A3/A3c/negatives, L4b route + live SQL, rcpt-10b SQL) and confirm they fail on the r2 state; commit them separately (adc2cc87). Then the minimal fix inside write_paths: per-receipt named-lineage judgment replacing the batch admission gate, integrity failures propagate to 503, a historical verification view for delayed old-key grants (verifier untouched), and a LATER migration replacing settle_offline_receipt() for the contradictory not_chargeable+scored case. Run AC1-AC4 exactly (AC2 additionally with PICKLE_AUDIT_PG_URL so ignored == 0), pnpm format:check, git diff --check; push the single branch.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/468d9ed4-6e5c-44c4-8f64-e8e9c79a5628/ac1_typecheck_r3.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce2543bc-1147-4529-8b6d-03e9eedd8290/ac2_edge_suite_r3_full.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/15b5ce6e-abcd-4160-a196-fbda096e71bb/ac2_edge_suite_r3.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a0757b3-42a9-499d-8dd5-2e561761429f/ac3_rls_r3.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7a3ef23-c133-494d-b01c-49a17f54f814/ac4_base_r3.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f27ba5bb-6b00-47ba-ba73-05cfad113d35/ac4_head_r3.log"
+            ],
+            "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+            "baseline_failures_observed": [],
+            "blocked": false,
+            "blocked_reason": "",
+            "branch": "devin/pp/w04-04/impl-r3",
+            "files_changed": [
+              "supabase/functions/api/index.ts",
+              "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts",
+              "supabase/migrations/20260909220000_offline_receipt_settlement.sql",
+              "supabase/migrations/20260909230000_offline_receipt_contradictory_evidence.sql",
+              "supabase/tests/security_regression.sql",
+              "supabase/functions/api/accountDeletionOperations.ts",
+              "supabase/functions/api/__wf__/http_test.ts"
+            ],
+            "head_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+            "out_of_scope_files": [
+              "supabase/functions/api/accountDeletionOperations.ts — additive one-line entry `offline_receipt_settlements: \"cascade_only\"` in ACCOUNT_DELETION_UNREAD_TABLES (the deletion inventory test fails for any new user-owned table that is not classified); carried from r1/r2, not under any serial group this package does not hold",
+              "supabase/functions/api/__wf__/http_test.ts — console-sink pin `index.ts: 19 -> 20` for the one new structured log line in reconcileOfflineReceipts (static pin test, no behavioural change); carried from r1/r2, not under any serial group this package does not hold"
+            ],
+            "package_id": "W04-04",
+            "regression_tests_added": [
+              "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (23 tests: r1/r2 settlement/replay/hold/lineage suite + r3: A1 replay of a consumed receipt after the ACTIVE release is withdrawn; A1b receipt naming another approved lineage under a withdrawn active; A1c not_chargeable abstention under a withdrawn active is recorded; A2 corrupt (integrity-failing) lineage row -> generic 503, settle_offline_receipt never called, nothing durable; A3 old-key grant expired before routine rotation settles once (control + rotated ring); A3c grant signed inside propagation grace, delivered after overlap boundary, settles; A3-neg old-key grant signed after grace stays held; A3-drop dropped previous key stays held; L4b live SQL: settle_offline_receipt() HOLDs not_chargeable + resultKind=scored as evidence_ambiguous, ticket reserved, replay returns the same hold)",
+              "supabase/tests/security_regression.sql (section U rcpt-1..rcpt-13 settlement matrix incl. rcpt-10b: not_chargeable receipt beside a scored output is held evidence_ambiguous, no shot, ledger unchanged, replay returns the hold; settlement count expectations 15 -> 16)"
+            ],
+            "residual_risks": [
+              "AC2 as literally written (XC_PG_URL only) leaves 12 W06-01 golden SQL-parity tests ignored because that file (outside this package) reads only PICKLE_AUDIT_PG_URL; the criterion (ignored == 0) is met by also exporting PICKLE_AUDIT_PG_URL to the same disposable DB, which is recorded in the AC2 command.",
+              "The write_paths entry names the migration `20260908130000_offline_receipt_settlement.sql`; on BASE_SHA migrations already run to 20260909210000, so the settlement migration is `20260909220000_offline_receipt_settlement.sql` (r1/r2) and the r3 fix is `20260909230000_offline_receipt_contradictory_evidence.sql` — both under the `sql` serial group this package holds, both later than every existing file.",
+              "Two files outside write_paths carry the minimum additive wiring from r1 (accountDeletionOperations.ts deletion-inventory entry for the new table; http_test.ts console-sink pin 19->20); listed in out_of_scope_files.",
+              "A delayed old-key grant is verified at its historical instant only while the ring still honours the previous key (retiredAt <= now + grace); once the previous key is dropped from the ring the receipt holds evidence_ambiguous (tested as the intended behaviour — a key no longer in the ring cannot vouch for anything).",
+              "Pro-lease (no-ticket) receipts are recorded by settle_offline_receipt() without the SQL-side billing/output consistency check (unchanged r2 behaviour; the edge verifies output id and digest before the RPC). Only the ticketed branch was changed for L4b to keep the migration minimal."
+            ],
+            "summary": "W04-04 round 3 on branch devin/pp/w04-04/impl-r3 (HEAD 14c0f7e8, base 7cfeacbb). The r1/r2 work (route POST /v1/offline/receipts, migration 20260909220000, the settlement matrix) was cherry-picked from the prior candidate, then two new commits: adc2cc87 (regression tests only) and 14c0f7e8 (fixes). Defects on the r2 candidate (BASE has no route at all — every receipt test 404s):\n\nA1 (P1) index.ts reconcileOfflineReceipts: `chargeableReleaseAdmission()` ran ONCE per batch and returned `releaseNotAuthorized()` (409 access.release_not_authorized, 'No rating was counted') on 'ineligible' BEFORE any receipt reached settle_offline_receipt(), so withdrawing the ACTIVE release made already-consumed receipts unreplayable, receipts naming another approved lineage unjudged and abstentions unrecordable. Fix: the batch gate is removed; the active policy is read once only as a cache seed (a read failure is 503). `offlineReceiptReleaseLineage()` reads and verifies the grant's NAMED lineage by digest (`read_analysis_release_policy_lineage`) and yields {release, hold: null | 'grant_revoked'} (withdrawnAt <= now or denyNewAuthorizations) or {release: null, hold: 'evidence_ambiguous'} (unknown lineage / malformed claim). `offlineReceiptHoldReason()` applies `grant_revoked` only to chargeable receipts, so a not_chargeable abstention under a withdrawn lineage is recorded (nothing to charge). Replay of a known receipt still happens inside settle_offline_receipt() before any lineage verdict matters.\n\nA2 (P2) index.ts offlineReceiptReleaseLineage caught ReleasePolicyError failure==='integrity' and set policy=null -> durable evidence_ambiguous hold. Fix: no catch — any ReleasePolicyError (integrity or storage) propagates to the batch-level generic 503 (`serviceUnavailable('Offline receipt settlement', error)`); settle_offline_receipt is never called; the identical redelivery settles once the authority row is repaired (tested: A2).\n\nA3 (P1) index.ts offlineGrantVerificationInstant() back-dated verification to min(now, exp-1) and passed the full key ring to verifyOfflineExecutionGrant(), whose retired-key check (offlineSignature.ts: retiredAt > now + GRACE => retired_key) then rejected every old-key grant that EXPIRED before the rotation. Fix: new `offlineReceiptVerificationView(grant, keyRing, now)` + `decodeJwsHeaderKid()`: when the previous key is still honoured by the ring (retiredAt <= now + grace) and the grant's historical instant precedes the retirement, the grant is verified against [active, previous-as-plain-key] at that instant (the key WAS the active key then, so no retirement window applies); a grant whose instant falls at/after retirement but that is signed by the previous kid is verified at min(instant, overlapEnd-1) with the retirement metadata retained, so the verifier's iat-within-grace rule still governs (A3c settles; a grant signed after the grace, or under a dropped key, still fails and HOLDs). offlineSignature.ts is untouched.\n\nL4b (P1) migration 20260909220000 settle_offline_receipt(): the `v_billing = 'not_chargeable'` branch recorded result_recorded without inspecting the output, so a receipt saying 'nothing to charge' beside an output claiming resultKind='scored' became a permanent recorded verdict. Fix: NEW migration 20260909230000_offline_receipt_contradictory_evidence.sql (later than every existing file; the applied migration is not edited) replaces the function body: not_chargeable + (no output, or an output naming this resultId and not scored) -> result_recorded, ticket outstanding; not_chargeable + scored output or another result's output -> reconciliation_required / evidence_ambiguous, ticket reserved, replay returns the hold. Every other branch (replay, conflict, owner, lineage, lease, chargeable evidence_missing/evidence_ambiguous, consume_offline_ticket paths), the comment, revokes and grants are reproduced unchanged.\n\nVerification (all VERIFIED on HEAD): AC1 frozen Deno 2.5.6 check exit 0; AC2 `deno task test` with the disposable PG under XC_PG_URL and PICKLE_AUDIT_PG_URL: 1004 passed / 0 failed / 0 ignored; AC3 run_rls_tests.sh exit 0, 4/4 matrices (fresh + historical upgrades) ALL CASES PASSED; AC4 new test file on BASE (worktree + BASE-migrated disposable DB): 1 passed / 22 failed, exit 1; on HEAD 23/23, exit 0. `pnpm format:check` exit 0 ('All matched files use Prettier code style!'); `git diff --check` exit 0 (working tree and 7cfeacbb..HEAD). Pushed only origin devin/pp/w04-04/impl-r3 (new branch, no force). No PR opened. No production resources touched."
+          },
+          "lane": 1,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/149c9f40-aae7-4f27-8573-5681836a77b5/ac1_typecheck.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC1",
+                "note": "VERIFIED by reviewer on HEAD 14c0f7e8 (repo checkout /home/ubuntu/repos/Pickle-Sensei). Output: `Check file:///.../supabase/functions/api/index.ts`, exit 0; only the pre-existing warnings about `lock`/`nodeModulesDir` in a non-root deno.json. No type errors.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab5c0f5c-31ac-4585-982d-13d6d90026ce/ac2_edge_suite_both.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 1004,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC2",
+                "note": "VERIFIED by reviewer on HEAD 14c0f7e8 against a disposable postgres:16 (container pickle-xc-pg on 127.0.0.1:55433 started via supabase/functions/api/__wf__/xc_pg_up.sh from the HEAD checkout: shim_auth.sql + every migration in order incl. 20260909220000 and 20260909230000; image pulled from mirror.gcr.io/library/postgres:16 and tagged postgres:16 because Docker Hub answered 429). Summary line: `ok | 1004 passed (31 steps) | 0 failed (2m0s)` — no ignored count printed, no `... ignored` test lines => ignored == 0. Cross-check of the implementer's residual-risk claim: with XC_PG_URL alone the run is `ok | 992 passed (31 steps) | 0 failed | 12 ignored`, all 12 being `W06-01 golden:` SQL-parity tests (a file outside this package that reads only PICKLE_AUDIT_PG_URL) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a5f6413-9558-4897-914e-6e95555f07ba/ac2_edge_suite_xc_only.log. The criterion (ignored == 0) is met by pointing both env names at the same disposable DB; nothing about that is a change to the candidate.",
+                "passed": 1004,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89060b4b-96f7-49b8-909f-f2f7bf1f5c68/ac3_rls.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 4,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC3",
+                "note": "VERIFIED by reviewer on HEAD 14c0f7e8 (Docker postgres:16). The runner executed 4 migration histories — `Security migration history: fresh`, `production_20260906`, `upstream_20260906`, `ordered_20260907` — each applying every migration through 20260909230000 (4 occurrences in the log) and each printing `SECURITY REGRESSION MATRIX: ALL CASES PASSED` (4/4), `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED` (4/4), `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` (4/4) and `Analysis release policy authority: PASS` (4/4). Section U (settlement matrix rcpt-1..rcpt-13 incl. rcpt-10b) runs inside security_regression.sql on every pass and raises on any failed case; none raised. Only NOTICE lines for `drop ... if exists` appear; no ERROR, no skipped matrix.",
+                "passed": 4,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cb44cf4-fe2c-41e5-996e-bbd4bdddd046/ac4_head.log",
+                "command": "git worktree add --detach /home/ubuntu/w0404-base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && (cd /home/ubuntu/w0404-base && XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh) && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts /home/ubuntu/w0404-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0404-base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts)  # BASE; then HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+                "executed": 23,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC4",
+                "note": "PROOF exit 0 — the new tests FAIL on BASE_SHA and PASS on HEAD (both runs by the reviewer). BASE run: detached worktree at 7cfeacbb (git rev-parse HEAD confirmed; `git status --porcelain` showed ONLY the copied test file as untracked — no candidate migrations or implementation copied), separate disposable postgres:16 (pickle-xc-pg-base on 55434) migrated from BASE's migrations (last = 20260909210000): exit_code=1, executed=23, passed=1, failed=22, skipped=0 — `FAILED | 1 passed | 22 failed (278ms)`; the single pass is 'the route requires an authenticated caller and a live session' (401 precedes routing), the 22 failures are 404s from the absent POST /v1/offline/receipts route and the live-SQL tests finding no settle_offline_receipt(). BASE log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/52b2dc9b-29d6-425d-b7df-31f5d508db26/ac4_base.log. HEAD run on 14c0f7e8 against pickle-xc-pg (55433): exit_code=0, `ok | 23 passed | 0 failed (567ms)`, 0 ignored — includes the duplicate-batch/duplicate-inside-batch replay test (settles once), the evidence_ambiguous / grant_revoked / evidence_missing HOLD tests, the live-DB exactly-once consumption across duplicate deliveries and the not_chargeable+scored contradictory-evidence HOLD (L4b). The SQL-plane rcpt-10b assertion in security_regression.sql cannot be isolated on BASE (function absent) and is covered 4x under AC3.",
+                "passed": 23,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/149c9f40-aae7-4f27-8573-5681836a77b5/ac1_typecheck.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab5c0f5c-31ac-4585-982d-13d6d90026ce/ac2_edge_suite_both.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a5f6413-9558-4897-914e-6e95555f07ba/ac2_edge_suite_xc_only.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89060b4b-96f7-49b8-909f-f2f7bf1f5c68/ac3_rls.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52b2dc9b-29d6-425d-b7df-31f5d508db26/ac4_base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cb44cf4-fe2c-41e5-996e-bbd4bdddd046/ac4_head.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "Manifest write_paths names `supabase/migrations/20260908130000_offline_receipt_settlement.sql`, but BASE_SHA already carries migrations through 20260909210000, so that timestamp would violate the later-than-every-existing-file rule; the candidate correctly ships `20260909220000_offline_receipt_settlement.sql` and `20260909230000_offline_receipt_contradictory_evidence.sql` instead (both under the `sql` serial group this package holds; no applied migration edited; `diff` of the two function bodies shows 20260909230000 changes only the `v_billing = 'not_chargeable'` branch). Manifest text should be updated to the real filenames.",
+              "Two files outside write_paths, both listed in out_of_scope_files, judged justified minimal wiring (scope_violation=false): supabase/functions/api/accountDeletionOperations.ts +1 line `offline_receipt_settlements: \"cascade_only\"` (the table has `references public.profiles (id) on delete cascade` and no client SELECT, so the classification is accurate and the deletion-inventory pin would otherwise fail); supabase/functions/api/__wf__/http_test.ts static console-sink pin `index.ts: 19 -> 20` for the one new `console.warn` audit line in reconcileOfflineReceipts. Neither is under a serial-group prefix this package does not hold.",
+              "Pro-lease (no-ticket) receipts are recorded by settle_offline_receipt() without the SQL-side output/billing consistency check that the ticketed branch has (implementer's own residual risk); the edge verifies output id and canonical digest before the RPC, and no ticket/credit is involved, so billing conservation is unaffected. Worth a follow-up SQL-plane check for symmetry.",
+              "offlineReceiptVerificationView (index.ts ~5173-5203) verifies a delayed grant signed by the ring's previous key at its historical instant (min(now, exp-1)) with that key treated as a plain key when the instant precedes retiredAt — deliberately outside the verifier's overlap-window rule for delayed receipts. Acceptance still requires a signature by that key, a live session, owner/installation binding, and a ticket in the caller's allocation lineage, and a key dropped from the ring verifies nothing (tested A3-drop); offlineSignature.ts is untouched. Noting as a design decision, not a defect."
+            ],
+            "package_id": "W04-04",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+            "scope_violation": false,
+            "summary": "APPROVE W04-04 candidate 14c0f7e846cecd817219aae3b12220f79c31ac1a (branch devin/pp/w04-04/impl-r3, base 7cfeacbb). Scope clean: 7 changed files — 4 within write_paths (index.ts, the new test file, security_regression.sql, plus the settlement migrations under the held `sql` group at correct later timestamps 20260909220000/20260909230000), 2 justified minimal wiring edits listed in out_of_scope_files. The objective is shipped behaviour: `POST /v1/offline/receipts` is dispatched from the router with a 25/min per-user budget, verifies each receipt's grant and output digest, and settles via the durable `settle_offline_receipt()` RPC (SECURITY DEFINER, search_path='', auth.uid()+is_active_session() required, EXECUTE only for `authenticated`, service_role revoked; table RLS on with all direct grants revoked, append-only trigger, unique (user_id, receipt_id), replay by canonical digest, `offline.receipt_conflict` for same-id/other-body). Holds keep the ticket reserved and never release/refund; the only rating write is the existing consume_offline_ticket(); pending session_not_found writes nothing durable; lineage read runs as service role by digest. All four acceptance criteria independently re-verified: AC1 exit 0; AC2 1004 passed / 0 failed / 0 ignored (and the implementer's 12-ignored-with-XC_PG_URL-only observation reproduced exactly); AC3 4/4 histories ALL CASES PASSED incl. Section U; AC4 base 1 passed / 22 failed (exit 1) vs HEAD 23/23 (exit 0), with only the test file copied to the base worktree. No test weakening/ignores/bypasses found in the diff (the only removed lines are two import lines in index.ts, the http_test pin, and two SQL allowlist lines extended to include the new table/function); no comment edits; no applied-migration edits; `git diff --check` and prettier clean; no user-facing copy, no production resources touched.",
+            "verdict": "approve"
+          }
+        },
+        {
+          "adversary": {
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/edbf5496-fb09-49a5-a484-9faedf3b3679/ac1_check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6683299-ed66-46d3-8aa3-bebdc1aec374/ac2_edge_full.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da0d690b-aefd-48f4-8a32-0cdfff3cf8ee/ac3_rls.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9556b133-6155-444a-99f3-a04c1478c2c7/attack_candidate_run4.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/05bafa24-bec6-4902-8a60-29ff9c6f0a2f/attack_base_run.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2c0673f9-3dab-4487-a19a-725686624704/attack_edge_full.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d704966d-503f-47fa-9155-4d9ed265f2f4/attack_check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/18a51312-df2b-425e-9079-024714178456/attack_prettier.log"
+            ],
+            "attack_branch": "devin/pp/w04-04/attack-91290c7f",
+            "attack_branch_sha": "3556c68bb92ef5e9a27c75de502e5fb2663344b3",
+            "attacked_sha": "91290c7f8705cfb4433a64f9f88d154748c34991",
+            "attacks_tried": 11,
+            "breaks": [
+              {
+                "expected": "Output evidence PostgreSQL cannot persist is ambiguous evidence: the entry should HOLD as evidence_ambiguous (durable row, ticket reserved) or be rejected per-entry, and the healthy siblings in the same batch should still settle. Contrast: a lone surrogate in the output IS held as evidence_ambiguous by the edge because the canonicalizer rejects it; \"\\u0000\" escapes that guard.",
+                "observed": "VERIFIED. Route half (routesHarness): canonicalizeOfflineJson accepts \"\\u0000\" (valid RFC 8785), the output digest matches, offlineReceiptHoldReason() returns null, so the edge calls the RPC with p_hold_reason=null and the poisoned p_output; the RPC failure becomes a generic 503 for the WHOLE batch, the batch stops at the poisoned entry (1 settle call), the healthy sibling never reaches the RPC, and identical redelivery repeats the same outcome. Live half (disposable PostgreSQL, candidate migrations): select ... settle_offline_receipt(receipt, sha, '{\"note\":\"nul\\u0000byte\"}'::jsonb, null) raises SQLSTATE 22P05 'unsupported Unicode escape sequence' before the function body runs; no offline_receipt_settlements row is written and the ticket stays reserved. No charge, no leak, no cross-account effect — only the device's own outbox is stuck.",
+                "repro": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json --filter 'ATTACK-5' w04_04_attack_offline_receipts.test.ts  (both ATTACK-5 tests pass = the defect reproduces; exit 0 on candidate 91290c7f)",
+                "severity": "P3",
+                "test_file": "supabase/functions/api/__wf__/w04_04_attack_offline_receipts.test.ts (tests 'ATTACK-5 route: ...' and 'ATTACK-5 live: ...'), pushed on devin/pp/w04-04/attack-91290c7f @ 3556c68bb92ef5e9a27c75de502e5fb2663344b3",
+                "title": "A receipt whose output contains \"\\u0000\" is forwarded to settle_offline_receipt() as a settle (hold=null); PostgreSQL cannot store it as jsonb, so the whole batch answers 503 with no durable verdict and every later sibling in that batch is starved on redelivery"
+              }
+            ],
+            "package_id": "W04-04",
+            "summary": "ADVERSARY W04-04 vs candidate 91290c7f8705cfb4433a64f9f88d154748c34991 (branch devin/pp/w04-04/impl-r3-c2). Test-only attack branch devin/pp/w04-04/attack-91290c7f @ 3556c68bb92ef5e9a27c75de502e5fb2663344b3 (one new file supabase/functions/api/__wf__/w04_04_attack_offline_receipts.test.ts, 12 Deno tests / 11 distinct attacks; no production file, migration, or candidate test touched; pushed with plain `git push -u origin`, no PR, nothing to main, no production project).\n\nCANDIDATE ACCEPTANCE (all VERIFIED on Linux, disposable postgres:16 docker `pickle-xc-pg` @127.0.0.1:55433 with shim_auth.sql + every migration applied):\n- AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` -> exit 0 (ac1_check.log).\n- AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=... PICKLE_AUDIT_PG_URL=... deno task test` -> exit 0, 1004 passed / 0 failed / 0 ignored (ac2_edge_full.log; a first run with only XC_PG_URL set left 12 unrelated PICKLE_AUDIT_PG_URL-gated tests ignored, so it was rerun with both variables). Re-run WITH the attack file present: exit 0, 1016 passed (31 steps) / 0 failed / 0 ignored (attack_edge_full.log).\n- AC3 `./supabase/tests/run_rls_tests.sh` -> exit 0, all 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) completed (ac3_rls.log).\n- AC4 regress (reviewer procedure applied to the NEW attack file): BASE_SHA 7cfeacbb worktree + base-only migrated postgres (no settle_offline_receipt) -> `deno test -A --no-check --config deno.json w04_04_attack_offline_receipts.test.ts` exit 1, 0 passed / 12 failed (404 'Unknown endpoint: POST /v1/offline/receipts', 'function public.settle_offline_receipt(...) does not exist', 'relation public.offline_receipt_settlements does not exist') (attack_base_run.log). Candidate HEAD: exit 0, 12 passed / 0 failed (attack_candidate_run4.log).\n- New file checks: `deno check --config deno.json w04_04_attack_offline_receipts.test.ts` exit 0 (attack_check.log); root `npx prettier --check <file>` exit 0 (attack_prettier.log); `git diff --check HEAD~1 HEAD` exit 0. No `any`, `@ts-ignore`, eslint-disable, `|| true`, inflated timeouts.\n\nATTACKS EXECUTED (11 distinct; route half = routesHarness with an in-memory durable RPC stand-in shaped from the migration's replay/conflict/hold/pending semantics; live half = real SQL RPC on the disposable DB as authenticated/anon/service_role):\n1 concurrency/reentrancy: six simultaneous identical 2-receipt batches -> each receipt settled exactly once, siblings replayed; in-batch duplicate receipt id replays; same receipt id / different digest -> offline.receipt_conflict. HELD.\n2 network faults at the RPC step: 429+Retry-After, injected 500, thrown fetch error, 302 redirect to https://evil.example/collect, malformed 200 row -> generic 503 every time, no follow of redirect, no detail leak, no consume/release call, identical redelivery settles afterwards. HELD.\n3 boundaries: 0 and 26 entries rejected, 25 accepted, 2 MB body cap, 25/60s route budget -> 429 Retry-After, lifecycleSequence 0 / 2^53-1 / 2^53 / negative / NaN-shaped values, grant issued in the future and expired long ago -> held evidence_ambiguous, ticket reserved. HELD.\n4 route authorisation: anonymous -> 401; account B flushing account A's receipts -> held (owner_mismatch/evidence_ambiguous), never settled, never consumes A's ticket. HELD.\n5 output PostgreSQL cannot store as jsonb (\"\\u0000\"): edge forwards as settle, RPC fails SQLSTATE 22P05, batch-wide 503 with no durable verdict, healthy sibling starved. BROKE (P3, see breaks).\n6 live concurrency: five simultaneous transactions on one ticket (same receipt and rival receipts) -> exactly one result_recorded, rivals conflicting_receipt holds, one consume. HELD.\n7 live roles: anon and service_role cannot EXECUTE settle_offline_receipt()/read_analysis_release_policy_lineage(); JWT sub != session sub -> 42501 'API session authorization required' (secure denial, no row). HELD.\n8 live cross-account: another account cannot settle this owner's receipts (owner_mismatch hold on the caller's own ledger row, owner's ticket untouched, RLS hides the other owner's rows). HELD.\n9 live free-rating conservation: lifetime_scored_count() + offline holds <= 2, abstention records without consuming, hold keeps ticket reserved, held row is append-only/immutable, no refund/retry under a new operation id. HELD.\n10 live crash-between-steps: receipt held for missing output, then redelivered with the output -> replayed hold (no silent upgrade to settled), retry under a new operation id -> conflicting_receipt hold. HELD.\n11 lapsed (not withdrawn) release validity between execution and delivery -> held evidence_ambiguous with ticket reserved (not settled, not grant_revoked); same grant delivered while valid settles. HELD (design observation: a conservative hold that needs an operator path to resolve, not a break).\n\nCONFIRMED BREAKS: 1 (P3). No P0/P1: no double charge, no cross-account settlement, no refund/retry-under-new-id, no leak, no ambiguous evidence settled as success was found. Verdict: candidate holds its money/isolation invariants under all 11 attacks; the one defect is a self-inflicted outbox stall for an implausible output (\"\\u0000\" in the device's own result), recommended fix in a follow-up: treat CanonicalDigest-valid-but-jsonb-invalid output (or any per-entry RPC SQLSTATE 22 failure) as an evidence_ambiguous HOLD / per-entry rejection instead of a batch-wide 503."
+          },
+          "blocked": false,
+          "decision": {
+            "accepted": true,
+            "criteria_examined": [
+              "implementer not blocked",
+              "head_sha is a full sha",
+              "reviewer and adversary examined the same sha",
+              "implementer acceptance coverage",
+              "reviewer independent re-verification",
+              "regression tests fail on base",
+              "reviewer verdict approve with no blocking issues",
+              "no scope violation",
+              "no invariant violations",
+              "no unresolved P0/P1 adversarial break"
+            ],
+            "reasons": []
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c2a080d-aa3a-4c05-86ae-d3ea1d186cbb/ac1_typecheck.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC1",
+                "note": "VERIFIED on 91290c7f. Only the pre-existing deno.json 'nodeModulesDir'/'lock' workspace warnings; `Check file:///.../supabase/functions/api/index.ts` completed.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/98de4382-7b7e-4e09-b948-f40d72961e86/ac2_edge_suite.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 1004,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC2",
+                "note": "VERIFIED on 91290c7f: `ok | 1004 passed (31 steps) | 0 failed` with 0 ignored. Disposable postgres:16 (docker, host port 55433) built by supabase/functions/api/__wf__/xc_pg_up.sh (shim_auth.sql + every migration incl. 20260909230000). PICKLE_AUDIT_PG_URL points at the same disposable DB so the 12 W06-01 golden SQL-parity tests (ignored without it) also run — with XC_PG_URL alone the run is 992 passed / 0 failed / 12 ignored.",
+                "passed": 1004,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/08666e43-5711-4d10-b11c-91c485923355/ac3_rls_matrix.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 16,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC3",
+                "note": "VERIFIED on 91290c7f: 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) × 4 matrices (SECURITY REGRESSION MATRIX incl. new section U, W07 CONCURRENT BILLING MATRIX, W08 ACCOUNT DELETION MATRIX, Analysis release policy authority) all PASSED; script exit 0.",
+                "passed": 16,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/42b35c34-bfc2-49a5-b7ba-b4a32e9c6a49/ac4_head_new_tests.log",
+                "command": "git worktree add /home/ubuntu/w0404_base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts <base>/supabase/functions/api/__wf__/ && (cd <base>/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts)  # BASE; then on HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+                "executed": 23,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC4",
+                "note": "VERIFIED. BASE run (BASE_SHA worktree, ONLY the new test file copied over — byte-identical to HEAD's, checked with cmp — against a second disposable postgres migrated with BASE's migrations only, port 55434): exit 1, `FAILED | 0 passed | 23 failed` (route absent → 404; settle_offline_receipt() absent), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/3b7fcec2-937b-4771-9f6e-e67ac426793b/ac4_base_new_tests.log. HEAD run (91290c7f): exit 0, `ok | 23 passed | 0 failed`. Duplicate batch settles once ('a duplicate batch (and a duplicate inside a batch) replays the durable verdict' + live 'settle_offline_receipt() consumes a ticket exactly once across duplicate deliveries'); ambiguous receipt stays HOLD ('unverifiable or inconsistent evidence is HELD…', live L4b contradictory abstention held with ticket reserved, hold replays).",
+                "passed": 23,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Test-first: wrote the 23-test regression file exercising the route through the existing routesHarness fake DB plus live-PG tests through the real RPC, proved 0/23 on a BASE_SHA worktree with only the test copied over (separate disposable postgres migrated with BASE migrations only), committed it alone. Then reused the sound parts of r2 (b214adf5: table shape, RPC skeleton, security section) but re-derived the Edge route around per-receipt lineage verdicts instead of a batch admission gate, propagated release-authority integrity failures as server faults, and moved grant verification to an explicit instant with the retained active+previous keys; added the SQL output/result-kind consistency check. Ran every acceptance command exactly as listed (with PICKLE_AUDIT_PG_URL additionally set so ignored==0), the full RLS matrix, format:check and diff --check, then committed the implementation separately and pushed only to devin/pp/w04-04/impl-r3-c2.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1c2a080d-aa3a-4c05-86ae-d3ea1d186cbb/ac1_typecheck.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/98de4382-7b7e-4e09-b948-f40d72961e86/ac2_edge_suite.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/08666e43-5711-4d10-b11c-91c485923355/ac3_rls_matrix.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3b7fcec2-937b-4771-9f6e-e67ac426793b/ac4_base_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/42b35c34-bfc2-49a5-b7ba-b4a32e9c6a49/ac4_head_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/afa5bb8c-3d0d-419c-ab28-863fb8cf0463/format_check.log"
+            ],
+            "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+            "baseline_failures_observed": [],
+            "blocked": false,
+            "branch": "devin/pp/w04-04/impl-r3-c2",
+            "files_changed": [
+              "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts",
+              "supabase/functions/api/index.ts",
+              "supabase/migrations/20260909230000_offline_receipt_settlement.sql",
+              "supabase/tests/security_regression.sql",
+              "supabase/functions/api/accountDeletionOperations.ts"
+            ],
+            "head_sha": "91290c7f8705cfb4433a64f9f88d154748c34991",
+            "out_of_scope_files": [
+              "supabase/functions/api/accountDeletionOperations.ts — one additive line (`offline_receipt_settlements: \"cascade_only\"` in ACCOUNT_DELETION_UNREAD_TABLES): the live registry test account_deletion_complete.test.ts ('the namespace registry covers every account-keyed table') asserts registry == every table with an account FK, so the new user-keyed settlement table must be declared or AC2 fails; not under any serial_group_paths prefix."
+            ],
+            "package_id": "W04-04",
+            "regression_tests_added": [
+              "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (23 tests: route contract, duplicate/out-of-order batches, per-receipt holds, Pro/not_chargeable, malformed/auth/503/429, historical + withdrawn + unknown lineages, A1/A1b/A2/A3/A3c, future/ancient grants, pending unsynced session, live PG: settle-once, generation re-issue, original-owner recovery, pending→settled, L4b contradictory abstention)",
+              "supabase/tests/security_regression.sql section U (U1–U5: registry/allowlist, RLS + exact grants, replay/conflict/hold/pending/consume/lineage/L4b as the owner, cross-owner isolation, anon/service_role denial, append-only, account cascade) — runs under all 4 migration histories"
+            ],
+            "residual_risks": [
+              "Migration file name is 20260909230000_offline_receipt_settlement.sql, not the manifest's 20260908130000_… — the manifest timestamp is older than migrations already applied on BASE (up to 20260909210000) and AGENTS.md/hard rules require a LATER timestamp than every existing one.",
+              "AC2's ignored==0 needs PICKLE_AUDIT_PG_URL as well as XC_PG_URL (both pointed at the same disposable DB); with XC_PG_URL alone the pre-existing W06-01 golden SQL-parity tests (12) are ignored by design of that suite.",
+              "Delayed receipts whose grant names a lineage that is neither the active policy nor an installed row are durable evidence_ambiguous holds by design (unknown authority); operators reconcile those manually — no automatic un-hold path exists (consistent with the HOLD-never-refund invariant).",
+              "Other packages holding the edge-index/sql serial groups edit index.ts concurrently; this candidate's index.ts hunks are additive (new imports, new helpers, one new `case` in the router) but the import-block reformatting of two existing import lines (multi-line to add CanonicalDigestError/admitChargeableRelease/ReleasePolicyError) could need a trivial conflict resolution at integration."
+            ],
+            "summary": "Gap on BASE_SHA 7cfeacbb (VERIFIED): supabase/functions/api/index.ts has no `POST /v1/offline/receipts` route (the router falls to 404) and no migration defines a durable settlement ledger or `settle_offline_receipt()`; offline execution grants/tickets (20260908160000_offline_device_grants.sql, consume_offline_ticket()) exist but a consumption executed offline and reported later has no idempotent, bound settlement path — nothing prevents double consumption or turns ambiguous evidence into a HOLD. Fix (two commits on devin/pp/w04-04/impl-r3-c2 from BASE_SHA): (1) 4ae7f540 test-only — offline_receipt_reconciliation.test.ts, 0/23 pass on BASE; (2) 91290c7f implementation — new append-only migration 20260909230000_offline_receipt_settlement.sql (later than every existing migration; the manifest's 20260908130000 name predates 20260909xxxxxx migrations already applied) adding public.offline_receipt_settlements (one row per user+receipt_id bound to receipt digest, grant id + JWS digest, owner, installation key, ticket, operation, result, lifecycle sequence, billing disposition, full output digest; RLS owner-select only, no client DML, exact revokes, append-only trigger, account cascade), SECURITY INVOKER `settle_offline_receipt(receipt, output_sha256, output, hold_reason)` under access_lock_key() (identical redelivery → replayed; same receipt_id/other digest → offline.receipt_conflict; explicit verification failure → durable HOLD; session not yet synced → transient pending with no row; ticket owner/installation/generation/allocation lineage re-checked against the offline ledger; chargeable scored result consumes atomically via consume_offline_ticket(); not_chargeable receipt + scored output, or chargeable receipt + abstention, → evidence_ambiguous HOLD with ticket reserved [L4b]) and service-role `read_analysis_release_policy_lineage(sha256)`; Edge route `reconcileOfflineReceipts()` in index.ts (authenticated + live session, per-user route budget, 1–25 entries / 2 MB, per-entry parse + grant/receipt/output verification, one RPC per receipt, generic 503 on server faults). Round-2 findings resolved: A1 — no batch-wide active-release admission; each grant is judged against the lineage it names (active row, or lineage read once per batch by digest), so withdrawing the active release replays consumed receipts, HOLDs its own chargeable results as grant_revoked, records valid abstentions, and settles grants under another approved lineage; A2 — a lineage row failing integrity throws ReleasePolicyError → generic 503, settle_offline_receipt never called, identical redelivery settles after repair; A3 — delayed grants verify with the retained previous key inside its overlap even when they expired before the rotation (verification at min(now, exp−1) over the active+previous keys; issuance after retirement+15-min grace or after overlapEndsAt is held); L4b — SQL contradiction check before the not_chargeable branch. security_regression.sql gains section U (registry/allowlist, RLS/grants, replay/conflict/hold/pending/consume/lineage/L4b as owner, cross-owner isolation, anon/service_role denial, append-only, cascade) and passes under all 4 migration histories. Also VERIFIED: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/afa5bb8c-3d0d-419c-ab28-863fb8cf0463/format_check.log), `git diff --check` / `git diff --cached --check` exit 0. Out of scope: one additive line in accountDeletionOperations.ts (see out_of_scope_files). No PR opened; nothing pushed to main; no production project touched."
+          },
+          "lane": 2,
+          "review": {
+            "acceptance_reverified": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca3669f-66dc-4862-826c-91d2c849177c/ac1_typecheck.log",
+                "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC1",
+                "note": "VERIFIED on 91290c7f: `Check file:///.../supabase/functions/api/index.ts` completed, exit 0; only the pre-existing deno.json nodeModulesDir/lock workspace warnings.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bd720ed-1ec2-404b-b758-6479c2604cf1/ac2_edge_suite.log",
+                "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+                "executed": 1004,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC2",
+                "note": "VERIFIED on 91290c7f: `ok | 1004 passed (31 steps) | 0 failed`, no ignored. Disposable postgres 16 (docker, host port 55433) built by supabase/functions/api/__wf__/xc_pg_up.sh with every migration incl. 20260909230000. Docker Hub rate-limited the postgres:16 pull, so the locally present postgres:16-alpine (PostgreSQL 16.15) image was tagged postgres:16 — environment only, no repo change. With XC_PG_URL alone the same run is 992 passed / 0 failed / 12 ignored (pre-existing W06-01 audit-parity tests), see non_blocking_issues.",
+                "passed": 1004,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de7976ae-89e6-478b-918a-ea984fe54bf6/ac3_rls_matrix.log",
+                "command": "./supabase/tests/run_rls_tests.sh",
+                "executed": 16,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC3",
+                "note": "VERIFIED on 91290c7f: 4 migration histories (fresh install + 3 historical upgrades) x 4 matrices = 16 PASS lines (12 `ALL CASES PASSED` + 4 `Analysis release policy authority: PASS`), zero FAIL lines, script exit 0. Section U (offline receipt settlement) runs inside the SECURITY REGRESSION MATRIX under all 4 histories.",
+                "passed": 16,
+                "skipped": 0,
+                "status": "PASS"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/227514eb-5fbf-4d50-bc8a-5742574ec17e/ac4_head_new_tests.log",
+                "command": "BASE: git worktree add /home/ubuntu/w0404_base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts /home/ubuntu/w0404_base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0404_base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts) ; HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+                "executed": 23,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W04-04-AC4",
+                "note": "VERIFIED proof. BASE (7cfeacbb worktree, ONLY the new test file copied, cmp-identical to HEAD's; second disposable postgres on port 55434 migrated with BASE migrations only): exit 1, `FAILED | 0 passed | 23 failed` — failures are semantic (route absent: 18 x `404` / `Unknown endpoint: POST /v1/offline/receipts.`; RPC absent: 5 x `function public.settle_offline_receipt(jsonb, unknown, jsonb, text) does not exist`), log https://la-hacks-rttothemoon.devinenterprise.com/attachments/2b491544-a103-469d-b30f-ee0116fba85b/ac4_base_new_tests.log. HEAD (91290c7f): exit 0, `ok | 23 passed | 0 failed`, 0 ignored (the 5 live-PG tests ran because XC_PG_URL was set). Criterion coverage: 'a duplicate batch (and a duplicate inside a batch) replays the durable verdict — the receipt settles once' + live 'settle_offline_receipt() consumes a ticket exactly once across duplicate deliveries'; 'unverifiable or inconsistent evidence is HELD with the matching reason' + live L4b contradictory-abstention HOLD with ticket reserved. The copied test file was removed from the base worktree afterwards.",
+                "passed": 23,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ca3669f-66dc-4862-826c-91d2c849177c/ac1_typecheck.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1bd720ed-1ec2-404b-b758-6479c2604cf1/ac2_edge_suite.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/de7976ae-89e6-478b-918a-ea984fe54bf6/ac3_rls_matrix.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2b491544-a103-469d-b30f-ee0116fba85b/ac4_base_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/227514eb-5fbf-4d50-bc8a-5742574ec17e/ac4_head_new_tests.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6eff7ae8-a00d-4749-a9b3-471e2506df2d/ac2_xc_only.log"
+            ],
+            "blocking_issues": [],
+            "invariant_violations": [],
+            "non_blocking_issues": [
+              "Migration is supabase/migrations/20260909230000_offline_receipt_settlement.sql, not the manifest write_path 20260908130000_offline_receipt_settlement.sql. VERIFIED the manifest name is infeasible under the hard rules: BASE already contains migrations up to 20260909210000, so 20260908130000 would sort before applied migrations. The chosen name is later than every existing migration and lies under the `sql` serial group this package holds (supabase/migrations/); judged justified, but it should have been listed in out_of_scope_files rather than only in residual_risks.",
+              "AC2 as literally written in the manifest (XC_PG_URL only) yields `992 passed | 0 failed | 12 ignored` (VERIFIED, exit 0, https://la-hacks-rttothemoon.devinenterprise.com/attachments/6eff7ae8-a00d-4749-a9b3-471e2506df2d/ac2_xc_only.log); the 12 ignored are the pre-existing W06-01 golden SQL-parity tests gated on PICKLE_AUDIT_PG_URL, unrelated to this package. Setting PICKLE_AUDIT_PG_URL to the same disposable DB gives ignored==0, which is the run recorded for AC2.",
+              "Route tests exercise settle_offline_receipt() through the routesHarness fake DB (stand-in mirrors the RPC's replay/conflict/hold/pending contract); the real RPC is covered by 5 live-PG Deno tests plus security_regression.sql section U. No test drives Edge route -> real RPC end to end in one process (same pattern as the other Edge route suites)."
+            ],
+            "package_id": "W04-04",
+            "regression_fails_on_base": true,
+            "reviewed_sha": "91290c7f8705cfb4433a64f9f88d154748c34991",
+            "scope_violation": false,
+            "summary": "APPROVE W04-04 candidate 91290c7f (branch devin/pp/w04-04/impl-r3-c2, base 7cfeacbb). Scope (VERIFIED, `git diff --stat`): 5 files — index.ts, __wf__/offline_receipt_reconciliation.test.ts, supabase/tests/security_regression.sql (write_paths), the new migration 20260909230000_offline_receipt_settlement.sql (write_path intent; the manifest's 20260908130000 name predates migrations already on BASE so the hard rule forced a later timestamp; under the held `sql` group), and one additive line in supabase/functions/api/accountDeletionOperations.ts (`offline_receipt_settlements: \"cascade_only\"`), listed in out_of_scope_files, required by the live registry test, not under any serial-group prefix -> scope_violation=false. Objective met as shipped behaviour: `case \"POST /v1/offline/receipts\"` is dispatched from the authenticated router with its own per-user budget (25/min) and calls reconcileOfflineReceipts(). All 4 acceptance criteria re-executed by me and PASS with failed==0 and skipped==0 (AC1 exit 0; AC2 1004/1004 with ignored==0; AC3 16/16 matrices over 4 migration histories; AC4 base 0/23 -> HEAD 23/23). Diff review vs REVIEW.md/invariants (INFERRED from code, backed by section U + live tests): new table has RLS enabled, all table/sequence privileges revoked from public/anon/authenticated/service_role (no client DML, owner-select only via policy), append-only trigger (UPDATE refused, DELETE only via the profiles cascade); settle_offline_receipt() is SECURITY DEFINER-locked to auth.uid() + api_private.is_active_session(), granted only to `authenticated`, serialises under access_lock_key(uid) then offline_ticket_lock_key(ticket), replays identical redelivery, reports same-id/other-digest as offline.receipt_conflict, holds owner mismatch / second receipt per operation or result / output-kind contradiction (L4b) / lineage mismatch with the ticket untouched, consumes only through the existing consume_offline_ticket() in the same transaction, and treats shot.session_not_found as transient pending with no durable row — never refunds, never retries under a new operation id. read_analysis_release_policy_lineage() is service_role-only. Edge route: authenticated, rate-limited, 1–25 entries / 2 MB, per-entry parsing so one malformed entry does not poison the batch, grant signature/owner/installation/lineage/digest verification, release-authority integrity failures -> generic 503 (no durable verdict), RPC errors -> generic 503. No existing migration edited (only a new file, later than all others); no existing comments changed; no `|| true`, `@ts-ignore`, `any`, `eslint-disable`, `.only`, `ignore: true` (the 5 live tests use the repo's existing `ignore = PG_URL === \"\"` gate and ran here), no timeout inflation; prettier --check on the changed TS files and `git diff --check` pass; no user-facing copy added. No PR opened, nothing pushed, no production project touched.",
+            "verdict": "approve"
+          }
+        }
+      ],
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/149c9f40-aae7-4f27-8573-5681836a77b5/ac1_typecheck.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC1",
+            "note": "VERIFIED by reviewer on HEAD 14c0f7e8 (repo checkout /home/ubuntu/repos/Pickle-Sensei). Output: `Check file:///.../supabase/functions/api/index.ts`, exit 0; only the pre-existing warnings about `lock`/`nodeModulesDir` in a non-root deno.json. No type errors.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab5c0f5c-31ac-4585-982d-13d6d90026ce/ac2_edge_suite_both.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 1004,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC2",
+            "note": "VERIFIED by reviewer on HEAD 14c0f7e8 against a disposable postgres:16 (container pickle-xc-pg on 127.0.0.1:55433 started via supabase/functions/api/__wf__/xc_pg_up.sh from the HEAD checkout: shim_auth.sql + every migration in order incl. 20260909220000 and 20260909230000; image pulled from mirror.gcr.io/library/postgres:16 and tagged postgres:16 because Docker Hub answered 429). Summary line: `ok | 1004 passed (31 steps) | 0 failed (2m0s)` — no ignored count printed, no `... ignored` test lines => ignored == 0. Cross-check of the implementer's residual-risk claim: with XC_PG_URL alone the run is `ok | 992 passed (31 steps) | 0 failed | 12 ignored`, all 12 being `W06-01 golden:` SQL-parity tests (a file outside this package that reads only PICKLE_AUDIT_PG_URL) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a5f6413-9558-4897-914e-6e95555f07ba/ac2_edge_suite_xc_only.log. The criterion (ignored == 0) is met by pointing both env names at the same disposable DB; nothing about that is a change to the candidate.",
+            "passed": 1004,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89060b4b-96f7-49b8-909f-f2f7bf1f5c68/ac3_rls.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC3",
+            "note": "VERIFIED by reviewer on HEAD 14c0f7e8 (Docker postgres:16). The runner executed 4 migration histories — `Security migration history: fresh`, `production_20260906`, `upstream_20260906`, `ordered_20260907` — each applying every migration through 20260909230000 (4 occurrences in the log) and each printing `SECURITY REGRESSION MATRIX: ALL CASES PASSED` (4/4), `W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED` (4/4), `W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED` (4/4) and `Analysis release policy authority: PASS` (4/4). Section U (settlement matrix rcpt-1..rcpt-13 incl. rcpt-10b) runs inside security_regression.sql on every pass and raises on any failed case; none raised. Only NOTICE lines for `drop ... if exists` appear; no ERROR, no skipped matrix.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cb44cf4-fe2c-41e5-996e-bbd4bdddd046/ac4_head.log",
+            "command": "git worktree add --detach /home/ubuntu/w0404-base 7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6 && (cd /home/ubuntu/w0404-base && XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh) && cp supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts /home/ubuntu/w0404-base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w0404-base/supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts)  # BASE; then HEAD: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts",
+            "executed": 23,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W04-04-AC4",
+            "note": "PROOF exit 0 — the new tests FAIL on BASE_SHA and PASS on HEAD (both runs by the reviewer). BASE run: detached worktree at 7cfeacbb (git rev-parse HEAD confirmed; `git status --porcelain` showed ONLY the copied test file as untracked — no candidate migrations or implementation copied), separate disposable postgres:16 (pickle-xc-pg-base on 55434) migrated from BASE's migrations (last = 20260909210000): exit_code=1, executed=23, passed=1, failed=22, skipped=0 — `FAILED | 1 passed | 22 failed (278ms)`; the single pass is 'the route requires an authenticated caller and a live session' (401 precedes routing), the 22 failures are 404s from the absent POST /v1/offline/receipts route and the live-SQL tests finding no settle_offline_receipt(). BASE log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/52b2dc9b-29d6-425d-b7df-31f5d508db26/ac4_base.log. HEAD run on 14c0f7e8 against pickle-xc-pg (55433): exit_code=0, `ok | 23 passed | 0 failed (567ms)`, 0 ignored — includes the duplicate-batch/duplicate-inside-batch replay test (settles once), the evidence_ambiguous / grant_revoked / evidence_missing HOLD tests, the live-DB exactly-once consumption across duplicate deliveries and the not_chargeable+scored contradictory-evidence HOLD (L4b). The SQL-plane rcpt-10b assertion in security_regression.sql cannot be isolated on BASE (function absent) and is covered 4x under AC3.",
+            "passed": 23,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/149c9f40-aae7-4f27-8573-5681836a77b5/ac1_typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ab5c0f5c-31ac-4585-982d-13d6d90026ce/ac2_edge_suite_both.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7a5f6413-9558-4897-914e-6e95555f07ba/ac2_edge_suite_xc_only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89060b4b-96f7-49b8-909f-f2f7bf1f5c68/ac3_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/52b2dc9b-29d6-425d-b7df-31f5d508db26/ac4_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3cb44cf4-fe2c-41e5-996e-bbd4bdddd046/ac4_head.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Manifest write_paths names `supabase/migrations/20260908130000_offline_receipt_settlement.sql`, but BASE_SHA already carries migrations through 20260909210000, so that timestamp would violate the later-than-every-existing-file rule; the candidate correctly ships `20260909220000_offline_receipt_settlement.sql` and `20260909230000_offline_receipt_contradictory_evidence.sql` instead (both under the `sql` serial group this package holds; no applied migration edited; `diff` of the two function bodies shows 20260909230000 changes only the `v_billing = 'not_chargeable'` branch). Manifest text should be updated to the real filenames.",
+          "Two files outside write_paths, both listed in out_of_scope_files, judged justified minimal wiring (scope_violation=false): supabase/functions/api/accountDeletionOperations.ts +1 line `offline_receipt_settlements: \"cascade_only\"` (the table has `references public.profiles (id) on delete cascade` and no client SELECT, so the classification is accurate and the deletion-inventory pin would otherwise fail); supabase/functions/api/__wf__/http_test.ts static console-sink pin `index.ts: 19 -> 20` for the one new `console.warn` audit line in reconcileOfflineReceipts. Neither is under a serial-group prefix this package does not hold.",
+          "Pro-lease (no-ticket) receipts are recorded by settle_offline_receipt() without the SQL-side output/billing consistency check that the ticketed branch has (implementer's own residual risk); the edge verifies output id and canonical digest before the RPC, and no ticket/credit is involved, so billing conservation is unaffected. Worth a follow-up SQL-plane check for symmetry.",
+          "offlineReceiptVerificationView (index.ts ~5173-5203) verifies a delayed grant signed by the ring's previous key at its historical instant (min(now, exp-1)) with that key treated as a plain key when the instant precedes retiredAt — deliberately outside the verifier's overlap-window rule for delayed receipts. Acceptance still requires a signature by that key, a live session, owner/installation binding, and a ticket in the caller's allocation lineage, and a key dropped from the ring verifies nothing (tested A3-drop); offlineSignature.ts is untouched. Noting as a design decision, not a defect."
+        ],
+        "package_id": "W04-04",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "14c0f7e846cecd817219aae3b12220f79c31ac1a",
+        "scope_violation": false,
+        "summary": "APPROVE W04-04 candidate 14c0f7e846cecd817219aae3b12220f79c31ac1a (branch devin/pp/w04-04/impl-r3, base 7cfeacbb). Scope clean: 7 changed files — 4 within write_paths (index.ts, the new test file, security_regression.sql, plus the settlement migrations under the held `sql` group at correct later timestamps 20260909220000/20260909230000), 2 justified minimal wiring edits listed in out_of_scope_files. The objective is shipped behaviour: `POST /v1/offline/receipts` is dispatched from the router with a 25/min per-user budget, verifies each receipt's grant and output digest, and settles via the durable `settle_offline_receipt()` RPC (SECURITY DEFINER, search_path='', auth.uid()+is_active_session() required, EXECUTE only for `authenticated`, service_role revoked; table RLS on with all direct grants revoked, append-only trigger, unique (user_id, receipt_id), replay by canonical digest, `offline.receipt_conflict` for same-id/other-body). Holds keep the ticket reserved and never release/refund; the only rating write is the existing consume_offline_ticket(); pending session_not_found writes nothing durable; lineage read runs as service role by digest. All four acceptance criteria independently re-verified: AC1 exit 0; AC2 1004 passed / 0 failed / 0 ignored (and the implementer's 12-ignored-with-XC_PG_URL-only observation reproduced exactly); AC3 4/4 histories ALL CASES PASSED incl. Section U; AC4 base 1 passed / 22 failed (exit 1) vs HEAD 23/23 (exit 0), with only the test file copied to the base worktree. No test weakening/ignores/bypasses found in the diff (the only removed lines are two import lines in index.ts, the http_test pin, and two SQL allowlist lines extended to include the new table/function); no comment edits; no applied-migration edits; `git diff --check` and prettier clean; no user-facing copy, no production resources touched.",
+        "verdict": "approve"
+      },
+      "round": 3,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-24-keep"
+}

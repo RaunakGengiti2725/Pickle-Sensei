@@ -46,6 +46,11 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+const mockShowBrandNotice = jest.fn();
+jest.mock('../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
+}));
+
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack }),
@@ -86,6 +91,15 @@ import {
 import { color, type } from '../src/design/tokens';
 import { Button, PressableScale } from '../src/design/components';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
+import {
+  clearApiSession,
+  establishApiSession,
+} from '../src/account/apiSession';
+import {
+  captureDataOwnerContext,
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
 const syncedSession: AuthSession = {
   provider: 'google',
@@ -94,6 +108,13 @@ const syncedSession: AuthSession = {
   localOnly: false,
   displayName: 'Alex Chen',
   email: 'alex@example.com',
+};
+
+const apiSession = {
+  apiBaseUrl: 'https://api.example.test',
+  bearerToken: 'access-token',
+  canonicalAppUserId: syncedSession.canonicalAppUserId!,
+  provider: 'google' as const,
 };
 
 function renderScreen() {
@@ -136,12 +157,35 @@ function radios(renderer: TestRenderer.ReactTestRenderer) {
     .filter(node => node.props.accessibilityRole === 'radio');
 }
 
+async function armDeletion(renderer: TestRenderer.ReactTestRenderer) {
+  mockRequestAccountDeletion.mockResolvedValue({
+    challenge: 'captured-challenge',
+    expiresAt: '2099-01-01T00:00:00.000Z',
+  });
+  await act(async () => {
+    pressable(renderer, 'Delete account')[0]!.props.onPress();
+  });
+  await act(async () => {
+    pressable(renderer, 'Skip the survey')[0]!.props.onPress();
+  });
+  await act(async () => {
+    sheetButton(renderer, 'Continue to delete').props.onPress();
+  });
+  await act(async () => {
+    jest.advanceTimersByTime(5_000);
+  });
+}
+
 describe('ManageAccountScreen', () => {
   beforeEach(() => {
     mockReducedMotion = false;
     mockGoBack.mockClear();
+    mockShowBrandNotice.mockClear();
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    setActiveDataOwner(apiSession.canonicalAppUserId);
+    establishApiSession(apiSession);
     useAuthStore.setState({
       hydrated: true,
       session: syncedSession,
@@ -149,6 +193,143 @@ describe('ManageAccountScreen', () => {
       error: null,
       completeAccountDeletion: jest.fn(() => Promise.resolve()),
     });
+  });
+
+  it.each(['signed_out', 'another_account'])(
+    'passes the immutable original owner to cleanup after auth changes to %s during confirmation',
+    async next => {
+      jest.useFakeTimers();
+      const context = { ...captureDataOwnerContext(), provider: 'google' };
+      let resolve!: () => void;
+      mockConfirmAccountDeletion.mockReturnValue(
+        new Promise<void>(res => {
+          resolve = res;
+        }),
+      );
+      const cleanup = useAuthStore.getState().completeAccountDeletion;
+      const renderer = renderScreen();
+      try {
+        await armDeletion(renderer);
+        await act(async () => {
+          sheetButton(renderer, 'Permanently delete').props.onPress();
+        });
+        await act(async () => {
+          clearApiSession();
+          setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+          useAuthStore.setState({ session: null });
+          if (next === 'another_account') {
+            const owner = '22222222-2222-4222-8222-222222222222';
+            setActiveDataOwner(owner);
+            establishApiSession({
+              ...apiSession,
+              canonicalAppUserId: owner,
+              provider: 'apple',
+            });
+            useAuthStore.setState({
+              session: {
+                ...syncedSession,
+                canonicalAppUserId: owner,
+                subject: owner,
+                provider: 'apple',
+              },
+            });
+          }
+          resolve();
+        });
+
+        expect(cleanup).toHaveBeenCalledWith(context);
+        expect(Object.isFrozen((cleanup as jest.Mock).mock.calls[0]![0])).toBe(
+          true,
+        );
+        expect(mockShowBrandNotice).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Account deleted',
+            tone: 'success',
+            eyebrow: 'DELETION CONFIRMED',
+          }),
+        );
+      } finally {
+        act(() => renderer.unmount());
+        jest.useRealTimers();
+      }
+    },
+  );
+
+  it('does not send a challenge from A with B credentials after switching during the countdown', async () => {
+    jest.useFakeTimers();
+    const renderer = renderScreen();
+    try {
+      await armDeletion(renderer);
+      const owner = '22222222-2222-4222-8222-222222222222';
+      await act(async () => {
+        setActiveDataOwner(owner);
+        establishApiSession({ ...apiSession, canonicalAppUserId: owner });
+        useAuthStore.setState({
+          session: {
+            ...syncedSession,
+            canonicalAppUserId: owner,
+            subject: owner,
+          },
+        });
+        sheetButton(renderer, 'Permanently delete').props.onPress();
+      });
+
+      expect(mockConfirmAccountDeletion).not.toHaveBeenCalled();
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+      expect(allText(renderer)).toContain('The signed-in account changed.');
+    } finally {
+      act(() => renderer.unmount());
+      jest.useRealTimers();
+    }
+  });
+
+  it('shows unknown completion after an unexpected final transport failure, never a keep-account claim', async () => {
+    jest.useFakeTimers();
+    mockConfirmAccountDeletion.mockRejectedValue(new Error('lost response'));
+    const renderer = renderScreen();
+    try {
+      await armDeletion(renderer);
+      await act(async () => {
+        sheetButton(renderer, 'Permanently delete').props.onPress();
+      });
+
+      expect(allText(renderer)).toContain('Deletion status unknown');
+      expect(allText(renderer)).toContain('may have completed');
+      expect(allText(renderer)).not.toContain('Nothing was deleted');
+      expect(allText(renderer)).not.toContain('Keep my account');
+      expect(sheetButton(renderer, 'Retry deletion').props.disabled).toBe(
+        false,
+      );
+      expect(sheetButton(renderer, 'Close').props.disabled).toBe(false);
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+      expect(mockShowBrandNotice).not.toHaveBeenCalled();
+    } finally {
+      act(() => renderer.unmount());
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps an offline restored owner in recovery instead of asking it to connect another account', async () => {
+    clearApiSession();
+    const renderer = renderScreen();
+    await act(async () => {
+      pressable(renderer, 'Delete account')[0]!.props.onPress();
+    });
+    await act(async () => {
+      pressable(renderer, 'Skip the survey')[0]!.props.onPress();
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Continue to delete').props.onPress();
+    });
+
+    expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
+    expect(allText(renderer)).toContain('Your account is still reconnecting.');
+    expect(allText(renderer)).not.toContain('Sign in to a synced account');
+    act(() => renderer.unmount());
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -202,7 +383,7 @@ describe('ManageAccountScreen', () => {
     expectContext('review');
     expectHeaderTarget('Close account deletion confirmation');
     expect(allText(renderer)).toContain(
-      "Free ratings you've already used stay used",
+      "A free rating you've already used stays used",
     );
     expect(allText(renderer)).toContain(
       'does not cancel a subscription or issue a',
@@ -362,7 +543,7 @@ describe('ManageAccountScreen', () => {
     await act(async () => {
       sheetButton(renderer, 'Continue to delete').props.onPress();
     });
-    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, {
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, {
       reason: 'too_expensive',
       wanted: 'price',
       details: '$60 a year is steep for a rec player.',
@@ -399,7 +580,7 @@ describe('ManageAccountScreen', () => {
       sheetButton(renderer, 'Continue to delete').props.onPress();
     });
     expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
-      null,
+      apiSession,
       expect.objectContaining({
         reason: 'other',
         wanted: null,
@@ -436,7 +617,7 @@ describe('ManageAccountScreen', () => {
       sheetButton(renderer, 'Continue to delete').props.onPress();
     });
     expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
-      null,
+      apiSession,
       expect.objectContaining({
         reason: 'privacy',
         wanted: null,
@@ -467,7 +648,7 @@ describe('ManageAccountScreen', () => {
     await act(async () => {
       sheetButton(renderer, 'Continue to delete').props.onPress();
     });
-    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, null);
     act(() => renderer.unmount());
   });
 
@@ -535,7 +716,7 @@ describe('ManageAccountScreen', () => {
         sheetButton(renderer, 'Continue to delete').props.onPress();
       });
       expect(mockRequestAccountDeletion).toHaveBeenCalledTimes(1);
-      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(apiSession, null);
 
       // Armed: the final button stays disabled through the 5s hold-off.
       let confirm = sheetButton(renderer, 'Permanently delete');
@@ -553,7 +734,7 @@ describe('ManageAccountScreen', () => {
         confirm.props.onPress();
       });
       expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
-        null,
+        apiSession,
         'challenge-1',
       );
       // Server confirmed → the store-level purge/disconnect runs.

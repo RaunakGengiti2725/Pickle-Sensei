@@ -45,6 +45,15 @@ jest.mock('../../src/components/strokeResultData', () => ({
   loadStrokeResultEvidence: (...args: unknown[]) => mockLoadEvidence(...args),
 }));
 
+const mockOfflineReceiptEvidence = jest.fn<Promise<unknown>, unknown[]>();
+jest.mock('../../src/data/offlineWallet', () => ({
+  ...jest.requireActual<typeof import('../../src/data/offlineWallet')>(
+    '../../src/data/offlineWallet',
+  ),
+  readOfflineReceiptEvidence: (...args: unknown[]) =>
+    mockOfflineReceiptEvidence(...args),
+}));
+
 const mockTrainingState = {
   planStatus: 'ready',
   currentPlan: null,
@@ -202,6 +211,22 @@ describe('fix-12: getShotOutboxStatus', () => {
     });
     await expect(
       getShotOutboxStatus(
+        fakeDb([
+          {
+            attempts: 0,
+            last_error: 'session.missing',
+            repair_reason: 'session.missing',
+          },
+        ]),
+        'shot-1',
+      ),
+    ).resolves.toEqual({
+      state: 'needs_repair',
+      attempts: 0,
+      lastError: 'session.missing',
+    });
+    await expect(
+      getShotOutboxStatus(
         fakeDb([{ attempts: 3, last_error: 'permit_invalid: expired' }]),
         'shot-1',
       ),
@@ -229,7 +254,9 @@ describe('fix-12: getShotOutboxStatus', () => {
     await getShotOutboxStatus(db, 'shot-9');
     const [sql, params] = db.execute.mock.calls[0]!;
     expect(sql).toMatch(/kind = 'shot\.sync'/);
-    expect(sql).toMatch(/json_extract\(payload, '\$\.id'\)/);
+    expect(sql).toMatch(
+      /CASE WHEN json_valid\(payload\) THEN json_extract\(payload, '\$\.id'\) END/,
+    );
     expect(sql).toMatch(/owner_key = \?/);
     expect(params).toEqual([expect.any(String), 'shot-9']);
     await expect(hasShotSyncReceipt(db, 'shot-9')).resolves.toBe(false);
@@ -242,6 +269,8 @@ describe('fix-12: Result breakdown sync gate honesty', () => {
     clearTryAgainHandoff();
     mockExecute.mockReset();
     mockNavigate.mockClear();
+    mockOfflineReceiptEvidence.mockReset();
+    mockOfflineReceiptEvidence.mockResolvedValue(null);
     mockLoadEvidence.mockReset();
     mockLoadEvidence.mockResolvedValue({
       analysis: analysisFixture(),
@@ -330,5 +359,116 @@ describe('fix-12: Result breakdown sync gate honesty', () => {
     expect(text).toContain('could not verify whether this shot reached');
     expect(text).not.toContain('still in the secure outbox');
     act(() => renderer.unmount());
+  });
+
+  describe('W05-07: a read rated on court has receipt evidence, never "unknown"', () => {
+    const UNVERIFIABLE = 'could not verify whether this shot reached';
+
+    function planButtons(renderer: TestRenderer.ReactTestRenderer) {
+      return renderer.root.findAll(
+        n =>
+          n.props.accessibilityLabel === 'Build reviewed plan' &&
+          typeof n.props.onPress === 'function',
+      );
+    }
+
+    it('a queued receipt says so and keeps the plan locked', async () => {
+      stubOutbox([]);
+      mockOfflineReceiptEvidence.mockResolvedValue({ kind: 'queued' });
+      const renderer = await renderResult();
+      const text = textOf(renderer);
+
+      expect(text).toContain('Its receipt is queued');
+      expect(text).toContain('rated on court with an offline allocation');
+      expect(text).not.toContain(UNVERIFIABLE);
+      expect(text).not.toContain('still in the secure outbox');
+      expect(planButtons(renderer)).toHaveLength(0);
+      expect(mockOfflineReceiptEvidence).toHaveBeenCalledWith(
+        expect.anything(),
+        'analysis-1',
+      );
+      act(() => renderer.unmount());
+    });
+
+    it('an unanswered presentation is distinguished from a server HOLD', async () => {
+      stubOutbox([]);
+      mockOfflineReceiptEvidence.mockResolvedValue({
+        kind: 'held',
+        answered: false,
+      });
+      let renderer = await renderResult();
+      let text = textOf(renderer);
+      expect(text).toContain('this phone has no confirmed answer for it');
+      expect(text).toContain('nothing is charged twice');
+      expect(text).not.toContain(UNVERIFIABLE);
+      expect(planButtons(renderer)).toHaveLength(0);
+      act(() => renderer.unmount());
+
+      mockOfflineReceiptEvidence.mockResolvedValue({
+        kind: 'held',
+        answered: true,
+      });
+      renderer = await renderResult();
+      text = textOf(renderer);
+      expect(text).toContain('is still confirming it');
+      expect(text).toContain('nothing is charged twice');
+      expect(text).not.toContain('no confirmed answer');
+      expect(text).not.toContain(UNVERIFIABLE);
+      expect(planButtons(renderer)).toHaveLength(0);
+      act(() => renderer.unmount());
+    });
+
+    it('a refused receipt states the refusal, the code, and offers a new read', async () => {
+      stubOutbox([]);
+      mockOfflineReceiptEvidence.mockResolvedValue({
+        kind: 'refused',
+        code: 'offline.grant_revoked',
+      });
+      const renderer = await renderResult();
+      const text = textOf(renderer);
+
+      expect(text).toContain('The server did not accept this read.');
+      expect(text).toContain('refused the receipt this on-court read');
+      expect(text).toContain('offline.grant_revoked');
+      expect(text).toContain('will not be presented again');
+      expect(text).not.toContain(UNVERIFIABLE);
+      expect(planButtons(renderer)).toHaveLength(0);
+      pressByLabel(renderer, 'Capture a new read');
+      expect(mockNavigate).toHaveBeenCalledWith('Analyze', {
+        source: 'camera',
+      });
+      act(() => renderer.unmount());
+    });
+
+    it('an accepted receipt unlocks the plan exactly like a synced shot', async () => {
+      stubOutbox([]);
+      mockOfflineReceiptEvidence.mockResolvedValue({ kind: 'accepted' });
+      const renderer = await renderResult();
+      const text = textOf(renderer);
+
+      expect(text).not.toContain(UNVERIFIABLE);
+      expect(text).not.toContain('Sync this read first.');
+      expect(planButtons(renderer).length).toBeGreaterThan(0);
+      act(() => renderer.unmount());
+    });
+
+    it('a durable sync receipt wins before the wallet is consulted', async () => {
+      mockExecute.mockImplementation(async (sql: string) => {
+        if (sql.includes('FROM sync_receipt')) return { rows: [{ n: 1 }] };
+        return { rows: [] };
+      });
+      const renderer = await renderResult();
+      expect(planButtons(renderer).length).toBeGreaterThan(0);
+      expect(mockOfflineReceiptEvidence).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    });
+
+    it('a wallet read that throws falls back to the outbox truth, not a crash', async () => {
+      stubOutbox([{ attempts: 0, last_error: null }]);
+      mockOfflineReceiptEvidence.mockRejectedValue(new Error('wallet locked'));
+      const renderer = await renderResult();
+      expect(textOf(renderer)).toContain('still in the secure outbox');
+      act(() => renderer.unmount());
+    });
   });
 });

@@ -19,15 +19,21 @@ jest.mock('../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
 });
 
 const mockNavigate = jest.fn();
+let mockFocused = true;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
   useFocusEffect: (callback: () => void | (() => void)) => {
     const React = jest.requireActual<typeof import('react')>('react');
-    React.useEffect(() => callback(), [callback]);
+    React.useEffect(() => {
+      if (mockFocused) return callback();
+    }, [callback, mockFocused]);
   },
 }));
 
@@ -61,7 +67,10 @@ jest.mock('../src/progress/playerRank', () => {
   return { ...actual, fetchPlayerRank: jest.fn(async () => null) };
 });
 
-const mockAppState = { profile: null as { skillLevel?: string } | null };
+const mockAppState = {
+  ownerKey: null as string | null,
+  profile: null as { skillLevel?: string } | null,
+};
 jest.mock('../src/state/appStore', () => ({
   useAppStore: (selector: (s: typeof mockAppState) => unknown) =>
     selector(mockAppState),
@@ -88,8 +97,45 @@ jest.mock('../src/progress/rankCelebration', () => {
 import { ProgressScreen } from '../src/screens/ProgressScreen';
 import type { RealAnalysisFact } from '../src/data/repository';
 import type { CaptureEvidenceV1 } from '../src/camera/capture';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
+const OWNER = '11111111-1111-4111-8111-111111111111';
+const OTHER_OWNER = '22222222-2222-4222-8222-222222222222';
 const DAY_MS = 86_400_000;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function syncedProgress(score: number) {
+  return {
+    series: [
+      {
+        day: daysAgoDay(2),
+        shotType: 'serve',
+        scoringModelVersion: 'model-2',
+        shotCount: 1,
+        avgScore: score,
+        bestScore: score,
+      },
+    ],
+    improving: [],
+    needsAttention: [],
+    streak: {
+      currentDays: 0,
+      longestDays: 0,
+      practicedToday: false,
+      lastPracticeDate: null,
+    },
+  };
+}
 
 function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * DAY_MS).toISOString();
@@ -334,6 +380,7 @@ describe('ProgressScreen dashboard', () => {
     // Fake timers keep the chart reveal animations from outliving the test.
     jest.useFakeTimers();
     mockNavigate.mockClear();
+    mockFocused = true;
     mockListRealAnalysisFacts.mockReset();
     mockListCaptureHistory.mockReset();
     mockListCaptureHistory.mockResolvedValue([]);
@@ -341,6 +388,8 @@ describe('ProgressScreen dashboard', () => {
     mockGetApiSession.mockReturnValue(null);
     mockFetchCanonicalProgress.mockReset();
     mockAppState.profile = null;
+    mockAppState.ownerKey = OWNER;
+    setActiveDataOwner(OWNER);
     mockConsistencyState.snapshot = null;
   });
 
@@ -349,6 +398,156 @@ describe('ProgressScreen dashboard', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  });
+
+  it('never requests canonical history with a different owner’s API session', async () => {
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 6.4 })]);
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('6.4');
+    expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('rejects local history from a previous sign-in even when the same owner returns before render', async () => {
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    setActiveDataOwner(OWNER);
+    await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 8.3 })]);
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(2);
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('hides loaded history and rejects canonical work from an earlier sign-in generation', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 4.2 })]);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    setActiveDataOwner(OWNER);
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(renderedText(renderer)).toContain('Loading measured progress');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    await act(async () => canonical.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).toContain('Loading measured progress');
+    await act(async () => local.resolve([]));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    act(() => renderer.unmount());
+  });
+
+  it('ignores canonical work after blur and starts a fresh request on refocus', async () => {
+    const first = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    mockFocused = false;
+    await act(async () => renderer.update(<ProgressScreen />));
+    await act(async () => first.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockFocused = true;
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(2);
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('paints local technique and practice data before a deferred canonical request', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValue(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([fact({ overallScore: 6.4 })]);
+    mockListCaptureHistory.mockResolvedValue([capture('local', daysAgoIso(1))]);
+    const renderer = await renderScreen();
+
+    expect(
+      findByTestId(renderer, 'technique-stat-reps')?.props.accessibilityLabel,
+    ).toBe('SCORED REPS: 1');
+    expect(renderedText(renderer)).toContain('6.4');
+    await pressByLabel(renderer, 'practice progress');
+    expect(
+      findByTestId(renderer, 'practice-stat-captures')?.props
+        .accessibilityLabel,
+    ).toBe('CAPTURES: 1');
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
+    await act(async () => canonical.resolve(syncedProgress(8.3)));
+    await pressByLabel(renderer, 'technique progress');
+    expect(renderedText(renderer)).toContain('6.4');
+    act(() => renderer.unmount());
+  });
+
+  it('merges canonical data later without holding the empty local dashboard behind it', async () => {
+    const canonical = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValue(canonical.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('KEY STATISTICS');
+    expect(renderedText(renderer)).not.toContain('serve daily average');
+    await act(async () => canonical.resolve(syncedProgress(8.3)));
+    expect(renderedText(renderer)).toContain('serve daily average');
+    expect(renderedText(renderer)).toContain('8.3');
+    act(() => renderer.unmount());
+  });
+
+  it('discards the previous owner’s deferred local history on an owner switch', async () => {
+    const local = deferred<unknown[]>();
+    mockListRealAnalysisFacts.mockReturnValueOnce(local.promise);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    mockAppState.ownerKey = OTHER_OWNER;
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({ shotType: 'serve', overallScore: 8.3 }),
+    ]);
+    await act(async () => renderer.update(<ProgressScreen />));
+    expect(renderedText(renderer)).toContain('8.3');
+    await act(async () => local.resolve([fact({ overallScore: 4.2 })]));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    act(() => renderer.unmount());
+  });
+
+  it('ignores the previous owner’s canonical result after the new owner has loaded', async () => {
+    const first = deferred<ReturnType<typeof syncedProgress>>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    setActiveDataOwner(OTHER_OWNER);
+    mockAppState.ownerKey = OTHER_OWNER;
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    await act(async () => renderer.update(<ProgressScreen />));
+    await act(async () => first.resolve(syncedProgress(4.2)));
+    expect(renderedText(renderer)).toContain('8.3');
+    expect(renderedText(renderer)).not.toContain('4.2 /10');
+    act(() => renderer.unmount());
+  });
+
+  it('keeps unmount cancellation when local history finishes late', async () => {
+    const local = deferred<unknown[]>();
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(8.3));
+    mockListRealAnalysisFacts.mockReturnValue(local.promise);
+    const renderer = await renderScreen();
+    act(() => renderer.unmount());
+    await act(async () => local.resolve([fact({})]));
+    expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
+    expect(renderer.toJSON()).toBeNull();
   });
 
   it('shows practice key statistics without inventing a first-period comparison', async () => {
@@ -447,6 +646,72 @@ describe('ProgressScreen dashboard', () => {
     act(() => renderer.unmount());
   });
 
+  it.each([8, 60, 120])(
+    'distinguishes a quiet 7-day window from no verified practice (%i days ago)',
+    async days => {
+      jest.setSystemTime(new Date('2026-09-10T12:00:00.000Z'));
+      mockListRealAnalysisFacts.mockResolvedValue([
+        fact({ shotType: 'forehand_drive', capturedAt: daysAgoIso(days) }),
+      ]);
+      mockListCaptureHistory.mockResolvedValue([
+        importedCapture('earlier-scan', daysAgoIso(days), true),
+        importedCapture('raw', daysAgoIso(0), false, null),
+      ]);
+      const renderer = await renderScreen();
+      await pressByLabel(renderer, 'practice progress');
+      await pressByLabel(renderer, '7 days range');
+      const text = renderedText(renderer);
+
+      expect(text).toContain('No verified captures in this range.');
+      expect(text).toContain(
+        'Your verified captures fall outside the selected dates. Check Recent captures below.',
+      );
+      expect(text).not.toContain('This chart is waiting on you.');
+      expect(text).toContain('forehand drive');
+      expect(text).toContain(
+        '1 saved clip without measured pose evidence is not counted.',
+      );
+      expect(
+        findByTestId(renderer, 'practice-stat-captures')!.props
+          .accessibilityLabel,
+      ).toMatch(/^CAPTURES: 0/);
+      expect(
+        findByTestId(renderer, 'practice-stat-pose-tracked')!.props
+          .accessibilityLabel,
+      ).toBe('POSE TRACKED: —');
+      if (days === 8) {
+        await pressByLabel(renderer, '4 weeks range');
+        expect(renderedText(renderer)).not.toContain(
+          'No verified captures in this range.',
+        );
+        expect(
+          findByTestId(renderer, 'practice-stat-captures')!.props
+            .accessibilityLabel,
+        ).toBe('CAPTURES: 1');
+      }
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('does not use future or corrupt captures as proof of earlier practice', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockListCaptureHistory.mockResolvedValue([
+      importedCapture('future', daysAgoIso(-1), true),
+      {
+        ...capture('corrupt', daysAgoIso(40)),
+        evidenceStatus: 'corrupt',
+        clip: null,
+      },
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'practice progress');
+    expect(renderedText(renderer)).toContain('This chart is waiting on you.');
+    expect(renderedText(renderer)).not.toContain(
+      'Your verified captures fall outside the selected dates.',
+    );
+    act(() => renderer.unmount());
+  });
+
   it('never counts a raw, unmeasured import — and says so instead of staying silent', async () => {
     mockListRealAnalysisFacts.mockResolvedValue([]);
     mockListCaptureHistory.mockResolvedValue([
@@ -482,17 +747,19 @@ describe('ProgressScreen dashboard', () => {
 
     expect(text).toContain('KEY STATISTICS');
     expect(text).toContain('VS. PRIOR 4 WEEKS');
-    expect(text).toContain('SCORE TREND');
+    expect(text).toContain('DUPR TREND');
     expect(text).toContain('DAILY AVG · ALL TECHNIQUES');
+    expect(text).toContain('EST. DUPR');
 
-    // Key statistic rows carry the honest prior-window comparison.
+    // Key statistic rows carry the honest prior-window comparison — the
+    // estimated DUPR first, the 0–10 score beside it (D-046).
     const reps = findByTestId(renderer, 'technique-stat-reps')!;
     expect(reps.props.accessibilityLabel).toBe(
       'SCORED REPS: 2. Prior period 1, trending up',
     );
     const best = findByTestId(renderer, 'technique-stat-best')!;
     expect(best.props.accessibilityLabel).toBe(
-      'BEST SCORE: 8.2. Prior period 8.1, trending up',
+      'BEST DUPR: 4.13 (8.2 /10). Prior period 4.07, trending up',
     );
 
     // The 8.2 read strictly beats the pre-window best of 8.1.
@@ -502,17 +769,23 @@ describe('ProgressScreen dashboard', () => {
         findByTestId(renderer, 'personal-best-card')!.props.style,
       ),
     ).toMatchObject({ borderColor: color.lineDark });
-    const scoreLabels = renderer.root
+    // Every 8.2 prints as its estimated DUPR 4.13 in the host's numeral role,
+    // with the " DUPR" unit nested and "8.2 /10" as the smaller line.
+    const duprLabels = renderer.root
       .findAllByType(Text)
-      .filter(node => node.props.children === '8.2');
+      .filter(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children[0] === '4.13',
+      );
     expect(
-      scoreLabels.filter(
+      duprLabels.filter(
         node =>
           StyleSheet.flatten(node.props.style)?.fontSize ===
           typography.score.fontSize,
       ).length,
     ).toBeGreaterThanOrEqual(2);
-    const heroScore = scoreLabels.find(
+    const heroScore = duprLabels.find(
       node =>
         StyleSheet.flatten(node.props.style)?.fontSize ===
         typography.display.fontSize,
@@ -520,11 +793,17 @@ describe('ProgressScreen dashboard', () => {
     expect(StyleSheet.flatten(heroScore.props.style)).toMatchObject(
       typography.display,
     );
+    expect(
+      renderer.root
+        .findAllByType(Text)
+        .filter(node => node.props.children === '8.2 /10').length,
+    ).toBeGreaterThanOrEqual(3);
     expect(text).toContain('NEW PERSONAL BEST');
-    expect(text).toMatch(/Beats your previous best\s+8\.1/);
+    expect(text).toMatch(/Beats your previous best\s+4\.07\s+DUPR/);
 
-    // Insight states the window arithmetic, nothing more.
-    expect(text).toContain('Average score -0.4 vs the prior 4 weeks.');
+    // Insight states the window arithmetic, nothing more — as the change in
+    // estimated DUPR (7.7 → 3.80 vs 8.1 → 4.07).
+    expect(text).toContain('Average DUPR \u22120.27 vs the prior 4 weeks.');
     act(() => renderer.unmount());
   });
 
@@ -612,7 +891,10 @@ describe('ProgressScreen dashboard', () => {
   });
 
   it('renders the account-synced series and server signals when signed in', async () => {
-    mockGetApiSession.mockReturnValue({ token: 'fake' });
+    mockGetApiSession.mockReturnValue({
+      canonicalAppUserId: OWNER,
+      token: 'fake',
+    });
     mockListRealAnalysisFacts.mockResolvedValue([]);
     mockFetchCanonicalProgress.mockResolvedValue({
       series: [
@@ -714,8 +996,9 @@ describe('ProgressScreen dashboard', () => {
     expect(
       findByTestId(renderer, 'technique-stat-reps')!.props.accessibilityLabel,
     ).toBe('SCORED REPS: 2. Prior period 1, trending up');
+    // 5.0 → 2.77 in the prior window, 6.5 → 3.00 now.
     expect(renderedText(renderer)).toContain(
-      'Average score +1.5 vs the prior 4 weeks.',
+      'Average DUPR +0.23 vs the prior 4 weeks.',
     );
     act(() => renderer.unmount());
   });
@@ -749,16 +1032,19 @@ describe('ProgressScreen dashboard', () => {
 
     expect(findByTestId(renderer, 'practice-set-card')).not.toBeNull();
     expect(text).toContain('THIS SET');
-    expect(text).toContain('+0.8 in this set');
+    expect(text).toContain('+0.53 DUPR in this set');
     expect(text).toContain(
-      '2 attempts · best 7.4 · contact position improved from 48 to 81',
+      '2 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
     );
     // Both attempts render as pills, in order, the latest ringed.
     expect(findByTestId(renderer, 'practice-set-attempt-set-1')).not.toBeNull();
     expect(findByTestId(renderer, 'practice-set-attempt-set-2')).not.toBeNull();
     expect(findByTestId(renderer, 'practice-set-latest-pill')).not.toBeNull();
 
-    await pressByLabel(renderer, 'Attempt 1 of 2, score 6.6');
+    await pressByLabel(
+      renderer,
+      'Attempt 1 of 2, Estimated DUPR 3.07, technique score 6.6 out of 10',
+    );
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: 'set-1',
     });

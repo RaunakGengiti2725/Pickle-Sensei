@@ -105,6 +105,7 @@ import { useConsentStore } from '../../src/state/consentStore';
 import { useNotificationStore } from '../../src/notifications/notificationStore';
 import { useConsistencyStore } from '../../src/consistency/store';
 import { useWalkthroughStore } from '../../src/walkthrough/walkthroughStore';
+import { DUPR_ESTIMATE_NOTE } from '../../src/progress/duprEstimate';
 import {
   REVIEW_PROMPT_KV_KEY,
   parseReviewPromptState,
@@ -395,7 +396,9 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     act(() => row(renderer, 'App walkthrough').props.onPress());
     expect(mockNavigate).toHaveBeenLastCalledWith('Tabs', { screen: 'Home' });
     expect(useWalkthroughStore.getState().visible).toBe(true);
-    expect(mockKvTable.has('walkthrough.device-complete')).toBe(false);
+    expect(
+      [...mockKvTable.keys()].some(key => key.startsWith('walkthrough.')),
+    ).toBe(false);
     act(() => renderer.unmount());
   });
 
@@ -524,7 +527,7 @@ describe('Settings root — guest (local-only) sessions', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     expect(copy).toContain('Alex');
-    expect(copy).toContain('Guest · this device');
+    expect(copy).toContain('Local · this device');
     expect(copy).toContain('LOCAL');
     expect(rowsStartingWith(renderer, 'Manage account')).toHaveLength(0);
     expect(copy).not.toContain('Account details');
@@ -766,11 +769,16 @@ describe('AGENTS.md invariants for settings-about', () => {
     act(() => renderer.unmount());
   });
 
-  it('the Technique Score disclaimer is present (not a verified DUPR)', () => {
+  it('discloses that the DUPR shown is an estimate from stroke form, not an official match rating', () => {
     const renderer = renderScreen();
-    expect(allText(renderer)).toContain(
-      'Technique Score is coaching feedback—not a verified DUPR or player rating.',
+    const copy = allText(renderer);
+    // D-046: the app's headline rating is an estimated DUPR, so Settings
+    // says exactly what it is and is not, in the shared words.
+    expect(copy).toContain(DUPR_ESTIMATE_NOTE);
+    expect(copy).toContain(
+      'The technique score beneath each figure describes stroke form.',
     );
+    expect(copy).not.toMatch(/≈/);
     act(() => renderer.unmount());
   });
 

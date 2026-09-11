@@ -23,7 +23,8 @@
  *   5. The outbox treats 401 as transient: the queued row keeps its attempt
  *      budget and is replayed under the rotated bearer — or, once a session
  *      is gone, simply waits for the next sign-in and never replays the dead
- *      bearer.
+ *      bearer. A sign-out that lands while a drain is in flight stops the
+ *      owner-fenced drain (DataOwnerChangedError) without writing anything.
  *   6. A LEGACY session (an older server returned no `session` block, so the
  *      bearer IS the provider token and there is nothing to rotate) keeps
  *      the pre-contract path: for Apple, which has no silent restore, the
@@ -48,6 +49,7 @@ import {
 import { SESSION_VAULT_SERVICE } from '../../src/account/sessionVault';
 import { stopSessionKeeper } from '../../src/account/sessionKeeper';
 import {
+  DataOwnerChangedError,
   SIGNED_OUT_DATA_OWNER,
   canonicalDataOwner,
   getActiveDataOwner,
@@ -61,6 +63,10 @@ import { TrainingError } from '../../src/training/types';
 import { createCanonicalAccessClient } from '../../src/billing/accessApi';
 import { BillingError } from '../../src/billing/types';
 import * as Keychain from 'react-native-keychain';
+import {
+  drainRows,
+  executeSyncSql,
+} from '../../test-support/outboxScheduleFake';
 
 // The auto-mock (__mocks__/react-native-keychain.ts) exposes its in-memory
 // store — the same instance sessionVault requires.
@@ -94,16 +100,10 @@ function mockCurrentDb(): LocalDb {
         mockKv.set(String(params[0]), String(params[1]));
         return { rows: [] };
       }
+      const handled = executeSyncSql(mockOutbox, statement, params);
+      if (handled) return handled;
       if (statement.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: mockOutbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(mockOutbox, params) };
       }
       if (statement.startsWith('UPDATE outbox')) {
         const row = mockOutbox.find(
@@ -447,6 +447,7 @@ describe('auth-session-lifecycle: the bearer is a server-minted session, not the
     // Keychain, nothing else anywhere.
     expect(vaultRecord()).toEqual({
       version: 1,
+      generation: expect.any(Number),
       provider: 'apple',
       canonicalAppUserId: canonicalId,
       refreshToken: 'refresh-1',
@@ -596,7 +597,7 @@ describe('auth-session-lifecycle: a 401 on the current bearer rotates the sessio
     expect(bearerOf(fetchFn.mock.calls[1]![1])).toBe('access-2');
   });
 
-  it('billing client: 401 is a distinct, non-retryable sign-in-expired error for THAT call (a 503 is a retryable outage), while the session is refreshed rather than torn down', async () => {
+  it('billing client: 401 stays retryable while the current session rotates, and a 503 does not trigger auth recovery', async () => {
     const { fetchMock } = await signInDurably({
       '/v1/auth/refresh': () =>
         refreshOk({ access: 'access-2', refresh: 'refresh-2' }),
@@ -628,9 +629,9 @@ describe('auth-session-lifecycle: a 401 on the current bearer rotates the sessio
     expect(caught).toBeInstanceOf(BillingError);
     expect(caught).toMatchObject({
       code: 'billing.backend_unavailable',
-      retryable: false,
+      retryable: true,
       message:
-        'Your sign-in has expired. Sign in again to check membership access.',
+        'Your account connection needs to refresh. Please try verification again.',
     });
     expect(bearerOf(fetchFn.mock.calls[0]![1])).toBe('access-1');
     // A 503 is a retryable outage with different copy and no auth reaction.
@@ -714,9 +715,14 @@ describe('auth-session-lifecycle: the ONE implicit sign-out is a refused refresh
       queueShot(owner);
       const transport = createTransport(liveClientConfig());
 
-      const first = await drainOutbox(mockCurrentDb(), transport);
-      expect(first).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
-      expect(mockOutbox[0]).toMatchObject({ attempts: 0 });
+      // The refused refresh ends the session while the drain is still
+      // in flight; the owner-fenced connection refuses to write the failure
+      // into a signed-out database, so the drain stops and the row is left
+      // exactly as it was queued.
+      await expect(drainOutbox(mockCurrentDb(), transport)).rejects.toThrow(
+        DataOwnerChangedError,
+      );
+      expect(mockOutbox[0]).toMatchObject({ attempts: 0, last_error: null });
 
       await settleUnauthorizedHandling();
       expect(callsTo(fetchMock, '/v1/auth/refresh')).toHaveLength(1);
@@ -735,16 +741,13 @@ describe('auth-session-lifecycle: the ONE implicit sign-out is a refused refresh
       expect(signInWithApple).toHaveBeenCalledTimes(1);
       expect(mockGoogleSignin.signInSilently).not.toHaveBeenCalled();
 
-      // A stray tick after teardown sends nothing: the signed-out owner has
-      // no rows and the per-request bearer resolves to null, so the dead
+      // A stray tick after teardown sends nothing: a signed-out owner has no
+      // writable scope, so the drain refuses before it reads a row, the dead
       // bearer is never replayed and the row stays queued for the next
       // sign-in with its budget intact.
-      const afterTeardown = await drainOutbox(mockCurrentDb(), transport);
-      expect(afterTeardown).toMatchObject({
-        synced: 0,
-        failed: 0,
-        remaining: 0,
-      });
+      await expect(drainOutbox(mockCurrentDb(), transport)).rejects.toThrow(
+        'Sign in or continue locally before saving product data.',
+      );
       expect(callsTo(fetchMock, '/v1/shots:sync')).toHaveLength(1);
       expect(mockOutbox).toHaveLength(1);
       expect(mockOutbox[0]).toMatchObject({ owner_key: owner, attempts: 0 });
@@ -802,15 +805,16 @@ describe('auth-session-lifecycle: a LEGACY provider-token session keeps the pre-
     const transport = createTransport(liveClientConfig());
 
     // Wall clock moves past the identity token's exp; server answers 401.
-    const result = await drainOutbox(mockCurrentDb(), transport);
-    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    // With nothing to rotate the sign-out lands synchronously inside the
+    // 401 handling, so the owner-fenced drain stops without writing a
+    // failure into the signed-out database.
+    await expect(drainOutbox(mockCurrentDb(), transport)).rejects.toThrow(
+      DataOwnerChangedError,
+    );
     expect(bearerOf(callsTo(fetchMock, '/v1/shots:sync')[0]![1])).toBe(
       identityToken,
     );
-    expect(mockOutbox[0]).toMatchObject({
-      attempts: 0,
-      last_error: expect.stringContaining('could not be verified'),
-    });
+    expect(mockOutbox[0]).toMatchObject({ attempts: 0, last_error: null });
 
     // Nothing to rotate: no refresh call is even attempted. Apple has no
     // silent restore, so the user lands signed out with an honest reason,
@@ -831,8 +835,9 @@ describe('auth-session-lifecycle: a LEGACY provider-token session keeps the pre-
     expect(mockGoogleSignin.signInSilently).not.toHaveBeenCalled();
 
     // A stray tick after teardown sends nothing and the row stays queued.
-    const afterTeardown = await drainOutbox(mockCurrentDb(), transport);
-    expect(afterTeardown).toMatchObject({ synced: 0, failed: 0, remaining: 0 });
+    await expect(drainOutbox(mockCurrentDb(), transport)).rejects.toThrow(
+      'Sign in or continue locally before saving product data.',
+    );
     expect(callsTo(fetchMock, '/v1/shots:sync')).toHaveLength(1);
     expect(mockOutbox).toHaveLength(1);
     expect(mockOutbox[0]).toMatchObject({ owner_key: owner, attempts: 0 });

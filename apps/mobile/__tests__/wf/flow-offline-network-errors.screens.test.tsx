@@ -81,6 +81,10 @@ import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
 import { BrandToggle, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { useConsentStore } from '../../src/state/consentStore';
 import {
   clearAccessStoreConfiguration,
@@ -177,6 +181,7 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   setSession(null);
 });
 
@@ -184,6 +189,7 @@ afterEach(() => {
 
 describe('ConsentSettingsScreen — consent server unreachable', () => {
   beforeEach(() => {
+    setActiveDataOwner(apiSession.canonicalAppUserId);
     useAuthStore.setState({
       hydrated: true,
       session: syncedSession,
@@ -254,6 +260,7 @@ describe('ConsentSettingsScreen — consent server unreachable', () => {
 
 describe('ManageAccountScreen — deletion with the network failing', () => {
   beforeEach(() => {
+    setActiveDataOwner(apiSession.canonicalAppUserId);
     useAuthStore.setState({
       hydrated: true,
       session: syncedSession,

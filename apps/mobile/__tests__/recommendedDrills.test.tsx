@@ -26,7 +26,9 @@ jest.mock('../src/training/api', () => ({
 }));
 
 import {
+  RECOMMENDED_DRILLS_HIDE_STEPS_LABEL,
   RECOMMENDED_DRILLS_SIGN_IN_COPY,
+  RECOMMENDED_DRILLS_STEPS_LABEL,
   RecommendedDrills,
 } from '../src/review/RecommendedDrills';
 import {
@@ -34,13 +36,28 @@ import {
   drillFocusFromAnalysis,
   pickRecommendedDrills,
 } from '../src/review/recommendedDrillsModel';
+import {
+  equipmentLine,
+  parseDrillDescription,
+} from '../src/training/drillDescription';
 
 /**
  * RecommendedDrills — catalog drills matched by the stroke family of one
- * scored analysis' worst measured fault. The catalog is fetched once per
- * analysis id, every state is a quiet card, the match basis is stated, and
- * nothing renders when the analysis carries no scored fault.
+ * scored analysis' worst measured fault, one card each. The catalog is
+ * fetched once per analysis id, every state is a quiet card, the match basis
+ * is stated, and nothing renders when the analysis carries no scored fault.
+ * The catalog description's structure (purpose · numbered steps · dose) is
+ * parsed so the dose shows on the card and the steps open on tap — none of
+ * it is clamped away.
  */
+
+/** The exact shape the edge function's `describe()` serves. */
+const STRUCTURED_DESCRIPTION =
+  'Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.\n\n' +
+  '1. Without a ball, rehearse the drive: turn shoulders and hips together as the split-step lands.\n' +
+  '2. Check in a mirror or phone video that the chest faces the sideline before the forward swing.\n' +
+  "3. Progress to dropped-ball feeds, calling 'turn' at the feeder's release.\n\n" +
+  'Dose: 3 × 10 shadow swings + 2 × 10 fed balls.';
 
 function checkpoint(
   key: CheckpointKey,
@@ -258,6 +275,59 @@ describe('recommendedDrillsModel', () => {
   });
 });
 
+describe('drillDescription', () => {
+  it('splits the catalog description into purpose, numbered steps and the dose', () => {
+    expect(parseDrillDescription(STRUCTURED_DESCRIPTION)).toEqual({
+      purpose:
+        'Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.',
+      steps: [
+        'Without a ball, rehearse the drive: turn shoulders and hips together as the split-step lands.',
+        'Check in a mirror or phone video that the chest faces the sideline before the forward swing.',
+        "Progress to dropped-ball feeds, calling 'turn' at the feeder's release.",
+      ],
+      dose: '3 × 10 shadow swings + 2 × 10 fed balls',
+    });
+    // Tolerant of CRLF, "1)" numbering, extra blank lines and a dose with
+    // no trailing period.
+    expect(
+      parseDrillDescription(
+        'Why.\r\n\r\n1) First\r\n2) Second\r\n\r\nDose: 4 × 45 s',
+      ),
+    ).toEqual({
+      purpose: 'Why.',
+      steps: ['First', 'Second'],
+      dose: '4 × 45 s',
+    });
+  });
+
+  it('an unstructured description is the purpose alone — no steps, no dose invented', () => {
+    expect(parseDrillDescription('Description for drive-and-recover.')).toEqual(
+      {
+        purpose: 'Description for drive-and-recover.',
+        steps: [],
+        dose: null,
+      },
+    );
+    expect(parseDrillDescription('')).toEqual({
+      purpose: '',
+      steps: [],
+      dose: null,
+    });
+  });
+
+  it('equipmentLine capitalises and joins; empty lists yield null', () => {
+    expect(
+      equipmentLine([
+        'paddle',
+        ' mirror or phone camera',
+        'balls (for the fed stage)',
+      ]),
+    ).toBe('Paddle · Mirror or phone camera · Balls (for the fed stage)');
+    expect(equipmentLine([])).toBeNull();
+    expect(equipmentLine(['  '])).toBeNull();
+  });
+});
+
 describe('RecommendedDrills', () => {
   it('keeps saved-drill controls at least 44 points and blocks pending presses', async () => {
     mockGetApiSession.mockReturnValue(session);
@@ -323,13 +393,25 @@ describe('RecommendedDrills', () => {
       'recommended-drill-shadow-swing-ladder',
     ]);
     const rendered = textOf(renderer);
-    expect(rendered).toContain('Drills for this stroke');
     expect(rendered).toContain('Drive And Recover');
     expect(rendered).toContain('Description for drive-and-recover.');
-    expect(rendered).toContain('PICKLE SENSEI TRAINING LIBRARY');
+    // The page title names the section and the catalog byline is the same
+    // on every drill — neither is repeated per card.
+    expect(rendered).not.toContain('Drills for this stroke');
+    expect(rendered).not.toContain('PICKLE SENSEI TRAINING LIBRARY');
     expect(rendered).not.toContain('Dink Target Ladder');
     expect(rendered).not.toContain('Footwork Split Step');
     expect(rendered).toContain(DRILL_MATCH_NOTE);
+    // An unstructured description has no steps to open and no dose to show.
+    expect(
+      hostByTestId(renderer, 'recommended-drill-drive-and-recover-dose'),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll(
+        node =>
+          node.props.testID === 'recommended-drill-drive-and-recover-steps',
+      ),
+    ).toHaveLength(0);
 
     const [open] = renderer.root.findAll(
       node =>
@@ -351,6 +433,95 @@ describe('RecommendedDrills', () => {
       );
     });
     expect(mockListCatalogDrills).toHaveBeenCalledTimes(1);
+    await unmount(renderer);
+  });
+
+  it('a structured description shows its dose on the card and opens its numbered steps + equipment on tap', async () => {
+    mockGetApiSession.mockReturnValue(session);
+    mockListCatalogDrills.mockResolvedValue([
+      drill('shadow-unit-turn', ['drive'], {
+        title: 'Shadow swing: unit turn ladder',
+        description: STRUCTURED_DESCRIPTION,
+        equipment: [
+          'paddle',
+          'mirror or phone camera',
+          'balls (for the fed stage)',
+        ],
+        difficultyMin: 'beginner',
+        difficultyMax: 'beginner',
+      }),
+    ]);
+    const renderer = await render(
+      <RecommendedDrills
+        analysis={analysisFixture()}
+        onOpenLibrary={jest.fn()}
+        dark
+      />,
+    );
+    let rendered = textOf(renderer);
+    // Collapsed: title, purpose, dose and difficulty — the steps stay closed.
+    expect(rendered).toContain('Shadow swing: unit turn ladder');
+    expect(rendered).toContain(
+      'Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.',
+    );
+    expect(rendered).toContain('3 × 10 shadow swings + 2 × 10 fed balls');
+    expect(rendered).not.toContain('Dose:');
+    expect(rendered).toContain('BEGINNER');
+    expect(rendered).not.toContain('Without a ball, rehearse the drive');
+    expect(rendered).not.toContain('Mirror or phone camera');
+    expect(
+      hostByTestId(renderer, 'recommended-drill-shadow-unit-turn-steps-list'),
+    ).toHaveLength(0);
+
+    const [toggle] = renderer.root.findAll(
+      node =>
+        node.props.testID === 'recommended-drill-shadow-unit-turn-steps' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(toggle).toBeDefined();
+    expect(toggle!.props.accessibilityLabel).toBe(
+      'Show steps for Shadow swing: unit turn ladder',
+    );
+    expect(toggle!.props.accessibilityState).toMatchObject({ expanded: false });
+    expect(rendered).toContain(RECOMMENDED_DRILLS_STEPS_LABEL);
+    expect(
+      StyleSheet.flatten(
+        hostByTestId(renderer, 'recommended-drill-shadow-unit-turn-steps')[0]!
+          .props.style,
+      ).minHeight,
+    ).toBeGreaterThanOrEqual(44);
+
+    await act(async () => {
+      toggle!.props.onPress();
+    });
+    rendered = textOf(renderer);
+    expect(
+      hostByTestId(renderer, 'recommended-drill-shadow-unit-turn-steps-list'),
+    ).toHaveLength(1);
+    expect(rendered).toContain('Without a ball, rehearse the drive');
+    expect(rendered).toContain(
+      "Progress to dropped-ball feeds, calling 'turn' at the feeder's release.",
+    );
+    expect(rendered).toContain(
+      'Paddle · Mirror or phone camera · Balls (for the fed stage)',
+    );
+    expect(rendered).toContain(RECOMMENDED_DRILLS_HIDE_STEPS_LABEL);
+    const [open] = renderer.root.findAll(
+      node =>
+        node.props.testID === 'recommended-drill-shadow-unit-turn-steps' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(open!.props.accessibilityLabel).toBe(
+      'Hide steps for Shadow swing: unit turn ladder',
+    );
+    expect(open!.props.accessibilityState).toMatchObject({ expanded: true });
+
+    await act(async () => {
+      open!.props.onPress();
+    });
+    expect(
+      hostByTestId(renderer, 'recommended-drill-shadow-unit-turn-steps-list'),
+    ).toHaveLength(0);
     await unmount(renderer);
   });
 

@@ -1,0 +1,225 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W07-03-r3",
+      "phase": "implement",
+      "prompt_sha256": "0e7f1b3bbd295efea003c8705346f3bc0668c73dd8ef455ac7f3f8b0172285e4",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-03-r3",
+      "phase": "review",
+      "prompt_sha256": "079c3061e7198f33b29670580d9c8179779dc2585108049dbe4da49eef313242",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-03-r3",
+      "phase": "adversary",
+      "prompt_sha256": "87363ab66911998ce8324f903d6a5cabde8a78ceb828b7ab253e8125b3690ced",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+  "candidate": {
+    "branch": "devin/pp/w07-03/impl-r3",
+    "head_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+    "lane": 1,
+    "round": 3
+  },
+  "competing": 1,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.8",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W07-03",
+  "requeued_from": {
+    "branch": "devin/pp/w07-03/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w07-03/attack-041d19a3",
+      "adversary_breaks": [
+        {
+          "expected": "billing_destination_blocker must only bar verdicts that would grant the destination entitlement *via the transfer*. A provider-confirmed active verdict for D issued on D's own ticket (an INITIAL_PURCHASE / sync for D alone, not a TRANSFER side) is D's own purchase and must be applied; the held transfer has nothing to grant D and must not hold D's own paid entitlement hostage.",
+          "observed": "persist_billing_verdict for D's OWN INITIAL_PURCHASE returns applied=false, withheld=true, billing.premium=false, transfer={state:'held', event_id:'w07-a5a-stale'}; complete_billing_webhook('w07-a5a-buy') raises 55000 'Webhook persistence is incomplete'; redelivery (fresh sync ticket, same active verdict) is withheld again; billing_entitlements row for D stays premium=false. Because S holds a lifetime product the blocker never lapses, so a paying user D never receives premium and RevenueCat keeps redelivering a 5xx-ing webhook until it gives up. VERIFIED (exit 3; 13 PASS / 3 BREAK in w07_03_attacks_head_run6.log).",
+          "repro": "docker exec pickle-attack psql -U postgres -d attack -v w07_dsn=\"dbname=attack user=postgres password=pg host=127.0.0.1\" -f /w07_03_attacks.sql  (section 'A5a held starvation (single destination)' in supabase/tests/w07_03_attacks.sql; DB = tests/shim_auth.sql + all migrations at 041d19a3). Scenario: S->D TRANSFER delivered after the device switched back to S; provider says S active (pickle_sensei_pro_lifetime, no expiry) and D inactive -> transfer 'held'. D then buys its own subscription: INITIAL_PURCHASE for D alone, begin_billing_verification([D]), persist_billing_verdict(D, ticket, active 30d), complete_billing_webhook.",
+          "severity": "P1",
+          "test_file": "supabase/tests/w07_03_attacks.sql",
+          "title": "A5a: held stale TRANSFER starves the destination's own independent purchase forever (INITIAL_PURCHASE never applies, webhook never completes)"
+        },
+        {
+          "expected": "A destination side that has already been applied (settled) is no longer a barrier subject for that transfer. Later source verdicts (a new, unrelated purchase by the source) must not withhold the destination's own provider-confirmed renewal; the renewal must be applied and expires_at advanced.",
+          "observed": "D1's renewal returns applied=false, withheld=true, transfer={state:'held', event_id:'w07-a5b'}; billing_transfer_recovery shows D1 side applied=true yet D1 is blocked because the source side is re-marked active (verified=true, active=true). D1's stored row keeps its OLD expires_at, so D1 will lapse at the old expiry although RevenueCat confirms the renewal. VERIFIED (same log).",
+          "repro": "same command; section 'A5b applied destination re-barred'. Scenario: S->[D1,D2] TRANSFER; S confirmed inactive (source loss), D1 confirmed active and APPLIED through this transfer (destination side applied_at set), D2 never syncs so the transfer stays unsettled. S later buys a new subscription (persist_billing_verdict(S, own ticket, active)). Then D1's monthly renewal arrives: persist_billing_verdict(D1, own sync ticket, active +30d).",
+          "severity": "P1",
+          "test_file": "supabase/tests/w07_03_attacks.sql",
+          "title": "A5b: an already-applied transfer destination is re-barred when the source later buys a new subscription (legitimate renewal withheld)"
+        },
+        {
+          "expected": "At minimum, a user's active verdict on their own ticket must be applied when the blocking transfer's source is itself confirmed active on its own account (that source is not losing anything - the transfer is stale). Never withhold entitlement from two mutually confirmed-active accounts simultaneously.",
+          "observed": "Both verdicts return applied=false, withheld=true (S blocked by t2 where S is destination and D active; D blocked by t1 where D is destination and S active). billing_entitlements has no premium row for either; both transfers stay 'held' with sources active=true. Two paying users are locked out of premium until one of them lapses. VERIFIED (same log).",
+          "repro": "same command; section 'A6 mutual hold'. Scenario: device switches S->D then D->S; two TRANSFER events w07-a6-t1 (S->D) and w07-a6-t2 (D->S) are queued; provider reports both S and D active (each has own purchases) on their own tickets: persist_billing_verdict(S, ticket, active) and persist_billing_verdict(D, ticket, active).",
+          "severity": "P1",
+          "test_file": "supabase/tests/w07_03_attacks.sql",
+          "title": "A6: mutual transfers (S->D and D->S both unsettled) leave BOTH provider-confirmed-active users non-premium with no recovery path except the other user's expiry"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "041d19a3b56f0f330d40c4d163f33884519b9c01"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ce38514-cb22-48f1-a1c7-7ee6b9af246a/ac1_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef2f324d-d9cd-4640-b40b-6b791ac2772a/ac2_attack_matrix_on_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5269898f-eda1-4335-9c93-cddaf21e39a5/ac2_attack_matrix_on_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac38ad70-89ba-4816-94de-7327798e6bc2/ac2_candidate_tests_on_base.log"
+        ],
+        "attack_branch": "devin/pp/w07-03/attack-00da1b9e",
+        "attack_branch_sha": "c7fec6579fefac0bdef48a297d0c12f530e61438",
+        "attacked_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+        "attacks_tried": 15,
+        "breaks": [],
+        "package_id": "W07-03",
+        "summary": "No confirmed break. Candidate 00da1b9e survived 15 attack groups (~100 assertions, ~20 role x surface denial probes, 4 dblink race scenarios) in the new independent file supabase/tests/w07_03_attack_matrix.sql on branch devin/pp/w07-03/attack-00da1b9e (sha c7fec657; plain push, no PR). Candidate production code and its own tests were not modified. Environment: postgres:16 in Docker (container pickle-attack-pg), DB built from supabase/tests/shim_auth.sql + every supabase/migrations/*.sql in order.\n\nVERIFIED W07-03-AC1: `./supabase/tests/run_rls_tests.sh` at 00da1b9e -> exit 0; 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x {security_regression.sql (incl. 'W07 concurrent billing matrix: 14 cases'), account_deletion_operations.sql, analysis_release_policy.sql} all PASS, 0 failed, 0 skipped (ac1_run_rls_tests.log, 2493 lines).\n\nVERIFIED W07-03-AC2 (regress boundary, independent test): `docker exec -i -e PGPASSWORD=pg pickle-attack-pg psql -h 127.0.0.1 -U postgres -d <db> -v ON_ERROR_STOP=1 -q < supabase/tests/w07_03_attack_matrix.sql`. On BASE 8ba4849d worktree with ONLY the new file copied over (git status: ?? supabase/tests/w07_03_attack_matrix.sql): exit 3, fails at A1 'destination became premium before the source was provider-confirmed' (destination row premium=true, applied=true) (ac2_attack_matrix_on_base.log). On candidate 00da1b9e (fresh DB): exit 0, A1-A12, A14, A15 passed + 'ATTACK CONCURRENCY (A13): 4 scenarios passed' (ac2_attack_matrix_on_candidate.log). Also the candidate-owned security_regression.sql on BASE: exit 3, 'relation api_private.billing_transfers does not exist' (ac2_candidate_tests_on_base.log).\n\nATTACKS TRIED (all held on the candidate):\nA1 barrier: destination verified first -> withheld, not premium, no entitlement row; complete_billing_webhook raises 55000 (retryable); billing_transfer_recovery lists it; source's confirmed loss releases destination; audit trail exact = [enqueued, destination_verified, destination_withheld, source_verified, destination_applied, confirmed]; webhook completes. FAILS ON BASE (this is the regress case).\nA2 replay/duplicate submit: same withheld destination verdict persisted twice -> identical idempotent result, single destination_withheld audit row; divergent verdict on the sealed ticket -> 22023; inactive verdict on it -> 22023.\nA3 crash between steps + lease expiry + redelivery: lease forced expired, redelivery re-claims, begin_billing_verification reuses the same durable transfer (1 transfer, 1 enqueued audit row), re-verifying the lost source keeps it lost, destination verdict on the new ticket applies, webhook completes.\nA4 stale worker: a lapsed lease is refused (55000) by begin_billing_verification and enqueue_billing_transfer after a new worker took the delivery; fresh lease admitted.\nA5 identity folding/cardinality/shape: duplicate + upper-cased ids fold, id on both sides dropped, malformed ids/ints/nulls ignored; all-both-sides and string-typed party fields -> outcome no_subjects (nothing queued, delivery not poisoned); exactly 16 parties admitted (16 sides), 17 -> 22023; wrong event.id, wrong event type, non-object payload -> 22023.\nA6 clock boundaries: expiresAt 'infinity' -> 22023, malformed -> rejected, far-future finite (9999-12-31) stored; source premium=true with past expiry treated as inactive -> releases destination; source with entitlement expiring in 1.2s -> transfer 'held' and destination mirrors its own verdict; after expiry a destination sync confirms the transfer.\nA7 unauthorised roles: anon/authenticated/service_role x {select/update/delete on billing_transfers, _sides, _audit; nextval on audit sequence; execute private helpers billing_transfer_party_ids/billing_destination_blocker/settle/reconcile/apply/note}, anon+authenticated on public enqueue_billing_transfer/billing_transfer_recovery, and authenticated with a destination JWT sub -> all 42501; service_role RPC path allowed.\nA8 corrupt/partial persisted state: after destination verdict, webhook_events + billing_webhook_claims + tickets deleted -> billing_transfer_recovery still exposes the pending transfer; redelivery reclaims the same transfer, source loss releases destination, webhook completes.\nA9 interleaved account switch A->B->C: B (destination of T1, source of T2) and C; with provider-confirmed losses only C is premium, both transfers confirmed, recovery empty.\nA10 conflicting payload for same event id (permuted sources): claim and enqueue -> 22023; single transfer/enqueued row.\nA11 two sources split + Auth deletion: one lost, one entitled -> held, destination mirrors own verdict; entitled source deleted from auth.users -> next destination reconciliation confirms.\nA12 double admission under one lease: fresh tickets but 1 transfer, 2 sides, 1 enqueued row; first tickets settle and complete.\nA13 concurrency (dblink, second session observed blocking on a row lock before first commits): (a) source then destination, (b) destination then source, (c) two destinations racing after source confirmed -> each applied once, one 'confirmed' audit row, (d) enqueue of S2->D racing the commit of S1's loss for S1->D -> T1 confirmed, T2 pending, D withheld by T2 until S2 confirmed. No deadlock, no duplicate transitions.\nA14 destination deleted from Auth while withheld: no entitlement row fabricated, side marked user_missing_at, transfer confirms, verdict for missing user -> outcome user_missing; unrelated user's sync never withheld and has no recovery entries.\nA15 stale-verdict resurrection via out-of-order tickets: newer inactive sync applied, older active TRANSFER ticket afterwards neither raises nor rewrites the side nor applies; source confirmation applies the newest (inactive) verdict, entitlement row keeps newest verification_order.\n\nObservations (not breaks): (1) a source re-verified on a newer ticket reports applied=true because the row's verification_order/verified_at advance (pre-existing base semantics). (2) run_rls_tests.sh enumerates test files explicitly, so the new attack file is not picked up by the runner unless added there (not done: runner is outside attacker write scope). (3) INFERRED from code: complete_billing_webhook is unchanged by the candidate; its 55000 for a withheld destination relies on no entitlement row at >= the ticket's order, so a newer applied inactive sync lets the webhook complete while the (superseded) withheld verdict's transfer stays pending in recovery - consistent behaviour, not a defect."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/270e2ff7-fe86-4015-813a-9ea7afa87a41/ac1_run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-03-AC1",
+            "note": "VERIFIED on HEAD 00da1b9e (repo checkout /home/ubuntu/repos/Pickle-Sensei, Docker postgres:16). 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 suites (security_regression.sql incl. new W07 blocks, account_deletion matrix, analysis release policy) = 12 suite runs, all reporting 'ALL CASES PASSED' / 'PASS' (12 occurrences of 'ALL CASES PASSED' in the log; 0 ERROR lines). Counts are suite runs; the SQL matrices are assertion-based (raise exception on failure), not per-test counters. Local copy: /home/ubuntu/w07/logs/ac1_run_rls_tests.log.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/270e2ff7-fe86-4015-813a-9ea7afa87a41/ac1_run_rls_tests.log",
+            "command": "git worktree add <wt> 8ba4849d42cfb90920f886f06cd4c5d05eba1c47 && cp supabase/tests/security_regression.sql <wt>/supabase/tests/ && (cd <wt> && ./supabase/tests/run_rls_tests.sh)  # BASE; then on HEAD: ./supabase/tests/run_rls_tests.sh",
+            "executed": 31,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-03-AC2",
+            "note": "PROOF exit 0: new tests FAIL on BASE and PASS on candidate. BASE run (VERIFIED): checked out 8ba4849d in a clean worktree, copied ONLY the final supabase/tests/security_regression.sql from HEAD over it (git status: 1 modified file), ran ./supabase/tests/run_rls_tests.sh -> exit 3; first failure 'psql:/tests/security_regression.sql:5540: ERROR: relation \"api_private.billing_transfers\" does not exist' (the W07-T header block; barrier/destination-not-premium cases W07-T*, W07-R2-*, W07-R3-* cannot run on BASE because the queue does not exist); BASE counts: executed 1 W07 block, passed 0, failed 1, skipped 0; BASE artifact: https://la-hacks-rttothemoon.devinenterprise.com/attachments/5dabcc2b-66f3-4064-b76c-c8d5003e59a3/ac2_base_run_rls_tests.log (a second BASE run through the shim harness /home/ubuntu/w07/build_db.sh base_tests also exit 3 at the same line: /home/ubuntu/w07/logs/ac2_base_run.log). Candidate run (VERIFIED): ./supabase/tests/run_rls_tests.sh on HEAD 00da1b9e -> exit 0, 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED' and 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' in all 4 histories (artifact above); candidate counts are the 31 new W07 do-blocks (134 distinct W07-* assertion labels, incl. barrier core W07-T*: destination withheld/no entitlement row/55000 until source loss; A5a/A5b/A6 as W07-R3-*), all passed, 0 failed, 0 skipped. Shim-harness candidate run also exit 0: https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f7ff43d-0efe-4eb2-a289-44e903128dc2/ac2_head_run.log.",
+            "passed": 31,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: copied ONLY supabase/tests/security_regression.sql over a clean BASE_SHA worktree and ran the canonical ./supabase/tests/run_rls_tests.sh -> exit 3 at the first W07 relation reference; then built the migration (reusing the sound r2 queue/audit/RLS structure) and rewrote the destination barrier: blocker = open transfer where the user is an UNAPPLIED destination and some source side is neither verified nor missing from Auth; settle_billing_transfer applies destinations once sources are all verified, confirms when no source is still entitled and nothing is unresolved, else parks as 'held' (re-parking to pending/held tracks later source verdicts). Verified with the canonical runner on HEAD (4 histories), the prior adversary suite (w07_03_attacks.sql from origin/devin/pp/w07-03/attack-041d19a3) against HEAD, pnpm format:check and git diff --check.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/270e2ff7-fe86-4015-813a-9ea7afa87a41/ac1_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5dabcc2b-66f3-4064-b76c-c8d5003e59a3/ac2_base_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f7ff43d-0efe-4eb2-a289-44e903128dc2/ac2_head_run.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8641c1ff-0188-45a3-9488-7a98488fe71e/w07_03_attacks_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b1ab5c-a8b6-478f-8d15-3d039b5b47d1/w07_03_attacks_head_r3sig.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/479e26ff-bd4b-4e91-b3d1-bbe50080a336/format_check.log"
+        ],
+        "base_sha": "8ba4849d42cfb90920f886f06cd4c5d05eba1c47",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w07-03/impl-r3",
+        "files_changed": [
+          "supabase/migrations/20260908150000_billing_recovery_transfer.sql",
+          "supabase/tests/security_regression.sql"
+        ],
+        "head_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+        "out_of_scope_files": [],
+        "package_id": "W07-03",
+        "regression_tests_added": [
+          "supabase/tests/security_regression.sql: W07-T1..W07-T62 (transfer queue/barrier/append-only/RLS matrix incl. W07-T60..62 owner TRUNCATE refusal), W07-R2-* (source loss independent of destination, held source deleted from Auth, redelivery/replay), W07-R3-A5a-* (held stale transfer must not withhold destination's own purchase; webhook completes; syncs keep applying), W07-R3-A5b-* (applied destination side never re-barred; renewal applies and advances expires_at), W07-R3-A6-* (mutual S->D / D->S transfers with both provider-confirmed active: neither withheld); 31 new do-blocks, 134 distinct assertion labels"
+        ],
+        "residual_risks": [
+          "Prior-round adversary suite (w07_03_attacks.sql from origin/devin/pp/w07-03/attack-041d19a3, unmodified) against HEAD: exit 3, 14 PASS / 1 BREAK / 1 ERROR (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8641c1ff-0188-45a3-9488-7a98488fe71e/w07_03_attacks_head.log). A1 ERROR is a fixture mismatch: the probe calls the private helper as billing_destination_blocker(uuid, timestamptz) which this round replaces with billing_destination_blocker(uuid); with only that probe line patched to the new signature (uncommitted copy) the suite is 15 PASS / 1 BREAK, A1 role isolation PASS (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9b1ab5c-a8b6-478f-8d15-3d039b5b47d1/w07_03_attacks_head_r3sig.log). A5a, A5b, A6 (the three prior-round P1 breaks) PASS; A8t owner TRUNCATE now refused.",
+          "A7 'clock boundaries' from the prior adversary suite reports BREAK by design conflict, not by accident: that probe expects a provider-confirmed *active* source to keep withholding the destination's own provider-confirmed active verdict (withheld=true, state=held). That expectation is the same mechanism that produced A5a/A6 (a still-entitled lifetime source starving the destination forever; mutual holds). Round 3 resolves it in favour of the prior-round 'expected' text for A5a/A6: once every source is provider-confirmed, the transfer parks as held and both accounts mirror their own provider verdicts, so the destination applies. The transfer stays held (visible in billing_transfer_recovery, re-settled on redelivery) and the source keeps exactly what the provider confirmed; the barrier still holds while any source is unverified. If the coordinator prefers the A7 expectation (hold until source expiry lapses), A5a/A6 cannot simultaneously hold for a lifetime source; a decision is needed. Independent regression coverage for held-source/expiry lapse in security_regression.sql covers the new semantics (W07-R2/W07-R3 blocks).",
+          "Counts for SQL matrices are suite/do-block level (assertion-based tests raise on failure); no per-assertion runner counters exist in this repo.",
+          "Edge function supabase/functions/api/index.ts was not modified (edge-index serial group not held): the RPC signatures begin_billing_verification / persist_billing_verdict / complete_billing_webhook are unchanged and TRANSFER queueing happens inside begin_billing_verification, so the shipping path is wired without Edge edits (INFERRED from reading index.ts; Deno Edge tests not run for this SQL-only package)."
+        ],
+        "summary": "Defect on BASE_SHA (VERIFIED): no durable transfer queue exists. supabase/functions/api/index.ts handles RevenueCat TRANSFER events through the generic begin_billing_verification -> persist_billing_verdict -> complete_billing_webhook sequence (migration 20260907120000_billing_webhook_lease.sql defines these RPCs); there is no api_private.billing_transfers/_sides/_audit relation (BASE run of the new tests fails at security_regression.sql:5540 'relation \"api_private.billing_transfers\" does not exist'), so a destination's active verdict is applied as soon as it lands, with no barrier on the source's provider-confirmed loss and no append-only audit. Fix (forward migration 20260908150000_billing_recovery_transfer.sql, later than every existing migration; no applied migration edited): api_private.billing_transfers (state pending|held|confirmed, settled_at iff confirmed), api_private.billing_transfer_sides (source/destination per user, verdict+verification_order+applied_at+user_missing_at), api_private.billing_transfer_audit (identity id, enumerated actions); RLS enabled with zero policies and ALL privileges revoked from public/anon/authenticated/service_role; append-only triggers (row-level UPDATE/DELETE + statement-level TRUNCATE) refuse deleting or truncating any transfer history, mutating audit rows, reopening confirmed transfers, mutating applied sides or regressing verification order; public.enqueue_billing_transfer(event_id,payload,lease_token) and public.billing_transfer_recovery() are SECURITY DEFINER, search_path='', executable by service_role only, and enqueue requires the live webhook lease; private helpers (billing_destination_blocker(uuid), reconcile_billing_transfer_sources, settle_billing_transfer, apply_billing_transfer_side, note_billing_transfer, guard_billing_transfer_history) have EXECUTE revoked from all client and service roles. Wiring into the shipping path (behaviour, not an unused module): begin_billing_verification is replaced (same signature) to enqueue TRANSFER payloads (transferred_from/transferred_to app_user_ids, folded/deduped, 1..16 parties, replay idempotent, conflicting payload 22023) under the lease before issuing tickets; persist_billing_verdict is replaced (same signature) so the verdict is recorded on every open side for that user, the source loses as soon as its verdict lands, and a destination that is an unapplied destination of any open transfer whose source is still unverified (and present in Auth) is withheld (applied=false, withheld=true, billing.premium=false, no entitlement row, transfer={id,event_id,state}); complete_billing_webhook keeps raising 55000 while a ticket is withheld so RevenueCat redelivers; recovery/redelivery re-settles (a source missing from Auth is authoritatively absent). Barrier semantics resolved for the prior-round breaks: once every source of the transfer is provider-confirmed, both accounts mirror their own provider verdicts — a source the provider still reports entitled parks the transfer as 'held' (retains its entitlement, transfer stays visible in billing_transfer_recovery) but no longer withholds the destination's own provider-confirmed purchase/sync (A5a: INITIAL_PURCHASE applies, webhook completes, syncs keep applying); applied_at is not null destination sides are excluded from the blocker so a later source purchase re-parks the transfer as held without re-barring the applied destination's renewal (A5b: renewal applies, expires_at advances); mutual S->D / D->S transfers with both accounts confirmed active on their own tickets leave neither withheld (A6). Commits: 2479d506 test(sql) regression matrix, 80d2a4e1 test(sql) TRUNCATE refusal, 00da1b9e feat(sql) migration. Pushed devin/pp/w07-03/impl-r3 = 00da1b9e1e8b4778e08220ce84f0093a64a83672 (plain push, no force). No PR opened. Hygiene VERIFIED: pnpm format:check exit 0 ('All matched files use Prettier code style!'), git diff --check exit 0, git diff --name-only BASE..HEAD lists exactly the two write_paths."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d39222a-51d2-400e-b437-42d9e311052b/ac1_head_run_rls_tests.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-03-AC1",
+            "note": "VERIFIED by reviewer on HEAD 00da1b9e in /home/ubuntu/repos/Pickle-Sensei (Docker postgres:16). Runner covered 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 3 suites (security_regression.sql incl. new W07 transfer blocks + W07 CONCURRENT BILLING MATRIX, account-deletion matrix, analysis release policy) = 12 suite runs; 12 occurrences of 'ALL CASES PASSED', 0 ERROR lines, final line 'Analysis release policy authority: PASS', EXIT=0. Local copy: /home/ubuntu/w07review/logs/ac1_head_run_rls_tests.log.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a1d0618-c269-41fa-a82d-914139f5ff6c/ac2_base_run_rls_tests.log",
+            "command": "git worktree add /home/ubuntu/w07review/base_wt 8ba4849d42cfb90920f886f06cd4c5d05eba1c47 && cp supabase/tests/security_regression.sql /home/ubuntu/w07review/base_wt/supabase/tests/ && (cd /home/ubuntu/w07review/base_wt && ./supabase/tests/run_rls_tests.sh)  # BASE must FAIL; then on HEAD: ./supabase/tests/run_rls_tests.sh must PASS",
+            "executed": 31,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-03-AC2",
+            "note": "PROOF exit 0: new tests FAIL on BASE and PASS on candidate. BASE run (VERIFIED): clean worktree at 8ba4849d (git rev-parse HEAD confirmed), ONLY supabase/tests/security_regression.sql copied from candidate (git status --short: exactly ' M supabase/tests/security_regression.sql'); ./supabase/tests/run_rls_tests.sh -> EXIT=3 in the first history ('fresh') at 'psql:/tests/security_regression.sql:5540: ERROR: relation \"api_private.billing_transfers\" does not exist' (the first W07-T header block; every barrier case W07-T*, W07-R2-*, W07-R3-* is unreachable on BASE because the queue does not exist); BASE counts: executed 1 W07 block, passed 0, failed 1, skipped 0; 0 occurrences of 'ALL CASES PASSED'. BASE log: /home/ubuntu/w07review/logs/ac2_base_run_rls_tests.log (uploaded as artifact). Candidate run (VERIFIED): same runner on HEAD 00da1b9e -> exit 0, 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' + 'W07 CONCURRENT BILLING MATRIX: ALL CASES PASSED' in all 4 histories (https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d39222a-51d2-400e-b437-42d9e311052b/ac1_head_run_rls_tests.log). Candidate counts = 31 new W07 do-blocks (134 distinct W07-* labels; barrier core W07-T17..T20/T53 destination withheld, applied=false, premium=false, no entitlement row, complete_billing_webhook 55000 until source loss; W07-R2-1..8 sync-verdict withheld; W07-R2-16..24 shared destination) all passed.",
+            "passed": 31,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d39222a-51d2-400e-b437-42d9e311052b/ac1_head_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a1d0618-c269-41fa-a82d-914139f5ff6c/ac2_base_run_rls_tests.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Design decision surfaced (not a defect): once every source of a transfer is provider-confirmed, a source the provider still reports ENTITLED parks the transfer as 'held' and the destination's OWN provider-confirmed verdict applies (migration lines 320-380 settle_billing_transfer; tests W07-T31..T36, W07-R2-9/10, W07-R3-*). The destination never gains anything the provider did not confirm for it, and the barrier holds while any source is unverified, so this satisfies 'destination not premium before confirmation'; but it is the opposite of the prior adversary probe A7 (hold until source expiry lapses). Coordinator should ratify one reading; both cannot hold for a lifetime source (A5a/A6).",
+          "public.billing_transfer_recovery(uuid) is a service-role read RPC that no shipping Edge path calls yet (INFERRED: grep of supabase/functions/api/index.ts). The queue itself IS wired (begin_billing_verification enqueues, persist_billing_verdict withholds, complete_billing_webhook keeps 55000), so the objective is met as behaviour; 'held' transfers are only re-settled on webhook redelivery or a later verdict for a party, never by a sweeper — an operational visibility gap to track in a later package.",
+          "Counts for AC1 are suite runs (12 = 4 histories x 3 matrices); the SQL matrices are assertion-based (raise on failure) and the repo has no per-assertion counter. AC2 candidate counts are the 31 new W07 do-blocks (134 distinct W07-* labels) inside the security_regression matrix."
+        ],
+        "package_id": "W07-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "00da1b9e1e8b4778e08220ce84f0093a64a83672",
+        "scope_violation": false,
+        "summary": "APPROVE W07-03 candidate devin/pp/w07-03/impl-r3 @ 00da1b9e1e8b4778e08220ce84f0093a64a83672 (BASE 8ba4849d). SCOPE (VERIFIED): git diff --numstat BASE..HEAD = exactly the two write_paths, 864/0 and 1299/0 lines (purely additive, zero deletions => no existing code comments or applied migrations edited); 20260908150000 is later than every existing migration (last prior: 20260908100000); git diff --check exit 0; out_of_scope_files empty; scope_violation=false. WIRING (INFERRED from supabase/functions/api/index.ts, unchanged, edge-index group not held): the webhook handler already calls begin_billing_verification(subjects, eventId, body, lease) -> persist_billing_verdict -> complete_billing_webhook; the migration replaces begin/persist with the SAME signatures so TRANSFER payloads are enqueued under the live lease and destination verdicts are withheld inside the shipping path; the withheld response {outcome:'persisted', applied:false, withheld:true, billing:{premium:false,...,verifiedAt}} satisfies the Edge's persistedBillingSnapshot() shape (index.ts:3430-3452, 3573) so no Edge change is needed; complete_billing_webhook keeps raising 55000 so RevenueCat redelivers. Objective met as shipped behaviour (W07-T52..T58 exercise exactly that path). SECURITY (VERIFIED by matrix + read): api_private.billing_transfers/_sides/_audit have RLS enabled, zero policies, ALL privileges revoked from public/anon/authenticated/service_role (migration lines 74-79); append-only enforced by BEFORE UPDATE/DELETE row triggers + BEFORE TRUNCATE statement triggers (lines 81-130; W07-T45..T51, T59..T62 incl. owner TRUNCATE refusal); enqueue_billing_transfer and billing_transfer_recovery are SECURITY DEFINER, search_path='', executable only by service_role, enqueue requires a live webhook lease; private helpers revoked from all roles (W07-T1..T16 assert all of this). No grants widened, no session checks weakened, billing_entitlements still written only via the service-role RPC. BILLING CONSERVATION: source loses on its own verdict immediately (W07-R2-4, R2-38/39 even when the destination cannot be applied); destination gains only its own provider-confirmed verdict and only after every source is verified or authoritatively absent; withheld verdicts write no entitlement row; replay is idempotent, conflicting payload raises 22023, malformed/anonymous-only transfers queue nothing (T41..T44). No test weakening: diff adds tests only, no || true / skips / timeouts. AC1 VERIFIED: ./supabase/tests/run_rls_tests.sh exit 0, 12/12 suite runs passed (4 histories x 3 matrices), 0 failed/skipped. AC2 VERIFIED: BASE worktree + ONLY the candidate test file -> exit 3 at security_regression.sql:5540 'relation api_private.billing_transfers does not exist'; HEAD -> exit 0 with all 31 new W07 do-blocks passing; regression_fails_on_base=true. Non-blocking: (1) coordinator decision on held-transfer semantics (destination applies once all sources are provider-confirmed even if a source remains entitled) vs the prior A7 probe expectation — the candidate's reading never fabricates entitlement and is internally consistent, tested, and documented; (2) billing_transfer_recovery has no shipping caller and held transfers are only re-settled on redelivery/later verdicts. No PR opened, nothing deployed, no production/App Store/secrets touched.",
+        "verdict": "approve"
+      },
+      "round": 3,
+      "winning_lane": 1
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-7-keep"
+}

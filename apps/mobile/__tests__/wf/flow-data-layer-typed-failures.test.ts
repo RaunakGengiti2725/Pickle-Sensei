@@ -37,6 +37,10 @@ import {
 } from '../../src/account/apiSession';
 import { MODEL_TRAINING_CONSENT_VERSION } from '../../src/account/consentApi';
 import { useConsentStore } from '../../src/state/consentStore';
+import {
+  drainRows,
+  executeSyncSql,
+} from '../../test-support/outboxScheduleFake';
 
 const mockGetDb = jest.fn<LocalDb, []>();
 jest.mock('../../src/data/db', () => ({
@@ -116,6 +120,7 @@ function fakeDb() {
     payload: string;
     attempts: number;
     last_error: string | null;
+    repair_reason?: string | null;
   }
   const outbox: OutboxRow[] = [];
   const receipts: Array<{ owner: string; entityId: string }> = [];
@@ -141,18 +146,14 @@ function fakeDb() {
         );
         return { rows: hit ? [{ 1: 1 }] : [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
-      if (sql.startsWith('SELECT attempts, last_error FROM outbox')) {
+      if (
+        sql.startsWith('SELECT attempts, last_error, repair_reason FROM outbox')
+      ) {
         // getShotOutboxStatus: the newest shot.sync row for this shot id.
         const row = [...outbox]
           .reverse()
@@ -164,7 +165,13 @@ function fakeDb() {
           );
         return {
           rows: row
-            ? [{ attempts: row.attempts, last_error: row.last_error }]
+            ? [
+                {
+                  attempts: row.attempts,
+                  last_error: row.last_error,
+                  repair_reason: row.repair_reason ?? null,
+                },
+              ]
             : [],
         };
       }
@@ -260,6 +267,7 @@ afterEach(() => {
 describe('consent toggle → consentStore (typed failure, no optimistic state)', () => {
   beforeEach(() => {
     resetConsentStore();
+    setActiveDataOwner(session.canonicalAppUserId);
     establishApiSession(session);
   });
 
@@ -309,6 +317,7 @@ describe('consent toggle → consentStore (typed failure, no optimistic state)',
     expect(useConsentStore.getState().availability).toBe('loading');
 
     // User signs out (SettingsScreen re-hydrates on session change).
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
     await useConsentStore.getState().hydrate();
     expect(useConsentStore.getState().availability).toBe('signed_out');
@@ -376,6 +385,7 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
       'local_session',
       'local_capture',
       'local_analysis_record',
+      'analysis_run_journal',
       'outbox',
       'sync_receipt',
     ]) {
@@ -383,10 +393,11 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
         expect.stringContaining(`DELETE FROM ${table}`),
       );
     }
-    // profile, rank.celebrated, notifications, consistency, practice.set
-    // (repository.ts OWNER_SCOPED_KV_NAMESPACES).
+    // profile, rank.celebrated, notifications, consistency, practice.set,
+    // billing.pending-fulfilment, analysis.release-policy,
+    // walkthrough.complete (repository.ts OWNER_SCOPED_KV_NAMESPACES).
     expect(inTx.filter(sql => sql.startsWith('DELETE FROM kv'))).toHaveLength(
-      5,
+      8,
     );
     expect(log.includes('ROLLBACK')).toBe(false);
     expect(useAuthStore.getState().deletionCleanup).toEqual({
@@ -418,8 +429,17 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
     // alerts on `localPurge === 'failed'`.
     const { db } = fakeDb();
     let attempts = 0;
+    const authKv = new Map<string, string>();
     const failing: LocalDb = {
-      async execute(sql, params) {
+      async execute(sql, params = []) {
+        if (sql.startsWith('SELECT value FROM kv')) {
+          const value = authKv.get(String(params[0]));
+          return { rows: value === undefined ? [] : [{ value }] };
+        }
+        if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+          authKv.set(String(params[0]), String(params[1]));
+          return { rows: [] };
+        }
         if (sql === 'BEGIN IMMEDIATE') {
           attempts += 1;
           throw new Error('database is locked');
@@ -512,7 +532,11 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
         rejected: [],
       }),
     });
-    const begin = log.indexOf('BEGIN IMMEDIATE');
+    const receipt = log.findIndex(sql =>
+      sql.includes('INSERT OR REPLACE INTO sync_receipt'),
+    );
+    const begin = receipt - 1;
+    expect(log[begin]).toBe('BEGIN IMMEDIATE');
     expect(log[begin + 1]).toContain('INSERT OR REPLACE INTO sync_receipt');
     expect(log[begin + 2]).toContain('DELETE FROM outbox');
     expect(log[begin + 3]).toBe('COMMIT');

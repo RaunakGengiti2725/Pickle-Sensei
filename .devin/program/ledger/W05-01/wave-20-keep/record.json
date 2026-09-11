@@ -1,0 +1,669 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W05-01-r4",
+      "phase": "implement",
+      "prompt_sha256": "db6481245bb09c0a14d509a948da275348a8eb1d220691c4371e403f329ab406",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W05-01-r4-c2",
+      "phase": "implement",
+      "prompt_sha256": "d280eef40ea318f49183288edd7fe03386e6465c848e7b765a5cb9f65f664c1b",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W05-01-r5",
+      "phase": "implement",
+      "prompt_sha256": "cce865640ba130af93bac3693c54364bea44d60a4cd09ef15fd0819c7b9c1ceb",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W05-01-r5-c2",
+      "phase": "implement",
+      "prompt_sha256": "e7d37ad87687d2a8e2c01b92343f78e2189dafa839c59161072437ca002a4415",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+  "competing": 2,
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-01",
+  "requeued_from": {
+    "branch": "devin/pp/w05-01/impl-r3",
+    "findings": {
+      "adversary_branch": "devin/pp/w05-01/attack-1549b6aa",
+      "adversary_breaks": [
+        {
+          "expected": "Native validation must be at least as strict as the JS read-back parser (reject with invalid_receipt, write nothing) or the wrapper must refuse the receipt before calling native; a natively committed wallet must never be unreadable through the typed bridge. VERIFIED on Linux JSONSerialization (swift-6.0.3); Apple's JSONSerialization documents that input 'may or may not have a BOM' (INFERRED for iOS, rerun the Swift test on the Mac runner to confirm).",
+          "observed": "OfflineWallet.replace(...receipts:[payloadJson:\"\\u{FEFF}{...}\"]) returns a revision-1 snapshot and writes 264 bytes to wallet.v1.<owner> (OfflineWalletShape.isJsonObject uses JSONSerialization, which tolerates a BOM). TS replaceOfflineWallet rejects with failure 'bridge_contract' (parseSnapshot -> isJsonObjectText -> JSON.parse throws) AFTER native.replaceWallet resolved; the fake native shows walletRevision 1. Every later loadOfflineWallet(owner) rejects bridge_contract, discardCorruptOfflineWallet rejects not_corrupt (native verifies fine), and clear needs the revision the caller never received.",
+          "repro": "Swift (Linux surrogate of native/vision-core): cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testReplaceRejectsReceiptPayloadWithByteOrderMarkThatJsCannotParse ; Jest: cd apps/mobile && npx jest __tests__/offlineWalletNativeAttack.test.ts -t 'refuses a receipt payload JS cannot parse back'",
+          "severity": "P1",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift; apps/mobile/__tests__/offlineWalletNativeAttack.test.ts",
+          "title": "Native accepts a receipt payload the JS bridge cannot parse (UTF-8 BOM) -> replace commits the wallet natively but rejects bridge_contract; owner's wallet then unreadable from JS (load -> bridge_contract, discardCorrupt -> not_corrupt)"
+        },
+        {
+          "expected": "discardCorrupt must throw not_corrupt (or re-read/CAS-verify the key before deleting) and leave wallet/fence intact. Reachability: the shipping bridge uses one OfflineWallet on a serial queue, so this needs a second instance/process — but OfflineWallet.swift's own header documents exactly that multi-instance/multi-process concurrency as a supported case.",
+          "observed": "readState reads key -> fence -> wallet as three non-atomic store reads. Instance B completes the owner's first replace (key+fence+wallet, receipt 'receipt-unsent') between A's key read (nil) and A's fence read. A's discardCorrupt classifies the state as integrityKeyMissing ('wallet present without its integrity key'), which satisfies isUnreadableState, and deletes wallet.v1.<owner> and fence.v1.<owner>; load afterwards returns nil — the committed receipt is gone with no error.",
+          "repro": "cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet",
+          "severity": "P1",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift",
+          "title": "discardCorrupt racing another OfflineWallet instance's first write for the same owner deletes a healthy wallet and its fence (unsent receipt lost)"
+        }
+      ],
+      "adversary_nonblocking_fix_if_crash_or_cheap": [
+        {
+          "expected": "Either nil (pre-write view) or the revision-1 snapshot; a concurrent legitimate write must only ever be observed as wallet-ahead-of-fence, as the doc comment promises for the fence — the same reasoning must cover the key read.",
+          "observed": "Same interleaving as above: load throws OfflineWalletError(integrityKeyMissing, 'wallet present without its integrity key'), an outcome the TS wrapper treats as isOfflineWalletUnreadable => callers are steered to discardCorrupt.",
+          "repro": "cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable",
+          "severity": "P2",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift",
+          "title": "load racing another instance's first write is reported as integrity_key_missing (unreadable-state failure) for a healthy owner"
+        },
+        {
+          "expected": "clear must commit the fence to the observed wallet revision (as replace does) so revision 2 is never handed out twice and the older authentic envelope is detected as rollback. Requires a crash in the wallet->fence window plus a later Keychain restore, hence P2.",
+          "observed": "Wallet at revision 2, fence left at 1 (process died before commitFence). Relaunched instance: load -> revision 2 (ok), clear(expectedRevision: 2) deletes the wallet and leaves fence=1, next replace(expectedRevision: 0) returns revision 2 (expected 3). Restoring the pre-clear revision-2 envelope then loads as current state (no .tampered), although the doc comment states 'the fence survives clear, so revisions never restart for an owner on this installation'.",
+          "repro": "cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision",
+          "severity": "P2",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift",
+          "title": "clear after a crash between the wallet write and the fence commit does not repair the fence -> the next replace reuses a revision number and the pre-clear authentic envelope replays as current state"
+        },
+        {
+          "expected": "invalid_receipt, nothing written. Must be re-run on the Mac runner: if Apple's JSONSerialization rejects the trailing comma this entry is Linux-surrogate-only and not a shipping break.",
+          "observed": "replace returns revision 1 and writes 197 bytes for payloadJson '{\"a\":1,}'; node JSON.parse of the same text throws.",
+          "repro": "cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testReplaceRejectsReceiptPayloadWithTrailingCommaThatJsCannotParse",
+          "severity": "P2",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift",
+          "title": "Trailing-comma JSON receipt payload ('{\"a\":1,}') accepted natively, rejected by JSON.parse (same bridge-wedge chain as the BOM break) — VERIFIED on Linux swift-6.0.3 JSONSerialization only, Apple parser UNKNOWN"
+        },
+        {
+          "expected": "Design limitation rather than a coding defect: the fence lives in the same Keychain store as the item it fences, so a whole-store restore cannot be detected without an out-of-store monotonic anchor. Reported so the 'anti-rollback' claim in the implementer summary is scoped correctly.",
+          "observed": "After revision 2 (grant spent, receipt stored), restoring both wallet.v1.<owner> and fence.v1.<owner> bytes from revision 1 loads as revision 1 with the spent grant present and the receipt gone; no .tampered.",
+          "repro": "cd ~/surrogate && swift test --filter OfflineWalletAttackTests/testRestoringWalletAndFenceTogetherIsDetectedAsRollback",
+          "severity": "P3",
+          "test_file": "native/vision-core/Tests/OfflineWalletAttackTests.swift",
+          "title": "Full-state rollback (wallet AND fence restored from the same earlier point) is indistinguishable from current state — anti-rollback only covers a partial restore"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 2"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "1549b6aa2e457ef32548941421bf797ccaca019b"
+  },
+  "rounds": [
+    {
+      "adversary": null,
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W05-01-AC1 status UNKNOWN"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a3873d2-05f8-47db-a655-adafa1c0b0fa/swift-surrogate-linux.log",
+            "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+            "executed": 0,
+            "exit_code": -1,
+            "failed": 0,
+            "id": "W05-01-AC1",
+            "note": "NOT RUN by this session (Mac runner is coordinator-owned per the package rules) — UNVERIFIED on Apple. Linux surrogate only (INFERRED for iOS): Swift 6.0.3 Linux SwiftPM package symlinking native/vision-core/Sources/OfflineWallet.swift + Tests/OfflineWalletTests.swift: `cd ~/surrogate && swift test --filter OfflineWalletTests` exit 0, Executed 49 tests, 0 failures (artifact linked). Pre-fix run of the same tests against the r3 implementation (commit a3ecb1e4 tests on 1549b6aa-derived source): 49 executed, 6 failing tests (testReceiptShapeValidation BOM/trailing-comma, testClearAfterCrash..., testLoadRacing..., testDiscardCorruptRacing..., testReplaceRacing..., testStateThatNeverSettles...). The new validator no longer depends on JSONSerialization, so the Linux/Apple parser difference the adversary flagged is removed by construction; the Mac run must still confirm compilation and XCTest on the iOS Simulator.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "UNKNOWN"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7f13eb9-836f-4391-b4ad-dbdc7b84ca3a/tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-01-AC2",
+            "note": "VERIFIED at HEAD 6cdd3ab9 after `cd apps/mobile && npm ci` (the pre-installed node_modules lacked the declared @sentry/react-native dependency and produced 21 unrelated diagnostics errors before reinstall). Empty log = no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Start from BASE_SHA, reuse the sound r3 commits (pod symlink + podspec line + bridge + wrapper), then: (1) tests first (commit a3ecb1e4), verified failing on the r3 implementation (6 tests) in the Linux Swift surrogate and Jest; (2) fix (commit 6cdd3ab9): replace JSONSerialization in OfflineWalletShape.isJsonObject with a strict non-recursive RFC 8259 scanner matching JSON.parse; split readState into readRawItems + pure classify and only report a fault once two consecutive passes see identical bytes (bounded at 4 passes -> revision_conflict, nothing deleted); make clear commitFence to the observed wallet revision when the fence is behind before deleting; JS replaceOfflineWallet pre-validates via a parseContents helper shared with parseSnapshot.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7f13eb9-836f-4391-b4ad-dbdc7b84ca3a/tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a3873d2-05f8-47db-a655-adafa1c0b0fa/swift-surrogate-linux.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/af7bdf73-b634-4bfc-b761-203939698982/mobile-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d633f18e-40f2-4679-abaa-a4aa6497a60b/format-check.log"
+        ],
+        "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — exit 2 with 21 errors under src/diagnostics/* (Cannot find module '@sentry/react-native') when run against the snapshot's stale node_modules; resolved by `npm ci` (environment, not code). Not a code failure on BASE_SHA.",
+          "cd apps/mobile && npx jest --silent — `Test Suites: 1 skipped, 325 passed, 325 of 326; Tests: 1 skipped, 6542 passed, 6543` exit 0; the one skipped suite is importedRealFootageAnalysis.test.ts (describe.skip when Mac-generated artifacts are absent), the documented environmental non-gate in docs/devin/TEST_MATRIX.md."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w05-01/impl-r4",
+        "files_changed": [
+          "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+          "apps/mobile/src/native/offlineWallet.ts",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts",
+          "native/vision-core/Sources/OfflineWallet.swift",
+          "native/vision-core/Tests/OfflineWalletTests.swift"
+        ],
+        "head_sha": "6cdd3ab97fb754636561c7586fef151e25a2389e",
+        "out_of_scope_files": [
+          "native/vision-core/Sources/OfflineWallet.swift — canonical wallet implementation that the shipping pod compiles via the repository-relative symlink apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift (podspec source_files); all three adversary defects (JSONSerialization leniency, non-atomic readState, clear not committing the fence) live here, so the fix must land here to reach the shipping path. Not under any serial_group_paths prefix.",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — symlink (carried from r3) wiring the canonical file into the pod; under native-pod which this package holds.",
+          "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — one additive source_files line (carried from r3) so the pod compiles OfflineWallet.swift; under native-pod which this package holds.",
+          "apps/mobile/src/native/offlineWallet.ts — typed JS bridge wrapper (part of the objective's 'JS bridge with typed errors'); replaceOfflineWallet now pre-validates contents with the same read-back rules as parseSnapshot so a payload JSON.parse would refuse is rejected as invalid_receipt/invalid_grant/capacity_exceeded BEFORE native commits (adversary's stated alternative remedy). Not under any serial_group_paths prefix.",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression for the wrapper pre-validation. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W05-01",
+        "regression_tests_added": [
+          "native/vision-core/Tests/OfflineWalletTests.swift::testReceiptShapeValidation (extended: 45 JSON.parse-rejected payloads incl. BOM and trailing comma must be invalidReceipt with nothing written; 12 JSON.parse-accepted object texts must be accepted)",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testClearOfAnAbsentWalletLeavesTheFenceAlone",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testClearRacingAReplaceConflictsAndKeepsTheirWallet",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testReplaceRacingAnotherInstancesFirstWriteConflictsAndKeepsTheirReceipt",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testStateThatNeverSettlesFailsTypedAndDeletesNothing",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testConcurrentFirstWritesKeepOneKeyAndConflictTheLoser",
+          "native/vision-core/Tests/OfflineWalletTests.swift::testLaggingFenceCommitBehindAFasterWriterNeitherRegressesNorFails",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts::'refuses replace contents it could not read back, before native is called'"
+        ],
+        "residual_risks": [
+          "Apple XCTest on the iOS Simulator (AC1) is unverified by this session; the Linux surrogate is not authoritative for Apple runtime. Swift 6.0.3 compiled the strict scanner; syntax is Swift 5.9-compatible but the Xcode toolchain run is the proof.",
+          "Design limitation (adversary P3, unchanged, by design): the fence lives in the same Keychain store as the wallet, so a restore of BOTH wallet.v1.<owner> and fence.v1.<owner> from the same earlier point (whole-store rollback) is indistinguishable from current state. Anti-rollback covers partial restores (older wallet vs newer fence) only; detecting whole-store rollback needs an out-of-store monotonic anchor (e.g. server-side revision on reconciliation).",
+          "Related: clear commits the fence to the observed revision N (not N+1) so the next replace hands out N+1 as the existing tests/adversary require; restoring the pre-clear revision-N envelope BEFORE the owner writes again therefore reads as current state (same class as the whole-store limitation). Once the owner has written again it reads as .tampered.",
+          "readState settles on two identical consecutive passes with at most 4 passes; a store whose bytes change on every pass yields revision_conflict (retryable, deletes nothing). Under a sustained writer storm a discardCorrupt could keep conflicting until the writer stops."
+        ],
+        "summary": "W05-01 r4 on devin/pp/w05-01/impl-r4 @ 6cdd3ab97fb754636561c7586fef151e25a2389e (base ecdd8352). Defects on the r3 candidate (all in native/vision-core/Sources/OfflineWallet.swift, compiled into the shipping pod via the Sources/Core symlink): (a) OfflineWalletShape.isJsonObject used JSONSerialization, which accepts a UTF-8 BOM (and on Linux a trailing comma) that JSON.parse rejects -> native committed a wallet the typed JS bridge could never read (adversary P1 + P2); (b) readState's three non-atomic reads (key, fence, wallet) let another instance's first write be classified as integrityKeyMissing, so load reported a healthy owner unreadable and discardCorrupt deleted a healthy wallet + fence (adversary P1 + P2); (c) clear deleted the wallet without committing a lagging fence, so after a crash between wallet write and fence commit the next replace reused the revision and the old envelope replayed (adversary P2). Fixes: strict JSON.parse-equivalent scanner (no Foundation parser dependence, so no Linux/Apple divergence); readState reports a fault only when two consecutive passes observe identical bytes (max 4 passes, otherwise revision_conflict and nothing deleted); clear commits the fence to the observed revision before deleting; JS replaceOfflineWallet pre-validates contents (invalid_receipt/invalid_grant/capacity_exceeded before native). Adversary P3 (whole-store rollback undetectable) is a documented design limitation, recorded in residual_risks. VERIFIED: `cd apps/mobile && npx tsc --noEmit` exit 0; `cd apps/mobile && npx jest --silent` exit 0 (325 suites passed, 1 documented skip, 6542 tests passed); `pnpm format:check` exit 0; `git diff --check` exit 0; root `npx eslint` on the two changed TS files exit 0; Linux Swift surrogate `swift test --filter OfflineWalletTests` exit 0 with 49 executed / 0 failures (pre-fix: 6 of the new tests failed). NOT RUN: scripts/mac-full-verify.sh --remote (coordinator slot) — AC1 UNKNOWN. No PR opened, no force-push, nothing pushed to main or ci/mac-*."
+      },
+      "lanes": [
+        {
+          "adversary": null,
+          "blocked": false,
+          "decision": {
+            "accepted": false,
+            "criteria_examined": [
+              "implementer acceptance coverage"
+            ],
+            "reasons": [
+              "impl: W05-01-AC1 status UNKNOWN"
+            ]
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a3873d2-05f8-47db-a655-adafa1c0b0fa/swift-surrogate-linux.log",
+                "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+                "executed": 0,
+                "exit_code": -1,
+                "failed": 0,
+                "id": "W05-01-AC1",
+                "note": "NOT RUN by this session (Mac runner is coordinator-owned per the package rules) — UNVERIFIED on Apple. Linux surrogate only (INFERRED for iOS): Swift 6.0.3 Linux SwiftPM package symlinking native/vision-core/Sources/OfflineWallet.swift + Tests/OfflineWalletTests.swift: `cd ~/surrogate && swift test --filter OfflineWalletTests` exit 0, Executed 49 tests, 0 failures (artifact linked). Pre-fix run of the same tests against the r3 implementation (commit a3ecb1e4 tests on 1549b6aa-derived source): 49 executed, 6 failing tests (testReceiptShapeValidation BOM/trailing-comma, testClearAfterCrash..., testLoadRacing..., testDiscardCorruptRacing..., testReplaceRacing..., testStateThatNeverSettles...). The new validator no longer depends on JSONSerialization, so the Linux/Apple parser difference the adversary flagged is removed by construction; the Mac run must still confirm compilation and XCTest on the iOS Simulator.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "UNKNOWN"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7f13eb9-836f-4391-b4ad-dbdc7b84ca3a/tsc.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-01-AC2",
+                "note": "VERIFIED at HEAD 6cdd3ab9 after `cd apps/mobile && npm ci` (the pre-installed node_modules lacked the declared @sentry/react-native dependency and produced 21 unrelated diagnostics errors before reinstall). Empty log = no diagnostics.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Start from BASE_SHA, reuse the sound r3 commits (pod symlink + podspec line + bridge + wrapper), then: (1) tests first (commit a3ecb1e4), verified failing on the r3 implementation (6 tests) in the Linux Swift surrogate and Jest; (2) fix (commit 6cdd3ab9): replace JSONSerialization in OfflineWalletShape.isJsonObject with a strict non-recursive RFC 8259 scanner matching JSON.parse; split readState into readRawItems + pure classify and only report a fault once two consecutive passes see identical bytes (bounded at 4 passes -> revision_conflict, nothing deleted); make clear commitFence to the observed wallet revision when the fence is behind before deleting; JS replaceOfflineWallet pre-validates via a parseContents helper shared with parseSnapshot.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f7f13eb9-836f-4391-b4ad-dbdc7b84ca3a/tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6a3873d2-05f8-47db-a655-adafa1c0b0fa/swift-surrogate-linux.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/af7bdf73-b634-4bfc-b761-203939698982/mobile-jest.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d633f18e-40f2-4679-abaa-a4aa6497a60b/format-check.log"
+            ],
+            "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+            "baseline_failures_observed": [
+              "cd apps/mobile && npx tsc --noEmit — exit 2 with 21 errors under src/diagnostics/* (Cannot find module '@sentry/react-native') when run against the snapshot's stale node_modules; resolved by `npm ci` (environment, not code). Not a code failure on BASE_SHA.",
+              "cd apps/mobile && npx jest --silent — `Test Suites: 1 skipped, 325 passed, 325 of 326; Tests: 1 skipped, 6542 passed, 6543` exit 0; the one skipped suite is importedRealFootageAnalysis.test.ts (describe.skip when Mac-generated artifacts are absent), the documented environmental non-gate in docs/devin/TEST_MATRIX.md."
+            ],
+            "blocked": false,
+            "blocked_reason": "",
+            "branch": "devin/pp/w05-01/impl-r4",
+            "files_changed": [
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+              "apps/mobile/src/native/offlineWallet.ts",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts",
+              "native/vision-core/Sources/OfflineWallet.swift",
+              "native/vision-core/Tests/OfflineWalletTests.swift"
+            ],
+            "head_sha": "6cdd3ab97fb754636561c7586fef151e25a2389e",
+            "out_of_scope_files": [
+              "native/vision-core/Sources/OfflineWallet.swift — canonical wallet implementation that the shipping pod compiles via the repository-relative symlink apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift (podspec source_files); all three adversary defects (JSONSerialization leniency, non-atomic readState, clear not committing the fence) live here, so the fix must land here to reach the shipping path. Not under any serial_group_paths prefix.",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — symlink (carried from r3) wiring the canonical file into the pod; under native-pod which this package holds.",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — one additive source_files line (carried from r3) so the pod compiles OfflineWallet.swift; under native-pod which this package holds.",
+              "apps/mobile/src/native/offlineWallet.ts — typed JS bridge wrapper (part of the objective's 'JS bridge with typed errors'); replaceOfflineWallet now pre-validates contents with the same read-back rules as parseSnapshot so a payload JSON.parse would refuse is rejected as invalid_receipt/invalid_grant/capacity_exceeded BEFORE native commits (adversary's stated alternative remedy). Not under any serial_group_paths prefix.",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression for the wrapper pre-validation. Not under any serial_group_paths prefix."
+            ],
+            "package_id": "W05-01",
+            "regression_tests_added": [
+              "native/vision-core/Tests/OfflineWalletTests.swift::testReceiptShapeValidation (extended: 45 JSON.parse-rejected payloads incl. BOM and trailing comma must be invalidReceipt with nothing written; 12 JSON.parse-accepted object texts must be accepted)",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testClearAfterCrashBetweenWalletWriteAndFenceCommitDoesNotReuseARevision",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testClearOfAnAbsentWalletLeavesTheFenceAlone",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testClearRacingAReplaceConflictsAndKeepsTheirWallet",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testReplaceRacingAnotherInstancesFirstWriteConflictsAndKeepsTheirReceipt",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testStateThatNeverSettlesFailsTypedAndDeletesNothing",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testConcurrentFirstWritesKeepOneKeyAndConflictTheLoser",
+              "native/vision-core/Tests/OfflineWalletTests.swift::testLaggingFenceCommitBehindAFasterWriterNeitherRegressesNorFails",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts::'refuses replace contents it could not read back, before native is called'"
+            ],
+            "residual_risks": [
+              "Apple XCTest on the iOS Simulator (AC1) is unverified by this session; the Linux surrogate is not authoritative for Apple runtime. Swift 6.0.3 compiled the strict scanner; syntax is Swift 5.9-compatible but the Xcode toolchain run is the proof.",
+              "Design limitation (adversary P3, unchanged, by design): the fence lives in the same Keychain store as the wallet, so a restore of BOTH wallet.v1.<owner> and fence.v1.<owner> from the same earlier point (whole-store rollback) is indistinguishable from current state. Anti-rollback covers partial restores (older wallet vs newer fence) only; detecting whole-store rollback needs an out-of-store monotonic anchor (e.g. server-side revision on reconciliation).",
+              "Related: clear commits the fence to the observed revision N (not N+1) so the next replace hands out N+1 as the existing tests/adversary require; restoring the pre-clear revision-N envelope BEFORE the owner writes again therefore reads as current state (same class as the whole-store limitation). Once the owner has written again it reads as .tampered.",
+              "readState settles on two identical consecutive passes with at most 4 passes; a store whose bytes change on every pass yields revision_conflict (retryable, deletes nothing). Under a sustained writer storm a discardCorrupt could keep conflicting until the writer stops."
+            ],
+            "summary": "W05-01 r4 on devin/pp/w05-01/impl-r4 @ 6cdd3ab97fb754636561c7586fef151e25a2389e (base ecdd8352). Defects on the r3 candidate (all in native/vision-core/Sources/OfflineWallet.swift, compiled into the shipping pod via the Sources/Core symlink): (a) OfflineWalletShape.isJsonObject used JSONSerialization, which accepts a UTF-8 BOM (and on Linux a trailing comma) that JSON.parse rejects -> native committed a wallet the typed JS bridge could never read (adversary P1 + P2); (b) readState's three non-atomic reads (key, fence, wallet) let another instance's first write be classified as integrityKeyMissing, so load reported a healthy owner unreadable and discardCorrupt deleted a healthy wallet + fence (adversary P1 + P2); (c) clear deleted the wallet without committing a lagging fence, so after a crash between wallet write and fence commit the next replace reused the revision and the old envelope replayed (adversary P2). Fixes: strict JSON.parse-equivalent scanner (no Foundation parser dependence, so no Linux/Apple divergence); readState reports a fault only when two consecutive passes observe identical bytes (max 4 passes, otherwise revision_conflict and nothing deleted); clear commits the fence to the observed revision before deleting; JS replaceOfflineWallet pre-validates contents (invalid_receipt/invalid_grant/capacity_exceeded before native). Adversary P3 (whole-store rollback undetectable) is a documented design limitation, recorded in residual_risks. VERIFIED: `cd apps/mobile && npx tsc --noEmit` exit 0; `cd apps/mobile && npx jest --silent` exit 0 (325 suites passed, 1 documented skip, 6542 tests passed); `pnpm format:check` exit 0; `git diff --check` exit 0; root `npx eslint` on the two changed TS files exit 0; Linux Swift surrogate `swift test --filter OfflineWalletTests` exit 0 with 49 executed / 0 failures (pre-fix: 6 of the new tests failed). NOT RUN: scripts/mac-full-verify.sh --remote (coordinator slot) — AC1 UNKNOWN. No PR opened, no force-push, nothing pushed to main or ci/mac-*."
+          },
+          "lane": 1,
+          "review": null
+        },
+        {
+          "adversary": null,
+          "blocked": false,
+          "decision": {
+            "accepted": false,
+            "criteria_examined": [
+              "implementer acceptance coverage"
+            ],
+            "reasons": [
+              "impl: W05-01-AC1 status UNKNOWN"
+            ]
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da298bfc-8c11-4089-8267-5be168befd34/swift-test-linux-surrogate-candidate.log",
+                "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+                "executed": 0,
+                "exit_code": -1,
+                "failed": 0,
+                "id": "W05-01-AC1",
+                "note": "NOT RUN: the package forbids implementers from invoking the shared coordinator-owned Mac runner, so the iOS Simulator XCTest outcome is UNKNOWN for this candidate. Linux surrogate only (INFERRED for iOS): swift-6.0.3 `swift test` on a package holding exactly native/vision-core/Sources/OfflineWallet.swift + Tests/OfflineWalletTests.swift from HEAD -> exit 0, 'Executed 50 tests, with 0 failures (0 unexpected)'. Same surrogate on BASE (the test file from 65dff4a4 with no wallet source, as on BASE_SHA where none of the wallet files exist) -> exit 1, compile failure with 540 `cannot find 'OfflineWallet…' in scope` errors (https://la-hacks-rttothemoon.devinenterprise.com/attachments/2356b247-1e39-4098-a8ab-13eec8720e26/swift-test-linux-surrogate-base.log). The Apple Keychain adapter (SecItem*, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly) and CryptoKit path compile only on Apple platforms and are untested here; the XCTest suite itself uses an in-memory store so it runs identically on the Simulator.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "UNKNOWN"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5661ae7a-3367-4b6f-b9d8-8da607ba39e8/tsc.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-01-AC2",
+                "note": "VERIFIED at 741548cf after `cd apps/mobile && npm ci` (the pre-installed node_modules lacked @sentry/react-native@8.24.0 from package.json, producing 21 unrelated diagnostics errors before reinstall; zero errors after). Supporting VERIFIED runs at HEAD: `cd apps/mobile && npx jest __tests__/offlineWalletNative.test.ts` exit 0, 12/12 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/96eee362-7d7f-4a6e-bb68-8e499747d4d3/jest-offline-wallet-candidate.log; on base the suite cannot resolve ../src/native/offlineWallet -> exit 1, 0 tests: https://la-hacks-rttothemoon.devinenterprise.com/attachments/c580bf3c-53de-413b-8f49-7a0c2e9c6b77/jest-offline-wallet-base.log); `cd apps/mobile && npx jest --silent` exit 0, Test Suites 325 passed / 1 skipped, Tests 6542 passed / 1 skipped (the documented importedRealFootageAnalysis.test.ts Mac-artifact skip from docs/devin/TEST_MATRIX.md) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/2ed29e5a-5e0e-4d95-8122-9fedc4802812/jest-full-candidate.log); root `pnpm format:check` exit 0, `git diff --check ecdd8352..HEAD` exit 0, `npx eslint` on the two TS files exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0313cff6-69a7-49df-bfca-a3580e386f15/format-diffcheck-eslint.log).",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Started from BASE_SHA on a fresh branch; reproduced the five r3 adversary findings on a Linux SwiftPM surrogate of native/vision-core (swift-6.0.3) before changing code; committed regression tests first (Swift + Jest), then reused the sound parts of r3 and rewrote readState/classify, clear, commitFence and the JSON validator; wrapped receipts pre-native in the TS bridge; verified with tsc, targeted + full Jest, surrogate swift test (candidate vs base), prettier, eslint and git diff --check; pushed without opening a PR.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5661ae7a-3367-4b6f-b9d8-8da607ba39e8/tsc.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/da298bfc-8c11-4089-8267-5be168befd34/swift-test-linux-surrogate-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2356b247-1e39-4098-a8ab-13eec8720e26/swift-test-linux-surrogate-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/96eee362-7d7f-4a6e-bb68-8e499747d4d3/jest-offline-wallet-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c580bf3c-53de-413b-8f49-7a0c2e9c6b77/jest-offline-wallet-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2ed29e5a-5e0e-4d95-8122-9fedc4802812/jest-full-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0313cff6-69a7-49df-bfca-a3580e386f15/format-diffcheck-eslint.log"
+            ],
+            "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+            "baseline_failures_observed": [
+              "cd apps/mobile && npx tsc --noEmit — on the pre-provisioned VM node_modules (before `npm ci`) fails with 21 errors, all `Cannot find module '@sentry/react-native'` and dependents in src/diagnostics/*; an environment staleness issue, not a code defect: after `cd apps/mobile && npm ci` it exits 0 on BASE-equivalent trees and on HEAD."
+            ],
+            "blocked": false,
+            "branch": "devin/pp/w05-01/impl-r4-c2",
+            "files_changed": [
+              "apps/mobile/__tests__/offlineWalletNative.test.ts",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+              "apps/mobile/src/native/offlineWallet.ts",
+              "native/vision-core/Sources/OfflineWallet.swift",
+              "native/vision-core/Tests/OfflineWalletTests.swift"
+            ],
+            "head_sha": "741548cf0281dc0923f827d008deb9526836257d",
+            "out_of_scope_files": [
+              "native/vision-core/Sources/OfflineWallet.swift — the wallet core the frozen test path native/vision-core/Tests/OfflineWalletTests.swift exercises; SwiftPM compiles only Sources/ into the PickleVisionCore target, so the XCTest of AC1 cannot exist without it (new file, nothing existing touched).",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — repo-relative symlink to the core above, following the existing Sources/Core convention (ApplePoseProvider.swift etc.) so the pod ships the same implementation the XCTest proves (new file; under native-pod, which this package holds).",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — one additive source_files entry for Sources/Core/OfflineWallet.swift; without it PickleOfflineWallet.swift would not compile in the pod (under native-pod, held).",
+              "apps/mobile/src/native/offlineWallet.ts — the 'JS bridge with typed errors' named in the objective: typed OfflineWalletError, wallet.<failure> code mapping, snapshot re-validation and pre-native receipt refusal; new file, no serial group.",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression suite for the TS bridge (12 tests; includes the 'refuses receipt payloads JSON.parse cannot read back before anything reaches native' case for adversary break #1); new file, no serial group."
+            ],
+            "package_id": "W05-01",
+            "regression_tests_added": [
+              "native/vision-core/Tests/OfflineWalletTests.swift: testReplaceRefusesReceiptPayloadsJsonParseRejectsAndWritesNothing (BOM, trailing comma, invalid grammar, non-object roots), testReplaceStoresEveryReceiptPayloadJsonParseAccepts, testReceiptPayloadNestingIsBoundedWithoutRecursion, testLoadRacingAnotherInstancesFirstWriteIsNilOrTheCommittedSnapshotNeverUnreadable, testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesTheHealthyWallet, testOwnerStateThatNeverSettlesIsAStorageFailureNotAVerdict, testClearAfterCrashBetweenWalletWriteAndFenceCommitRepairsTheFenceSoNoRevisionIsReused, testFenceCommitRetriesPastAConcurrentFenceMoveInsteadOfFailingTheCommittedWrite (suite: 50 tests on the Linux surrogate)",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts: 'refuses receipt payloads JSON.parse cannot read back before anything reaches native' (BOM, trailing comma, array/string/null roots, malformed, empty, >8192 UTF-8 bytes incl. 4-byte code points, depth 65) plus acceptance at the exact limits; 12 tests total"
+            ],
+            "residual_risks": [
+              "iOS Simulator XCTest, the Keychain adapter (SecItem*, kSecAttrGeneric digest CAS, AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY) and the CryptoKit path are only compiled/exercised on Apple platforms; Linux results are a surrogate and AC1 must be established by the coordinator's mac-full-verify run.",
+              "apps/mobile/ios/Podfile.lock SPEC CHECKSUMS.PickleNative (01c35ae8…) was not regenerated (no Ruby/CocoaPods on this Linux box); tools/macos-ci/pod-install.sh runs plain `pod install`, which refreshes the development-pod checksum itself and does not fail on it, but the integrator should expect a one-line Podfile.lock change after the Mac run.",
+              "Full-store rollback (wallet and fence both restored from the same earlier Keychain snapshot) is by design not detectable by the wallet alone; callers must reconcile against the server's view of the owner.",
+              "Nothing in the shipping app calls the JS bridge yet (no caller package is part of W05-01); the module is linked into the pod and exported, but end-to-end use is a later package."
+            ],
+            "summary": "Defect/gap on BASE_SHA ecdd8352 (VERIFIED by `git ls-tree`): no offline wallet exists anywhere — native/vision-core/Sources has no OfflineWallet.swift, apps/mobile/ios/LocalPods/PickleNative/Sources has no PickleOfflineWallet.swift/PickleOfflineWalletBridge.m, PickleNative.podspec:13-24 lists no wallet source, and apps/mobile/src/native/ has no offlineWallet.ts, so nothing stores signed grants/unsent receipts in the Keychain and the JS side has no typed bridge. The r3 candidate (1549b6aa) was reused where sound and every prior-round finding was resolved in native/vision-core/Sources/OfflineWallet.swift: (1) BOM / trailing-comma break — r3 `OfflineWalletShape.isJsonObject` used JSONSerialization; now a strict iterative ECMA-404 scanner (`StrictJsonObjectScanner`, ~L792-988) accepts exactly what JSON.parse accepts, bounded by maxReceiptPayloadBytes=8192 and new `Limits.maxReceiptJsonDepth`=64; the TS wrapper additionally refuses such receipts with `invalid_receipt` before calling native (`refuseUnreadableReceipts`, byte length via UTF-8 count, depth via container walk with identical semantics). (2) discardCorrupt race — r3 `readState` did three non-atomic reads; now `readItems` snapshots key/fence/wallet, `classify` decides, and while the view looks corrupt it is reread until two consecutive identical reads agree (bounded by `maxStateRereads`; a view that never settles is `storage_failure`, never a discard verdict), so a concurrent first write is seen as nil or the committed revision-1 snapshot and `discardCorrupt` returns `not_corrupt` without deleting. (3) load race — same fix; `integrity_key_missing` is only reported for a stable view. (4) clear after crash in the wallet->fence window — `clear` now commits the fence to the observed wallet revision before the conditional delete (`commitFence`, which also tolerates a fence another instance already advanced), so the next replace hands out revision 3 and the pre-clear revision-2 envelope is detected as `tampered`. (5) Full-store rollback (wallet AND fence restored together) is a documented design limitation in the file header (needs an out-of-store anchor = server reconciliation); the anti-rollback claim is scoped to partial restores and no detection is claimed. Shipping wiring: Sources/Core/OfflineWallet.swift symlink + one podspec source_files entry make the core part of the PickleNative pod; PickleOfflineWallet.swift (serial queue, `wallet.<failure>` codes + OSStatus) and PickleOfflineWalletBridge.m export loadWallet/replaceWallet/clearWallet/discardCorruptWallet; apps/mobile/src/native/offlineWallet.ts is the typed JS bridge. Commits: 65dff4a4 tests (first), eab3aae8 test correction (unstable-state case must alternate two corrupt views, since a valid<->absent toggle legitimately settles), 741548cf implementation. Pushed to origin devin/pp/w05-01/impl-r4-c2 = 741548cf0281dc0923f827d008deb9526836257d. AC1 (Mac runner) deliberately NOT run per the package rules -> UNKNOWN; Linux surrogate 50/50 (INFERRED for iOS). AC2 VERIFIED exit 0."
+          },
+          "lane": 2,
+          "review": null
+        }
+      ],
+      "review": null,
+      "round": 4
+    },
+    {
+      "adversary": null,
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W05-01-AC1 status UNKNOWN"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac9777f6-bcdf-44d4-86cc-0ea5671632a0/swift-surrogate-head.log",
+            "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+            "executed": 0,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W05-01-AC1",
+            "note": "UNVERIFIED on Apple: the criterion's command is the coordinator-owned Mac slot, which the implementer is forbidden to run (no ci/mac-* push, no --remote) and this Ubuntu x86_64 box has no Xcode/iOS Simulator. No mac-full-verify artifact exists for sha 6cdd3ab97fb754636561c7586fef151e25a2389e (ledger Mac evidence covers only 1549b6aa r3, run 34343392160, and 64f7353e r2e, run 34310861891). Coordinator action: run scripts/mac-full-verify.sh --remote on 6cdd3ab97fb754636561c7586fef151e25a2389e and feed run.json into make_verify_launcher.py --evidence W05-01-AC1=<run.json>. Linux SURROGATE (not Apple evidence): the exact test file was compiled against the canonical source with Swift 6.0.3 x86_64-unknown-linux-gnu via `swift test --filter OfflineWalletTests` in a shim package: exit 0, Executed 49 tests, 0 failures (artifact above). The Keychain adapter and CryptoKit code paths are #if canImport(Security)/CryptoKit and are byte-identical to r3 (1549b6aa), which passed swift-native (macOS swift test + xcodebuild macOS + iOS Simulator) and ios-app on the M4 (git diff 1549b6aa 6cdd3ab9 touches no Security/CryptoKit lines). Base proof: the same test file against BASE_SHA (which has no OfflineWallet.swift) fails to compile — exit 1, 888 `error:` lines, first: cannot find type 'OfflineWallet' in scope: https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5db9e0-e08f-4b0d-93cd-c515cee90761/swift-surrogate-base.log",
+            "passed": 0,
+            "skipped": 0,
+            "status": "UNKNOWN"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46c0314c-3d53-4b94-bb4b-edca31a9d1e9/tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-01-AC2",
+            "note": "VERIFIED at 6cdd3ab9 after `cd apps/mobile && npm ci` (exit 0): tsc exit 0, no diagnostics. Supplemental VERIFIED: `npx jest --silent __tests__/offlineWalletNative.test.ts` exit 0, 12/12 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/84dde6c5-0a9c-4819-bfcc-9dd2320bb853/jest-wallet-head.log); root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f941365b-9ebb-483e-a00b-8365fde6d122/format-check.log); `git diff --check ecdd8352 6cdd3ab9` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/70b157e7-1e6d-44ea-8c8c-bdbd13e8efab/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Checked out BASE_SHA, confirmed no wallet code exists there, and confirmed the r4 branch's merge-base is exactly BASE_SHA with a tests-before-fix commit order. Re-audited the r4 code against every prior-round adversarial finding (integrity-key recovery, anti-rollback scope, capacity under escaping, first-write races, JSON.parse parity) and the Keychain adapter (CAS via kSecAttrGeneric digest, accessibility class, no sync, data-protection keychain), and verified via git diff that the #if canImport(Security)/CryptoKit sections are byte-identical to the r3 sha the M4 already passed. Installed a Swift 6.0.3 Linux toolchain, built a shim SwiftPM package symlinking the repo's source and test file, and ran the suite on HEAD (49/49) and on BASE (compile failure) as the base-failure proof. Ran `npm ci` in apps/mobile (the stale node_modules lacked @sentry/*), then AC2 tsc, the wallet Jest suite, pnpm format:check and git diff --check. Pushed the branch under the required r5 name. Deliberately did NOT add a live-Keychain XCTest: the swift-native stage runs SwiftPM logic tests on macOS without a signed host app, where kSecUseDataProtectionKeychain writes return errSecMissingEntitlement, so an unrunnable-from-Linux live test would risk sinking the candidate on the Mac.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46c0314c-3d53-4b94-bb4b-edca31a9d1e9/tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84dde6c5-0a9c-4819-bfcc-9dd2320bb853/jest-wallet-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac9777f6-bcdf-44d4-86cc-0ea5671632a0/swift-surrogate-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5db9e0-e08f-4b0d-93cd-c515cee90761/swift-surrogate-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f941365b-9ebb-483e-a00b-8365fde6d122/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/70b157e7-1e6d-44ea-8c8c-bdbd13e8efab/git-diff-check.log"
+        ],
+        "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — exit 2 BEFORE `npm ci` on this box (stale node_modules missing @sentry/react-native / @sentry/browser types); after `npm ci` (exit 0) the same command exits 0 on HEAD. Environment staleness, not a BASE_SHA code failure; recorded for transparency."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w05-01/impl-r5",
+        "files_changed": [
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+          "native/vision-core/Tests/OfflineWalletTests.swift",
+          "native/vision-core/Sources/OfflineWallet.swift",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+          "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+          "apps/mobile/src/native/offlineWallet.ts",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts"
+        ],
+        "head_sha": "6cdd3ab97fb754636561c7586fef151e25a2389e",
+        "out_of_scope_files": [
+          "native/vision-core/Sources/OfflineWallet.swift — the platform-neutral wallet core (envelope sealing, per-owner integrity key + fence, CAS store protocol, Keychain adapter) lives in the SwiftPM target that native/vision-core/Tests/OfflineWalletTests.swift (a write_path) tests; the LocalPods Swift file is the RN-facing shell around it. Not under any serial_group_paths prefix.",
+          "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — symlink to the canonical core so the pod compiles it (native-pod group, held by this package).",
+          "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — one-line source_files addition so the pod builds the new Swift/ObjC files (native-pod group, held by this package).",
+          "apps/mobile/src/native/offlineWallet.ts — the typed JS bridge (OfflineWalletError union, load/replace/clear/discardCorrupt wrappers) that AC2 ('TS bridge types compile') exercises; without it the native module is an unused module. Not under any serial_group_paths prefix.",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression tests for the JS bridge (typed error mapping, JSON.parse parity, revision bounds). Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W05-01",
+        "regression_tests_added": [
+          "native/vision-core/Tests/OfflineWalletTests.swift (49 XCTest cases, incl. testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover, testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard, testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence, testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping, testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable, testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet, testStateThatNeverSettlesFailsTypedAndDeletesNothing, testKeychainQueriesPinDeviceOnlyAfterFirstUnlockAndDistinctService)",
+          "apps/mobile/__tests__/offlineWalletNative.test.ts (12 Jest cases for the typed JS bridge)"
+        ],
+        "residual_risks": [
+          "AC1 (iOS Simulator XCTest via mac-full-verify swift-native) is UNVERIFIED for sha 6cdd3ab9; only the Linux surrogate (49/49) and the r3 Mac pass of the unchanged Security/CryptoKit code stand behind it until the coordinator runs the slot on this exact sha.",
+          "KeychainOfflineWalletStore (SecItemAdd/Update/Delete CAS semantics, kSecAttrAccessible re-assert on SecItemUpdate) is compiled on the Mac but exercised only structurally (query/attribute dictionaries) — no live Keychain round-trip test exists because SwiftPM logic tests on macOS lack the data-protection-keychain entitlement.",
+          "Anti-rollback is per-item: restoring wallet+fence+integrity-key together from one older device backup is indistinguishable from current state without a server-side monotonic anchor (the receipt reconciliation on sync is the intended backstop).",
+          "Grant signature/policy verification is the caller's responsibility; the wallet only guarantees shape, integrity, revision monotonicity and owner binding."
+        ],
+        "summary": "Defect on BASE_SHA ecdd8352 (VERIFIED via git ls-tree): the repository has no offline wallet at all — no PickleOfflineWallet.swift / PickleOfflineWalletBridge.m under apps/mobile/ios/LocalPods/PickleNative/Sources/, no native/vision-core/Sources/OfflineWallet.swift, no native/vision-core/Tests/OfflineWalletTests.swift, no apps/mobile/src/native/offlineWallet.ts; the OfflineWalletTests file does not compile against the base (888 errors, 'cannot find type OfflineWallet'). Round 5 starts from BASE_SHA and reuses the round-4 history unchanged (tests committed before each implementation commit: 00a35728/be488df1 tests -> fca69b28 impl; 9dad560d tests -> 7c89af5e fix; a3ecb1e4 tests -> 6cdd3ab9 fix), because the r4 judge finding was solely 'W05-01-AC1 status UNKNOWN' (no code, scope or adversarial defect), and every prior adversarial finding is already covered by named regression tests: corrupt/wrong-length integrity key is per-owner and recoverable via discardCorrupt (testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover, testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard); partial rollback of an authentic older envelope behind the per-owner fence is `tampered` and the fence survives clear/discard (testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence, clear commits the fence before deleting); envelope budget 1,310,720 B fits 8 maximal grants + 64 maximal receipts at worst-case JSON escaping (testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping); receipt JSON is validated by a strict RFC 8259 scanner with JSON.parse parity (BOM/trailing comma/trailing garbage rejected); readState re-reads until stable so another instance's first write is never reported/discarded as corruption (testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable, testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet, testStateThatNeverSettlesFailsTypedAndDeletesNothing). The wallet is wired into the shipping code path: PickleNative.podspec compiles Sources/Core/OfflineWallet.swift (symlink to the canonical core) + PickleOfflineWallet.swift (RCT module, serial queue, typed NSError rejections wallet.<failure> with OSStatus) + PickleOfflineWalletBridge.m (RCT_EXTERN_MODULE loadWallet/replaceWallet/clearWallet/discardCorruptWallet), and apps/mobile/src/native/offlineWallet.ts exposes the typed JS API. Keychain: generic-password items in service com.picklesensei.offline.wallet, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly re-asserted on every write, kSecAttrSynchronizable=false, kSecUseDataProtectionKeychain=true; atomic replace = single CAS item write keyed on the SHA-256 of the previously read bytes in kSecAttrGeneric (SecItemUpdate refuses with errSecItemNotFound, SecItemAdd with errSecDuplicateItem -> revision_conflict). Rollback claim is scoped: the fence defeats restoring the wallet item alone; restoring wallet+fence+key together from one older snapshot is indistinguishable without an external monotonic anchor (documented residual). Linux verification VERIFIED: AC2 tsc exit 0; jest wallet suite 12/12; pnpm format:check exit 0; git diff --check exit 0; Linux Swift 6.0.3 surrogate of OfflineWalletTests 49/49 (not Apple evidence). AC1 remains UNKNOWN: it needs the coordinator's exact-SHA scripts/mac-full-verify.sh --remote run on 6cdd3ab97fb754636561c7586fef151e25a2389e; the Security/CryptoKit code is unchanged since r3 1549b6aa which passed swift-native + ios-app on the M4 (run 34343392160). Branch devin/pp/w05-01/impl-r5 pushed; origin/devin/pp/w05-01/impl-r5 == 6cdd3ab97fb754636561c7586fef151e25a2389e (same commit as impl-r4, so one Mac run on this sha proves both). No PR opened."
+      },
+      "lanes": [
+        {
+          "adversary": null,
+          "blocked": false,
+          "decision": {
+            "accepted": false,
+            "criteria_examined": [
+              "implementer acceptance coverage"
+            ],
+            "reasons": [
+              "impl: W05-01-AC1 status UNKNOWN"
+            ]
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac9777f6-bcdf-44d4-86cc-0ea5671632a0/swift-surrogate-head.log",
+                "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+                "executed": 0,
+                "exit_code": 1,
+                "failed": 0,
+                "id": "W05-01-AC1",
+                "note": "UNVERIFIED on Apple: the criterion's command is the coordinator-owned Mac slot, which the implementer is forbidden to run (no ci/mac-* push, no --remote) and this Ubuntu x86_64 box has no Xcode/iOS Simulator. No mac-full-verify artifact exists for sha 6cdd3ab97fb754636561c7586fef151e25a2389e (ledger Mac evidence covers only 1549b6aa r3, run 34343392160, and 64f7353e r2e, run 34310861891). Coordinator action: run scripts/mac-full-verify.sh --remote on 6cdd3ab97fb754636561c7586fef151e25a2389e and feed run.json into make_verify_launcher.py --evidence W05-01-AC1=<run.json>. Linux SURROGATE (not Apple evidence): the exact test file was compiled against the canonical source with Swift 6.0.3 x86_64-unknown-linux-gnu via `swift test --filter OfflineWalletTests` in a shim package: exit 0, Executed 49 tests, 0 failures (artifact above). The Keychain adapter and CryptoKit code paths are #if canImport(Security)/CryptoKit and are byte-identical to r3 (1549b6aa), which passed swift-native (macOS swift test + xcodebuild macOS + iOS Simulator) and ios-app on the M4 (git diff 1549b6aa 6cdd3ab9 touches no Security/CryptoKit lines). Base proof: the same test file against BASE_SHA (which has no OfflineWallet.swift) fails to compile — exit 1, 888 `error:` lines, first: cannot find type 'OfflineWallet' in scope: https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5db9e0-e08f-4b0d-93cd-c515cee90761/swift-surrogate-base.log",
+                "passed": 0,
+                "skipped": 0,
+                "status": "UNKNOWN"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46c0314c-3d53-4b94-bb4b-edca31a9d1e9/tsc-head.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-01-AC2",
+                "note": "VERIFIED at 6cdd3ab9 after `cd apps/mobile && npm ci` (exit 0): tsc exit 0, no diagnostics. Supplemental VERIFIED: `npx jest --silent __tests__/offlineWalletNative.test.ts` exit 0, 12/12 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/84dde6c5-0a9c-4819-bfcc-9dd2320bb853/jest-wallet-head.log); root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f941365b-9ebb-483e-a00b-8365fde6d122/format-check.log); `git diff --check ecdd8352 6cdd3ab9` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/70b157e7-1e6d-44ea-8c8c-bdbd13e8efab/git-diff-check.log).",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Checked out BASE_SHA, confirmed no wallet code exists there, and confirmed the r4 branch's merge-base is exactly BASE_SHA with a tests-before-fix commit order. Re-audited the r4 code against every prior-round adversarial finding (integrity-key recovery, anti-rollback scope, capacity under escaping, first-write races, JSON.parse parity) and the Keychain adapter (CAS via kSecAttrGeneric digest, accessibility class, no sync, data-protection keychain), and verified via git diff that the #if canImport(Security)/CryptoKit sections are byte-identical to the r3 sha the M4 already passed. Installed a Swift 6.0.3 Linux toolchain, built a shim SwiftPM package symlinking the repo's source and test file, and ran the suite on HEAD (49/49) and on BASE (compile failure) as the base-failure proof. Ran `npm ci` in apps/mobile (the stale node_modules lacked @sentry/*), then AC2 tsc, the wallet Jest suite, pnpm format:check and git diff --check. Pushed the branch under the required r5 name. Deliberately did NOT add a live-Keychain XCTest: the swift-native stage runs SwiftPM logic tests on macOS without a signed host app, where kSecUseDataProtectionKeychain writes return errSecMissingEntitlement, so an unrunnable-from-Linux live test would risk sinking the candidate on the Mac.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46c0314c-3d53-4b94-bb4b-edca31a9d1e9/tsc-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84dde6c5-0a9c-4819-bfcc-9dd2320bb853/jest-wallet-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac9777f6-bcdf-44d4-86cc-0ea5671632a0/swift-surrogate-head.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5db9e0-e08f-4b0d-93cd-c515cee90761/swift-surrogate-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f941365b-9ebb-483e-a00b-8365fde6d122/format-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/70b157e7-1e6d-44ea-8c8c-bdbd13e8efab/git-diff-check.log"
+            ],
+            "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+            "baseline_failures_observed": [
+              "cd apps/mobile && npx tsc --noEmit — exit 2 BEFORE `npm ci` on this box (stale node_modules missing @sentry/react-native / @sentry/browser types); after `npm ci` (exit 0) the same command exits 0 on HEAD. Environment staleness, not a BASE_SHA code failure; recorded for transparency."
+            ],
+            "blocked": false,
+            "branch": "devin/pp/w05-01/impl-r5",
+            "files_changed": [
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+              "native/vision-core/Tests/OfflineWalletTests.swift",
+              "native/vision-core/Sources/OfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+              "apps/mobile/src/native/offlineWallet.ts",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts"
+            ],
+            "head_sha": "6cdd3ab97fb754636561c7586fef151e25a2389e",
+            "out_of_scope_files": [
+              "native/vision-core/Sources/OfflineWallet.swift — the platform-neutral wallet core (envelope sealing, per-owner integrity key + fence, CAS store protocol, Keychain adapter) lives in the SwiftPM target that native/vision-core/Tests/OfflineWalletTests.swift (a write_path) tests; the LocalPods Swift file is the RN-facing shell around it. Not under any serial_group_paths prefix.",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — symlink to the canonical core so the pod compiles it (native-pod group, held by this package).",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — one-line source_files addition so the pod builds the new Swift/ObjC files (native-pod group, held by this package).",
+              "apps/mobile/src/native/offlineWallet.ts — the typed JS bridge (OfflineWalletError union, load/replace/clear/discardCorrupt wrappers) that AC2 ('TS bridge types compile') exercises; without it the native module is an unused module. Not under any serial_group_paths prefix.",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression tests for the JS bridge (typed error mapping, JSON.parse parity, revision bounds). Not under any serial_group_paths prefix."
+            ],
+            "package_id": "W05-01",
+            "regression_tests_added": [
+              "native/vision-core/Tests/OfflineWalletTests.swift (49 XCTest cases, incl. testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover, testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard, testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence, testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping, testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable, testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet, testStateThatNeverSettlesFailsTypedAndDeletesNothing, testKeychainQueriesPinDeviceOnlyAfterFirstUnlockAndDistinctService)",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts (12 Jest cases for the typed JS bridge)"
+            ],
+            "residual_risks": [
+              "AC1 (iOS Simulator XCTest via mac-full-verify swift-native) is UNVERIFIED for sha 6cdd3ab9; only the Linux surrogate (49/49) and the r3 Mac pass of the unchanged Security/CryptoKit code stand behind it until the coordinator runs the slot on this exact sha.",
+              "KeychainOfflineWalletStore (SecItemAdd/Update/Delete CAS semantics, kSecAttrAccessible re-assert on SecItemUpdate) is compiled on the Mac but exercised only structurally (query/attribute dictionaries) — no live Keychain round-trip test exists because SwiftPM logic tests on macOS lack the data-protection-keychain entitlement.",
+              "Anti-rollback is per-item: restoring wallet+fence+integrity-key together from one older device backup is indistinguishable from current state without a server-side monotonic anchor (the receipt reconciliation on sync is the intended backstop).",
+              "Grant signature/policy verification is the caller's responsibility; the wallet only guarantees shape, integrity, revision monotonicity and owner binding."
+            ],
+            "summary": "Defect on BASE_SHA ecdd8352 (VERIFIED via git ls-tree): the repository has no offline wallet at all — no PickleOfflineWallet.swift / PickleOfflineWalletBridge.m under apps/mobile/ios/LocalPods/PickleNative/Sources/, no native/vision-core/Sources/OfflineWallet.swift, no native/vision-core/Tests/OfflineWalletTests.swift, no apps/mobile/src/native/offlineWallet.ts; the OfflineWalletTests file does not compile against the base (888 errors, 'cannot find type OfflineWallet'). Round 5 starts from BASE_SHA and reuses the round-4 history unchanged (tests committed before each implementation commit: 00a35728/be488df1 tests -> fca69b28 impl; 9dad560d tests -> 7c89af5e fix; a3ecb1e4 tests -> 6cdd3ab9 fix), because the r4 judge finding was solely 'W05-01-AC1 status UNKNOWN' (no code, scope or adversarial defect), and every prior adversarial finding is already covered by named regression tests: corrupt/wrong-length integrity key is per-owner and recoverable via discardCorrupt (testCorruptIntegrityKeyWithoutWalletIsDiscardableAndWritesRecover, testCorruptIntegrityKeyWithWalletIsIsolatedToThatOwnerAndRecoversAfterDiscard); partial rollback of an authentic older envelope behind the per-owner fence is `tampered` and the fence survives clear/discard (testRollbackToEarlierAuthenticEnvelopeIsTamperedAndDiscardKeepsTheFence, clear commits the fence before deleting); envelope budget 1,310,720 B fits 8 maximal grants + 64 maximal receipts at worst-case JSON escaping (testEveryValidatedWalletIsStorableEvenAtWorstCaseEscaping); receipt JSON is validated by a strict RFC 8259 scanner with JSON.parse parity (BOM/trailing comma/trailing garbage rejected); readState re-reads until stable so another instance's first write is never reported/discarded as corruption (testLoadRacingAnotherInstancesFirstWriteIsNotReportedAsUnreadable, testDiscardCorruptRacingAnotherInstancesFirstWriteNeverDeletesAHealthyWallet, testStateThatNeverSettlesFailsTypedAndDeletesNothing). The wallet is wired into the shipping code path: PickleNative.podspec compiles Sources/Core/OfflineWallet.swift (symlink to the canonical core) + PickleOfflineWallet.swift (RCT module, serial queue, typed NSError rejections wallet.<failure> with OSStatus) + PickleOfflineWalletBridge.m (RCT_EXTERN_MODULE loadWallet/replaceWallet/clearWallet/discardCorruptWallet), and apps/mobile/src/native/offlineWallet.ts exposes the typed JS API. Keychain: generic-password items in service com.picklesensei.offline.wallet, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly re-asserted on every write, kSecAttrSynchronizable=false, kSecUseDataProtectionKeychain=true; atomic replace = single CAS item write keyed on the SHA-256 of the previously read bytes in kSecAttrGeneric (SecItemUpdate refuses with errSecItemNotFound, SecItemAdd with errSecDuplicateItem -> revision_conflict). Rollback claim is scoped: the fence defeats restoring the wallet item alone; restoring wallet+fence+key together from one older snapshot is indistinguishable without an external monotonic anchor (documented residual). Linux verification VERIFIED: AC2 tsc exit 0; jest wallet suite 12/12; pnpm format:check exit 0; git diff --check exit 0; Linux Swift 6.0.3 surrogate of OfflineWalletTests 49/49 (not Apple evidence). AC1 remains UNKNOWN: it needs the coordinator's exact-SHA scripts/mac-full-verify.sh --remote run on 6cdd3ab97fb754636561c7586fef151e25a2389e; the Security/CryptoKit code is unchanged since r3 1549b6aa which passed swift-native + ios-app on the M4 (run 34343392160). Branch devin/pp/w05-01/impl-r5 pushed; origin/devin/pp/w05-01/impl-r5 == 6cdd3ab97fb754636561c7586fef151e25a2389e (same commit as impl-r4, so one Mac run on this sha proves both). No PR opened."
+          },
+          "lane": 1,
+          "review": null
+        },
+        {
+          "adversary": null,
+          "blocked": false,
+          "decision": {
+            "accepted": false,
+            "criteria_examined": [
+              "implementer acceptance coverage"
+            ],
+            "reasons": [
+              "impl: W05-01-AC1 status UNKNOWN"
+            ]
+          },
+          "implement": {
+            "acceptance_results": [
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d32301b-7f81-4703-b483-72274181c9a3/swift-test-candidate-surrogate.log",
+                "command": "scripts/mac-full-verify.sh --remote (coordinator Mac slot)",
+                "executed": 0,
+                "exit_code": -1,
+                "failed": 0,
+                "id": "W05-01-AC1",
+                "note": "NOT RUN by this implementer: the package rules forbid running scripts/mac-full-verify.sh --remote or pushing ci/mac-* (coordinator-owned slot), and this Linux box has no Xcode/Simulator. Coordinator must run it against head_sha 761652ca15828d6d53d67b1947db2ff6db1375ac. Supporting evidence: (a) VERIFIED Linux surrogate — Swift 6.0.3 (tools-version 5.9) package containing only native/vision-core/Sources/OfflineWallet.swift + Tests/OfflineWalletTests.swift: `swift test` exit 0, 'Executed 49 tests, with 0 failures' (the 50th case is `#if canImport(Security)`, Apple-only); same suite on BASE_SHA fails to compile (`cannot find type 'OfflineWallet' in scope`, exit 1, https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f26dd1c-46ac-4ded-8023-1602bf05fde9/swift-test-base-surrogate.log). (b) INFERRED provenance — PickleOfflineWallet.swift, PickleOfflineWalletBridge.m, PickleNative.podspec and the Sources/Core symlink are byte-identical to r3 candidate 1549b6aa whose coordinator M4 run 34343392160 reported env/swift-native/ios-app ok (recorded in BASE_SHA's own commit message); OfflineWallet.swift/OfflineWalletTests.swift/offlineWallet.ts carry the r4 (6cdd3ab9) fixes for the r3 adversarial findings, which touch only portable Swift (no CryptoKit/Security hunks changed) and have not yet been compiled by Xcode. (c) VERIFIED r3 adversarial Swift suite replayed on this candidate: 8 executed, 7 passed, 1 failed (`testRestoringWalletAndFenceTogetherIsDetectedAsRollback`, exit 1, https://la-hacks-rttothemoon.devinenterprise.com/attachments/692b8dc3-fc32-4659-8aa9-b7b022930cd0/swift-attack-r3-on-candidate.log) — see residual_risks.",
+                "passed": 0,
+                "skipped": 0,
+                "status": "UNKNOWN"
+              },
+              {
+                "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/599a7c37-1d32-467d-b780-d78848a84a08/tsc-candidate.log",
+                "command": "cd apps/mobile && npx tsc --noEmit",
+                "executed": 0,
+                "exit_code": 0,
+                "failed": 0,
+                "id": "W05-01-AC2",
+                "note": "VERIFIED at HEAD 761652ca after `cd apps/mobile && npm ci --no-audit --no-fund` (the pre-installed node_modules lacked @sentry/react-native / @sentry/browser and tsc failed with TS2307 in src/diagnostics/sentry.ts before the documented install; not caused by this package). No output, exit 0. Also VERIFIED: `npx jest --silent __tests__/offlineWalletNative.test.ts` 12/12 exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f0f6d11-209b-48f7-a711-ef16d53d4eef/jest-candidate.log; same file on BASE_SHA: 'Cannot find module ../src/native/offlineWallet', exit 1, https://la-hacks-rttothemoon.devinenterprise.com/attachments/3fdbeed4-bb37-4e0e-859e-5d21c8f6fc61/jest-base.log); full `cd apps/mobile && npx jest --silent`: Test Suites 325 passed / 1 skipped of 326, Tests 6542 passed / 1 skipped of 6543, exit 0 — the one skip is `importedRealFootageAnalysis.test.ts` (documented environmental skip in docs/devin/TEST_MATRIX.md) (https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf95400a-0c80-49b4-8e16-ebe86870adc3/jest-full-candidate.log); root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/efa4f0d4-6e5b-4845-af09-8d35f527382f/format-check.log); `git diff --check ecdd8352 HEAD` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/019d85b7-8827-48c8-8e6e-d9c2190fbbb4/git-diff-check.log); root `npx eslint` on the two new TS files exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6e7b7933-6f6e-48f3-a26a-ed008567454f/eslint-candidate.log).",
+                "passed": 0,
+                "skipped": 0,
+                "status": "PASS"
+              }
+            ],
+            "approach": "Started from BASE_SHA on branch devin/pp/w05-01/impl-r5-c2; audited the r4 candidate (6cdd3ab9) and the coordinator's r3 evidence (M4 run 34343392160 passed env/swift-native/ios-app for 1549b6aa) and reused the r4 sources unchanged since they already fix the r3 adversarial findings (read-pass retry against in-flight first writes, fence commit before discarding an ahead-of-fence wallet, strict JSON.parse-equivalent receipt validation). Test commit first (30532d34), failing on base in both Swift (Linux Swift 6.0.3 surrogate package holding only the wallet source + test, because the full vision-core package imports Apple Vision) and Jest; then the implementation commit (761652ca). Verified on Linux: surrogate swift test, focused + full mobile jest, exact AC2 tsc, root prettier, git diff --check, eslint. Did not run the Mac remote command (forbidden). No PR opened, no force-push, nothing amended.",
+            "attachment_urls": [
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/599a7c37-1d32-467d-b780-d78848a84a08/tsc-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d32301b-7f81-4703-b483-72274181c9a3/swift-test-candidate-surrogate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f26dd1c-46ac-4ded-8023-1602bf05fde9/swift-test-base-surrogate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f0f6d11-209b-48f7-a711-ef16d53d4eef/jest-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3fdbeed4-bb37-4e0e-859e-5d21c8f6fc61/jest-base.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cf95400a-0c80-49b4-8e16-ebe86870adc3/jest-full-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/692b8dc3-fc32-4659-8aa9-b7b022930cd0/swift-attack-r3-on-candidate.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/efa4f0d4-6e5b-4845-af09-8d35f527382f/format-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/019d85b7-8827-48c8-8e6e-d9c2190fbbb4/git-diff-check.log",
+              "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6e7b7933-6f6e-48f3-a26a-ed008567454f/eslint-candidate.log"
+            ],
+            "base_sha": "ecdd8352077f031da7455d1cb67859e4d5c33ee9",
+            "baseline_failures_observed": [
+              "`cd apps/mobile && npx tsc --noEmit` on the pre-provisioned checkout (before `npm ci`) failed with TS2307 Cannot find module '@sentry/react-native' / '@sentry/browser' at src/diagnostics/sentry.ts:271-272 — stale node_modules on this VM, not a source defect; resolved by the documented `cd apps/mobile && npm ci` (exit 0), after which BASE_SHA-independent tsc passes.",
+              "`swift test` on the full native/vision-core package cannot run on Linux (imports Vision/AVFoundation); the wallet suite was executed through a two-file surrogate SwiftPM package instead — environmental, not a BASE_SHA defect."
+            ],
+            "blocked": false,
+            "branch": "devin/pp/w05-01/impl-r5-c2",
+            "files_changed": [
+              "native/vision-core/Sources/OfflineWallet.swift",
+              "native/vision-core/Tests/OfflineWalletTests.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWalletBridge.m",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec",
+              "apps/mobile/src/native/offlineWallet.ts",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts"
+            ],
+            "head_sha": "761652ca15828d6d53d67b1947db2ff6db1375ac",
+            "out_of_scope_files": [
+              "native/vision-core/Sources/OfflineWallet.swift — the wallet core (OfflineWallet, OfflineWalletError, KeychainOfflineWalletStore) lives in the canonical native package so native/vision-core/Tests/OfflineWalletTests.swift (a declared write_path) can exercise it under `swift test` on the Mac swift-native stage; the pod compiles the same file through a Sources/Core symlink like every other Core source. New file, no serial group.",
+              "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/OfflineWallet.swift — one-line repository-relative symlink following the existing Sources/Core convention so the local pod builds the core (native-pod group, held by this package).",
+              "apps/mobile/ios/LocalPods/PickleNative/PickleNative.podspec — single added `Sources/Core/OfflineWallet.swift` entry in `source_files` (+ trailing comma on the previous line); minimum wiring to compile the module into the shipping PickleNative pod (native-pod group, held).",
+              "apps/mobile/src/native/offlineWallet.ts — the typed JS bridge the objective names ('a JS bridge with typed errors'); AC2 (`npx tsc --noEmit`) type-checks it. New file under apps/mobile/src/native/, no serial group.",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts — Jest regression suite for the JS bridge (typed errors, bridge_contract on malformed native output, not_configured, snapshot/receipt validation). New file, no serial group."
+            ],
+            "package_id": "W05-01",
+            "regression_tests_added": [
+              "native/vision-core/Tests/OfflineWalletTests.swift (OfflineWalletTests, 49 cases portable + 1 Apple-only `#if canImport(Security)` Keychain-query case: absent wallet, grants+receipts round trip, owner isolation, canonical owner ids, stale revision -> revision_conflict, whole-wallet single write, store write/read failure mapping, clear/rev-fence semantics, interleaved instances, flipped payload bytes / undecodable payload / cross-owner copy / missing or garbage key / unsupported version -> typed unreadable failures, rollback behind fence, fence persistence + repair, crash windows (wallet written, fence not committed), concurrent first writes, MAX_SAFE_INTEGER revision ceiling, grant/receipt validation + capacity, strict JSON receipt payloads, bridge dictionary round trip + malformed shapes, stable wallet.<failure> codes, SHA-256/HMAC vectors, Keychain query attributes)",
+              "apps/mobile/__tests__/offlineWalletNative.test.ts (12 cases: not_configured without native module, native rejection -> OfflineWalletError{failure,code,status}, unknown native code -> bridge_contract, malformed snapshot / owner mismatch / unsafe revision -> bridge_contract, invalid receipt JSON / kind, capacity, concurrent replace serialisation, null on absent wallet, discardCorrupt result mapping)"
+            ],
+            "residual_risks": [
+              "AC1 (XCTest on iOS Simulator via mac-full-verify swift-native) is UNKNOWN until the coordinator runs the M4 slot against 761652ca; the r3→r4 core changes (readState retry loop, fence-before-discard, StrictJsonScanner) have compiled only under Linux Swift 6.0.3 in Swift 5 language mode, not Xcode. The Apple-only `#if canImport(CryptoKit)` / `canImport(Security)` sections are byte-identical to the r3 files the M4 run compiled.",
+              "Coordinated full-state rollback is not detected (VERIFIED failing r3 adversarial case `testRestoringWalletAndFenceTogetherIsDetectedAsRollback`, 7/8 passed): an attacker with Keychain write access who restores BOTH the wallet envelope and its matching fence from an earlier authentic snapshot gets a self-consistent pair back. Detecting it needs a monotonic marker outside the wallet+fence pair (e.g. rotating the integrity key whenever the fence is lost, or a server-issued high-water mark checked at reconciliation); the former would change the committed test contract `testMissingOrCorruptFenceBesideAWalletIsTamperedAndDiscardable` ('a usable key stays'), so it was left out rather than editing a committed regression test. Server-side single-use enforcement of grant ids (W05 receipts/reconciliation) remains the backstop against a replayed spent grant being charged twice.",
+              "Nothing in apps/mobile currently calls src/native/offlineWallet.ts — the JS consumer (apps/mobile/src/data/offlineWallet.ts) is W05-03's declared write_path under the mobile-data serial group this package does not hold; the module is wired into the shipping binary (pod + RCT_EXTERN_MODULE + typed bridge) but exercised end to end only by W05-03/W05-05.",
+              "Runtime SecItem* behaviour (kSecAttrGeneric compare-and-swap on SecItemUpdate/SecItemDelete, kSecUseDataProtectionKeychain on the Simulator) is INFERRED from Apple documentation and the r3 build; the Simulator XCTest stage does not exercise a real Keychain round trip — W05-05's native acceptance (launch/store/kill/restore) is where that is proven.",
+              "Podspec edit modifies one existing line (adds a trailing comma) in addition to the new entry — minimal but not purely additive; another native-pod package touching the same `source_files` array would need a trivial merge."
+            ],
+            "summary": "Gap on BASE_SHA ecdd8352 (VERIFIED): no offline wallet exists in any source tree — `git grep -il offlinewallet ecdd8352` matches only .devin/program manifest/ledger records, apps/mobile/ios/LocalPods/PickleNative/Sources/ has no PickleOfflineWallet*.{swift,m}, native/vision-core has no OfflineWallet source or test, and apps/mobile/src/native/ has no wallet bridge; the only Keychain user is src/account/sessionVault.ts (react-native-keychain, session refresh credential). Signed grants and unsent receipts therefore have no device-bound, tamper-evident, atomically-replaced store. Regression tests were committed first (30532d34: native/vision-core/Tests/OfflineWalletTests.swift + apps/mobile/__tests__/offlineWalletNative.test.ts) and shown to fail on BASE_SHA (Swift: `cannot find type 'OfflineWallet' in scope`; Jest: `Cannot find module ../src/native/offlineWallet`). Implementation (761652ca): native/vision-core/Sources/OfflineWallet.swift — per owner three generic-password items in the dedicated service `com.picklesensei.offline.wallet` (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly re-asserted on every write, kSecAttrSynchronizable=false, kSecUseDataProtectionKeychain=true): 32-byte integrity key, HMAC-signed revision fence, wallet envelope `[version][HMAC-SHA256 tag][JSON payload]` (tag binds domain, account, version, payload). `replace(ownerId, expectedRevision, contents)` validates owner/grants/receipts (≤8 grants, ≤64 receipts, compact ES256 JWS shape, strict-JSON object receipt payloads, size caps, unique ids) and writes the WHOLE wallet as one compare-and-swap Keychain operation (SecItemUpdate/SecItemDelete matched on kSecAttrGeneric = SHA-256 of the bytes last read; first write SecItemAdd → errSecDuplicateItem = conflict), then commits the fence; `load` returns nil for an absent wallet and typed `tampered` / `integrity_key_missing` / `unsupported_version` for flipped bytes, cross-owner copies, missing/garbage key, unknown versions, or an envelope behind the committed fence — never an empty wallet; `clear` needs the current revision and keeps the fence; `discardCorrupt` is the only exit from unreadable state (post-reconciliation). Errors are `OfflineWalletError{failure, detail, status}` with stable codes `wallet.<failure>`; no grant/receipt bytes are logged and no access/provider token is stored. Shipping wiring: PickleOfflineWallet.swift (RN module, one serial queue, Promise rejections carry code/message/OSStatus) + PickleOfflineWalletBridge.m (RCT_EXTERN_MODULE loadWallet/replaceWallet/clearWallet/discardCorruptWallet) compiled into the PickleNative pod via the podspec entry + Sources/Core symlink, and apps/mobile/src/native/offlineWallet.ts (typed bridge: OfflineWalletError, not_configured, bridge_contract for malformed native output, snapshot/owner/revision validation). Candidate reuses r4 (6cdd3ab9) sound work unchanged; the only r4 finding was AC1 UNKNOWN, which this lane cannot close itself (remote Mac run is coordinator-owned) — AC1 is therefore reported UNKNOWN with Linux-surrogate + provenance evidence, AC2 PASS. All runs: swift surrogate 49/49, jest wallet 12/12, full mobile jest 6542 passed/1 documented skip, tsc 0, format:check 0, git diff --check 0, eslint 0."
+          },
+          "lane": 2,
+          "review": null
+        }
+      ],
+      "review": null,
+      "round": 5
+    }
+  ],
+  "start_round": 4,
+  "status": "REQUEUE",
+  "wave_id": "wave-20-keep"
+}

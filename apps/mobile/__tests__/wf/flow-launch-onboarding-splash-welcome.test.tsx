@@ -363,7 +363,7 @@ describe('flow: launch-onboarding — WelcomeScreen', () => {
         renderer.root.findByProps({ testID: 'welcome-free-copy' }).props
           .children,
       ).toBe(
-        'Two successful validated ratings free · Unscored attempts don’t count',
+        'One successful validated rating free · Unscored attempts don’t count',
       );
       act(() => renderer.unmount());
     },

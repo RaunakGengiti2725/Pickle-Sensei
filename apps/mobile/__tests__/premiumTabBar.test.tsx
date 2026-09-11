@@ -72,14 +72,28 @@ jest.mock('../src/design/components', () => {
 });
 
 import React from 'react';
-import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Dimensions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { PremiumTabBar } from '../src/navigation/PremiumTabBar';
+import {
+  TAB_BAR_HEIGHT,
+  TAB_BAR_SIDE_INSET,
+  tabBarBottomOffset,
+  tabBarFootprint,
+} from '../src/navigation/tabBarLayout';
+import { useTabBarDockStore } from '../src/navigation/tabBarDock';
 import { Icon } from '../src/design/icons';
-import { color, space } from '../src/design/tokens';
+import { color, radius, shadow, space } from '../src/design/tokens';
 
 const mockRootNavigate = jest.fn();
 const mockTabNavigate = jest.fn();
@@ -213,7 +227,8 @@ describe('PremiumTabBar coach menu', () => {
       const panel = coachPanel(renderer);
       const bounds = StyleSheet.flatten(panel.props.style);
       expect(panel.props.pointerEvents).toBe('box-none');
-      expect(bounds.bottom).toBe(dimensions.bottom + 70 + space.xl);
+      // The menu rises from the floating bar's top edge, wherever it rests.
+      expect(bounds.bottom).toBe(tabBarFootprint(dimensions.bottom) + space.xl);
       expect(bounds.maxHeight).toBe(
         dimensions.height - dimensions.top - space.md - bounds.bottom,
       );
@@ -261,8 +276,9 @@ describe('PremiumTabBar coach menu', () => {
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     const panel = coachPanel(renderer);
+    // 12 (bar lift, no home indicator) + 70 (bar) + 32 (arrow lane).
     expect(StyleSheet.flatten(panel.props.style)).toMatchObject({
-      bottom: 102,
+      bottom: 114,
     });
     const scroll = panel.findByType(ScrollView);
     expect(StyleSheet.flatten(scroll.props.style).flexGrow).toBe(0);
@@ -315,7 +331,8 @@ describe('PremiumTabBar coach menu', () => {
     );
     expect(tabs).toHaveLength(4);
     for (const tab of tabs) {
-      expect(tab.props.accessibilityRole).toBe('tab');
+      expect(tab.props.accessibilityRole).toBe('button');
+      expect(typeof tab.props.accessibilityState.selected).toBe('boolean');
       const style = controlStyle(tab);
       expect(style.minWidth).toBeGreaterThanOrEqual(44);
       expect(style.minHeight).toBeGreaterThanOrEqual(44);
@@ -353,16 +370,18 @@ describe('PremiumTabBar coach menu', () => {
         .some(icon => icon.props.name === 'flame'),
     ).toBe(false);
     expect(renderer.root.findAllByType(LinearGradient)).toHaveLength(0);
+    // The overlay copy sits exactly over the in-bar button: the bar rests 12
+    // above the screen edge here and the button's bottom is 26 up the bar.
     const overlay = renderer.root.findAll(node => {
       if (node.props.accessibilityLabel !== 'Close coach actions') return false;
       if (typeof node.props.onPress !== 'function') return false;
       const style = controlStyle(node);
-      return style?.width === 68 && style.bottom === 26;
+      return style?.width === 68 && style.bottom === 38;
     })[0]!;
     expect(controlStyle(overlay)).toMatchObject({
       width: 68,
       height: 68,
-      bottom: 26,
+      bottom: 38,
       left: '50%',
       marginLeft: -34,
     });
@@ -447,6 +466,259 @@ describe('PremiumTabBar coach menu', () => {
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'library',
+    });
+    act(() => renderer.unmount());
+  });
+});
+
+/**
+ * The bar floats: a rounded card positioned over the screens, a little above
+ * the home indicator, with the surface showing around it. It takes no layout
+ * room (screens reserve `useTabBarContentInset()` instead). Once the focused
+ * page is scrolled to its end it latches onto the bottom of the screen — the
+ * docked bar as it always sat — and lets go again as the page scrolls up.
+ */
+describe('PremiumTabBar floating geometry', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockReducedMotion = true;
+    mockInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+    act(() => useTabBarDockStore.setState({ docked: {} }));
+    jest
+      .spyOn(Dimensions, 'get')
+      .mockReturnValue({ width: 393, height: 852, scale: 3, fontScale: 1 });
+    jest.mocked(useSharedValue).mockClear();
+    mockWithTiming.mockClear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  function barNode(renderer: TestRenderer.ReactTestRenderer) {
+    return renderer.root.find(
+      node => node.type === View && node.props.testID === 'premium-tab-bar',
+    );
+  }
+
+  function barStyle(renderer: TestRenderer.ReactTestRenderer) {
+    return StyleSheet.flatten(barNode(renderer).props.style);
+  }
+
+  it.each([
+    { label: 'iOS home button', os: 'ios', bottom: 0, expectedLift: 12 },
+    { label: 'iOS home indicator', os: 'ios', bottom: 34, expectedLift: 20 },
+    {
+      label: 'Android gesture nav',
+      os: 'android',
+      bottom: 24,
+      expectedLift: 32,
+    },
+    {
+      label: 'Android 3-button nav',
+      os: 'android',
+      bottom: 48,
+      expectedLift: 56,
+    },
+  ])(
+    'rests $expectedLift above the screen edge with a $label ($bottom inset)',
+    ({ os, bottom, expectedLift }) => {
+      jest.replaceProperty(Platform, 'OS', os as 'ios');
+      mockInsets = { top: 59, bottom, left: 0, right: 0 };
+      const renderer = renderBar();
+      expect(tabBarBottomOffset(bottom)).toBe(expectedLift);
+      expect(barStyle(renderer)).toMatchObject({
+        position: 'absolute',
+        bottom: expectedLift,
+        left: TAB_BAR_SIDE_INSET,
+        right: TAB_BAR_SIDE_INSET,
+        height: TAB_BAR_HEIGHT,
+        borderRadius: radius.lg,
+        // Floating, the bar itself never stretches to the screen edge.
+        paddingBottom: 0,
+      });
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('sits just above the home indicator: the card dips into the 34pt inset rather than riding on top of it', () => {
+    mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+    const renderer = renderBar();
+    const style = barStyle(renderer);
+    expect(style.bottom).toBeLessThan(34);
+    expect(style.bottom).toBe(20);
+    act(() => renderer.unmount());
+  });
+
+  it('keeps the existing colors; floating, the top rule becomes a card edge with a downward shadow', () => {
+    const renderer = renderBar();
+    const style = barStyle(renderer);
+    expect(style.backgroundColor).toBe(color.tabBar);
+    expect(style.borderColor).toBe(color.line);
+    expect(style.borderTopWidth).toBe(StyleSheet.hairlineWidth);
+    expect(style.borderLeftWidth).toBe(StyleSheet.hairlineWidth);
+    expect(style.borderRightWidth).toBe(StyleSheet.hairlineWidth);
+    expect(style.borderBottomWidth).toBe(StyleSheet.hairlineWidth);
+    expect(style.shadowColor).toBe(shadow.floating.shadowColor);
+    expect(style.shadowOpacity).toBe(shadow.floating.shadowOpacity);
+    expect(style.shadowOffset.height).toBeGreaterThan(0);
+    act(() => renderer.unmount());
+  });
+
+  it.each([0, 34])(
+    'latches onto the bottom of the screen — full width, square, flush — once the focused page reaches its end (%s inset)',
+    async bottom => {
+      mockInsets = { top: 59, bottom, left: 0, right: 0 };
+      act(() => useTabBarDockStore.getState().setDocked('Home', true));
+      const renderer = renderBar();
+      const style = barStyle(renderer);
+      // The docked frame is the bar as it sat before it floated.
+      expect(style).toMatchObject({
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: TAB_BAR_HEIGHT + bottom,
+        paddingBottom: bottom,
+        borderRadius: 0,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderLeftWidth: 0,
+        borderRightWidth: 0,
+        borderBottomWidth: 0,
+        backgroundColor: color.tabBar,
+        borderColor: color.line,
+        shadowOpacity: 0.055,
+        shadowRadius: 20,
+      });
+      expect(style.shadowOffset.height).toBeLessThan(0);
+      // The Coach menu and overlay button follow the docked row.
+      await pressByLabel(renderer, 'Open coach actions');
+      const overlay = renderer.root
+        .findAll(
+          node =>
+            node.props.accessibilityLabel === 'Close coach actions' &&
+            node.props.accessibilityState?.expanded === true &&
+            typeof node.props.onPress === 'function',
+        )
+        .map(controlStyle)
+        .find(style_ => style_.left === '50%');
+      expect(overlay).toMatchObject({ bottom: bottom + 26 });
+      expect(StyleSheet.flatten(coachPanel(renderer).props.style).bottom).toBe(
+        bottom + TAB_BAR_HEIGHT + space.xl,
+      );
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('reads the latch of the FOCUSED tab only', () => {
+    act(() => useTabBarDockStore.getState().setDocked('Library', true));
+    // Home is focused (index 0): Library's latch does not dock the bar.
+    const renderer = renderBar();
+    expect(barStyle(renderer)).toMatchObject({
+      bottom: 12,
+      left: TAB_BAR_SIDE_INSET,
+      borderRadius: radius.lg,
+    });
+    // Focus Library. The reanimated mock evaluates the animated style during
+    // render, while the latch effect writes the shared value afterwards, so a
+    // second render is what reads it back (on device the UI thread does).
+    const focusLibrary = () =>
+      renderer.update(
+        <PremiumTabBar
+          {...makeProps()}
+          state={{ ...makeProps().state, index: 1 }}
+        />,
+      );
+    act(focusLibrary);
+    act(focusLibrary);
+    expect(barStyle(renderer)).toMatchObject({
+      bottom: 0,
+      left: 0,
+      right: 0,
+      borderRadius: 0,
+    });
+    act(() => renderer.unmount());
+  });
+
+  it('animates the latch with a 240ms ease-out, and snaps under reduced motion', () => {
+    mockReducedMotion = false;
+    const renderer = renderBar();
+    // results[0] is the menu progress; the dock value follows it.
+    const dock = jest.mocked(useSharedValue).mock.results[1]!.value;
+    expect(dock.value).toBe(0);
+    mockWithTiming.mockClear();
+    act(() => useTabBarDockStore.getState().setDocked('Home', true));
+    expect(mockWithTiming).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ duration: 240 }),
+    );
+    // The floating→docked animation never restarts the menu's own timing.
+    expect(mockWithTiming).not.toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ duration: 210 }),
+    );
+    mockReducedMotion = true;
+    mockWithTiming.mockClear();
+    act(() => renderer.update(<PremiumTabBar {...makeProps()} />));
+    act(() => useTabBarDockStore.getState().setDocked('Home', false));
+    expect(dock.value).toBe(0);
+    expect(mockWithTiming).not.toHaveBeenCalled();
+    act(() => renderer.unmount());
+  });
+
+  it('adds the horizontal safe-area insets to the side gaps', () => {
+    // Landscape on a Face ID phone: 21 under, 44 either side.
+    mockInsets = { top: 0, bottom: 21, left: 44, right: 44 };
+    const renderer = renderBar();
+    expect(StyleSheet.flatten(barNode(renderer).props.style)).toMatchObject({
+      left: TAB_BAR_SIDE_INSET + 44,
+      right: TAB_BAR_SIDE_INSET + 44,
+      bottom: 12,
+    });
+    act(() => renderer.unmount());
+  });
+
+  it.each([0, 34])(
+    'anchors the overlay Coach button and the menu to the resting bar (%s inset)',
+    async bottom => {
+      mockInsets = { top: 59, bottom, left: 0, right: 0 };
+      const renderer = renderBar();
+      await pressByLabel(renderer, 'Open coach actions');
+      const lift = tabBarBottomOffset(bottom);
+      // In-bar button: rises 24 above a 70 bar, so its bottom edge is 26 up.
+      const overlay = renderer.root
+        .findAll(
+          node =>
+            node.props.accessibilityLabel === 'Close coach actions' &&
+            node.props.accessibilityState?.expanded === true &&
+            typeof node.props.onPress === 'function',
+        )
+        .map(controlStyle)
+        .find(style => style.left === '50%');
+      expect(overlay).toMatchObject({ bottom: lift + 26 });
+      expect(StyleSheet.flatten(coachPanel(renderer).props.style).bottom).toBe(
+        lift + TAB_BAR_HEIGHT + space.xl,
+      );
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('dims the whole screen behind the menu, the floating bar included', async () => {
+    mockInsets = { top: 59, bottom: 34, left: 0, right: 0 };
+    const renderer = renderBar();
+    await pressByLabel(renderer, 'Open coach actions');
+    const scrim = renderer.root
+      .findAllByType(View)
+      .map(node => StyleSheet.flatten(node.props.style))
+      .find(style => style?.backgroundColor === color.overlayStrong);
+    expect(scrim).toMatchObject({
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: color.overlayStrong,
     });
     act(() => renderer.unmount());
   });

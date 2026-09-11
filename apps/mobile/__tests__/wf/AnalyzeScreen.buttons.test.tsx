@@ -20,6 +20,7 @@ jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
 jest.mock('../../src/account/apiSession', () => ({
+  ...jest.requireActual('../../src/account/apiSession'),
   getApiSession: () => null,
 }));
 jest.mock('../../src/review/appStoreReview', () => ({
@@ -112,6 +113,10 @@ import {
   setDeclaredStroke,
 } from '../../src/data/repository';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { reportScoredAnalysisForReview } from '../../src/review/appStoreReview';
 
 // ─── fixtures ───────────────────────────────────────────────────────────────
@@ -349,6 +354,7 @@ const extract = extractImportedPoseSequence as jest.Mock;
 
 describe('AnalyzeScreen button ledger', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.useFakeTimers();
     jest.clearAllMocks();
     mockRouteParams = {};
@@ -359,6 +365,7 @@ describe('AnalyzeScreen button ledger', () => {
   });
 
   afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
@@ -646,13 +653,19 @@ describe('AnalyzeScreen button ledger', () => {
 
       // Error phase again → Close + header Close both leave the screen.
       capture.mockRejectedValueOnce(new Error('Recording failed.'));
-      await pressButton(renderer, 'Capture another');
+      await pressButton(renderer, 'Record another clip');
       expect(rendered(renderer)).toContain('Recording failed.');
       await pressButton(renderer, 'Close');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
       await pressHeaderClose(renderer);
-      expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+      expect(mockNavigation.goBack).toHaveBeenCalledTimes(1); // retained exit is inert
       await unmount(renderer);
+      capture.mockRejectedValueOnce(new Error('Recording failed.'));
+      const reopened = await renderScreen('camera');
+      await pressButton(reopened, 'Open automatic camera');
+      await pressHeaderClose(reopened);
+      expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+      await unmount(reopened);
     });
   });
 
@@ -730,11 +743,11 @@ describe('AnalyzeScreen button ledger', () => {
       expect(copy).toContain('took too long to respond');
       expect(mockNavigation.replace).not.toHaveBeenCalled();
 
-      // Try again keeps the declaration ("dink") and re-captures; a guided
-      // clip with a declaration goes straight through the zero-touch path.
+      // This legacy seam has no original proof. Its separately labelled
+      // new capture keeps the declaration and takes the zero-touch path.
       capture.mockResolvedValueOnce(guidedClip);
       analyze.mockResolvedValueOnce(scoredOutcome('analysis-retry'));
-      await pressButton(renderer, 'Try again');
+      await pressButton(renderer, 'Record another clip');
       expect(capture).toHaveBeenCalledTimes(2);
       expect(analyze).toHaveBeenCalledTimes(2);
       expect(analyze.mock.calls[1]![0]).toEqual(
@@ -763,17 +776,17 @@ describe('AnalyzeScreen button ledger', () => {
         reason: 'Your full body left the frame.',
         envelope: { overall: 'UNSUPPORTED', dimensions: [] },
       });
-      await pressButton(renderer, 'Try again');
+      await pressButton(renderer, 'Record another clip');
       expect(analyze).toHaveBeenCalledTimes(2);
       expect(rendered(renderer)).toContain('Your full body left the frame.');
       expect(mockNavigation.replace).not.toHaveBeenCalled();
       await unmount(renderer);
     });
 
-    it('Capture another relaunches the camera; Open Library navigates to the Library tab; header Close pops to top', async () => {
+    it('Record another clip relaunches the camera; Open Library navigates to the Library tab; header Close pops to top', async () => {
       const renderer = await renderSavedCamera();
       expect(capture).toHaveBeenCalledTimes(1);
-      await pressButton(renderer, 'Capture another');
+      await pressButton(renderer, 'Record another clip');
       expect(capture).toHaveBeenCalledTimes(2);
       expect(rendered(renderer)).toContain('Captured');
 
@@ -783,8 +796,12 @@ describe('AnalyzeScreen button ledger', () => {
       });
 
       await press(renderer, 'Close');
-      expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+      expect(mockNavigation.popToTop).not.toHaveBeenCalled(); // Library already left this visit
       await unmount(renderer);
+      const reopened = await renderSavedCamera();
+      await pressHeaderClose(reopened);
+      expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+      await unmount(reopened);
     });
 
     it('pose-less guided clip: honest "cannot be scored" copy, no score button, recovery buttons still live', async () => {
@@ -793,7 +810,7 @@ describe('AnalyzeScreen button ledger', () => {
       expect(copy).toContain('cannot be scored');
       expect(hasLabel(renderer, 'Get my Technique Score')).toBe(false);
       expect(hasLabel(renderer, 'Dink')).toBe(false);
-      await pressButton(renderer, 'Capture another');
+      await pressButton(renderer, 'Record another clip');
       expect(capture).toHaveBeenCalledTimes(2);
       await pressButton(renderer, 'Open Library');
       expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', {
@@ -811,7 +828,7 @@ describe('AnalyzeScreen button ledger', () => {
       expect(rendered(renderer)).toContain('offline');
       // The armed AUTO intent survives the error: re-capture scores directly.
       analyze.mockResolvedValueOnce(scoredOutcome('analysis-auto-2'));
-      await pressButton(renderer, 'Try again');
+      await pressButton(renderer, 'Record another clip');
       expect(analyze).toHaveBeenCalledTimes(2);
       expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
         analysisId: 'analysis-auto-2',
@@ -841,21 +858,26 @@ describe('AnalyzeScreen button ledger', () => {
       return renderer;
     }
 
-    it('See the full read routes to Result; Capture another relaunches; Close goes back; header Close pops', async () => {
+    it('See the full read routes to Result; Record another clip relaunches; Close goes back; header Close pops', async () => {
       const renderer = await renderAnalyzed(true);
       await pressButton(renderer, 'See the full read');
       expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
         analysisId: 'analysis-lc',
       });
 
+      await pressButton(renderer, 'Record another clip');
+      expect(capture).toHaveBeenCalledTimes(1); // retained after Result navigation
+      expect(analyze).toHaveBeenCalledTimes(1);
+      await unmount(renderer);
+      const reopened = await renderAnalyzed(true);
       analyze.mockResolvedValueOnce(scoredOutcome('analysis-lc-2'));
-      await pressButton(renderer, 'Capture another');
-      expect(capture).toHaveBeenCalledTimes(2);
-      expect(analyze).toHaveBeenCalledTimes(2);
+      await pressButton(reopened, 'Record another clip');
+      expect(capture).toHaveBeenCalledTimes(3);
+      expect(analyze).toHaveBeenCalledTimes(3);
       expect(mockNavigation.replace).toHaveBeenLastCalledWith('Result', {
         analysisId: 'analysis-lc-2',
       });
-      await unmount(renderer);
+      await unmount(reopened);
     });
 
     it('withheld result hides See the full read; Close and header Close still exit', async () => {
@@ -864,8 +886,12 @@ describe('AnalyzeScreen button ledger', () => {
       await pressButton(renderer, 'Close');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
       await pressHeaderClose(renderer);
-      expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+      expect(mockNavigation.popToTop).not.toHaveBeenCalled();
       await unmount(renderer);
+      const reopened = await renderAnalyzed(false);
+      await pressHeaderClose(reopened);
+      expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+      await unmount(reopened);
     });
   });
 
@@ -907,21 +933,23 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('header Close and the Modal back gesture both route to Result', async () => {
-      const renderer = await renderFreeLimit();
-      await press(renderer, 'Close');
-      expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
-      expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
-        analysisId: 'analysis-fl',
-      });
-      const modal = renderer.root.findByType(Modal);
-      expect(modal.props.visible).toBe(true);
-      await act(async () => {
-        modal.props.onRequestClose();
-      });
-      expect(mockNavigation.replace).toHaveBeenCalledTimes(2);
-      await unmount(renderer);
-    });
+    it.each(['header', 'modal'] as const)(
+      '%s Close routes once to Result and its retained callback cannot navigate again',
+      async exit => {
+        const renderer = await renderFreeLimit();
+        const modal = renderer.root.findByType(Modal);
+        expect(modal.props.visible).toBe(true);
+        if (exit === 'header') await press(renderer, 'Close');
+        else await act(async () => modal.props.onRequestClose());
+        expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
+        expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+          analysisId: 'analysis-fl',
+        });
+        await act(async () => modal.props.onRequestClose());
+        expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
+        await unmount(renderer);
+      },
+    );
   });
 
   // ─── LIBRARY source (imported video) ─────────────────────────────────────
@@ -934,7 +962,7 @@ describe('AnalyzeScreen button ledger', () => {
       const renderer = await renderScreen('library');
       expect(importVideo).toHaveBeenCalledTimes(1);
       expect(rendered(renderer)).toContain('Capture complete');
-      expect(hasLabel(renderer, 'Import another')).toBe(true);
+      expect(hasLabel(renderer, 'Import another video')).toBe(true);
       expect(hasLabel(renderer, 'Get my Technique Score')).toBe(true);
 
       await press(renderer, 'Forehand drive');
@@ -960,7 +988,14 @@ describe('AnalyzeScreen button ledger', () => {
         selection,
       );
       expect(extract).toHaveBeenCalledTimes(1);
-      expect(extract).toHaveBeenCalledWith(importedClip, selection.point);
+      expect(extract).toHaveBeenCalledWith(
+        importedClip,
+        selection.point,
+        expect.objectContaining({
+          operationId: expect.any(String),
+          signal: expect.objectContaining({ aborted: false }),
+        }),
+      );
       expect(analyze).toHaveBeenCalledTimes(1);
       expect(analyze.mock.calls[0]![0]).toEqual(
         expect.objectContaining({
@@ -985,41 +1020,53 @@ describe('AnalyzeScreen button ledger', () => {
       const renderer = await renderScreen('library');
       await press(renderer, 'Dink');
       const selector = renderer.root.findByType(TargetSelector);
+      expect(selector.props.automaticOnly).toBe(true);
       await act(async () => {
         selector.props.onSkip();
       });
       await act(async () => {});
       expect(setCaptureTargetSeed).not.toHaveBeenCalled();
       expect(extract).toHaveBeenCalledTimes(1);
-      expect(extract).toHaveBeenCalledWith(importedClip, null);
+      expect(extract).toHaveBeenCalledWith(
+        importedClip,
+        null,
+        expect.objectContaining({
+          operationId: expect.any(String),
+          signal: expect.objectContaining({ aborted: false }),
+        }),
+      );
       expect(analyze).not.toHaveBeenCalled();
       const copy = rendered(renderer);
       expect(copy).toContain('Nothing was rated.');
       expect(copy).toContain('No person could be tracked in this video');
 
-      await pressButton(renderer, 'Try again');
+      await pressButton(renderer, 'Import another video');
       expect(importVideo).toHaveBeenCalledTimes(2);
       expect(rendered(renderer)).not.toContain('Nothing was rated.');
       await unmount(renderer);
     });
 
-    it('Import another reopens the picker; header Close pops to top; picker cancel goes back', async () => {
+    it('Import another video reopens the picker; header Close pops to top; picker cancel goes back', async () => {
       importVideo.mockResolvedValue(importedClip);
       const renderer = await renderScreen('library');
-      await pressButton(renderer, 'Import another');
+      await pressButton(renderer, 'Import another video');
       expect(importVideo).toHaveBeenCalledTimes(2);
       await press(renderer, 'Close');
       expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
 
+      await pressButton(renderer, 'Import another video');
+      expect(importVideo).toHaveBeenCalledTimes(2); // closed visit cannot reopen the picker
+      expect(mockNavigation.goBack).not.toHaveBeenCalled();
+      await unmount(renderer);
       importVideo.mockRejectedValueOnce(
         Object.assign(new Error('Video import was canceled.'), {
           code: 'camera.cancelled',
         }),
       );
-      await pressButton(renderer, 'Import another');
+      const reopened = await renderScreen('library');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-      expect(rendered(renderer)).not.toContain('Nothing was rated.');
-      await unmount(renderer);
+      expect(rendered(reopened)).not.toContain('Nothing was rated.');
+      await unmount(reopened);
     });
 
     it('TargetSelector is not shown again once a seed exists; Get my Technique Score scores directly', async () => {
@@ -1046,7 +1093,7 @@ describe('AnalyzeScreen button ledger', () => {
       expect(analyze).toHaveBeenCalledTimes(1);
       expect(rendered(renderer)).toContain('Measuring your swing…');
       await press(renderer, 'Close');
-      expect(cancelCameraOperation).toHaveBeenCalled();
+      expect(cancelCameraOperation).not.toHaveBeenCalled();
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
       await act(async () => {
         resolveAnalysis(scoredOutcome('analysis-late'));
@@ -1056,6 +1103,7 @@ describe('AnalyzeScreen button ledger', () => {
       // exit; the stale REPLACE is dropped by the stack router once the
       // route is gone (its source key no longer exists).
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
       await unmount(renderer);
     });
   });

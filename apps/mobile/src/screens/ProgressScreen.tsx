@@ -23,6 +23,12 @@ import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
 import {
+  captureDataOwnerContext,
+  getActiveDataOwner,
+  isDataOwnerContextCurrent,
+  SIGNED_OUT_DATA_OWNER,
+} from '../data/accountScope';
+import {
   listCaptureHistory,
   listRealAnalysisFacts,
   type CaptureHistoryEntry,
@@ -40,11 +46,16 @@ import {
   PRACTICE_HISTORY_RANGES,
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
-import {
-  DUPR_ESTIMATE_NOTE,
-  formatDuprEstimate,
-} from '../progress/duprEstimate';
 import { DashSectionHeader } from '../progress/DashSectionHeader';
+import { DuprReadout } from '../progress/DuprReadout';
+import {
+  DUPR_ESTIMATE_LABEL,
+  DUPR_ESTIMATE_NOTE,
+  duprFromScore,
+  formatDupr,
+  formatDuprDelta,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { PracticeSetCard } from '../progress/PracticeSetCard';
 import { latestPracticeSet } from '../progress/practiceSetProgress';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
@@ -60,6 +71,8 @@ import { AchievementsShowcase } from '../consistency/AchievementsShowcase';
 import { ConsistencyCard } from '../consistency/ConsistencyCard';
 import { useConsistencyStore } from '../consistency/store';
 import type { RootStackParams } from '../navigation/params';
+import { useTabBarContentInset } from '../navigation/tabBarLayout';
+import { useTabScrollDock } from '../navigation/tabBarDock';
 import { plural } from '../util/plural';
 
 /**
@@ -89,10 +102,6 @@ function spread(values: number[]) {
   const variance =
     values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   return Math.sqrt(variance);
-}
-
-function signed(value: number) {
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 }
 
 function deviceTimeZone() {
@@ -220,9 +229,17 @@ function EvidenceMetric(props: {
 
 export function ProgressScreen() {
   const { width } = useWindowDimensions();
+  const tabBarInset = useTabBarContentInset();
+  const tabBarDock = useTabScrollDock('Performance');
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const profile = useAppStore(state => state.profile);
+  const ownerKey = useAppStore(state => state.ownerKey);
+  const activeOwner = getActiveDataOwner();
+  const ownerGeneration =
+    activeOwner === SIGNED_OUT_DATA_OWNER
+      ? null
+      : captureDataOwnerContext().generation;
   const consistency = useConsistencyStore(state => state.snapshot);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
   const timeZone = useMemo(deviceTimeZone, []);
@@ -234,44 +251,75 @@ export function ProgressScreen() {
   const [canonical, setCanonical] = useState<CanonicalProgress | null>(null);
   const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
   const [loaded, setLoaded] = useState(false);
+  const [loadedOwner, setLoadedOwner] = useState<{
+    ownerKey: string;
+    generation: number | null;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadRevision, setLoadRevision] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      const owner = getActiveDataOwner();
+      const context =
+        owner === SIGNED_OUT_DATA_OWNER ? null : captureDataOwnerContext();
+      const isCurrent = () =>
+        active &&
+        getActiveDataOwner() === owner &&
+        (context === null || isDataOwnerContextCurrent(context));
       void (async () => {
         try {
           const db = getDb();
-          const apiSession = getApiSession();
-          const [localFacts, localCaptures, accountProgress] =
-            await Promise.all([
-              listRealAnalysisFacts(db, null),
-              listCaptureHistory(db, null),
-              apiSession
-                ? fetchCanonicalProgress(apiSession).catch(() => null)
-                : Promise.resolve(null),
-            ]);
-          if (!active) return;
+          const [localFacts, localCaptures] = await Promise.all([
+            listRealAnalysisFacts(db, null),
+            listCaptureHistory(db, null),
+          ]);
+          if (!isCurrent()) return;
           setFacts(localFacts);
           setCaptures(localCaptures);
-          setCanonical(accountProgress);
+          setCanonical(null);
           setAsOfIso(new Date().toISOString());
           setLoadError(null);
+          // Local technique/practice is usable even while the network is
+          // unavailable. A later canonical response may enrich this focus
+          // only; it cannot publish after blur, retry, or an owner change.
+          const apiSession = getApiSession();
+          if (apiSession?.canonicalAppUserId === owner) {
+            void fetchCanonicalProgress(apiSession)
+              .then(accountProgress => {
+                if (isCurrent()) setCanonical(accountProgress);
+              })
+              .catch(() => {
+                if (isCurrent()) setCanonical(null);
+              });
+          }
         } catch {
-          if (!active) return;
+          if (!isCurrent()) return;
           setLoadError(
             'Your saved camera history could not be opened. No empty values were substituted.',
           );
         } finally {
-          if (active) setLoaded(true);
+          if (isCurrent()) {
+            setLoadedOwner({
+              ownerKey: owner,
+              generation: context?.generation ?? null,
+            });
+            setLoaded(true);
+          }
         }
       })();
       void refreshConsistency();
       return () => {
         active = false;
       };
-    }, [loadRevision, refreshConsistency]),
+    }, [
+      activeOwner,
+      loadRevision,
+      ownerGeneration,
+      ownerKey,
+      refreshConsistency,
+    ]),
   );
 
   const practice = useMemo(
@@ -352,6 +400,7 @@ export function ProgressScreen() {
           points,
           movement: points.length >= 2 ? points.at(-1)! - points[0]! : null,
           spread: spread(points.slice(-10)),
+          duprSpread: spread(points.slice(-10).map(duprFromScore)),
           repCount: comparable.reduce((sum, point) => sum + point.shotCount, 0),
           basis: 'daily averages' as const,
         };
@@ -376,6 +425,9 @@ export function ProgressScreen() {
         points,
         movement: points.length >= 2 ? points.at(-1)! - points[0]! : null,
         spread: spread(points.slice(-10)),
+        // The printed spread is the deviation of the DUPR figures themselves
+        // — the map is not linear, so a 0–10 deviation cannot be converted.
+        duprSpread: spread(points.slice(-10).map(duprFromScore)),
         repCount: points.length,
         basis: 'scored reads' as const,
       };
@@ -434,20 +486,32 @@ export function ProgressScreen() {
       ? bestScore.current - bestScore.previous
       : null;
 
-  if (!loaded) return <LoadingState dark label="Loading measured progress…" />;
+  if (
+    !loaded ||
+    loadedOwner?.ownerKey !== activeOwner ||
+    loadedOwner.generation !== ownerGeneration
+  ) {
+    return (
+      <View style={[styles.screen, { paddingBottom: tabBarInset }]}>
+        <LoadingState dark label="Loading measured progress…" />
+      </View>
+    );
+  }
 
   if (loadError) {
     return (
-      <ErrorState
-        dark
-        title="Progress couldn’t load"
-        detail={loadError}
-        onRetry={() => {
-          setLoaded(false);
-          setLoadError(null);
-          setLoadRevision(value => value + 1);
-        }}
-      />
+      <View style={[styles.screen, { paddingBottom: tabBarInset }]}>
+        <ErrorState
+          dark
+          title="Progress couldn’t load"
+          detail={loadError}
+          onRetry={() => {
+            setLoaded(false);
+            setLoadError(null);
+            setLoadRevision(value => value + 1);
+          }}
+        />
+      </View>
     );
   }
 
@@ -455,7 +519,8 @@ export function ProgressScreen() {
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        {...tabBarDock}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarInset }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pageHeader}>
@@ -559,11 +624,14 @@ export function ProgressScreen() {
                   </View>
                   <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
-                      This chart is waiting on you.
+                      {practice.longestStreak > 0
+                        ? 'No verified captures in this range.'
+                        : 'This chart is waiting on you.'}
                     </Text>
                     <Text style={[type.caption, styles.captureZeroDetail]}>
-                      Step into frame or import a clip — every measured swing
-                      lands here.
+                      {practice.longestStreak > 0
+                        ? 'Your verified captures fall outside the selected dates. Check Recent captures below.'
+                        : 'Step into frame or import a clip — every measured swing lands here.'}
                     </Text>
                   </View>
                 </View>
@@ -810,15 +878,14 @@ export function ProgressScreen() {
                   </View>
                 </View>
               ) : (
-                <View style={styles.techniqueScoreRow}>
-                  <Text style={styles.techniqueScore}>
-                    {latestScore.toFixed(1)}
-                  </Text>
-                  <Text style={[type.body, styles.techniqueScale]}>/ 10</Text>
-                  <Text style={[type.caption, styles.techniqueDupr]}>
-                    {formatDuprEstimate(latestScore)}
-                  </Text>
-                </View>
+                <DuprReadout
+                  score={latestScore}
+                  valueStyle={styles.techniqueScore}
+                  dark
+                  align="flex-start"
+                  style={styles.techniqueScoreRow}
+                  testID="technique-latest-rating"
+                />
               )}
             </Card>
 
@@ -846,30 +913,40 @@ export function ProgressScreen() {
               />
               <StatDeltaRow
                 icon="progress"
-                label="AVG SCORE"
+                label="AVG DUPR"
                 value={
-                  avgScore.current === null ? '—' : avgScore.current.toFixed(1)
+                  avgScore.current === null ? '—' : formatDupr(avgScore.current)
+                }
+                secondary={
+                  avgScore.current === null
+                    ? null
+                    : formatTechniqueScore(avgScore.current)
                 }
                 previous={
                   avgScore.previous === null
                     ? null
-                    : avgScore.previous.toFixed(1)
+                    : formatDupr(avgScore.previous)
                 }
                 delta={avgDelta}
                 testID="technique-stat-avg"
               />
               <StatDeltaRow
                 icon="star"
-                label="BEST SCORE"
+                label="BEST DUPR"
                 value={
                   bestScore.current === null
                     ? '—'
-                    : bestScore.current.toFixed(1)
+                    : formatDupr(bestScore.current)
+                }
+                secondary={
+                  bestScore.current === null
+                    ? null
+                    : formatTechniqueScore(bestScore.current)
                 }
                 previous={
                   bestScore.previous === null
                     ? null
-                    : bestScore.previous.toFixed(1)
+                    : formatDupr(bestScore.previous)
                 }
                 delta={bestDelta}
                 testID="technique-stat-best"
@@ -889,7 +966,7 @@ export function ProgressScreen() {
             </View>
 
             <DashSectionHeader
-              title="SCORE TREND"
+              title="DUPR TREND"
               right={selectedDefinition.label.toUpperCase()}
             />
             <Card tone="dark" style={styles.trendCard}>
@@ -897,7 +974,9 @@ export function ProgressScreen() {
                 <Text style={[type.micro, { color: color.volt }]}>
                   DAILY AVG · ALL TECHNIQUES
                 </Text>
-                <Text style={[type.micro, styles.trendScale]}>0–10</Text>
+                <Text style={[type.micro, styles.trendScale]}>
+                  {DUPR_ESTIMATE_LABEL}
+                </Text>
               </View>
               {reps.current === 0 ? (
                 <View style={styles.trendEmpty}>
@@ -934,13 +1013,16 @@ export function ProgressScreen() {
                   </Text>
                   <Text style={[type.caption, styles.pbDetail]}>
                     Beats your previous best{' '}
-                    {dashboard.personalBest.previousBest.toFixed(1)} ·{' '}
+                    {formatDupr(dashboard.personalBest.previousBest)} DUPR ·{' '}
                     {shortDayLabel(dashboard.personalBest.day)}
                   </Text>
                 </View>
-                <Text style={styles.pbScore}>
-                  {dashboard.personalBest.score.toFixed(1)}
-                </Text>
+                <DuprReadout
+                  score={dashboard.personalBest.score}
+                  valueStyle={styles.pbScore}
+                  dark
+                  testID="personal-best-rating"
+                />
               </Card>
             ) : null}
 
@@ -978,20 +1060,26 @@ export function ProgressScreen() {
                         </Text>
                       </View>
                       <View style={styles.strokeScoreWrap}>
-                        <Text style={styles.strokeScore}>
-                          {current?.toFixed(1)}
-                        </Text>
+                        {current !== null ? (
+                          <DuprReadout
+                            score={current}
+                            valueStyle={styles.strokeScore}
+                            dark
+                            testID={`stroke-rating-${item.shotType}`}
+                          />
+                        ) : null}
                         {item.movement !== null ? (
                           <Text
                             style={[
                               type.micro,
+                              styles.strokeMovement,
                               {
                                 color:
                                   item.movement >= 0 ? color.mint : color.flame,
                               },
                             ]}
                           >
-                            {signed(item.movement)} SERIES
+                            {formatDuprDelta(item.points[0]!, current!)} SERIES
                           </Text>
                         ) : null}
                       </View>
@@ -1014,9 +1102,9 @@ export function ProgressScreen() {
                         standard deviation
                       </Text>
                       <Text style={[type.bodyBold, { color: color.onDark }]}>
-                        {item.spread === null
+                        {item.duprSpread === null
                           ? 'Need 2'
-                          : `±${item.spread.toFixed(1)}`}
+                          : `±${item.duprSpread.toFixed(2)}`}
                       </Text>
                     </View>
                   </Card>
@@ -1103,9 +1191,9 @@ export function ProgressScreen() {
                 </Text>
               </View>
             </View>
-            <Text style={styles.ratingDisclosure}>
-              Technique Score is coaching feedback, not a DUPR or verified match
-              rating. {DUPR_ESTIMATE_NOTE}
+            <Text style={styles.ratingDisclosure} testID="progress-dupr-note">
+              {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
+              describes stroke form.
             </Text>
           </>
         )}
@@ -1120,7 +1208,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.xl,
-    paddingBottom: space.xxxl + 28,
   },
   pageHeader: { maxWidth: 380 },
   pageTitle: { color: color.onDark },
@@ -1411,17 +1498,11 @@ const styles = StyleSheet.create({
     borderColor: color.lineDark,
   },
   techniqueEmptyCopy: { color: color.onDarkSubtle, marginTop: 4 },
-  techniqueScoreRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: space.xl,
-  },
+  techniqueScoreRow: { marginTop: space.xl },
   techniqueScore: {
     ...type.display,
     color: color.onDark,
   },
-  techniqueScale: { color: color.onDarkSubtle, marginLeft: 8 },
-  techniqueDupr: { color: color.onDarkFaint, marginLeft: 8 },
   trendCard: { paddingBottom: space.md },
   trendCardTop: {
     flexDirection: 'row',
@@ -1493,6 +1574,7 @@ const styles = StyleSheet.create({
     ...type.score,
     color: color.onDark,
   },
+  strokeMovement: { marginTop: 2 },
   chartWrap: { marginTop: space.md, alignItems: 'center', overflow: 'hidden' },
   strokeMeta: {
     marginTop: space.md,

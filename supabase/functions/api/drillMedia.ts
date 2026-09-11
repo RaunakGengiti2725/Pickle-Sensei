@@ -63,11 +63,6 @@ const VIDEOS = {
     creatorName: "Sarah Ansboury",
     title: "How To Play Skinny Singles - Lesson & Drill",
   },
-  skinnySinglesNspired: {
-    videoId: "LvCnX0AytaI",
-    creatorName: "Nspired Pickleball",
-    title: "The Greatest PICKLEBALL Drill You Can Do With Two People!",
-  },
   skinnySinglesJardim: {
     videoId: "TV5C7gbJFnI",
     creatorName: "Simone Jardim Pickleball",
@@ -98,15 +93,10 @@ const VIDEOS = {
     creatorName: "Limitless Pickleball",
     title: "How to reset from the transition zone",
   },
-  midcourtResetSelkirk: {
-    videoId: "iP1_CqHT_6Q",
-    creatorName: "Selkirk TV",
-    title: "How to Reset From Mid-Court and Still Win the Point",
-  },
   resetGameOfDeath: {
     videoId: "SJoRLqssCFU",
     creatorName: "Cori Elliott",
-    title: "Reset Game of Death [BEST PICKLEBALL DRILLS]",
+    title: "Reset Game of Death",
   },
 } as const satisfies Record<string, VerifiedVideo>;
 
@@ -135,15 +125,10 @@ const MEDIA_BY_SLUG: Record<string, VideoKey[]> = {
   ],
   "drop-and-charge": ["thirdShotDrop411", "aggressiveThirdDrop"],
   "reset-game-of-death": ["resetGameOfDeath", "resetDrillMidVsKitchen"],
-  "midcourt-reset-blocks": ["midcourtResetSelkirk", "transitionReset"],
-  "transition-zone-crawl": ["transitionReset", "midcourtResetSelkirk"],
+  "midcourt-reset-blocks": ["transitionReset"],
+  "transition-zone-crawl": ["transitionReset"],
   "wall-reset-softening": ["wallDrills20Min"],
-  "skinny-singles": [
-    "skinnySinglesAnsboury",
-    "skinnySinglesNspired",
-    "skinnySinglesJardim",
-    "skinnySinglesBeginner",
-  ],
+  "skinny-singles": ["skinnySinglesAnsboury", "skinnySinglesJardim", "skinnySinglesBeginner"],
 };
 
 /** Shape mirrors apps/mobile/src/training/api.ts parseInstructionalMedia:

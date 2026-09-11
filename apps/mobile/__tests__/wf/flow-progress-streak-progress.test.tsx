@@ -20,7 +20,10 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
 });
 
 const mockNavigate = jest.fn();
@@ -88,7 +91,12 @@ jest.mock('../../src/progress/rankCelebration', () => ({
 
 import { ProgressScreen } from '../../src/screens/ProgressScreen';
 import { PRACTICE_HISTORY_RANGES } from '../../src/progress/practiceHistory';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 
+const OWNER = '11111111-1111-4111-8111-111111111111';
 const DAY_MS = 86_400_000;
 
 function daysAgoIso(days: number): string {
@@ -194,6 +202,7 @@ async function pressByLabel(
 
 describe('flow: progress dashboard', () => {
   beforeEach(() => {
+    setActiveDataOwner(OWNER);
     jest.useFakeTimers();
     mockNavigate.mockClear();
     mockMaybeCelebrate.mockClear();
@@ -215,6 +224,7 @@ describe('flow: progress dashboard', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   });
 
   it('opens on Technique with a real tablist and refreshes the streak on focus', async () => {
@@ -252,12 +262,12 @@ describe('flow: progress dashboard', () => {
 
   it('switches sections both ways and keeps the selected tab honest', async () => {
     const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('SCORE TREND');
+    expect(renderedText(renderer)).toContain('DUPR TREND');
 
     await pressByLabel(renderer, 'practice progress');
     let text = renderedText(renderer);
     expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('SCORE TREND');
+    expect(text).not.toContain('DUPR TREND');
     expect(
       hostByLabel(renderer, 'practice progress')!.props.accessibilityState
         .selected,
@@ -270,7 +280,7 @@ describe('flow: progress dashboard', () => {
 
     await pressByLabel(renderer, 'technique progress');
     text = renderedText(renderer);
-    expect(text).toContain('SCORE TREND');
+    expect(text).toContain('DUPR TREND');
     expect(
       hostByLabel(renderer, 'technique progress')!.props.accessibilityState
         .selected,
@@ -366,6 +376,7 @@ describe('flow: progress dashboard', () => {
     mockGetApiSession.mockReturnValue({
       apiBaseUrl: 'https://example.test',
       bearerToken: 'fake',
+      canonicalAppUserId: OWNER,
     });
     mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
     mockFetchPlayerRank.mockRejectedValue(new Error('offline'));
@@ -376,6 +387,7 @@ describe('flow: progress dashboard', () => {
     expect(text).toContain('KEY STATISTICS');
     // Device-only evidence stands in: nothing is invented for the rank.
     expect(text).toContain('Unranked');
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 

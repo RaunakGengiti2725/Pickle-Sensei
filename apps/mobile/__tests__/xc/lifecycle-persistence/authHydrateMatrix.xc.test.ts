@@ -17,11 +17,14 @@
  * Invariants asserted per scenario (the contract from AGENTS.md "Auth
  * sessions", not the current code path):
  *   noThrow             hydrate() resolves and `hydrated` becomes true
- *   noImplicitSignOut   a parseable canonical vault record + any refresh
+ *   noImplicitSignOut   a readable restore gate + canonical vault + any refresh
  *                       outcome other than 401/403 ends signed in as that
  *                       account, with the data owner pointing at it
  *   revokedSignsOut     401/403 → signed out AND the vault record is gone
- *   malformedDiscarded  a record the vault refuses is removed from the Keychain
+ *   unknownVaultHeld    invalid/unsupported/unreadable credentials stay intact
+ *                       with an unavailable state and no provider fallback
+ *   unknownGateHeld     unreadable restore metadata blocks resurrection and
+ *                       preserves the credential for a later retry
  *   shotsPreserved      local_shot rows are byte-identical afterwards and no
  *                       destructive statement ran
  *   noSessionInKv       kv never holds session material afterwards
@@ -31,13 +34,10 @@
  *                       (`local_data.unavailable`) and never as a sign-out;
  *                       a healthy database leaves it null
  *
- * SQLite is the LOCAL-DATA layer: a database that cannot be opened or read
- * (open throws, the legacy/local-mode kv reads throw, the legacy kv wipe
- * throws, every statement throws) must not change the sign-in outcome —
- * the Keychain is consulted first and every vault invariant above is
- * asserted unchanged for those rows. Only the two paths that NEED the
- * database (the `auth.local-mode` guest flag and the legacy Google
- * `auth.last-provider` fallback) are not reachable without it.
+ * SQLite also holds the non-secret suppression/replacement gate. An unreadable
+ * gate cannot be treated as an absent marker. Other local-data read failures
+ * do not revoke an eligible credential. No corruption authorizes deleting the
+ * original credential or falling back to a different provider.
  *
  * Every executed row (inputs + observations + per-invariant verdict) goes to
  * artifacts/xc-lifecycle-persistence/auth-hydrate-matrix.rows.json; the
@@ -52,6 +52,7 @@ import {
 } from '../../../src/account/apiSession';
 import { SESSION_VAULT_SERVICE } from '../../../src/account/sessionVault';
 import { stopSessionKeeper } from '../../../src/account/sessionKeeper';
+import { stopBillingLifecycle } from '../../../src/billing/lifecycle';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -66,7 +67,6 @@ import {
   KV_LEGACY_SESSION_VARIANTS,
   KV_LOCAL_MODE_VARIANTS,
   LAST_PROVIDER_GOOGLE_VALUE,
-  VAULT_ACCEPTED_NON_UUID,
   VAULT_ACCEPTED_VARIANTS,
   VAULT_RECORD_VARIANTS,
   VAULT_VARIANT_NAMES,
@@ -390,6 +390,8 @@ function installFetch(scenario: AuthScenario): jest.Mock {
 }
 
 function configureGoogle(mode: GoogleMode): void {
+  mockGoogleSignin.hasPreviousSignIn.mockClear();
+  mockGoogleSignin.signInSilently.mockClear();
   mockGoogleSignin.hasPreviousSignIn.mockReturnValue(mode !== 'no-previous');
   switch (mode) {
     case 'silent-success':
@@ -449,6 +451,7 @@ const nativeModules = NativeModules as { PickleAuth?: unknown };
 const realFetch = globalThis.fetch;
 
 function resetRuntime(): void {
+  stopBillingLifecycle();
   stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
@@ -465,6 +468,7 @@ function resetRuntime(): void {
 
 const ALLOWED_VAULT_KEYS = [
   'version',
+  'generation',
   'provider',
   'canonicalAppUserId',
   'refreshToken',
@@ -480,8 +484,7 @@ function expectedProfile(scenario: AuthScenario) {
     vaultPresent &&
     keychainReadable &&
     VAULT_ACCEPTED_VARIANTS.has(scenario.vault);
-  const vaultUuidOk =
-    vaultParsed && !VAULT_ACCEPTED_NON_UUID.has(scenario.vault);
+  const vaultUuidOk = vaultParsed;
   const vaultAccountId = vaultParsed
     ? String(
         (
@@ -506,6 +509,19 @@ function expectedProfile(scenario: AuthScenario) {
     scenario.db === 'kv-get-legacy-throws' ||
     scenario.db === 'kv-get-local-mode-throws' ||
     (scenario.db === 'kv-set-legacy-throws' && legacyTruthy);
+  const gateReadable =
+    scenario.db !== 'open-throws' && scenario.db !== 'all-throw';
+  const vaultEmpty =
+    scenario.keychain !== 'get-throws' &&
+    (!vaultPresent || scenario.keychain === 'get-returns-false');
+  const unknownVault = !vaultEmpty && !vaultParsed;
+  const guestReadable =
+    gateReadable &&
+    scenario.db !== 'kv-get-local-mode-throws' &&
+    scenario.kvLocalMode === 'valid-guest';
+  // A detected legacy account writes a returning-user marker before the
+  // historical guest flag is considered, keeping that account intent first.
+  const legacyMarker = legacyTruthy && scenario.db !== 'kv-get-legacy-throws';
   const guestKv = scenario.kvLocalMode === 'valid-guest';
   return {
     vaultPresent,
@@ -516,32 +532,11 @@ function expectedProfile(scenario: AuthScenario) {
     revoked,
     dbUnavailable,
     guestKv,
+    gateReadable,
+    vaultEmpty,
+    unknownVault,
+    guestFlagReadable: guestReadable && !legacyMarker,
   };
-}
-
-/**
- * Contract deviations already reproduced and triaged (see the findings in the
- * session report). A row failing ONLY through these is recorded as a known
- * deviation, not as a new failure; the suite additionally asserts that each
- * of them is still reproduced, so a fix flips the row back to strict.
- */
-const KNOWN_DEVIATIONS = {
-  'XC-LP-2':
-    'Vault record with a non-UUID canonicalAppUserId passes parsePersistedSession, throws in canonicalDataOwner, lands signed-out and is never discarded',
-} as const;
-type DeviationId = keyof typeof KNOWN_DEVIATIONS;
-
-function classifyDeviation(
-  scenario: AuthScenario,
-  invariant: string,
-): DeviationId | null {
-  if (
-    invariant === 'unusableRecordDiscarded' &&
-    VAULT_ACCEPTED_NON_UUID.has(scenario.vault)
-  ) {
-    return 'XC-LP-2';
-  }
-  return null;
 }
 
 async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
@@ -624,40 +619,45 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
 
   const invariants: Record<string, boolean> = {};
   invariants['noThrow'] = threw === null && state.hydrated === true;
-  // A guest flag the store cannot read (database unavailable) does not
-  // exist for this launch: the durable session decides.
-  const guestFlagReadable = exp.guestKv && !exp.dbUnavailable;
-  if (exp.vaultUuidOk && !exp.revoked && !guestFlagReadable) {
+  const guestFlagReadable = exp.guestFlagReadable;
+  if (
+    exp.vaultUuidOk &&
+    !exp.revoked &&
+    !guestFlagReadable &&
+    exp.gateReadable
+  ) {
     invariants['noImplicitSignOut'] = signedInAsCanonical;
   }
-  if (exp.vaultUuidOk && exp.revoked && !guestFlagReadable) {
+  if (
+    exp.vaultUuidOk &&
+    exp.revoked &&
+    !guestFlagReadable &&
+    exp.gateReadable
+  ) {
     invariants['revokedSignsOut'] =
       state.session === null &&
       owner === SIGNED_OUT_DATA_OWNER &&
       (vaultAfterRaw === null || scenario.keychain === 'reset-throws');
   }
-  if (
-    exp.vaultPresent &&
-    exp.keychainReadable &&
-    !exp.vaultParsed &&
-    !guestFlagReadable
-  ) {
-    invariants['malformedDiscarded'] =
-      mockKeychain.log.includes('reset') &&
-      (scenario.keychain === 'reset-throws' ||
-        vaultAfterRaw === null ||
-        vaultAfterRaw !== VAULT_RECORD_VARIANTS[scenario.vault]);
-  }
-  if (
-    exp.vaultPresent &&
-    exp.keychainReadable &&
-    VAULT_ACCEPTED_NON_UUID.has(scenario.vault) &&
-    !guestFlagReadable
-  ) {
-    // Accepted by the parser but unusable as a data owner: the record must
-    // still not survive as a launch-after-launch dead weight.
-    invariants['unusableRecordDiscarded'] =
-      vaultAfterRaw === null || scenario.keychain === 'reset-throws';
+  if (!exp.gateReadable || (exp.unknownVault && !guestFlagReadable)) {
+    const reason = !exp.gateReadable
+      ? 'local_storage_unavailable'
+      : scenario.keychain === 'get-throws'
+        ? 'vault_unavailable'
+        : scenario.vault === 'version-0' ||
+            scenario.vault === 'version-2-future'
+          ? 'vault_unsupported'
+          : 'vault_invalid';
+    invariants[exp.gateReadable ? 'unknownVaultHeld' : 'unknownGateHeld'] =
+      state.session === null &&
+      owner === SIGNED_OUT_DATA_OWNER &&
+      state.restoreState.status === 'unavailable' &&
+      state.restoreState.reason === reason &&
+      vaultAfterRaw === (VAULT_RECORD_VARIANTS[scenario.vault] ?? null) &&
+      !mockKeychain.log.includes('reset') &&
+      !mockKeychain.log.includes('set') &&
+      !mockGoogleSignin.hasPreviousSignIn.mock.calls.length &&
+      !fetchMock.mock.calls.length;
   }
   invariants['shotsPreserved'] =
     db.shotFingerprint() === shotsBefore &&
@@ -675,11 +675,13 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
     vaultAfter !== 'unparseable' &&
     scenario.refresh === 'rotate' &&
     exp.vaultUuidOk &&
+    exp.gateReadable &&
     !guestFlagReadable
   ) {
     invariants['vaultShape'] =
       JSON.stringify(Object.keys(vaultAfter).sort()) ===
         JSON.stringify(ALLOWED_VAULT_KEYS) &&
+      vaultAfter['generation'] === 0 &&
       vaultAfter['refreshToken'] === 'refresh-rotated' &&
       !('accessToken' in vaultAfter) &&
       !('bearerToken' in vaultAfter);
@@ -708,17 +710,16 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
   }
   if (exp.dbUnavailable) {
     invariants['localDataReported'] =
-      state.localDataError?.code === 'local_data.unavailable' &&
-      state.session?.provider !== 'guest';
+      state.localDataError?.code === 'local_data.unavailable';
   } else if (scenario.db === 'ok') {
     invariants['localDataReported'] = state.localDataError === null;
   }
   const legacyGooglePath =
-    !exp.vaultParsed &&
+    exp.vaultEmpty &&
     scenario.kvLastProvider === 'valid-google' &&
     !exp.dbUnavailable &&
     scenario.db !== 'kv-get-last-provider-throws' &&
-    !exp.guestKv;
+    !guestFlagReadable;
   if (legacyGooglePath && scenario.google === 'silent-throws') {
     invariants['transientGoogleKeepsFlag'] =
       db.kv.get('auth.last-provider') === LAST_PROVIDER_GOOGLE_VALUE &&
@@ -743,16 +744,9 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
       state.session === null;
   }
 
-  const allFailed = Object.entries(invariants)
+  const failed = Object.entries(invariants)
     .filter(([, held]) => !held)
     .map(([name]) => name);
-  const knownDeviations: string[] = [];
-  const failed: string[] = [];
-  for (const name of allFailed) {
-    const deviation = classifyDeviation(scenario, name);
-    if (deviation) knownDeviations.push(`${deviation}:${name}`);
-    else failed.push(name);
-  }
   const row: MatrixRow = {
     suite: 'authHydrateMatrix',
     scenario: scenario.name,
@@ -769,6 +763,7 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
           }
         : null,
       error: state.error,
+      restoreState: state.restoreState,
       owner,
       apiSessionInstalled: getApiSession() !== null,
       vaultAfter:
@@ -803,7 +798,6 @@ async function runScenario(scenario: AuthScenario): Promise<MatrixRow> {
       statements: db.statements.length,
       destructiveStatements: db.destructiveStatements(),
       expectation: exp,
-      knownDeviations,
     },
     invariants,
     ok: failed.length === 0,
@@ -831,35 +825,12 @@ beforeEach(() => {
   mockGoogleSignin.revokeAccess.mockResolvedValue(null);
 });
 
-function knownDeviationCounts(): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const row of rows) {
-    for (const entry of row.observed['knownDeviations'] as string[]) {
-      const id = entry.split(':')[0] as string;
-      counts[id] = (counts[id] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
-
 afterAll(() => {
   resetRuntime();
   jest.useRealTimers();
   delete nativeModules.PickleAuth;
   globalThis.fetch = realFetch;
-  const summary = {
-    ...summarize(rows),
-    knownDeviations: KNOWN_DEVIATIONS,
-    knownDeviationRows: knownDeviationCounts(),
-    knownDeviationScenarios: rows
-      .filter(row => (row.observed['knownDeviations'] as string[]).length > 0)
-      .map(row => ({
-        scenario: row.scenario,
-        seed: row.seed,
-        deviations: row.observed['knownDeviations'],
-        inputs: row.inputs,
-      })),
-  };
+  const summary = summarize(rows);
   writeJsonArtifact('auth-hydrate-matrix.rows.json', rows);
   writeJsonArtifact('auth-hydrate-matrix.summary.json', summary);
   writeTextArtifact('auth-hydrate-matrix.matrix.md', matrixMarkdown(rows));
@@ -938,14 +909,17 @@ describe('authStore.hydrate() persisted-state matrix', () => {
     });
   }
 
-  it('every triaged deviation is still reproduced (remove it from KNOWN_DEVIATIONS once fixed)', () => {
-    const counts = knownDeviationCounts();
-    for (const id of Object.keys(KNOWN_DEVIATIONS)) {
-      expect({ id, rows: counts[id] ?? 0 }).toEqual({
-        id,
-        rows: expect.any(Number),
-      });
-      expect(counts[id] ?? 0).toBeGreaterThan(0);
+  it('rejects noncanonical subjects and blank refresh tokens without destroying the historical record', () => {
+    for (const vault of [
+      'canonical-not-uuid',
+      'canonical-nil-uuid',
+      'refresh-whitespace',
+    ]) {
+      const row = rows.find(
+        candidate => candidate.scenario === `existing-online/vault=${vault}`,
+      );
+      expect(row?.invariants['unknownVaultHeld']).toBe(true);
+      expect(row?.ok).toBe(true);
     }
   });
 });

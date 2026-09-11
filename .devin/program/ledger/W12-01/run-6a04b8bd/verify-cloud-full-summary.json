@@ -1,0 +1,28 @@
+{
+  "tool": "verify-cloud",
+  "git_sha": "6a04b8bd247d0cdbd953da53f3ff8778db24e58a",
+  "dirty": false,
+  "tier": "full",
+  "started_utc": "20260910T165243Z",
+  "host": "Linux 6.8.0-1061-aws x86_64",
+  "node": "v24.19.0",
+  "ok": true,
+  "reason": "",
+  "stages": [
+    {"name": "deps", "status": "passed", "seconds": 1, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/deps.log"},
+    {"name": "format", "status": "passed", "seconds": 34, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/format.log"},
+    {"name": "lint", "status": "passed", "seconds": 16, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/lint.log"},
+    {"name": "typecheck", "status": "passed", "seconds": 22, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/typecheck.log"},
+    {"name": "test", "status": "passed", "seconds": 160, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/test.log"},
+    {"name": "db", "status": "passed", "seconds": 2, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/db.log"},
+    {"name": "mobile", "status": "passed", "seconds": 445, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/mobile.log"},
+    {"name": "ml", "status": "passed", "seconds": 0, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/ml.log"},
+    {"name": "scripts", "status": "passed", "seconds": 21, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/scripts.log"},
+    {"name": "edge", "status": "passed", "seconds": 103, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/edge.log"},
+    {"name": "rls", "status": "passed", "seconds": 31, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/rls.log"},
+    {"name": "security", "status": "passed", "seconds": 14, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/security.log"},
+    {"name": "admin", "status": "passed", "seconds": 1, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/admin.log"},
+    {"name": "e2e", "status": "passed", "seconds": 5, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/e2e.log"},
+    {"name": "release", "status": "passed", "seconds": 0, "note": "", "log": "artifacts/verify-cloud/20260910T165243Z/release.log"}
+  ]
+}

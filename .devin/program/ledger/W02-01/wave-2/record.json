@@ -1,0 +1,228 @@
+{
+  "agent_counts": {
+    "completed": 2,
+    "failed": 0,
+    "launched": 2,
+    "requested": 2
+  },
+  "agents": [
+    {
+      "label": "implement-W02-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "711aa50c44083b7ee92c53683deb4fa107af402c64ec13d33474a04197d71a1c",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W02-01-r2",
+      "phase": "implement",
+      "prompt_sha256": "7423f8b8d5de00dc852d665ac44bdda41d415dcb9dd8386d5351de421ac04d2a",
+      "role": "implementer",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W02-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W02-01-AC2 status FAIL"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5627d5d9-ac05-4c58-ac64-dae18e5fb96f/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OutboxDependencyOrder.test.ts __tests__/sync*.test.ts",
+            "executed": 49,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC1",
+            "note": "VERIFIED on HEAD 5d67aade. Suites: sync.test.ts, syncIntegrity.integration.test.ts, w02OutboxDependencyOrder.test.ts — 3 passed. Local copy: artifacts/w02-01/ac1-jest.log.",
+            "passed": 49,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bb63630b-f87a-4c16-8c8f-d86174cfc1bc/ac2-base-55d80326.log",
+            "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them → must FAIL; run on HEAD → must PASS",
+            "executed": 8,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W02-01-AC2",
+            "note": "Proof outcome 1 because the new test PASSES on BASE: base run at 55d80326 with only apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts added (`cd apps/mobile && npx jest --ci __tests__/w02OutboxDependencyOrder.test.ts`): exit 0, executed 8, passed 8, failed 0, skipped 0, log artifacts/w02-01/ac2-base-55d80326.log (attached URL). HEAD run (same file, HEAD = BASE + test commit, within AC1): exit 0, 8/8. VERIFIED: no ordering defect exists on BASE for the crash-at-every-step matrix (568 crash points), so no fix was made (PROCEDURE step 1). Sensitivity controls (uncommitted sync.ts mutations, restored afterwards): no cross-batch parent lookup -> exit 1, 4 failed/4 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d2f6c6c-06b3-49fa-b2f9-403f4275865d/mutation1-no-cross-batch-parent-lookup.log); parent DELETE committed before remote ack -> exit 1, 3 failed/5 passed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/a9ee5678-f155-4e5e-8535-296577fd14e3/mutation2-parent-deleted-before-remote-ack.log).",
+            "passed": 8,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ae87a54-fc45-496b-83bb-6a599438fa18/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC3",
+            "note": "VERIFIED on HEAD. Required `cd apps/mobile && npm ci` beforehand: the pre-provisioned node_modules lacked @sentry/react-native (11 TS2307/TS7006 errors in src/diagnostics/* before install, 0 after). Local copy: artifacts/w02-01/ac3-tsc.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fce788f9-49c5-4ced-8ae2-766102e9ce95/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts && npx prettier --check apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC4",
+            "note": "VERIFIED from repo root (root ESLint + root Prettier 3.9.6). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/56ba0c13-c95d-48ae-a27d-4eab4488e2aa/root-format-check.log) and `git diff --check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/242948c6-2608-4f45-b148-d457f18ae8a4/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first, real SQLite. The new suite seeds a file-backed node:sqlite database (testSupport/sqlite.ts harness over the real DatabaseSync, migrations from src/data/db.ts) with the queue shapes the shipping app produces (repository.ts saveAnalysis / commitPracticeSet / finishSession: shot-first practice set; 50 dependents ahead of their parent across the nextBatch LIMIT 50 boundary; two interleaved practice sets plus an independent shot). A reference drainOutbox run records every durable step (each SQL statement incl. BEGIN/COMMIT via observeStatements, plus each transport round trip). The scenario is then replayed once per step with the process dying right after that step (native connection closed, every later statement/transport call throws; the fake server keeps what it already processed), then restarted from the same file until the queue is empty (<=8 drains). On every createSession/finalizeSession/syncShots call the fake server asserts (a) the parent session was already received remotely and (b) no session.create row for it remains in the local outbox (its DELETE committed) — i.e. 'durably acknowledged'. After the queue empties, every queued row must have reached the server. Steps are covered in CRASH_WINDOW=150-sized `it` cases so each case stays far under Jest's default 30s timeout; the reference test asserts the declared window count is exact so no step can silently go uncovered. Harness-only PRAGMA synchronous=OFF / journal_mode=MEMORY (process death, not power loss, is modelled). Two throwaway mutation controls of src/data/sync.ts (not committed; sync.ts restored, git diff vs BASE is the test file only) confirm the suite detects real ordering/durability defects: (1) dropping the cross-batch queuedSession() parent lookup -> 4 failures ('server never received session', 'session.create row still queued'); (2) committing the parent DELETE before the remote createSession ack -> 3 failures incl. a permanently stuck row after 8 drains.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5627d5d9-ac05-4c58-ac64-dae18e5fb96f/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bb63630b-f87a-4c16-8c8f-d86174cfc1bc/ac2-base-55d80326.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ae87a54-fc45-496b-83bb-6a599438fa18/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fce788f9-49c5-4ced-8ae2-766102e9ce95/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/56ba0c13-c95d-48ae-a27d-4eab4488e2aa/root-format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/242948c6-2608-4f45-b148-d457f18ae8a4/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d2f6c6c-06b3-49fa-b2f9-403f4275865d/mutation1-no-cross-batch-parent-lookup.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a9ee5678-f155-4e5e-8535-296577fd14e3/mutation2-parent-deleted-before-remote-ack.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — on the pre-provisioned checkout BEFORE `npm ci`: exit 2 with 11 errors (TS2307 Cannot find module '@sentry/react-native' / '@sentry/browser' in src/diagnostics/{privacy,sentry}.ts and tests, plus dependent TS7006). Cause: stale node_modules missing @sentry/react-native 8.24.0 declared in apps/mobile/package.json; resolved by the documented `cd apps/mobile && npm ci` (no code change). Not a BASE code failure."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w02-01/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "head_sha": "5d67aade649f11ae65610b9688fd808f91cb3fdb",
+        "out_of_scope_files": [],
+        "package_id": "W02-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "residual_risks": [
+          "The suite's crash model is process death (connection closed, later statements fail); power-loss/fsync-loss is not modelled (harness sets PRAGMA synchronous=OFF, journal_mode=MEMORY for speed). SQLite's own commit atomicity is relied upon for the durability of committed rows.",
+          "Fault model 'statement fails but process continues' and concurrent drains across syncRuntime generations were analysed by reading (INFERRED: no dependent is sent unless its parent's createSession resolved in the same drain, so ordering holds) but are not exercised by the new suite.",
+          "The fifty-row scenario runs ~415 crash points (~19-22s wall on this machine, split into three ~7s cases); a much slower CI runner still has >4x headroom against the 30s default timeout, no timeout was changed.",
+          "AC2 cannot be satisfied as literally written because BASE has no ordering defect; the judge must weigh PROCEDURE step 1 ('do not invent work') against the regress criterion."
+        ],
+        "summary": "VERIFIED: no dependency-ordering defect exists on BASE_SHA 55d80326 — the objective's ordering property already holds, so per PROCEDURE step 1 no production change was made (nothing under apps/mobile/src/data/ was modified; a fix would have been invented work). Evidence: the new crash-at-every-step real-SQLite suite (568 crash points across 3 scenarios: 29 + 415 + 74 steps, plus 3 no-crash references) passes on BASE with only the test file copied over (artifacts/w02-01/ac2-base-55d80326.log, exit 0, 8/8). Code basis (INFERRED from reading, confirmed by the runs): apps/mobile/src/data/sync.ts:303-326 collects session.create parents for every shot.sync/session.finalize in the batch via queuedSession() (sync.ts:216-231, whole owned queue, beyond the 50-row batch); sync.ts:334-414 sends parents first and deletes the parent row (autocommit DELETE, sync.ts:379-382) only AFTER transport.createSession resolves; a parent whose send or delete failed is recorded in blockedSessions (sync.ts:399-404) and its dependents are held with 'session.pending' (sync.ts:365-373 finalize, sync.ts:434-442 shots) rather than sent; shots are transmitted (sync.ts:485) only after that loop; a crash between the remote ack and the local DELETE leaves the parent queued, so the restarted drain re-sends the idempotent session.create (server upsert ignoreDuplicates, supabase/functions/api/index.ts:2121-2127) before any dependent; nextBatch's last_attempt_order rotation (sync.ts:164-195) cannot reorder because parents are looked up outside the batch and dependents whose parent failed are never sent. The shipping enqueue path is atomic and parent-first (runCaptureAnalysis.ts:1656-1676 / originalAnalysisOperations.ts:1223-1232 call commitPracticeSet then saveAnalysis inside one transaction), so no enqueue race exists either. Consequence for AC2 (kind=regress): by construction it cannot be satisfied — the test PASSES on BASE (exit 0, 8 passed) and PASSES on HEAD (exit 0, 8 passed), so the proof outcome is exit_code 1 / status FAIL, reported honestly; the crash-injection suite is the durable proof the objective asks for and the two mutation controls (artifacts/w02-01/mutation1-*.log, mutation2-*.log, both exit 1) show it would fail on a reordering or non-durable-ack defect. AC1 VERIFIED exit 0 (3 suites, 49 tests passed, 0 failed, 0 skipped). AC3 VERIFIED exit 0 (required `cd apps/mobile && npm ci` first — the pre-provisioned node_modules lacked @sentry/react-native 8.24.0; a dependency-install state, not a code failure). AC4 VERIFIED exit 0. Root `pnpm format:check` exit 0; `git diff --check` exit 0. Branch pushed to origin devin/pp/w02-01/impl-r1 at 5d67aade649f11ae65610b9688fd808f91cb3fdb (single commit on top of BASE; no PR opened, no force-push, main/ci untouched). Logs are under artifacts/w02-01/ (gitignored) and uploaded as attachments."
+      },
+      "round": 1
+    },
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W02-01-AC2 status FAIL"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e894ccad-0d6f-4eca-9883-211cfa34836e/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OutboxDependencyOrder.test.ts __tests__/sync*.test.ts",
+            "executed": 61,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC1",
+            "note": "VERIFIED on HEAD 7a44617f. 3 suites: w02OutboxDependencyOrder.test.ts (20 tests, real node:sqlite file DB, ~67s), sync.test.ts, syncIntegrity.integration.test.ts. No existing test weakened, skipped, deleted or reordered.",
+            "passed": 61,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8abbaa3c-d303-4eb7-89a6-16319fb2a801/ac2-base.log",
+            "command": "git worktree add --detach /home/ubuntu/w02-base 55d80326bca44a25550855c2be6f755370493e0f && cp apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts <base>/apps/mobile/__tests__/ && (cd <base>/apps/mobile && npx jest --ci --silent __tests__/w02OutboxDependencyOrder.test.ts)  # then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w02OutboxDependencyOrder.test.ts",
+            "executed": 20,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W02-01-AC2",
+            "note": "PROOF exit_code=1 because the new suite PASSES on BASE_SHA: base run exit 0, 1 suite passed, Tests: 20 passed / 0 failed / 0 skipped (log: ac2-base.log). HEAD run: exit 0, 20 passed (inside ac1-jest.log). VERIFIED: BASE_SHA has no dependency-ordering defect for the test to expose — drainOutbox (apps/mobile/src/data/sync.ts:303-326 collects parents across the whole owner queue incl. beyond the 50-row batch; :334-414 sends every session.create before any finalize and DELETEs the row only after the transport call returns; :416-543 sends shot.sync afterwards; a shot whose parent failed transiently is held as 'session.pending' without consuming attempts). The suite is not vacuous: with the shipping source mutated it FAILS — M1 delete-parent-before-ack: exit 1, 6 failed/14 passed of 20; M2 no beyond-batch parent discovery: exit 1, 12 failed/8 passed of 20; M3 finalize ignores pending parent: exit 1, 2 failed/18 passed of 20 (logs: mutation-M1/M2/M3 attachments, run against the final committed suite; sync.ts restored byte-for-byte afterwards — cmp identical, git status clean, git diff vs BASE shows only the test file). Per PROCEDURE step 1 ('If the package objective is already fully satisfied on BASE_SHA, prove it with the acceptance commands and say so — do not invent work') no source change was made; a source edit whose only purpose is to make a base run fail would be invented work. The AC2 criterion 'fails on base' is therefore unsatisfiable without fabricating a defect and is reported FAIL honestly. Round-1 suite (impl-r1 5d67aade) also passed on BASE (8/8) — that was the cause of the r1 judge failure, not a test bug.",
+            "passed": 20,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ade511b5-e3b5-4c9d-9f28-ea7fdf7d41a0/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC3",
+            "note": "VERIFIED on HEAD; empty output, exit 0. A first run exited 2 only because the VM's apps/mobile/node_modules predated BASE_SHA's package.json (@sentry/react-native missing in src/diagnostics/*); fixed by the documented `cd apps/mobile && npm ci` (exit 0), not by any source change.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04e4ebef-664f-4551-891f-226ccf6f4862/ac4-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts && npx prettier --check apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-01-AC4",
+            "note": "VERIFIED from repo root (root ESLint + root Prettier 3.9.6); the only changed file. Also VERIFIED: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/aff6a63b-d2e3-4118-a0b4-113fd4185741/format-check.log), `git diff --check` exit 0 and `git diff --check 55d80326 HEAD` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f85940b0-0c1b-4e5d-b7d8-ed6bc8b8f2db/git-diff-check.log). No any/@ts-ignore/eslint-disable/passWithNoTests/forceExit/inflated timeouts in the added file.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Round-1 finding resolved by diagnosis rather than a source change. (1) Re-ran the r1 suite on BASE_SHA: it passes 8/8, so r1's AC2 FAIL was a missing regression, not a flaky judge. (2) Read apps/mobile/src/data/sync.ts, syncRuntime.ts, repository.ts, api.ts, testSupport/sqlite.ts and supabase/functions/api/index.ts to enumerate every way a dependent could be sent before its parent is durably acknowledged (batch-boundary parents, crash between transport ack and local DELETE, lost acks, interleaved sessions, finalize-vs-create order, transient parent failure). (3) Wrote a stronger real node:sqlite proof (file-backed DB; crash-at-every-durable-step across restarts with fresh connections; lost-ack injection using the shipping ApiError(408,'network.timeout'); committed state audited via an independent DatabaseSync connection so an uncommitted DELETE never counts as durable; 50-row batch boundary; two interleaved sessions; attempt-budget and sync_receipt invariants). (4) Verified the suite is discriminating with three temporary source mutations (all detected; source restored byte-for-byte). (5) The unmodified BASE passes every scenario, so per procedure step 1 no fix was invented. Committed the test alone, ran all acceptance commands, pushed devin/pp/w02-01/impl-r2.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e894ccad-0d6f-4eca-9883-211cfa34836e/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8abbaa3c-d303-4eb7-89a6-16319fb2a801/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ade511b5-e3b5-4c9d-9f28-ea7fdf7d41a0/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04e4ebef-664f-4551-891f-226ccf6f4862/ac4-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aff6a63b-d2e3-4118-a0b4-113fd4185741/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f85940b0-0c1b-4e5d-b7d8-ed6bc8b8f2db/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8caccd19-8691-4fbb-9cc9-7dc8506726fb/mutation-M1-delete-before-ack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29e9044c-1b84-4a58-9329-a979c8297fea/mutation-M2-no-beyond-batch-parent.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1943a74a-18d9-4ba3-bb9a-8ac1bc494212/mutation-M3-finalize-ignores-pending-parent.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w02-01/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "head_sha": "7a44617f8f47d0068081c5db36668a5e16340f7d",
+        "out_of_scope_files": [],
+        "package_id": "W02-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts"
+        ],
+        "residual_risks": [
+          "AC2 as written (new tests must fail on BASE_SHA) is unsatisfiable without fabricating a defect; the judge will mark AC2 FAIL again. Coordinator decision needed: accept W02-01 as 'objective already satisfied on base, proven by the new suite' (procedure step 1), or re-scope AC2 to a mutation/adversarial proof (the M1-M3 mutation logs attached show the suite detects injected ordering defects).",
+          "The proof models process death (connection closed mid-step, SQLite journal recovery on reopen), not physical power loss with an unsynced OS page cache; durability across power loss depends on the device SQLite configuration, which this package does not change.",
+          "The new suite takes ~67s (crash-at-every-step across 4 scenarios); it runs in the AC1 command and mobile `npx jest --silent` — no timeout was inflated, but CI wall time grows by roughly a minute."
+        ],
+        "summary": "W02-01 round 2. Defect search on BASE_SHA 55d80326 (VERIFIED, not INFERRED): the shipping outbox already satisfies 'never send a dependent before its parent is durably acknowledged'. Evidence: (a) new suite apps/mobile/__tests__/w02OutboxDependencyOrder.test.ts — 20 tests, real node:sqlite, crash injected after EVERY durable step (each SQL statement incl. BEGIN/COMMIT and each transport round trip, numbered across all restart processes), lost-acknowledgement injection, parents beyond the 50-row batch, two interleaved sessions, committed-state audit through a second connection — PASSES 20/20 on unmodified BASE (ac2-base.log) and on HEAD; (b) the same suite FAILS against three hand-applied ordering mutations of sync.ts (delete parent before ack: 6/20 fail; drop beyond-batch parent lookup: 12/20 fail; finalize ignoring a pending parent: 2/20 fail), so it is a real proof, not vacuous. Code path (INFERRED from reading, confirmed by (a)): sync.ts:303-326 parent discovery over the whole owner queue; :334-383 session.create sent and only then DELETEd, finalizes after creates; :416-543 shots last, 'session.pending' hold without attempt burn; api.ts maps timeouts to ApiError 408 which isPermanentSyncFailure treats as transient. CONSEQUENCE: AC2 ('must FAIL on base') is reported FAIL with proof exit_code=1 — the manifest's premise of an existing ordering defect is not true on this base, and PROCEDURE step 1 forbids inventing work; I did NOT alter sync.ts/syncRuntime.ts to manufacture a base failure. AC1/AC3/AC4 PASS with logs; pnpm format:check and git diff --check exit 0. One commit (test only) on devin/pp/w02-01/impl-r2 = 7a44617f8f47d0068081c5db36668a5e16340f7d; no PR opened; nothing pushed elsewhere. Environment note: apps/mobile/node_modules on the VM was stale vs BASE (missing @sentry/react-native) — `npm ci` per AGENTS.md fixed it. APP_STORE_SUBMISSION.md listed in READ FIRST does not exist at BASE_SHA (not needed for this package; not recreated)."
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "REQUEUE",
+  "wave_id": "wave-2"
+}

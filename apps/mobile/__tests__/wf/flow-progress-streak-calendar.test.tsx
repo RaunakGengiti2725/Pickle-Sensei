@@ -224,7 +224,7 @@ describe('flow: streak calendar', () => {
     let copy = allText(renderer);
     expect(copy).toContain('serve');
     expect(copy).toContain('1 ACTIVITY');
-    expect(copy).toContain('AVG 7.9');
+    expect(copy).toContain('AVG 3.93 DUPR');
 
     const todayLabel = (l: string) => l.startsWith('2026-03-09, trained');
     expect(host(renderer, todayLabel).props.accessibilityRole).toBe('button');

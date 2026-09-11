@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Animated,
   Easing,
@@ -32,15 +38,27 @@ import {
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
-import { color, radius, space, type } from '../design/tokens';
-import { getDb } from '../data/db';
+import { color, space, type } from '../design/tokens';
+import { getDb, type LocalDb } from '../data/db';
+import {
+  readOfflineReceiptEvidence,
+  type OfflineReceiptResultEvidence,
+} from '../data/offlineWallet';
 import {
   getShotOutboxStatus,
   hasShotSyncReceipt,
   listRealAnalysisFacts,
+  retryShotSync,
   type ShotOutboxStatus,
 } from '../data/repository';
 import { OUTBOX_MAX_ATTEMPTS } from '../data/sync';
+import { triggerOutboxSync } from '../data/syncRuntime';
+import {
+  assertDataOwnerContext,
+  getDataOwnerSnapshot,
+  isDataOwnerContextCurrent,
+  type DataOwnerContext,
+} from '../data/accountScope';
 import type { RootStackParams } from '../navigation/params';
 import {
   FixList,
@@ -48,6 +66,7 @@ import {
   FormReviewPlayer,
   RecommendedDrills,
   buildFormReviewScript,
+  coachingCue,
   directionPhrase,
   drillFocusFromAnalysis,
   fixList,
@@ -86,10 +105,19 @@ import {
   type StrokeResultEvidenceRecord,
 } from '../components/strokeResultModel';
 import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
+import { TECHNIQUE_BENCHMARK_UNAVAILABLE } from '../progress/techniqueBenchmarkDisplay';
 import {
+  DUPR_ESTIMATE_LABEL,
   DUPR_ESTIMATE_NOTE,
-  formatDuprEstimate,
+  duprAccessibilityLabel,
+  formatDupr,
+  formatDuprDelta,
+  formatTechniqueScore,
 } from '../progress/duprEstimate';
+import {
+  readPartialOutcome,
+  RELEASE_NOT_AUTHORIZED_MESSAGE,
+} from '../analysis/partialOutcome';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -98,7 +126,7 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * idea per page, stepped through with a pinned Next, and NO page scrolls on
  * a 6.1" phone:
  *
- *   1. SCORE       — the technique score ring, the DUPR-style estimate and
+ *   1. SCORE       — the technique score ring, benchmark availability and
  *                    the ONE measured insight (plus this sitting's set).
  *   2. THE PROBLEM — the form-review replay IS the page: the stage fills
  *                    the height, frozen on the priority fault's stop, and
@@ -108,12 +136,16 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  *                    nothing is drawn over the body. With no replay
  *                    evidence on this device a kicker + fault headline +
  *                    the top fix cards stand in for the player.
- *   3. DRILLS      — catalog drills for the fault, each saveable to the
- *                    library.
- *   4. NEXT        — try it again / done over ONE recap card: three tiles
- *                    (score, checkpoints held, checkpoints to fix) and the
- *                    priority-fix / strongest rows — the same evidence-
- *                    derived strings the earlier pages showed, nothing new.
+ *   3. DRILLS      — catalog drills for the fault, one card each: title,
+ *                    purpose, dose, the numbered steps one tap away, and a
+ *                    bookmark into the library.
+ *   4. NEXT        — try it again / done over ONE recap card (three tiles:
+ *                    score, checkpoints held, checkpoints to fix; and the
+ *                    priority-fix / strongest rows) plus ONE coach's note:
+ *                    the coaching cue for the measured fault and the one
+ *                    next step (work a drill, film the same stroke again).
+ *                    Every string is the same evidence-derived copy the
+ *                    earlier pages showed, nothing new.
  *                    The `ResultDetails` route (`ResultBreakdownSheet`) still
  *                    holds EVERYTHING else unchanged, but the guide no
  *                    longer links to it (product decision 2026-09-02).
@@ -136,15 +168,53 @@ export type SyncEvidenceState =
   | { kind: 'pending' }
   | { kind: 'unknown' }
   | {
-      kind: 'rejected' | 'exhausted';
+      kind: 'rejected' | 'exhausted' | 'needs_repair';
       attempts: number;
       lastError: string | null;
-    };
+    }
+  | { kind: 'offline_queued' }
+  | { kind: 'offline_held'; answered: boolean }
+  | { kind: 'offline_refused'; code: string | null };
+
+/**
+ * A read rated on court with an offline allocation has no outbox row; its
+ * receipt is the sync evidence. `accepted` was already recorded as the
+ * shot's sync receipt, so it never reaches here; the wallet's other durable
+ * states are surfaced as themselves, never as "could not verify".
+ */
+function syncEvidenceFromOfflineReceipt(
+  receipt: OfflineReceiptResultEvidence,
+): SyncEvidenceState {
+  switch (receipt.kind) {
+    case 'accepted':
+      return { kind: 'synced' };
+    case 'queued':
+      return { kind: 'offline_queued' };
+    case 'held':
+      return { kind: 'offline_held', answered: receipt.answered };
+    case 'refused':
+      return { kind: 'offline_refused', code: receipt.code };
+  }
+}
+
+/** Null when the wallet has no receipt for the read, or when the wallet
+ * itself cannot be read (the outbox then decides, as before). */
+async function offlineReceiptEvidence(
+  db: LocalDb,
+  analysisId: string,
+): Promise<OfflineReceiptResultEvidence | null> {
+  try {
+    return await readOfflineReceiptEvidence(db, analysisId);
+  } catch {
+    return null;
+  }
+}
 
 function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
   switch (status.state) {
     case 'rejected':
     case 'exhausted':
+    case 'needs_repair':
       return {
         kind: status.state,
         attempts: status.attempts,
@@ -205,7 +275,13 @@ export function useStrokeResultEvidence(analysisId: string): {
   /** The verified pose sequence; `undefined` while it is still being read. */
   sequence: ReviewPoseSequence | null | undefined;
   syncEvidence: SyncEvidenceState;
+  refreshSyncEvidence: () => void;
 } {
+  const [syncRevision, setSyncRevision] = useState(0);
+  const refreshSyncEvidence = useCallback(
+    () => setSyncRevision(value => value + 1),
+    [],
+  );
   const [evidence, setEvidence] = useState<StrokeResultEvidence | undefined>(
     undefined,
   );
@@ -242,6 +318,9 @@ export function useStrokeResultEvidence(analysisId: string): {
   // exactly like the engine does; any failure is an honest null (video-only
   // replay), never a repair. `undefined` while the read is in flight so the
   // inline player never flashes a "no pose" caption it would then retract.
+  // A not-scored read loads it too: its page replays the clip with the
+  // measured exoskeleton, paused at the wrist-speed peak, so the player sees
+  // what the camera tracked — with no checkpoint verdict drawn from nowhere.
   const [sequence, setSequence] = useState<
     ReviewPoseSequence | null | undefined
   >(undefined);
@@ -250,7 +329,7 @@ export function useStrokeResultEvidence(analysisId: string): {
     setSequence(undefined);
     if (evidence === undefined) return;
     const sidecar = evidence.review?.poseSequence ?? null;
-    if (!sidecar || !techniqueScoreSectionVisible(analysis)) {
+    if (!sidecar || !analysis) {
       setSequence(null);
       return;
     }
@@ -278,6 +357,8 @@ export function useStrokeResultEvidence(analysisId: string): {
     hasShotSyncReceipt(db, analysis.id)
       .then(async accepted => {
         if (accepted) return { kind: 'synced' } as const;
+        const receipt = await offlineReceiptEvidence(db, analysis.id);
+        if (receipt !== null) return syncEvidenceFromOfflineReceipt(receipt);
         return syncEvidenceFromOutbox(
           await getShotOutboxStatus(db, analysis.id),
         );
@@ -291,9 +372,9 @@ export function useStrokeResultEvidence(analysisId: string): {
     return () => {
       cancelled = true;
     };
-  }, [analysis]);
+  }, [analysis, syncRevision]);
 
-  return { evidence, analysis, sequence, syncEvidence };
+  return { evidence, analysis, sequence, syncEvidence, refreshSyncEvidence };
 }
 
 export function ResultScreen() {
@@ -301,7 +382,8 @@ export function ResultScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Result'>>();
   const analysisId = route.params.analysisId;
-  const { evidence, analysis, sequence, syncEvidence } =
+  const ownerContext = useRef(getDataOwnerSnapshot()).current;
+  const { evidence, analysis, sequence, syncEvidence, refreshSyncEvidence } =
     useStrokeResultEvidence(analysisId);
   const loadCurrentPlan = useTrainingStore(state => state.loadCurrentPlan);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
@@ -379,6 +461,8 @@ export function ResultScreen() {
       sequence={sequence}
       practiceSet={practiceSet}
       syncEvidence={syncEvidence}
+      ownerContext={ownerContext}
+      onSyncRetried={refreshSyncEvidence}
       onClose={() => navigation.popToTop()}
       onTryAgain={() => {
         // §2 TRY AGAIN: re-arm the guided capture flow with the SAME intent —
@@ -400,6 +484,7 @@ export function ResultScreen() {
         })
       }
       onOpenLibrary={() => navigation.navigate('DrillLibrary')}
+      onOpenDetails={() => navigation.navigate('ResultDetails', { analysisId })}
     />
   );
 }
@@ -417,11 +502,15 @@ interface ResultGuideProps {
   sequence: ReviewPoseSequence | null | undefined;
   practiceSet: PracticeSetSummary | null;
   syncEvidence: SyncEvidenceState;
+  ownerContext: DataOwnerContext;
+  onSyncRetried: () => void;
   onClose: () => void;
   onTryAgain: () => void;
   onOpenAttempt: (analysisId: string) => void;
   onOpenFormReview: (phase?: PhaseKey) => void;
   onOpenLibrary: () => void;
+  /** Push the `ResultDetails` route (the full breakdown) for this analysis. */
+  onOpenDetails: () => void;
 }
 
 function ResultGuide(props: ResultGuideProps) {
@@ -480,15 +569,25 @@ function ResultGuide(props: ResultGuideProps) {
   }, [stepIndex]);
 
   const shotLabel = analysis ? humanize(analysis.shotType) : 'stroke';
+  // Mechanics-only partial: the release authority withheld the benchmark, so
+  // the page states that explicitly — no score, confidence or range exists
+  // to show, and no rating was consumed.
+  const partial = readPartialOutcome(record);
 
   // ── Abstained: ONE honest page — the full sheet, inline ────────────────
+  // Its replay is the same form-review player the scored pages use: real
+  // frames with the measured exoskeleton, letterboxed so the whole body is
+  // in frame, paused at the wrist-speed peak. With no checkpoint scored the
+  // script has exactly that one stop and claims nothing else.
   if (!scored || step === null) {
     return (
       <GuideShell
         stepKey="abstained"
         stepIndex={0}
         total={1}
-        label="RESULT · NOT SCORED"
+        label={
+          partial ? 'RESULT · BENCHMARK UNAVAILABLE' : 'RESULT · NOT SCORED'
+        }
         onClose={props.onClose}
         footer={
           <GuideFooter
@@ -503,6 +602,38 @@ function ResultGuide(props: ResultGuideProps) {
         }
       >
         <View testID="result-guide-step-abstained">
+          {partial ? (
+            <View
+              style={styles.partialNotice}
+              testID="result-partial-benchmark"
+            >
+              <Text style={[type.micro, styles.kicker]}>
+                MECHANICS RECORDED · RATING NOT CONSUMED
+              </Text>
+              <Text
+                style={[type.caption, styles.benchmarkNote]}
+                testID="result-benchmark-status"
+              >
+                {TECHNIQUE_BENCHMARK_UNAVAILABLE}
+              </Text>
+              <Text style={[type.caption, styles.benchmarkNote]}>
+                {RELEASE_NOT_AUTHORIZED_MESSAGE}
+              </Text>
+            </View>
+          ) : null}
+          {props.syncEvidence.kind === 'needs_repair' ||
+          props.syncEvidence.kind === 'exhausted' ? (
+            <SyncRepairNotice
+              analysisId={props.analysisId}
+              ownerContext={props.ownerContext}
+              evidence={{
+                kind: props.syncEvidence.kind,
+                attempts: props.syncEvidence.attempts,
+                lastError: props.syncEvidence.lastError,
+              }}
+              onRetried={props.onSyncRetried}
+            />
+          ) : null}
           <ResultBreakdownSheet
             analysisId={props.analysisId}
             analysis={analysis}
@@ -527,9 +658,10 @@ function ResultGuide(props: ResultGuideProps) {
   const goBack = () => setStepIndex(current => Math.max(0, current - 1));
   const goNext = () =>
     setStepIndex(current => Math.min(total - 1, current + 1));
-  // THE PROBLEM with a replay and NEXT are fixed flex columns (the player
-  // fills the page; the summary is three lines) — nothing to scroll.
-  const fixedPage = (step === 'problem' && reviewAvailable) || step === 'next';
+  // THE PROBLEM with a replay is a fixed flex column (the player fills the
+  // page) — nothing to scroll. Every other page scrolls; NEXT fits a 6.1"
+  // phone without scrolling but must not clip under large text.
+  const fixedPage = step === 'problem' && reviewAvailable;
 
   return (
     <GuideShell
@@ -558,17 +690,37 @@ function ResultGuide(props: ResultGuideProps) {
           }
           {...(stepIndex > 0 ? { back: goBack } : {})}
           {...(isLast ? { done: props.onClose } : {})}
+          // W09-02 routing decision (2026-09-08): the SCORE page — where
+          // every entry lands, a fresh run or a Library history row — is the
+          // ONE way into the full breakdown; later pages and the recap stay
+          // link-free.
+          {...(step === 'score' ? { details: props.onOpenDetails } : {})}
         />
       }
     >
       {step === 'score' ? (
-        <ScorePage
-          analysis={scored}
-          shotLabel={shotLabel}
-          insight={insight}
-          practiceSet={props.practiceSet}
-          onOpenAttempt={props.onOpenAttempt}
-        />
+        <>
+          {props.syncEvidence.kind === 'needs_repair' ||
+          props.syncEvidence.kind === 'exhausted' ? (
+            <SyncRepairNotice
+              analysisId={props.analysisId}
+              ownerContext={props.ownerContext}
+              evidence={{
+                kind: props.syncEvidence.kind,
+                attempts: props.syncEvidence.attempts,
+                lastError: props.syncEvidence.lastError,
+              }}
+              onRetried={props.onSyncRetried}
+            />
+          ) : null}
+          <ScorePage
+            analysis={scored}
+            shotLabel={shotLabel}
+            insight={insight}
+            practiceSet={props.practiceSet}
+            onOpenAttempt={props.onOpenAttempt}
+          />
+        </>
       ) : step === 'problem' ? (
         <ProblemPage
           analysis={scored}
@@ -585,12 +737,89 @@ function ResultGuide(props: ResultGuideProps) {
         <DrillsPage
           analysis={scored}
           priorityFix={priorityFix}
+          shotLabel={shotLabel}
           onOpenLibrary={props.onOpenLibrary}
         />
       ) : (
-        <NextPage analysis={scored} priorityFix={priorityFix} />
+        <NextPage
+          analysis={scored}
+          priorityFix={priorityFix}
+          shotLabel={shotLabel}
+        />
       )}
     </GuideShell>
+  );
+}
+
+function SyncRepairNotice(props: {
+  analysisId: string;
+  ownerContext: DataOwnerContext;
+  evidence: {
+    kind: 'needs_repair' | 'exhausted';
+    attempts: number;
+    lastError: string | null;
+  };
+  onRetried: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const retry = async () => {
+    if (inFlight.current || !isDataOwnerContextCurrent(props.ownerContext))
+      return;
+    inFlight.current = true;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await retryShotSync(getDb(), props.analysisId, props.ownerContext);
+      assertDataOwnerContext(props.ownerContext);
+      if (!mounted.current) return;
+      await triggerOutboxSync();
+      assertDataOwnerContext(props.ownerContext);
+      if (mounted.current) props.onRetried();
+    } catch {
+      if (mounted.current && isDataOwnerContextCurrent(props.ownerContext))
+        setFailed(true);
+    } finally {
+      inFlight.current = false;
+      if (mounted.current && isDataOwnerContextCurrent(props.ownerContext))
+        setBusy(false);
+    }
+  };
+  return (
+    <Card tone="dark" style={styles.syncRepair} testID="result-sync-repair">
+      <Text style={[type.bodyBold, styles.insightSentence]}>
+        Saved on this device
+      </Text>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={[type.body, styles.insightSentence]}
+      >
+        {failed
+          ? 'Couldn’t retry yet. Your read is still saved here.'
+          : props.evidence.kind === 'exhausted'
+            ? `The server refused this read ${props.evidence.attempts} times${
+                props.evidence.lastError
+                  ? ` (last response: ${props.evidence.lastError})`
+                  : ''
+              }. It is not sent again on its own; retry saving once the rating service has been updated.`
+            : 'This read needs another attempt to save to your account.'}
+      </Text>
+      <Button
+        variant="secondary"
+        label={busy ? 'Retrying…' : 'Retry saving'}
+        disabled={busy}
+        onPress={() => void retry()}
+        testID="result-sync-retry"
+      />
+    </Card>
   );
 }
 
@@ -618,26 +847,46 @@ export interface ResultBreakdownSheetProps {
  * canonical `StrokeResult` (header, replay, ONE insight, measured rows,
  * ledger) with the form-review entry card, WHAT TO FIX in full, the stroke
  * map, the provenance trace, the personalized training plan and the
- * feedback prompt. It stays on its light surface so every evidence card
- * renders exactly as before. Hosted by the `ResultDetails` route ("See full
- * breakdown" on the guide's last page) and, inline, by the guide's abstained
- * page — the honest ledger IS that page.
+ * feedback prompt — on the same dark surface as the guide's pages. Hosted
+ * by the `ResultDetails` route ("Full breakdown" on the guide's score page)
+ * and, inline, by the guide's not-scored page — the honest ledger IS that
+ * page.
+ *
+ * Replay: a scored read keeps the replay card plus the form-review entry
+ * card (the full-screen player). A read the engine did NOT score has no
+ * form-review route, so the player renders inline instead of the card —
+ * real frames, the measured exoskeleton, the whole body in frame, paused at
+ * the wrist-speed peak — the one stop `buildFormReviewScript` derives when
+ * no checkpoint carries a score. Nothing is claimed that was not measured.
  */
 export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
   const { analysis, record, clip, review, sequence } = props;
   const scored = techniqueScoreSectionVisible(analysis) ? analysis : null;
-  const reviewAvailable =
-    scored !== null && (clip !== null || review?.poseSequence != null);
+  const replayEvidence = clip !== null || review?.poseSequence != null;
+  const reviewAvailable = scored !== null && replayEvidence;
   const script = useMemo<FormReviewScript | null>(
     () =>
-      scored && sequence !== undefined
-        ? buildFormReviewScript(scored, sequence)
+      analysis && sequence !== undefined
+        ? buildFormReviewScript(analysis, sequence)
         : null,
-    [scored, sequence],
+    [analysis, sequence],
   );
   const shotLabel = analysis ? humanize(analysis.shotType) : 'stroke';
   const scoredReal =
     scored !== null && scored.source === 'real' && scored.overallScore !== null;
+  const videoSize =
+    review && review.width > 0 && review.height > 0
+      ? { width: review.width, height: review.height }
+      : null;
+  // Unscored read with replay evidence: the inline player IS the replay.
+  // `undefined` while the sidecar is still being verified keeps the card's
+  // slot from flashing a pose-less player it would then swap out.
+  const inlineReplay =
+    analysis !== null && scored === null && replayEvidence
+      ? sequence === undefined || script === null
+        ? { kind: 'loading' as const }
+        : { kind: 'player' as const, script }
+      : null;
 
   return (
     <View style={styles.sheet} testID={props.testID}>
@@ -651,6 +900,29 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
         onTryAgain={props.onTryAgain}
         onDone={props.onDone}
         hideCtaRow
+        replayVideoSize={videoSize}
+        {...(inlineReplay
+          ? {
+              replaySlot:
+                inlineReplay.kind === 'player' && analysis ? (
+                  <FormReviewPlayer
+                    analysis={analysis}
+                    clip={clip}
+                    review={review}
+                    sequence={sequence ?? null}
+                    script={inlineReplay.script}
+                    initialStop={inlineReplay.script.stops[0] ?? null}
+                  />
+                ) : (
+                  <View
+                    style={styles.playerLoading}
+                    testID="result-breakdown-replay-loading"
+                  >
+                    <LoadingState label="Preparing your replay…" dark />
+                  </View>
+                ),
+            }
+          : {})}
         reviewSlot={
           // Entry into the full-screen exoskeleton + heat-map playback that
           // pauses at every measured checkpoint with its coaching cue.
@@ -675,6 +947,7 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
           scored ? (
             <FixList
               analysis={scored}
+              dark
               {...(reviewAvailable
                 ? { onOpenInReview: props.onOpenFormReview }
                 : {})}
@@ -686,8 +959,9 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
           <>
             <SectionTitle
               title="Stroke map"
+              dark
               right={
-                <Text style={[type.caption, { color: color.inkSoft }]}>
+                <Text style={[type.caption, { color: color.onDarkMuted }]}>
                   {
                     scored.checkpoints.filter(
                       checkpoint => checkpoint.applicable,
@@ -697,7 +971,7 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
                 </Text>
               }
             />
-            <Card style={styles.checkpointsCard}>
+            <Card tone="dark" style={styles.checkpointsCard}>
               {scored.checkpoints
                 .filter(checkpoint => checkpoint.applicable)
                 .map((checkpoint, index) => (
@@ -707,12 +981,13 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
                     score={checkpoint.score}
                     band={checkpoint.band}
                     revealDelay={index * 45}
+                    dark
                   />
                 ))}
             </Card>
 
             <View style={styles.traceRow}>
-              <Icon name="shield" size={17} color={color.inkSoft} />
+              <Icon name="shield" size={17} color={color.onDarkSubtle} />
               <Text style={[type.caption, styles.traceCopy]}>
                 Scored with {scored.versionVector.scoringModelVersion} ·
                 configuration {scored.versionVector.shotConfigVersion} ·
@@ -889,6 +1164,7 @@ function GuideFooter(props: {
   };
   back?: () => void;
   done?: () => void;
+  details?: () => void;
 }) {
   return (
     <>
@@ -924,6 +1200,19 @@ function GuideFooter(props: {
             <Text style={[type.bodyBold, styles.footerLinkText]}>Done</Text>
           </PressableScale>
         ) : null}
+        {props.details ? (
+          <PressableScale
+            accessibilityLabel="Full breakdown"
+            onPress={props.details}
+            containerStyle={styles.footerLinkContainer}
+            style={styles.footerLink}
+            testID="result-guide-breakdown-link"
+          >
+            <Text style={[type.bodyBold, styles.footerLinkText]}>
+              Full breakdown
+            </Text>
+          </PressableScale>
+        ) : null}
       </View>
     </>
   );
@@ -944,20 +1233,19 @@ function ScorePage(props: {
   return (
     <View testID="result-guide-step-score">
       <Text style={[type.micro, styles.kicker]}>
-        TECHNIQUE SCORE · {props.shotLabel.toUpperCase()}
+        ESTIMATED DUPR · {props.shotLabel.toUpperCase()}
       </Text>
       <View style={styles.ringWrap}>
-        <ScoreRing
-          score={analysis.overallScore}
-          label="out of 10"
-          size={190}
-          dark
-        />
+        <ScoreRing score={analysis.overallScore} size={190} dark />
       </View>
-      <Text style={[type.caption, styles.duprEstimate]}>
-        {formatDuprEstimate(analysis.overallScore)}
+      {/* The big number is an estimate rescaled from this swing's technique
+          score (D-046); the page says so under the ring, every time. */}
+      <Text
+        style={[type.caption, styles.benchmarkNote]}
+        testID="result-dupr-note"
+      >
+        {DUPR_ESTIMATE_NOTE}
       </Text>
-      <Text style={[type.caption, styles.duprNote]}>{DUPR_ESTIMATE_NOTE}</Text>
 
       {/* ONE insight: the strongest defensible evidence — for a scored read,
           the engine's own worst measured checkpoint plus the cue that matches
@@ -1085,9 +1373,16 @@ function ProblemPage(props: {
 
 // ─── Page 3: DRILLS ─────────────────────────────────────────────────────────
 
+/**
+ * The page is the three drill cards. Its header is two lines: the measured
+ * fault in the same words the recap uses, and the one instruction that
+ * matters — pick a drill and run it before the next swing. Where a saved
+ * drill lands is the bookmark's job to show, not the header's to explain.
+ */
 function DrillsPage(props: {
   analysis: ShotAnalysis & { overallScore: number };
   priorityFix: FixItem | null;
+  shotLabel: string;
   onOpenLibrary: () => void;
 }) {
   const savedDrills = useTrainingStore(state => state.savedDrills);
@@ -1115,10 +1410,10 @@ function DrillsPage(props: {
     <View testID="result-guide-step-drills">
       <Text style={[type.micro, styles.kicker]}>DRILLS</Text>
       <Text style={[type.h1, styles.headline]}>Drills to fix it</Text>
-      <Text style={[type.body, styles.sub]}>
+      <Text style={[type.body, styles.sub]} testID="result-guide-drills-sub">
         {props.priorityFix
-          ? `For ${props.priorityFix.name.toLowerCase()}. Save the ones you’ll practice — they land in Library → Saved drills.`
-          : 'Save the ones you’ll practice — they land in Library → Saved drills.'}
+          ? `${props.priorityFix.name} — ${directionPhrase(props.priorityFix.direction)}. Pick one drill and run it before your next ${props.shotLabel}.`
+          : `Pick one drill and run it before your next ${props.shotLabel}.`}
       </Text>
       <RecommendedDrills
         analysis={props.analysis}
@@ -1145,15 +1440,51 @@ function DrillsPage(props: {
 const ALL_CHECKPOINTS = Number.MAX_SAFE_INTEGER;
 
 /**
+ * COACH'S NOTE — the two sentences a player leaves the result with. Both
+ * are evidence-derived and already spoken by earlier pages:
+ *
+ *   fault    → the coaching cue matched to the MEASURED direction of the
+ *              priority fault (the same line the replay's stop card and the
+ *              fix list speak), then the loop: work a drill, film the same
+ *              stroke again, see whether that checkpoint moves.
+ *   clean    → the strongest checkpoint's own "keep it" cue, then: film the
+ *              same stroke again and see whether it holds.
+ *   neither  → null; nothing is written for a record with no scored
+ *              checkpoint to speak from.
+ */
+export function coachNote(
+  analysis: ShotAnalysis,
+  priorityFix: FixItem | null,
+  strongest: { key: FixItem['key']; name: string } | null,
+  shotLabel: string,
+): { cue: string; next: string } | null {
+  if (priorityFix) {
+    return {
+      cue: priorityFix.cue,
+      next: `Work one drill, then film another ${shotLabel} and see whether ${priorityFix.name.toLowerCase()} moves.`,
+    };
+  }
+  if (strongest) {
+    return {
+      cue: coachingCue(strongest.key, 'none', analysis.shotType),
+      next: `Film another ${shotLabel} and see whether every checkpoint holds again.`,
+    };
+  }
+  return null;
+}
+
+/**
  * The last page is a quick recap to move on from: ONE card with three tiles
  * (the score, how many checkpoints held, how many are to fix) and the
- * priority-fix / strongest rows — every value the same evidence-derived
- * number or string the earlier pages showed, nothing new said. Try it again /
- * Done live in the pinned footer.
+ * priority-fix / strongest rows, then ONE coach's note (`coachNote`) — every
+ * value and sentence the same evidence-derived number or string the earlier
+ * pages showed, nothing new said. Try it again / Done live in the pinned
+ * footer.
  */
 function NextPage(props: {
   analysis: ShotAnalysis & { overallScore: number };
   priorityFix: FixItem | null;
+  shotLabel: string;
 }) {
   const { analysis, priorityFix } = props;
   const held = strengthList(analysis, ALL_CHECKPOINTS).length;
@@ -1163,6 +1494,7 @@ function NextPage(props: {
   // below green AND at least one green checkpoint exists. With neither a
   // fault nor a strength on record the row is omitted, not filled in.
   const clean = priorityFix === null && strongest !== null;
+  const note = coachNote(analysis, priorityFix, strongest, props.shotLabel);
   return (
     <View testID="result-guide-step-next">
       <Text style={[type.micro, styles.kicker]}>NEXT</Text>
@@ -1175,10 +1507,10 @@ function NextPage(props: {
       >
         <View style={styles.tiles}>
           <RecapTile
-            value={analysis.overallScore.toFixed(1)}
-            unit="/10"
-            label="SCORE"
-            accessibilityLabel={`Score ${analysis.overallScore.toFixed(1)} out of 10`}
+            value={formatDupr(analysis.overallScore)}
+            label={DUPR_ESTIMATE_LABEL}
+            secondary={formatTechniqueScore(analysis.overallScore)}
+            accessibilityLabel={duprAccessibilityLabel(analysis.overallScore)}
             testID="result-guide-tile-score"
           />
           <View style={styles.tileDivider} />
@@ -1223,16 +1555,42 @@ function NextPage(props: {
           </View>
         ) : null}
       </Card>
+
+      {note ? (
+        // The same shape as the score page's insight card: one kicker, the
+        // cue in the voice the replay used, and the single next step.
+        <Card tone="dark" style={styles.noteCard} testID="result-guide-note">
+          <View style={styles.insightHeader}>
+            <Icon name="spark" size={17} color={color.volt} />
+            <Text style={[type.micro, { color: color.volt }]}>
+              COACH’S NOTE
+            </Text>
+          </View>
+          <Text
+            style={[type.bodyBold, styles.insightSentence]}
+            testID="result-guide-note-cue"
+          >
+            {note.cue}
+          </Text>
+          <Text
+            style={[type.body, styles.noteNext]}
+            testID="result-guide-note-next"
+          >
+            {note.next}
+          </Text>
+        </Card>
+      ) : null}
     </View>
   );
 }
 
 /** One recap tile: a card numeral (the same 30/34 `type.score` role every
- * card score uses) over a micro label. */
+ * card score uses) over a micro label, with an optional smaller secondary
+ * reading beneath (the "/10" under the DUPR tile). */
 function RecapTile(props: {
   value: string;
-  unit?: string;
   label: string;
+  secondary?: string;
   accessibilityLabel: string;
   testID: string;
 }) {
@@ -1243,13 +1601,13 @@ function RecapTile(props: {
       accessibilityLabel={props.accessibilityLabel}
       testID={props.testID}
     >
-      <Text style={styles.tileValue}>
-        {props.value}
-        {props.unit !== undefined ? (
-          <Text style={[type.caption, styles.tileUnit]}>{props.unit}</Text>
-        ) : null}
-      </Text>
+      <Text style={styles.tileValue}>{props.value}</Text>
       <Text style={[type.micro, styles.tileLabel]}>{props.label}</Text>
+      {props.secondary !== undefined ? (
+        <Text style={[type.micro, styles.tileSecondary]}>
+          {props.secondary}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -1407,11 +1765,11 @@ function TrainingPlanSection(props: {
 
   return (
     <View testID="training-plan-section">
-      <SectionTitle title="Personalized training" />
+      <SectionTitle title="Personalized training" dark />
       {!scoredReal || !analysis ? (
-        <Card tone="soft" style={styles.trainingStateCard}>
+        <Card tone="dark" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="shield" size={22} color={color.court} />
+            <Icon name="shield" size={22} color={color.volt} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             A score is required.
@@ -1423,12 +1781,12 @@ function TrainingPlanSection(props: {
         </Card>
       ) : planStatus === 'loading' || planStatus === 'idle' ? (
         <View style={styles.planLoading}>
-          <LoadingState label="Checking reviewed training…" />
+          <LoadingState label="Checking reviewed training…" dark />
         </View>
       ) : planStatus === 'unconfigured' ? (
-        <Card tone="soft" style={styles.trainingStateCard}>
+        <Card tone="dark" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="lock" size={22} color={color.court} />
+            <Icon name="lock" size={22} color={color.volt} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             Training is not connected.
@@ -1439,7 +1797,7 @@ function TrainingPlanSection(props: {
           </Text>
         </Card>
       ) : planStatus === 'error' ? (
-        <Card tone="soft" style={styles.trainingStateCard}>
+        <Card tone="dark" style={styles.trainingStateCard}>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             Training could not be verified.
           </Text>
@@ -1463,9 +1821,10 @@ function TrainingPlanSection(props: {
           <Text style={[type.h1, styles.improvementTitle]}>
             {currentPlan.scoreDelta === null
               ? 'Plan complete'
-              : `${
-                  currentPlan.scoreDelta >= 0 ? '+' : ''
-                }${currentPlan.scoreDelta.toFixed(1)} points`}
+              : `${formatDuprDelta(
+                  currentPlan.baselineScore,
+                  currentPlan.baselineScore + currentPlan.scoreDelta,
+                )} DUPR`}
           </Text>
           <Text style={[type.body, styles.improvementBody]}>
             {currentPlan.scoreDelta === null
@@ -1521,20 +1880,26 @@ function TrainingPlanSection(props: {
               }
               onConfirmComplete={() => confirmCompletion(item)}
               onOpenMedia={media => void openMedia(media)}
+              dark
             />
           ))}
-          <Card tone="soft" style={styles.reassessmentCard}>
+          <Card tone="dark" style={styles.reassessmentCard}>
             <View style={styles.reassessmentIcon}>
               <Icon
                 name={allPrescribedComplete ? 'check' : 'lock'}
                 size={21}
-                color={allPrescribedComplete ? color.good : color.inkSoft}
+                color={allPrescribedComplete ? color.mint : color.onDarkSubtle}
               />
             </View>
             <View style={styles.reassessmentCopy}>
-              <Text style={[type.h3, { color: color.ink }]}>Reassessment</Text>
+              <Text style={[type.h3, { color: color.onDark }]}>
+                Reassessment
+              </Text>
               <Text
-                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
+                style={[
+                  type.caption,
+                  { color: color.onDarkMuted, marginTop: 3 },
+                ]}
               >
                 {allPrescribedComplete
                   ? `Capture a newer ${shotLabel} read. The server will compare it only when the shot and model evidence are valid.`
@@ -1571,22 +1936,29 @@ function TrainingPlanSection(props: {
         </Card>
       ) : syncEvidence.kind === 'checking' ? (
         <View style={styles.planLoading}>
-          <LoadingState label="Checking sync evidence…" />
+          <LoadingState label="Checking sync evidence…" dark />
         </View>
-      ) : syncEvidence.kind === 'exhausted' ? (
-        <Card tone="soft" style={styles.trainingStateCard}>
+      ) : syncEvidence.kind === 'exhausted' ||
+        syncEvidence.kind === 'offline_refused' ? (
+        <Card tone="dark" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="close" size={22} color={color.bad} />
+            <Icon name="close" size={22} color={color.flame} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             The server did not accept this read.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {`Sync was refused ${syncEvidence.attempts} times and this read will not be sent again${
-              syncEvidence.lastError
-                ? ` (last response: ${syncEvidence.lastError})`
-                : ''
-            }. It stays on this device; capture a new read to build training.`}
+            {syncEvidence.kind === 'offline_refused'
+              ? `The server refused the receipt this on-court read was rated with${
+                  syncEvidence.code
+                    ? ` (last response: ${syncEvidence.code})`
+                    : ''
+                }. The receipt will not be presented again; the read stays on this device. Capture a new read to build training.`
+              : `Sync was refused ${syncEvidence.attempts} times and this read will not be sent again on its own${
+                  syncEvidence.lastError
+                    ? ` (last response: ${syncEvidence.lastError})`
+                    : ''
+                }. It stays on this device; retry saving from its score page once the rating service has been updated, or capture a new read to build training.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -1597,9 +1969,9 @@ function TrainingPlanSection(props: {
           </View>
         </Card>
       ) : syncEvidence.kind !== 'synced' ? (
-        <Card tone="soft" style={styles.trainingStateCard}>
+        <Card tone="dark" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="upload" size={22} color={color.court} />
+            <Icon name="upload" size={22} color={color.volt} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             Sync this read first.
@@ -1607,19 +1979,25 @@ function TrainingPlanSection(props: {
           <Text style={[type.body, styles.trainingStateBody]}>
             {syncEvidence.kind === 'pending'
               ? 'This real score is still in the secure outbox. Personalized training unlocks after the server accepts the shot.'
-              : syncEvidence.kind === 'rejected'
-                ? `The server refused this read ${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times${
-                    syncEvidence.lastError
-                      ? ` (last response: ${syncEvidence.lastError})`
-                      : ''
-                  }. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
-                : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
+              : syncEvidence.kind === 'offline_queued'
+                ? 'This read was rated on court with an offline allocation. Its receipt is queued and is presented on the next online sync; personalized training unlocks after the server accepts it.'
+                : syncEvidence.kind === 'offline_held'
+                  ? syncEvidence.answered
+                    ? 'The server received the receipt for this on-court read and is still confirming it. The same receipt is presented again on the next sync, so nothing is charged twice; training unlocks only if the server accepts it.'
+                    : 'The receipt for this on-court read was sent, but this phone has no confirmed answer for it. The same receipt is presented again on the next sync, so nothing is charged twice; training unlocks only if the server accepts it.'
+                  : syncEvidence.kind === 'rejected'
+                    ? `The server refused this read ${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times${
+                        syncEvidence.lastError
+                          ? ` (last response: ${syncEvidence.lastError})`
+                          : ''
+                      }. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
+                    : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
           </Text>
         </Card>
       ) : (
-        <Card style={styles.createPlanCard}>
+        <Card tone="dark" style={styles.createPlanCard}>
           <View style={styles.trainingStateIcon}>
-            <Icon name="court" size={22} color={color.court} />
+            <Icon name="court" size={22} color={color.volt} />
           </View>
           <Text style={[type.h2, styles.trainingStateTitle]}>
             {currentPlan?.status === 'active'
@@ -1638,7 +2016,7 @@ function TrainingPlanSection(props: {
                   ? 'Building plan…'
                   : 'Build reviewed plan'
               }
-              variant="dark"
+              variant="volt"
               disabled={mutation !== 'idle'}
               onPress={requestPlan}
             />
@@ -1650,6 +2028,7 @@ function TrainingPlanSection(props: {
         <MutationErrorCard
           message={mutationError.message}
           onDismiss={clearMutationError}
+          dark
         />
       ) : null}
       <BrandDialog
@@ -1698,6 +2077,7 @@ function TrainingPlanSection(props: {
 }
 
 const styles = StyleSheet.create({
+  syncRepair: { marginBottom: space.lg, gap: space.sm },
   screen: { flex: 1, backgroundColor: color.surfaceDark },
   flex: { flex: 1 },
   // ── Shell ──
@@ -1766,18 +2146,14 @@ const styles = StyleSheet.create({
   sub: { color: color.onDarkMuted, marginTop: space.sm, maxWidth: 340 },
   // ── Score page ──
   ringWrap: { alignItems: 'center', marginTop: space.lg },
-  duprEstimate: {
-    color: color.onDarkMuted,
-    textAlign: 'center',
-    marginTop: space.md,
-  },
-  duprNote: {
+  benchmarkNote: {
     color: color.onDarkFaint,
     textAlign: 'center',
-    marginTop: space.xs,
+    marginTop: space.md,
     alignSelf: 'center',
     maxWidth: 320,
   },
+  partialNotice: { alignItems: 'center', marginBottom: space.lg },
   insightCard: { marginTop: space.lg, padding: space.lg },
   insightHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   insightSentence: { color: color.onDark, marginTop: space.sm },
@@ -1809,8 +2185,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     lineHeight: 34,
   },
-  tileUnit: { color: color.onDarkSubtle, letterSpacing: 0 },
   tileLabel: { color: color.onDarkSubtle, marginTop: space.xs },
+  tileSecondary: {
+    color: color.onDarkFaint,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1824,19 +2204,11 @@ const styles = StyleSheet.create({
   },
   summaryLabel: { color: color.onDarkMuted, width: 92, flexShrink: 0 },
   summaryValue: { color: color.onDark, flex: 1, textAlign: 'right' },
-  // The breakdown keeps today's light surface: every evidence card renders
-  // exactly as before, on a sheet that bleeds to the page edges.
-  sheet: {
-    marginTop: space.md,
-    marginHorizontal: -space.lg,
-    marginBottom: -space.xl,
-    paddingHorizontal: space.lg,
-    paddingTop: space.lg,
-    paddingBottom: space.xl,
-    backgroundColor: color.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-  },
+  noteCard: { marginTop: space.md, padding: space.lg },
+  noteNext: { color: color.onDarkMuted, marginTop: space.sm },
+  // The breakdown sits on the same dark surface as every guide page — a
+  // result never switches to a light sheet.
+  sheet: { marginTop: space.sm },
   reviewSlot: { marginTop: space.md },
   checkpointsCard: { paddingHorizontal: space.lg, paddingVertical: 5 },
   traceRow: {
@@ -1846,19 +2218,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     marginTop: space.lg,
   },
-  traceCopy: { color: color.inkSoft, flex: 1 },
-  // ── Personalized training (unchanged from the single-page surface) ──
+  traceCopy: { color: color.onDarkSubtle, flex: 1 },
+  // ── Personalized training ──
   trainingStateCard: { padding: space.lg },
   trainingStateIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: color.courtSoft,
+    backgroundColor: color.voltTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  trainingStateTitle: { color: color.ink, marginTop: space.lg },
-  trainingStateBody: { color: color.inkSoft, marginTop: space.sm },
+  trainingStateTitle: { color: color.onDark, marginTop: space.lg },
+  trainingStateBody: { color: color.onDarkMuted, marginTop: space.sm },
   trainingAction: { marginTop: space.lg },
   planLoading: { minHeight: 240 },
   improvementCard: { padding: space.lg },
@@ -1890,7 +2262,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: color.surfaceAlt,
+    backgroundColor: color.onDarkTint,
     alignItems: 'center',
     justifyContent: 'center',
   },

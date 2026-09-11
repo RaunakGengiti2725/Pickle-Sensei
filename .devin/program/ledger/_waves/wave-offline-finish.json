@@ -1,0 +1,28 @@
+{
+  "base_sha": "17377c5ae59eea49d9b831ec2cc7cf10d73f6860",
+  "integration_order": {},
+  "packages": {
+    "W04-04": {
+      "agent_counts": {
+        "completed": 10,
+        "failed": 0,
+        "launched": 10,
+        "requested": 10
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W05-07": {
+      "agent_counts": {
+        "completed": 12,
+        "failed": 0,
+        "launched": 12,
+        "requested": 12
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-offline-finish"
+}

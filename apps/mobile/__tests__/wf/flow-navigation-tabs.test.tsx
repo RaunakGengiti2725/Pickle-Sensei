@@ -60,11 +60,15 @@ jest.mock('../../src/auth/authStore', () => ({
 }));
 
 import React from 'react';
-import { Modal, Text } from 'react-native';
+import { Modal, Platform, Pressable, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { PremiumTabBar } from '../../src/navigation/PremiumTabBar';
 import type { MainTabParams } from '../../src/navigation/params';
+
+// The renderer exposes the component inside React.memo, not its wrapper.
+const PressableInner = (Pressable as unknown as { type: React.ComponentType })
+  .type;
 
 const TAB_ROUTES: (keyof MainTabParams)[] = [
   'Home',
@@ -154,8 +158,14 @@ function menu(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findByType(Modal);
 }
 
-describe('navigation-tabs: PremiumTabBar regular tabs', () => {
+describe.each([
+  { os: 'ios', version: '26.0', role: 'button', viewer: true },
+  { os: 'android', version: '35', role: 'tab', viewer: false },
+] as const)('navigation-tabs: regular tabs on $os', fixture => {
+  const { os, version, role, viewer } = fixture;
   beforeEach(() => {
+    jest.replaceProperty(Platform, 'OS', os);
+    jest.spyOn(Platform, 'Version', 'get').mockReturnValue(version);
     jest.useFakeTimers();
     mockRootNavigate.mockClear();
     mockTabNavigate.mockClear();
@@ -166,15 +176,22 @@ describe('navigation-tabs: PremiumTabBar regular tabs', () => {
     mockAuth.session = { localOnly: false };
   });
   afterEach(() => {
+    jest.restoreAllMocks();
     jest.useRealTimers();
   });
 
-  it('renders every MainTabParams route as a labelled tab with a selected state, plus the COACH portal', () => {
+  it('renders four labelled navigation controls with platform roles and selected state, plus the COACH portal', () => {
     const renderer = renderBar(0);
-    const tabs = renderer.root.findAll(
-      n =>
-        n.props.accessibilityRole === 'tab' &&
-        typeof n.props.onPress === 'function',
+    const controls = renderer.root.findAllByType(PressableInner);
+    expect(controls.map(n => n.props.accessibilityLabel)).toEqual([
+      'Home',
+      'Library',
+      'Open coach actions',
+      'Progress',
+      'Settings',
+    ]);
+    const tabs = controls.filter(
+      n => n.props.accessibilityState?.selected !== undefined,
     );
     expect(tabs.map(n => n.props.accessibilityLabel)).toEqual([
       'Home',
@@ -188,10 +205,24 @@ describe('navigation-tabs: PremiumTabBar regular tabs', () => {
       { selected: false },
       { selected: false },
     ]);
-    // The Add route renders as the COACH button, never as a navigable tab.
+    for (const tab of tabs) {
+      expect(tab.props.accessibilityRole).toBe(role);
+      expect(typeof tab.props.onPress).toBe('function');
+      expect(typeof tab.props.onLongPress).toBe('function');
+      expect(tab.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+      expect(tab.props.accessibilityLargeContentTitle).toBe(
+        tab.props.accessibilityLabel,
+      );
+      expect(tab.findByType(Text).props.children).toBe(
+        tab.props.accessibilityLabel,
+      );
+    }
+    // The Add route renders as the COACH button, never as a selected tab.
     const coach = findPressable(renderer, 'Open coach actions');
     expect(coach.props.accessibilityRole).toBe('button');
     expect(coach.props.accessibilityState).toEqual({ expanded: false });
+    expect(coach.props.accessibilityShowsLargeContentViewer).toBe(viewer);
+    expect(coach.props.accessibilityLargeContentTitle).toBe('Coach');
     expect(allText(renderer)).toContain('COACH');
     expect(menu(renderer).props.visible).toBe(false);
     act(() => renderer.unmount());

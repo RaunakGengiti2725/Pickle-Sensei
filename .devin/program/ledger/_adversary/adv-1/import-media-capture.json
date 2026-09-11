@@ -1,0 +1,149 @@
+{
+  "area": "import-media-capture",
+  "breaks": [
+    {
+      "expected": "Imported media must go through the same readiness/quality gate as guided captures (or an import-specific one): a clip the envelope classifies UNSUPPORTED must end quality_blocked / unavailable with zero scored finalizations and no credit consumed.",
+      "observed": "runCaptureAnalysis(screen-shaped request with captureEnvelope=null, exactly as AnalyzeScreen builds it for captureMode='imported_video') returned kind='scored' and the /v1/analysis:finalize mock recorded outcome='scored'. attemptCaptureEnvelope(clip,...) for the same clip returns resolution UNSUPPORTED (240 px short side < 720) and frameRate UNSUPPORTED (8 fps < 24). AnalyzeScreen.tsx passes `captureEnvelope: null` for any non-automatic clip, so no envelope is ever evaluated for imports.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importEnvelopeGate.adv.test.ts -t 'ATTACK G1'  (exit 1; in full run: 14 executed / 1 passed / 13 failed)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/importEnvelopeGate.adv.test.ts",
+      "title": "Imported clips bypass the capture-envelope quality gate: a 240p @ 8 fps import with a valid sidecar is SCORED and the permit is finalized scored (consumes a rating) although attemptCaptureEnvelope reports resolution+frame rate UNSUPPORTED"
+    },
+    {
+      "expected": "Non-finite or out-of-domain values are not measurements; they must classify NOT_MEASURED (or UNSUPPORTED), never SUPPORTED, so a native sampler bug or corrupt persisted envelope cannot mint a SUPPORTED verdict.",
+      "observed": "evaluateCaptureEnvelope with frameWidthPx/frameHeightPx=Infinity, avgFrameRateFps=Infinity, laplacianVarianceMedian=Infinity, denoiseSurvivalRatio=Infinity, playerPixelHeightFraction=Infinity, playerMeanJointVisibility=Infinity -> dimension SUPPORTED. clippedPixelFraction/brightnessStdLuma/meanAbsFrameDiff/contrastNormalizedFrameDiff/frameIntervalCv = -1 -> SUPPORTED. visibility 1.5 and heightFraction 5 (outside [0,1]) -> SUPPORTED. packages/capture-envelope/src/envelope.ts classifyDimension only guards null and NaN before inBand().",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importEnvelopeGate.adv.test.ts -t 'ATTACK G2|ATTACK G3|ATTACK G4'  (12 tests, 12 failed)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/importEnvelopeGate.adv.test.ts",
+      "title": "capture-envelope classifyDimension treats +Infinity and impossible negative statistics as valid measurements (SUPPORTED) instead of NOT_MEASURED/UNSUPPORTED"
+    },
+    {
+      "expected": "Pose evidence that cannot be on-image / is self-contradictory is corrupt evidence: refuse (unavailable or quality_blocked), no scored finalization, no credit consumption. Native writes landmarks in [0,1] and one entry per joint; JS must not trust anything else on replay.",
+      "observed": "E2: every frame lists each joint twice with contradictory coordinates -> outcome 'scored', permit finalized scored. E3: every landmark x,y = 1e6 (normalized_image_top_left) -> outcome 'scored', permit finalized scored. E5 (1000 extra joints/frame, 4.8 MB sidecar) also scored (logged `[ADV E5] sidecar bytes=4844725 elapsedMs=745 outcome=scored`, bounded, no crash - reported as observation, not a failure).",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importedSidecarContent.adv.test.ts -t 'ATTACK E2|ATTACK E3'  (exit 1; full file: 8 executed / 6 passed / 2 failed)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/importedSidecarContent.adv.test.ts",
+      "title": "Sidecar that passes SHA-256 + canonical parse but carries semantically impossible poses still scores and finalizes a scored permit (duplicated contradictory joints; landmarks 1e6 image-widths off-screen)"
+    },
+    {
+      "expected": "Refuse (unavailable) when the media timeline the clip claims is not covered by the sidecar timeline, or at minimum bound the scored window to the observed frames; never publish a window outside the evidence.",
+      "observed": "outcome 'scored' with record.result.timestamps.endMs = 3600000 while the sidecar's last frame is at 1967 ms. Native import caps duration at 60 s, so a 1 h imported clip row can only exist through corrupt persisted state, but JS admitted it (see B3/B11) and produced a scored record whose time window is not covered by pose evidence.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importTimeMapping.adv.test.ts -t 'ATTACK A4'  (exit 1; full file: 6 executed / 4 passed / 2 failed)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/importTimeMapping.adv.test.ts",
+      "title": "Sidecar/media timeline mismatch not enforced: a 4-second sidecar attached to a clip whose metadata claims 3,600,000 ms scores and stamps result.timestamps.endMs=3600000 (900x beyond the last observed pose frame)"
+    },
+    {
+      "expected": "The JS contract for imported clips should mirror the native import budget (fps>0 & <=240, duration <=60 s and >= a meaningful minimum, dimension <=4096) so unknown/corrupt persisted state is classified corrupt/metadata_mismatch rather than reloading as valid evidence (product invariant: corrupt state never becomes fabricated valid state).",
+      "observed": "assertCapturedClip({...valid, fps: 0}, 'imported_video') does not throw (validator only requires fps >= 0 while ClipMediaStore.swift requires fps > 0 and <= 240). durationMs 0.001 accepted (isPositiveFinite). durationMs 7.2e6 accepted (native max 60 s). width=height=1e9 accepted (native max 4096 / 4096*2160 px). getPendingCapture on a persisted row with fps=0,durationMs=7.2e6 returns evidenceStatus 'valid' with the clip attached.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B1|ATTACK B2|ATTACK B3|ATTACK B4|ATTACK B11'  (5 failed; full file: 15 executed / 4 passed / 11 failed)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/importedClipBoundary.adv.test.ts",
+      "title": "assertCapturedClip(imported_video) is far looser than the native import budget, so corrupt persisted rows reload as VALID evidence: fps=0, durationMs=0.001, durationMs=7,200,000 (2 h vs 60 s native cap), width/height=1e9 all accepted; a persisted 0 fps / 2 h imported row reloads with evidenceStatus='valid'"
+    },
+    {
+      "expected": "frameIndex must be a strictly increasing non-negative integer sequence (the versioned time mapping back to media frames); otherwise the sidecar is corrupt and must be refused.",
+      "observed": "frameIndex = -i for even frames and 7 for all odd frames -> outcome 'scored'.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importTimeMapping.adv.test.ts -t 'ATTACK A5'",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/importTimeMapping.adv.test.ts",
+      "title": "Canonical pose parser accepts negative, duplicated and out-of-order frameIndex values while timestamps look valid; the sidecar still scores"
+    },
+    {
+      "expected": "JS should refuse receipts that do not resolve inside the app's private Captures directory and sidecars that are not derived from the clip being extracted, so a native regression cannot bind the app to Photos originals or foreign artifacts. Whether the native layer (ClipMediaStore/readCaptureArtifact) independently enforces the private-directory boundary at runtime is NOT_YET_VERIFIABLE on Linux.",
+      "observed": "importStrokeVideo resolved with uri 'file:///var/mobile/Media/DCIM/100APPLE/img_0001.mov' (not a private copy). extractImportedPoseSequence(clip) resolved with poseSequence.uri 'import-OTHER-pose-1.pose.json' and with posterUri under /var/mobile/Media/DCIM. assertCapturedClip accepted uri 'file:' (empty path), 'file:///private/captures/../../../etc/passwd.mov', posterUri with '../' traversal.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importBridgeLifecycle.adv.test.ts -t 'ATTACK F3|ATTACK F4|ATTACK F5' ; npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B7|ATTACK B9|ATTACK B10'  (6 failed)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/importBridgeLifecycle.adv.test.ts",
+      "title": "JS import/extraction receipt validation binds URIs only to the 'file:' scheme: original Photos/DCIM path, empty 'file:' URI, '..' traversal, poster outside the captures directory, and a sidecar named for a different clip are all accepted"
+    },
+    {
+      "expected": "Reject arrays as records, require origin 'import_copy' for imported clips, and apply MAX_IMPORTED_POSE_FRAMES to persisted refs as well as fresh receipts.",
+      "observed": "Object.assign([], validClip) passes isRecord and is returned as a CapturedClip; origin 'native_export' is accepted for captureMode 'imported_video' (native import always writes 'import_copy'); a persisted poseSequence ref with frameCount 4001 passes isPoseSequenceRef although assertImportedPoseExtraction refuses the same count at the receipt boundary.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B5|ATTACK B6|ATTACK B8'  (3 failed)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/importedClipBoundary.adv.test.ts",
+      "title": "assertCapturedClip accepts an Array carrying clip properties, nativeMediaIdentity.origin='native_export' on an imported_video clip, and a poseSequence ref whose frameCount exceeds the 4000-frame extraction ceiling"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-import-media-capture-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cef7250b-05ed-4c21-b183-fe70a1865831/adv-report.json"
+    ],
+    "attack_branch": "devin/pp/adv/import-media-capture-30a40650",
+    "attack_branch_sha": "54caaea2403a1724f3ffd39e7da9d8eb519165cd",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 60,
+    "breaks": [
+      {
+        "expected": "Imported media must go through the same readiness/quality gate as guided captures (or an import-specific one): a clip the envelope classifies UNSUPPORTED must end quality_blocked / unavailable with zero scored finalizations and no credit consumed.",
+        "observed": "runCaptureAnalysis(screen-shaped request with captureEnvelope=null, exactly as AnalyzeScreen builds it for captureMode='imported_video') returned kind='scored' and the /v1/analysis:finalize mock recorded outcome='scored'. attemptCaptureEnvelope(clip,...) for the same clip returns resolution UNSUPPORTED (240 px short side < 720) and frameRate UNSUPPORTED (8 fps < 24). AnalyzeScreen.tsx passes `captureEnvelope: null` for any non-automatic clip, so no envelope is ever evaluated for imports.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importEnvelopeGate.adv.test.ts -t 'ATTACK G1'  (exit 1; in full run: 14 executed / 1 passed / 13 failed)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/importEnvelopeGate.adv.test.ts",
+        "title": "Imported clips bypass the capture-envelope quality gate: a 240p @ 8 fps import with a valid sidecar is SCORED and the permit is finalized scored (consumes a rating) although attemptCaptureEnvelope reports resolution+frame rate UNSUPPORTED"
+      },
+      {
+        "expected": "Non-finite or out-of-domain values are not measurements; they must classify NOT_MEASURED (or UNSUPPORTED), never SUPPORTED, so a native sampler bug or corrupt persisted envelope cannot mint a SUPPORTED verdict.",
+        "observed": "evaluateCaptureEnvelope with frameWidthPx/frameHeightPx=Infinity, avgFrameRateFps=Infinity, laplacianVarianceMedian=Infinity, denoiseSurvivalRatio=Infinity, playerPixelHeightFraction=Infinity, playerMeanJointVisibility=Infinity -> dimension SUPPORTED. clippedPixelFraction/brightnessStdLuma/meanAbsFrameDiff/contrastNormalizedFrameDiff/frameIntervalCv = -1 -> SUPPORTED. visibility 1.5 and heightFraction 5 (outside [0,1]) -> SUPPORTED. packages/capture-envelope/src/envelope.ts classifyDimension only guards null and NaN before inBand().",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importEnvelopeGate.adv.test.ts -t 'ATTACK G2|ATTACK G3|ATTACK G4'  (12 tests, 12 failed)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/importEnvelopeGate.adv.test.ts",
+        "title": "capture-envelope classifyDimension treats +Infinity and impossible negative statistics as valid measurements (SUPPORTED) instead of NOT_MEASURED/UNSUPPORTED"
+      },
+      {
+        "expected": "Pose evidence that cannot be on-image / is self-contradictory is corrupt evidence: refuse (unavailable or quality_blocked), no scored finalization, no credit consumption. Native writes landmarks in [0,1] and one entry per joint; JS must not trust anything else on replay.",
+        "observed": "E2: every frame lists each joint twice with contradictory coordinates -> outcome 'scored', permit finalized scored. E3: every landmark x,y = 1e6 (normalized_image_top_left) -> outcome 'scored', permit finalized scored. E5 (1000 extra joints/frame, 4.8 MB sidecar) also scored (logged `[ADV E5] sidecar bytes=4844725 elapsedMs=745 outcome=scored`, bounded, no crash - reported as observation, not a failure).",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importedSidecarContent.adv.test.ts -t 'ATTACK E2|ATTACK E3'  (exit 1; full file: 8 executed / 6 passed / 2 failed)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/importedSidecarContent.adv.test.ts",
+        "title": "Sidecar that passes SHA-256 + canonical parse but carries semantically impossible poses still scores and finalizes a scored permit (duplicated contradictory joints; landmarks 1e6 image-widths off-screen)"
+      },
+      {
+        "expected": "Refuse (unavailable) when the media timeline the clip claims is not covered by the sidecar timeline, or at minimum bound the scored window to the observed frames; never publish a window outside the evidence.",
+        "observed": "outcome 'scored' with record.result.timestamps.endMs = 3600000 while the sidecar's last frame is at 1967 ms. Native import caps duration at 60 s, so a 1 h imported clip row can only exist through corrupt persisted state, but JS admitted it (see B3/B11) and produced a scored record whose time window is not covered by pose evidence.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importTimeMapping.adv.test.ts -t 'ATTACK A4'  (exit 1; full file: 6 executed / 4 passed / 2 failed)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/importTimeMapping.adv.test.ts",
+        "title": "Sidecar/media timeline mismatch not enforced: a 4-second sidecar attached to a clip whose metadata claims 3,600,000 ms scores and stamps result.timestamps.endMs=3600000 (900x beyond the last observed pose frame)"
+      },
+      {
+        "expected": "The JS contract for imported clips should mirror the native import budget (fps>0 & <=240, duration <=60 s and >= a meaningful minimum, dimension <=4096) so unknown/corrupt persisted state is classified corrupt/metadata_mismatch rather than reloading as valid evidence (product invariant: corrupt state never becomes fabricated valid state).",
+        "observed": "assertCapturedClip({...valid, fps: 0}, 'imported_video') does not throw (validator only requires fps >= 0 while ClipMediaStore.swift requires fps > 0 and <= 240). durationMs 0.001 accepted (isPositiveFinite). durationMs 7.2e6 accepted (native max 60 s). width=height=1e9 accepted (native max 4096 / 4096*2160 px). getPendingCapture on a persisted row with fps=0,durationMs=7.2e6 returns evidenceStatus 'valid' with the clip attached.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B1|ATTACK B2|ATTACK B3|ATTACK B4|ATTACK B11'  (5 failed; full file: 15 executed / 4 passed / 11 failed)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/importedClipBoundary.adv.test.ts",
+        "title": "assertCapturedClip(imported_video) is far looser than the native import budget, so corrupt persisted rows reload as VALID evidence: fps=0, durationMs=0.001, durationMs=7,200,000 (2 h vs 60 s native cap), width/height=1e9 all accepted; a persisted 0 fps / 2 h imported row reloads with evidenceStatus='valid'"
+      },
+      {
+        "expected": "frameIndex must be a strictly increasing non-negative integer sequence (the versioned time mapping back to media frames); otherwise the sidecar is corrupt and must be refused.",
+        "observed": "frameIndex = -i for even frames and 7 for all odd frames -> outcome 'scored'.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importTimeMapping.adv.test.ts -t 'ATTACK A5'",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/importTimeMapping.adv.test.ts",
+        "title": "Canonical pose parser accepts negative, duplicated and out-of-order frameIndex values while timestamps look valid; the sidecar still scores"
+      },
+      {
+        "expected": "JS should refuse receipts that do not resolve inside the app's private Captures directory and sidecars that are not derived from the clip being extracted, so a native regression cannot bind the app to Photos originals or foreign artifacts. Whether the native layer (ClipMediaStore/readCaptureArtifact) independently enforces the private-directory boundary at runtime is NOT_YET_VERIFIABLE on Linux.",
+        "observed": "importStrokeVideo resolved with uri 'file:///var/mobile/Media/DCIM/100APPLE/img_0001.mov' (not a private copy). extractImportedPoseSequence(clip) resolved with poseSequence.uri 'import-OTHER-pose-1.pose.json' and with posterUri under /var/mobile/Media/DCIM. assertCapturedClip accepted uri 'file:' (empty path), 'file:///private/captures/../../../etc/passwd.mov', posterUri with '../' traversal.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importBridgeLifecycle.adv.test.ts -t 'ATTACK F3|ATTACK F4|ATTACK F5' ; npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B7|ATTACK B9|ATTACK B10'  (6 failed)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/importBridgeLifecycle.adv.test.ts",
+        "title": "JS import/extraction receipt validation binds URIs only to the 'file:' scheme: original Photos/DCIM path, empty 'file:' URI, '..' traversal, poster outside the captures directory, and a sidecar named for a different clip are all accepted"
+      },
+      {
+        "expected": "Reject arrays as records, require origin 'import_copy' for imported clips, and apply MAX_IMPORTED_POSE_FRAMES to persisted refs as well as fresh receipts.",
+        "observed": "Object.assign([], validClip) passes isRecord and is returned as a CapturedClip; origin 'native_export' is accepted for captureMode 'imported_video' (native import always writes 'import_copy'); a persisted poseSequence ref with frameCount 4001 passes isPoseSequenceRef although assertImportedPoseExtraction refuses the same count at the receipt boundary.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/importedClipBoundary.adv.test.ts -t 'ATTACK B5|ATTACK B6|ATTACK B8'  (3 failed)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/importedClipBoundary.adv.test.ts",
+        "title": "assertCapturedClip accepts an Array carrying clip properties, nativeMediaIdentity.origin='native_export' on an imported_video clip, and a poseSequence ref whose frameCount exceeds the 4000-frame extraction ceiling"
+      }
+    ],
+    "package_id": "INT-import-media-capture",
+    "summary": "INDEPENDENT ADVERSARY, area import-media-capture, attacked HEAD 30a4065036a917514fb4984fde73f87867f38619 (branch devin/1788854799-production-program-integration). Attack branch devin/pp/adv/import-media-capture-30a40650 @ 54caaea2403a1724f3ffd39e7da9d8eb519165cd (pushed, no force, no PR). Only additions: 6 Jest suites under apps/mobile/__tests__/adv/ + evidence under apps/mobile/__tests__/adv/evidence/ (*.txt because root .gitignore ignores *.log). No production code, no existing test, no migration touched (git diff 30a40650..54caaea = 12 added files only).\n\nFULL ATTACK RUN [VERIFIED]: `cd apps/mobile && npx jest --verbose __tests__/adv` -> exit 1, 6 suites, 60 tests: 29 passed / 31 failed / 0 skipped. Log: apps/mobile/__tests__/adv/evidence/adv-all.final.txt. Every failure was read against the source and classified; all 31 are confirmed product gaps (grouped into the 8 `breaks` above); none is a harness bug.\n\nBASELINE (required existing suites) [VERIFIED]: `cd apps/mobile && npx jest __tests__/nativeImportSafety.test.ts __tests__/nativeMediaIdentity.test.ts __tests__/importedCaptureAnalysis.test.ts __tests__/importedPoseExtraction.test.ts __tests__/cameraCapture.test.ts __tests__/originalAnalysisRetry.test.ts` -> exit 0, 6 suites, 432 passed / 0 failed / 0 skipped (evidence/baseline-area-suites.txt). `cd packages/capture-envelope && npx vitest run` -> exit 0, 9 files, 75 passed (evidence/capture-envelope-vitest.txt). Checks on new files [VERIFIED]: `cd apps/mobile && npx tsc --noEmit` exit 0 (evidence/tsc.txt); root `npx eslint apps/mobile/__tests__/adv` exit 0 (evidence/eslint.txt); root `npx prettier --check apps/mobile/__tests__/adv/*.ts` exit 0 (evidence/prettier.txt). Env: Node v24.19.0, pnpm 10.15.1, root `pnpm install --frozen-lockfile` exit 0, `cd apps/mobile && npm ci` exit 0.\n\nATTACKS THAT DID NOT BREAK ANYTHING (29 passing, all VERIFIED, same full-run command; per-file: `cd apps/mobile && npx jest <file>`):\n- originalRetryReplay.adv.test.ts (11/11 passed): control original imported clip extracts+scores+charges exactly once; C1 native current-bytes status mismatch / unavailable / legacy / invalid at replay -> no extraction, no permit, no charge, operation stays recoverable; C2 native 'verified' but compared a DIFFERENT byte expectation than the receipt -> refused; C3 byte comparison throws -> HOLD, honest retry then scores once (same operation id); C4 receipt above 4000-frame ceiling -> refused, no charge, operation intact; C5 sidecar file missing at replay -> no throw, no permit, no charge; C6 account switch while native extraction in flight -> account_changed, nothing persisted for either owner; C7 two concurrent replays of one saved operation -> extract at most once, charge at most once.\n- importBridgeLifecycle.adv.test.ts (3 passed): F1 user cancels, native later fails with import_too_long -> caller sees only camera.cancelled and the drain barrier releases so the next import starts; F2 guided-mode payload through the import path -> refused; F6 permission-denied rejection keeps its native code and message.\n- importedClipBoundary.adv.test.ts (4 passed): valid control accepted; B12 persisted payload with trailing-garbage JSON -> corrupt (not legacy, not fabricated); B13 persisted byteSize disagreeing with native identity -> refused; valid persisted row reloads valid.\n- importTimeMapping.adv.test.ts (4 passed): aligned control scores inside media timeline; A1 all pose frames stamped after clip end -> refused; A2 negative timestamps -> refused; A3 clip claims 1 ms timeline vs multi-second sidecar -> refused.\n- importedSidecarContent.adv.test.ts (6 passed): E1 all joints renamed to unknown names -> not scored; E4 single-frame sidecar -> not scored; E5 landmark flood (1000 extra joints/frame, 4.8 MB) bounded, finishes in ~0.7 s with a known outcome (it scored - see break #3 note); E6 sidecar fps != clip fps -> refused; E7 frameCount off by one with rehashed file -> refused; E8 UTF-8 BOM prefix -> hash mismatch refused, never repaired.\n- importEnvelopeGate.adv.test.ts (1 passed): all-null measurement set -> every dimension NOT_MEASURED, overall SUPPORTED_UNMEASURED, never SUPPORTED.\n\nINFERRED (read code, not executed): ClipMediaStore.swift enforces fps>0 && <=240, duration <=60 s, dimension <=4096 / <=4096*2160 px, source <=512 MiB, decoded frames <=14401, pose frames <=4000, landmarks/pose <=64, sidecar <=16 MiB, poster <=8 MiB, 64 MiB disk reserve, 15 s metadata / 120 s copy / 180 s extraction timeouts. The JS-side gaps in breaks #5, #7, #8 are only reachable in production through native regression or corrupt persisted state, hence P2/P3 rather than P1.\n\nNOT_YET_VERIFIABLE (Apple/device only; no verdict guessed): (1) native refusal of 0 fps / >60 s / >4096 px / >512 MiB / >240 fps imports and the resourceLimit/invalidMedia error codes actually reaching JS; (2) private-directory confinement of ClipMediaStore copy targets and readCaptureArtifact (whether native independently blocks Photos-original / traversal paths - break #7); (3) Vision pose extraction producing <=64 landmarks in [0,1] and monotone frameIndex (whether breaks #3/#6 are reachable without disk tampering); (4) cancellation mid-copy and mid-extraction releasing partial files; (5) missing Photos permission / security-scoped URL expiry; (6) low-disk (64 MiB reserve) refusal; (7) process death and relaunch between native copy, extraction receipt and JS persistence; (8) sidecar/poster missing on disk at replay on a real device. Exact commands a Mac/device run needs (NOT run here - forbidden `--remote`, shared runner): `scripts/mac-full-verify.sh` on the M4 runner (runs `cd apps/mobile/ios && bundle exec pod install`, `xcodebuild test -workspace apps/mobile/ios/PickleSensei.xcworkspace -scheme PickleSensei -destination 'platform=iOS Simulator,name=iPhone 16'` incl. the PickleNative XCTest targets for ClipMediaStore import budget/identity), then a physical-iPhone run of the Analyze -> Import flow with (a) a 61 s clip, (b) a 4K120 clip, (c) an 8 fps 240p clip (break #1), (d) Photos permission denied, (e) killing the app during import copy and during extraction, (f) deleting the sidecar from the app container before retrying the original clip.\n\nUNKNOWN: whether AnalyzeScreen's `captureEnvelope: null` for imports (break #1) is an intentional v1 product decision documented in the dossier - not found in docs/APP_STORE_SUBMISSION.md or docs/RELEASE_READINESS_2026-09-07.md §11; treated as a break because the product's own evaluator declares such media UNSUPPORTED and a rating credit is consumed.\n\nRestrictions honoured: no PR, no push to main/ci/mac-*, no force push, no production Supabase / ASC / secrets touched, no `|| true`/`--passWithNoTests`/`@ts-ignore`/`any`/`eslint-disable`/inflated timeouts, no existing test or production file modified."
+  },
+  "status": "DONE"
+}

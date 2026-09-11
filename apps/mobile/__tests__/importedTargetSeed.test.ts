@@ -5,6 +5,7 @@ import {
 import type { LocalDb } from '../src/data/db';
 import {
   getCaptureTargetSeed,
+  parseCaptureTargetSeed,
   setCaptureTargetSeed,
   type CaptureTargetSeed,
 } from '../src/data/repository';
@@ -53,12 +54,32 @@ describe('imported-capture target seed persistence', () => {
     await expect(getCaptureTargetSeed(db, 'capture-1')).resolves.toEqual(seed);
   });
 
-  it('reads absent, corrupt, or malformed seeds as null, never a reconstructed tap', async () => {
+  it('distinguishes absent seeds from corrupt or malformed selection evidence', async () => {
     setActiveDataOwner(owner);
     const rowsByCall: Array<Record<string, unknown>[]> = [
       [],
       [{ target_seed: null }],
       [{ target_seed: '{not-json' }],
+      [{ target_seed: '' }],
+      [{ target_seed: JSON.stringify({ ...seed, point: { x: 1.1, y: 0.5 } }) }],
+      [
+        {
+          target_seed: JSON.stringify({ ...seed, point: { x: 0.5, y: -0.1 } }),
+        },
+      ],
+      [
+        {
+          target_seed: JSON.stringify({
+            ...seed,
+            selectedAtIso: '2026-02-30T00:00:00.000Z',
+          }),
+        },
+      ],
+      [
+        {
+          target_seed: JSON.stringify({ ...seed, selectedAtIso: 'not a date' }),
+        },
+      ],
       [{ target_seed: JSON.stringify({ point: { x: 'a', y: 0.5 } }) }],
       [
         {
@@ -76,8 +97,33 @@ describe('imported-capture target seed persistence', () => {
         },
         close() {},
       };
-      await expect(getCaptureTargetSeed(db, 'capture-1')).resolves.toBeNull();
+      if (rows.length === 0 || rows[0]?.target_seed === null) {
+        expect(parseCaptureTargetSeed(rows[0]?.target_seed)).toEqual({
+          kind: 'absent',
+        });
+        await expect(getCaptureTargetSeed(db, 'capture-1')).resolves.toBeNull();
+      } else {
+        expect(parseCaptureTargetSeed(rows[0]?.target_seed)).toEqual({
+          kind: 'corrupt',
+        });
+        await expect(getCaptureTargetSeed(db, 'capture-1')).rejects.toThrow(
+          'corrupt',
+        );
+      }
     }
+  });
+
+  it.each([
+    { ...seed, point: { x: 2, y: 0.5 } },
+    { ...seed, point: { x: 0.5, y: Number.NaN } },
+    { ...seed, selectedAtIso: '2026-02-30T00:00:00.000Z' },
+  ])('rejects corrupt target input before any write: %j', async invalid => {
+    setActiveDataOwner(owner);
+    const execute = jest.fn(async () => ({ rows: [] }));
+    await expect(
+      setCaptureTargetSeed({ execute, close() {} }, 'capture-1', invalid),
+    ).rejects.toThrow('invalid');
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('refuses to write for a read-only owner scope', async () => {

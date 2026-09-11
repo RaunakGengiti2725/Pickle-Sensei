@@ -1,0 +1,361 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W02-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "0505f638ac65ff5134528421c5884a7e3279d4c13dfad74a56a1d0eec9b893c1",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W02-02-r2",
+      "phase": "implement",
+      "prompt_sha256": "3cb6bc9d7570a364400ce73285624722b7a256e9f178e7cdbd451168f1c81fdb",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W02-02-r2",
+      "phase": "review",
+      "prompt_sha256": "1d25908ba0ced64343b9ee36cb18433fc086fe793a4ca362facc93ac9b6f2fbd",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W02-02-r2",
+      "phase": "adversary",
+      "prompt_sha256": "a0a65d8b97126168829baa3460cba080c1da835e0ab6507d2628a588754cf43b",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "candidate": {
+    "branch": "devin/pp/w02-02/impl-r2",
+    "head_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+    "round": 2
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.6",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W02-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: W02-02-AC2 status FAIL"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2efcc16-bc99-4e44-9f68-63e99cce293e/ac1-head-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 11,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC1",
+            "note": "VERIFIED on HEAD 6022b2c2: Test Suites 1 passed; Tests 11 passed, 11 total.",
+            "passed": 11,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93f38c5c-ec7f-4f1f-8693-fa3709744f03/ac2-base-jest.log",
+            "command": "git checkout d8e5db3eb346b651e4ce04cc997178abcbed56fe && git show devin/pp/w02-02/impl-r1:apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts > apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts && cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts; then same command on HEAD 6022b2c2",
+            "executed": 11,
+            "exit_code": 1,
+            "failed": 0,
+            "id": "W02-02-AC2",
+            "note": "PROOF outcome 1 because the new suite does NOT fail on BASE_SHA. Base run (d8e5db3e, only the test file copied over): jest exit 0, 11 executed / 11 passed / 0 failed / 0 skipped, log ac2-base-jest.log (artifact URL above). Candidate run (HEAD 6022b2c2): jest exit 0, 11/11/0/0, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2efcc16-bc99-4e44-9f68-63e99cce293e/ac1-head-jest.log. Per the criterion's second clause ('or the matrix documents existing coverage per stage') the matrix documents the existing fence per stage in its header comment and per-test names; no stage leaks on base, so no accountScope.ts change was made. Status is reported FAIL under the strict regress rule (no base failure) rather than claiming PASS; the reviewer decides whether the documented-coverage clause applies.",
+            "passed": 11,
+            "skipped": 0,
+            "status": "FAIL"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8eecffc1-492d-4b8e-9d87-208628efe0a6/EVIDENCE.md",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC3",
+            "note": "VERIFIED on HEAD: exit 0 with empty output (artifacts/w02-02/ac3-tsc.log is 0 bytes; summarized in EVIDENCE.md). Required `cd apps/mobile && npm ci` first because @sentry/react-native was absent from the pre-installed node_modules.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/911503c2-012f-40ac-a040-ea9a256f3db2/ac4-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts && npx prettier --check apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC4",
+            "note": "VERIFIED at repo root on HEAD: eslint exit 0 (empty output), prettier --check exit 0 ('All matched files use Prettier code style!'). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/349b26d3-ee8b-4910-9cc4-22ce2d111e28/format-check.log) and `git diff --check` / `git diff --check d8e5db3e HEAD` exit 0. accountScope.ts unchanged, so the only changed file is the test.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: wrote the matrix before touching production code and ran it against a clean BASE_SHA checkout with ONLY the test file copied over (git show <branch>:path > path), then on HEAD. Since it passed on base there was no reproduced defect and, per the package procedure ('if the objective is already fully satisfied on BASE_SHA, prove it with the acceptance commands and say so — do not invent work'), accountScope.ts was not modified. The matrix uses the shipping primitives directly (setActiveDataOwner/captureDataOwnerContext/forDataOwner, OriginalAnalysisExecution, prepareOriginalCaptureAnalysis/runOriginalCaptureAnalysis, runCaptureAnalysis, drainOutbox/syncRuntime) with deterministic pause points (deferred mock fetch / extractImportedPoseSequence / SQLite statement observer) so the account switch lands at an exact stage; fixture owners are canonical UUIDs A=1111…, B=2222… with distinct bearer tokens so token leakage is observable.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8eecffc1-492d-4b8e-9d87-208628efe0a6/EVIDENCE.md",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e2efcc16-bc99-4e44-9f68-63e99cce293e/ac1-head-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93f38c5c-ec7f-4f1f-8693-fa3709744f03/ac2-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/911503c2-012f-40ac-a040-ea9a256f3db2/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/349b26d3-ee8b-4910-9cc4-22ce2d111e28/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/582109d1-98fe-4d25-ac91-db405a260d25/full-mobile-jest.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit on BASE_SHA with the pre-installed node_modules failed with unresolved '@sentry/react-native' imports (environment: dependency not installed); resolved by `cd apps/mobile && npm ci --no-audit --no-fund` (962 packages), after which tsc exits 0 on both base and HEAD — not a code failure.",
+          "cd apps/mobile && npx jest --ci --silent (full suite, HEAD == BASE + test file): 1 suite / 1 test skipped — importedRealFootageAnalysis.test.ts (describe.skip when Mac-generated pose/meta artifacts are absent), a documented non-gate in docs/devin/TEST_MATRIX.md; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/582109d1-98fe-4d25-ac91-db405a260d25/full-mobile-jest.log"
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w02-02/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts"
+        ],
+        "head_sha": "6022b2c2725258b53eee82c302ff93f4a5b3a21d",
+        "out_of_scope_files": [],
+        "package_id": "W02-02",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts"
+        ],
+        "residual_risks": [
+          "The matrix drives the stage boundaries through the shipping analysis/data modules (runCaptureAnalysis, originalAnalysisOperations, runJournal, drainOutbox/syncRuntime) but not through the React screens (AnalyzeScreen / sessionNative); screen-level owner fencing is covered by existing tests, not by this file.",
+          "AC2 has no base failure: if the reviewer reads the regress criterion strictly (a base FAIL is mandatory) the package is a documented-coverage outcome, not a fix; no production change was made in accountScope.ts by design.",
+          "The sync-stage probes use a fake fetch transport; real network cancellation semantics (AbortSignal propagation through the native fetch) are not exercised on Linux."
+        ],
+        "summary": "Result: NO owner-fencing defect reproduced on BASE_SHA d8e5db3e; the objective is already satisfied as behaviour, so apps/mobile/src/data/accountScope.ts was left unchanged (no invented fix). The deliverable is the new adversarial matrix apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts (11 tests, one commit 6022b2c2) which switches the active account A->B and A->B->A while an analysis is paused at each stage and asserts, against a real owner-keyed SQLite db and a fake edge API: (1) no owner-scoped row is written under B (rowsOwnedBy over every owner_key table), (2) nothing of A's work is readable through the active-owner read paths while B is active and B's bearer is never sent for A's work, (3) restored A recovers the pending result through the SAME durable operation id / journal row. Stage -> fence exercised (INFERRED from code, VERIFIED by the matrix): capture: OriginalAnalysisExecution invalidation on owner change (apps/mobile/src/analysis/originalAnalysisOperations.ts dispose/assertCurrent) + prepare()'s owner-scoped capture lookup, and forDataOwner() (apps/mobile/src/data/transactions.ts) rejecting a stale DataOwnerContext around savePendingCapture (apps/mobile/src/data/repository.ts) — a switch before prepare yields DataOwnerChangedError, during the INSERT INTO analysis_logical_operations yields OriginalAnalysisHeldError, B's prepare of the same operation is refused (OriginalAnalysisHeldError), restored A prepares/runs the same OPERATION id; extraction: runOriginalCaptureAnalysis re-asserts the execution after extractImportedPoseSequence resolves, so no journal/shot row is written for B and A resumes the saved operation; settlement: runJournal release_pending/committed states + runCaptureAnalysis replay of a committed result — a switch during permit reservation leaves A a recoverable journal and B nothing; a switch between durable commit and publication withholds the result from B and A replays it under the same operation without a second reservation; sync: drainOutbox owner context + syncRuntime configured-generation check (apps/mobile/src/data/syncRuntime.ts) — a switch mid-upload writes no receipt for B and A finishes its own sync later; plus an owner-epoch primitive test that A->B->A yields a new generation (apps/mobile/src/data/accountScope.ts) so every context captured before the round trip is stale. AC2 therefore has proof exit_code=1: the matrix PASSES on BASE_SHA (11/11) and on HEAD (11/11) — it documents existing coverage per stage (header comment of the test file) rather than exposing a leak. Verified commands (all exit 0): AC1 jest matrix 11/11; AC3 tsc --noEmit (empty output); AC4 eslint + prettier --check on the changed file; root pnpm format:check; git diff --check (worktree and d8e5db3e..HEAD); full mobile suite cd apps/mobile && npx jest --ci --silent: 314 suites / 6066 tests, 6065 passed, 1 skipped (importedRealFootageAnalysis.test.ts, documented non-gate in docs/devin/TEST_MATRIX.md). Branch pushed to origin as devin/pp/w02-02/impl-r1 (single commit). No PR opened, no force-push, no ci/mac-* push, no production touch. Note: npm ci was run inside apps/mobile because @sentry/react-native was missing from the pre-installed node_modules (pre-existing environment state, not a repo change)."
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/80eaa87c-e1f1-4287-8afe-cb192d9bbac0/attacks-on-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aa47009b-bd94-424c-8b42-7d81103fc63d/attacks-on-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/663a11d0-0f5b-4646-a561-be8abce3e2fc/ac1-candidate-rerun.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cb2f6d3-7312-4bd6-b98e-5c676a22d4f9/ac3-tsc-attack.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e64ecc51-88cd-449d-9411-e8d614b58050/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b5b8b6a8-5836-4f09-87b9-f67ecffe67d4/ac4-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w02-02/attack-7c06c0b6",
+        "attack_branch_sha": "c516a1f3c3170891bd785bd53fe34f9f327eb55d",
+        "attacked_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "An explicit sign-out must always clear the account, the Keychain refresh credential and the device's server session regardless of subscriber failures (AGENTS.md: the ONE implicit sign-in restore is the vault; a user who signed out must not be signed back in on relaunch). Either notifyOwnerListeners() must not propagate subscriber errors to the owner-transition caller (report/log them instead), or every owner-transition caller must complete its teardown in a finally/after the throw.",
+            "observed": "VERIFIED. With one subscribeToDataOwner() listener that throws, useAuthStore.signOut() rejects with the listener error after setActiveDataOwner(SIGNED_OUT_DATA_OWNER) already committed: getActiveDataOwner()='signed-out' and getApiSession()=null (half-switched), but authStore.session still = account A, the session vault record for A is still in the Keychain, logoutCalls=0. On the following hydrate() the vault restores A: /v1/auth/refresh is called once and bearerTokenFor(A)='access-a2'. Same for sign-in as B over the faulty fence: authStore.session=A while active owner='signed-out' and api session=null (a session with no bearer). Root cause: candidate's notifyOwnerListeners() commits the owner, delivers to every subscriber (the W02-02 fix), then RETHROWS the first subscriber error; no shipping call site (authStore.signOut, establishSyncedAccount, revoked-session path, apiSession) tolerates that throw, so the exception unwinds the caller mid-transition. INFERRED: none of the three shipped subscribers (capture.ts byte-compare abort, AnalyzeScreen abandon, OriginalAnalysisExecution.recheck) throws today, so this is a latent hazard on a supported path rather than a live regression; it is identical on BASE_SHA (which also rethrew via forEach), so the candidate preserved rather than introduced it.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02OwnerFencingAttackAuth.test.ts -t 'ATK-11' (fails 3/3 on candidate 7c06c0b6 AND on BASE_SHA d8e5db3e; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/80eaa87c-e1f1-4287-8afe-cb192d9bbac0/attacks-on-candidate.log)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w02OwnerFencingAttackAuth.test.ts",
+            "title": "A throwing owner-change subscriber aborts explicit sign-out after the owner switch committed: auth store still shows account A, Keychain record kept, /v1/auth/logout never called, and the next launch silently restores A"
+          },
+          {
+            "expected": "Each subscribe() call is independently detachable (reference-counted or wrapper-per-registration), or the API documents/enforces single registration.",
+            "observed": "VERIFIED. subscribeToDataOwner(fence) twice returns two unsubscribe handles backed by one Set entry; calling the first handle removes the only entry, and a subsequent A->B switch delivers 0 calls to the still-'subscribed' second registration. A consumer that reuses one callback for two scopes (e.g. two OriginalAnalysisExecution instances sharing a recheck) loses its fence when the first is disposed. Pre-existing on BASE_SHA; the candidate did not change subscribe/unsubscribe semantics. INFERRED: no shipping caller currently registers the same function object twice.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w02OwnerFencingAttack.test.ts -t 'ATK-3' (fails on candidate and on BASE_SHA; log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/80eaa87c-e1f1-4287-8afe-cb192d9bbac0/attacks-on-candidate.log)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w02OwnerFencingAttack.test.ts",
+            "title": "Duplicate registration of the same fence function is silently collapsed: unsubscribing either handle detaches the other"
+          }
+        ],
+        "package_id": "W02-02",
+        "summary": "Adversarial run against W02-02 candidate 7c06c0b6 (branch devin/pp/w02-02/impl-r2). 11 distinct attacks / 21 tests on branch devin/pp/w02-02/attack-7c06c0b6 @ c516a1f3 (2 new test files only; candidate production code and w02OwnerFencingMatrix.test.ts untouched; no PR, no force-push). Command `cd apps/mobile && npx jest --ci __tests__/w02OwnerFencingAttack.test.ts __tests__/w02OwnerFencingAttackAuth.test.ts` -> exit 1, 21 executed / 17 passed / 4 failed / 0 skipped on the candidate; the SAME 4 fail on BASE_SHA d8e5db3e (copied into a worktree: exit 1, 17 passed / 4 failed), so no attack distinguishes candidate from base and neither break is a regression introduced by the fix. NON-BREAKING (held on candidate, VERIFIED): ATK-1 reentrant setActiveDataOwner inside a subscriber during delivery (settles on last owner, +1 generation per switch, every fence sees the settled owner); ATK-2 subscribe/unsubscribe of other fences during delivery (disposed fence still invalidated, self-removing fence delivered once); ATK-4 settlement switch while the local 'reserved' permit write is in flight (A keeps a release_pending journal with the permit id, zero rows for B, A settles once); ATK-5 5xx then 429+Retry-After on finalize during original-owner recovery (journal stays pending, no second reservation, permit released exactly once as cancelled, no charge); ATK-6 B replays A's operation id with and without its own capture (no B rows / no network without the capture; with its own capture B gets its own permit under its own bearer, A's journal untouched and A replays its own result); ATK-7 process death with a reserved permit then restart under B then A (B's sync runtime never touches A's journal; A releases once with A's bearer); ATK-8 switch between the two receipt transactions of one accepted sync batch (first receipt stays under A, second row stays in outbox, nothing for B, no second charge); ATK-9 corrupt/partial persisted state (SQLite trigger refuses identity/owner/generation/hash/state corruption of the journal; a committed A journal whose result rows vanished is not replayed as a fabricated result, not re-charged, not visible to B); ATK-10 invalid owner keys (empty, whitespace, upper-case sentinel, v0 uuid, bad variant, nil uuid) rejected before any fence runs and without moving the generation; same owner in different case is not a switch. BREAKS: (P2) ATK-11 — the candidate's notifyOwnerListeners() rethrows the first subscriber error after the owner switch has committed, and authStore.signOut()/signInWithApple() do not tolerate it: explicit sign-out leaves authStore.session=A, keeps the Keychain refresh credential, never calls /v1/auth/logout, and the next hydrate() restores A via /v1/auth/refresh (3 tests). Latent (no shipped subscriber throws today, INFERRED) and identical on base, but it means the fix's chosen semantics 'deliver to all, then rethrow' has no safe consumer at the shipping call sites. (P3) ATK-3 — duplicate registration of one fence function collapses in the Set; unsubscribing one handle detaches the other (pre-existing). Acceptance re-checks on the attack branch: AC1 matrix `cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts` exit 0, 13/13 passed; AC3 `cd apps/mobile && npx tsc --noEmit` exit 0; AC4 `npx eslint <2 attack files>` exit 0 and `npx prettier --check <2 attack files>` exit 0. Logs attached. UNKNOWN/not covered: native iOS runtime behaviour (Linux only), Edge/SQL surfaces (W02-02 added none)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/26271ad8-424b-46bd-b053-a2f522f6fff6/ac1_head_jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC1",
+            "note": "VERIFIED on HEAD 7c06c0b6. Test Suites: 1 passed, 1 total; Tests: 13 passed, 13 total. Local copy: artifacts/w02-02/ac1_head_jest.log (untracked).",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce6d0028-128a-4ebb-ae0b-a500d35cb18d/ac2_base_testonly.log",
+            "command": "git checkout d8e5db3eb346b651e4ce04cc997178abcbed56fe -- apps/mobile/src/data/accountScope.ts (working tree = BASE_SHA + ONLY the new test file) && cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts; then git checkout HEAD -- apps/mobile/src/data/accountScope.ts && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC2",
+            "note": "VERIFIED. BASE run (BASE_SHA sources + only the new test file): exit_code=1, executed=13, passed=11, failed=2, skipped=0; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce6d0028-128a-4ebb-ae0b-a500d35cb18d/ac2_base_testonly.log (local artifacts/w02-02/ac2_base_testonly.log). The 2 base failures are both in describe 'W02-02 owner fencing matrix: owner-change delivery': (1) 'switching away from A while extraction is pending reaches every owner fence even when an earlier subscriber throws...' fails at expect(nativeOperation.signal.aborted).toBe(true) — Received: false (the owner-only fence registered after a throwing subscriber never sees the switch); (2) 'delivers one switch to every subscriber in registration order...' fails at expect(seen).toEqual([first,second,third]) — only 'first' recorded. CANDIDATE run (HEAD 7c06c0b6): exit_code=0, executed=13, passed=13, failed=0, skipped=0; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/26271ad8-424b-46bd-b053-a2f522f6fff6/ac1_head_jest.log. The other 11 tests (capture/extraction/settlement/sync/epoch) pass on both base and HEAD and document existing per-stage coverage. Only two files differ between BASE_SHA and HEAD, so BASE + accountScope.ts@BASE is exactly 'BASE_SHA with only the new test file copied over'.",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ecbe74fb-b223-41b1-8aad-edf145c30374/ac3_tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC3",
+            "note": "VERIFIED on HEAD, exit 0, no diagnostics. A first attempt reported 20 errors, all 'Cannot find module @sentry/react-native' (and its transitive implicit-any/type fallout) in src/diagnostics/* — a stale apps/mobile/node_modules in this VM (package.json pins @sentry/react-native 8.24.0, directory absent). Fixed by the documented `cd apps/mobile && npm ci` (exit 0, 962 packages); tsc then passed. Not a code issue; package-lock.json unchanged (git status clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e83985b-368c-44bf-b40f-51d23a5ca6c9/ac4_eslint_prettier.log",
+            "command": "npx eslint apps/mobile/src/data/accountScope.ts apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts && npx prettier --check apps/mobile/src/data/accountScope.ts apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC4",
+            "note": "VERIFIED from repo root on HEAD: ESLint 0 problems, Prettier 'All matched files use Prettier code style!'. Also VERIFIED: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7105f296-70ef-416e-b361-f7205ef1eb20/format_check.log) and `git diff --check d8e5db3e HEAD` exit 0 (no whitespace errors).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Round 1's matrix (11 tests across capture, extraction, settlement, sync, epoch) was sound but passed unchanged on BASE_SHA, so it failed AC2. Round 2 kept that matrix as the per-stage coverage documentation and located a concrete defect inside the authorized write path apps/mobile/src/data/accountScope.ts: setActiveDataOwner() (base line 57) notified subscribers with `ownerListeners.forEach(listener => listener())`, so the first subscriber that threw aborted delivery and every subscriber registered after it never observed the switch. Every owner fence in the shipping app is subscription-based — capture.ts:757-761 aborts the native byte comparison via subscribeToDataOwner, AnalyzeScreen.tsx:2187 abandons the in-flight analysis via subscribeToDataOwner, OriginalAnalysisExecution (originalAnalysisOperations.ts) invalidates its lease via subscribeToDataOwner — so a starved fence lets in-flight work continue for the previous owner after A→B. Test first (commit 1fa6ee2b + prettier 2c96e49e): a new describe 'owner-change delivery' with (a) an extraction-stage probe: faulty subscriber registered first, an owner-only AbortController fence (modelled on capture.ts) and the execution lease registered after it, extraction held mid-flight, owner switched away from A → asserts the switch is applied, the throw surfaces, and BOTH later fences fire; then B sees no rows/results, no B bearer is used, A returns and completes the SAME operation id; (b) a primitive probe: three subscribers (two throwing) all run in order against the new snapshot, generation bumps once, first error rethrown once, a no-op re-set notifies nobody. Fix (commit 7c06c0b6): setActiveDataOwner() delegates to notifyOwnerListeners(), which iterates every listener, captures the first thrown error, and rethrows it after the last listener — 16 added lines, no exported signature change, no other file touched. Wired into shipping behaviour by construction: every existing subscribeToDataOwner caller (authStore sign-out/sign-in paths call setActiveDataOwner) now receives every switch.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/26271ad8-424b-46bd-b053-a2f522f6fff6/ac1_head_jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ce6d0028-128a-4ebb-ae0b-a500d35cb18d/ac2_base_testonly.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ecbe74fb-b223-41b1-8aad-edf145c30374/ac3_tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9e83985b-368c-44bf-b40f-51d23a5ca6c9/ac4_eslint_prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7105f296-70ef-416e-b361-f7205ef1eb20/format_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4597929b-3f4d-4f68-9824-988a59be3008/related_jest.log"
+        ],
+        "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w02-02/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts",
+          "apps/mobile/src/data/accountScope.ts"
+        ],
+        "head_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+        "out_of_scope_files": [],
+        "package_id": "W02-02",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts :: W02-02 owner fencing matrix: owner-change delivery › switching away from A while extraction is pending reaches every owner fence even when an earlier subscriber throws, and A resumes the same operation (FAILS on BASE_SHA)",
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts :: W02-02 owner fencing matrix: owner-change delivery › delivers one switch to every subscriber in registration order, applies it fully, and surfaces the first subscriber failure once (FAILS on BASE_SHA)",
+          "apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts :: capture / extraction / settlement / sync / owner-epoch stages (11 tests, reused from r1; they PASS on BASE_SHA and document the existing per-stage coverage, per AC2's 'or the matrix documents existing coverage per stage')"
+        ],
+        "residual_risks": [
+          "The fix changes error surfacing order inside setActiveDataOwner(): when a subscriber throws, all remaining subscribers still run and the FIRST error is rethrown after the loop (base rethrew immediately and skipped the rest). Callers see the same exception type as before; only the set of notified subscribers grew. No shipping subscriber is known to throw (INFERRED from reading capture.ts, AnalyzeScreen.tsx, originalAnalysisOperations.ts, syncRuntime.ts, React useSyncExternalStore glue); the hardening protects the owner-only fences (camera byte-comparison abort capture.ts:757-761, Analyze abandon AnalyzeScreen.tsx:2187, OriginalAnalysisExecution.recheck) from being starved by an earlier faulty subscriber.",
+          "The extraction-stage delivery probe switches the data owner BEFORE clearing the API session to isolate the owner-subscription path; shipping sign-out (authStore.clearSyncedRuntime → setActiveDataOwner) does the reverse, where the execution lease is additionally invalidated through the API-session subscription. The owner-only fences (no API-session subscription) are the ones the probe protects.",
+          "Supplementary regression run (not an acceptance gate): all mobile Jest suites referencing setActiveDataOwner/subscribeToDataOwner plus authDurableSession — 118 suites passed, 1 suite skipped (importedRealFootageAnalysis.test.ts, the documented environmental skip in docs/devin/TEST_MATRIX.md), 2800 passed / 1 skipped; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/4597929b-3f4d-4f68-9824-988a59be3008/related_jest.log. Full `npx jest --silent` and Mac/M4 verification were not run (TypeScript/data-only change, no native paths touched)."
+        ],
+        "summary": "Defect on BASE_SHA (VERIFIED by the new tests failing on base): apps/mobile/src/data/accountScope.ts:57 `ownerListeners.forEach(listener => listener())` — an owner-change subscriber that throws stops delivery to all later subscribers, so subscription-only fences (capture.ts:757-761 native byte-compare abort, AnalyzeScreen.tsx:2187 abandon, originalAnalysisOperations.ts OriginalAnalysisExecution recheck) can miss an A→B switch and keep an in-flight analysis alive under the previous owner. The r1 matrix passed on base because every stage it exercised was already fenced through forDataOwner()/generation checks, so it documented coverage rather than a gap. Round 2: kept the 11 per-stage tests (capture, extraction, settlement, sync, epoch — all pass on base and HEAD, documenting existing coverage) and added 2 'owner-change delivery' tests that FAIL on BASE_SHA (2 failed / 11 passed, exit 1) and PASS on HEAD (13/13, exit 0). Minimal fix inside write_paths: notifyOwnerListeners() runs every subscriber, then rethrows the first failure once. AC1 PASS (13/13), AC2 PASS (proof exit 0), AC3 PASS (tsc exit 0 after the documented `npm ci` refreshed a stale apps/mobile/node_modules that lacked @sentry/react-native — environment, not code), AC4 PASS (eslint + prettier + root pnpm format:check + git diff --check all exit 0). Branch devin/pp/w02-02/impl-r2 pushed at 7c06c0b68c9b5f3d3a5c6942e284984631df211a (3 commits over d8e5db3e: test, prettier, fix). No PR opened. out_of_scope_files empty."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/57a79a6c-a5bf-4214-aa6f-dd56b358536a/ac1_head_jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC1",
+            "note": "VERIFIED by reviewer on HEAD 7c06c0b68c9b5f3d3a5c6942e284984631df211a after `cd apps/mobile && npm ci`. Test Suites: 1 passed, 1 total; Tests: 13 passed, 13 total. Local copy artifacts/w02-02-review/ac1_head_jest.log.",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee9fdf01-aa2c-459f-9f07-564caa84cc4c/ac2_head_jest.log",
+            "command": "git checkout d8e5db3eb346b651e4ce04cc997178abcbed56fe && git checkout 7c06c0b68c9b5f3d3a5c6942e284984631df211a -- apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts && (cd apps/mobile && npx jest --ci __tests__/w02OwnerFencingMatrix.test.ts); then git checkout 7c06c0b68c9b5f3d3a5c6942e284984631df211a && (cd apps/mobile && npx jest --ci --silent __tests__/w02OwnerFencingMatrix.test.ts)",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC2",
+            "note": "VERIFIED proof holds. BASE run (working tree = BASE_SHA d8e5db3e + ONLY the new test file; `git status` showed just `A apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts`): exit_code=1, executed=13, passed=11, failed=2, skipped=0; log https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3d3c0dd-bbc6-4e5c-817b-95dc712b3d8d/ac2_base_testonly.log. The 2 base failures are 'owner-change delivery › switching away from A while extraction is pending reaches every owner fence even when an earlier subscriber throws...' (line 946 expect(nativeOperation.signal.aborted).toBe(true) received false) and 'owner-change delivery › delivers one switch to every subscriber in registration order...' (seen = [first] only; second/third never notified). The 11 capture/extraction/settlement/sync/epoch probes pass on base (document existing per-stage coverage). CANDIDATE run on HEAD: exit 0, 13/13 passed. exit_code above is the proof outcome; executed/passed/failed/skipped are the HEAD run's counts.",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cab1df12-4fa8-4f6a-8c21-aa77207f628d/ac3_tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC3",
+            "note": "VERIFIED on HEAD after the documented `npm ci` (the VM's apps/mobile/node_modules was stale, lacking @sentry/react-native). Exit 0, zero diagnostics (empty log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c4184972-6aa9-4800-bc36-e4c0a704cc27/ac4_eslint_prettier.log",
+            "command": "npx eslint apps/mobile/src/data/accountScope.ts apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts && npx prettier --check apps/mobile/src/data/accountScope.ts apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W02-02-AC4",
+            "note": "VERIFIED from repo root on HEAD with root ESLint/Prettier (node_modules/.bin): eslint exit 0 (no output), prettier exit 0 ('All matched files use Prettier code style!'). Both changed files are the complete diff vs BASE_SHA.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/57a79a6c-a5bf-4214-aa6f-dd56b358536a/ac1_head_jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3d3c0dd-bbc6-4e5c-817b-95dc712b3d8d/ac2_base_testonly.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee9fdf01-aa2c-459f-9f07-564caa84cc4c/ac2_head_jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cab1df12-4fa8-4f6a-8c21-aa77207f628d/ac3_tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c4184972-6aa9-4800-bc36-e4c0a704cc27/ac4_eslint_prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/254d9048-0e3d-441e-b9d3-dbb183f08672/full_mobile_jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/data/accountScope.ts:63-73 notifyOwnerListeners() rethrows only the FIRST subscriber error; a second/third throwing subscriber's error is swallowed silently (the new primitive test at __tests__/w02OwnerFencingMatrix.test.ts:998-1038 pins exactly this 'surface first failure once' contract). Acceptable for a fencing primitive (delivery to every fence is what matters), but errors from later subscribers are now invisible rather than aborting delivery as on base. INFERRED: no shipping subscribeToDataOwner callback (capture.ts:759, AnalyzeScreen.tsx:2187, originalAnalysisOperations.ts:105, LibraryScreen/RootNavigator/AnalyzeScreen useSyncExternalStore glue) throws, so this is hardening rather than a reproduced production leak.",
+          "The base-failing tests demonstrate fence starvation only with a synthetically throwing subscriber registered first; the 11 per-stage probes (capture/extraction/settlement/sync/epoch) pass on BASE_SHA, i.e. no stage leaks rows/results on base with shipping fences alone. AC2 is satisfied through its 'matrix documents existing coverage per stage' branch plus the two genuinely base-failing delivery tests.",
+          "Environment note (not code): apps/mobile/node_modules in this VM was stale (no @sentry/react-native); the documented `cd apps/mobile && npm ci` (exit 0) fixed it before AC3. package-lock.json unchanged, git status clean afterwards."
+        ],
+        "package_id": "W02-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+        "scope_violation": false,
+        "summary": "APPROVE W02-02 candidate devin/pp/w02-02/impl-r2 @ 7c06c0b68c9b5f3d3a5c6942e284984631df211a (3 commits over BASE d8e5db3e). Scope: `git diff --stat` shows exactly 2 files, both in write_paths (apps/mobile/__tests__/w02OwnerFencingMatrix.test.ts +1039, apps/mobile/src/data/accountScope.ts +16/-1); mobile-data serial group is held; out_of_scope_files empty and correct; scope_violation=false. Fix (VERIFIED by reading the full diff): setActiveDataOwner() now calls notifyOwnerListeners(), which runs every subscriber and rethrows the first error after the loop, replacing `ownerListeners.forEach(listener => listener())` which stopped delivery at the first throwing subscriber. Wired into shipping behaviour: setActiveDataOwner is called from authStore.ts sign-in/sign-out paths (14 call sites) and the subscription-only fences in capture.ts:759 (native byte-compare abort), AnalyzeScreen.tsx:2187 (abandon) and originalAnalysisOperations.ts:105 (execution lease recheck) all depend on delivery. No exported signature change; no existing comment modified (one new docblock on the new function); no `any`/@ts-ignore/eslint-disable/skip/only/timeouts in the test file (grep); no migrations, RLS, grants, session, billing or copy touched. All four acceptance criteria re-executed by me: AC1 13/13 exit 0; AC2 proof holds (BASE_SHA + only the new test file: exit 1, 2 failed/11 passed — the two 'owner-change delivery' tests; HEAD: 13/13 exit 0); AC3 tsc exit 0; AC4 eslint+prettier exit 0. Supplementary (not a gate): full `cd apps/mobile && npx jest --ci --silent` on HEAD exit 0 — 313 suites passed / 1 skipped, 6067 tests passed / 1 skipped, the skip being the documented importedRealFootageAnalysis.test.ts (docs/devin/TEST_MATRIX.md). Non-blocking: only the first subscriber error is surfaced (later ones swallowed); the base defect is fence starvation demonstrated with a synthetic throwing subscriber — INFERRED no shipping subscriber throws, so this is hardening plus the 11 per-stage coverage probes rather than a reproduced production leak. Environment: stale apps/mobile/node_modules required the documented `npm ci` before AC3 (lockfile unchanged).",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-4"
+}

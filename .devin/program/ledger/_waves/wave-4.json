@@ -1,0 +1,167 @@
+{
+  "base_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+  "integration_order": {
+    "edge-index": [
+      "W01-03",
+      "W07-06",
+      "W11-01",
+      "P0-03"
+    ],
+    "mobile-data": [
+      "W02-01",
+      "W05-02",
+      "W02-02"
+    ],
+    "sql": [
+      "W01-03",
+      "W07-03",
+      "P0-04"
+    ]
+  },
+  "packages": {
+    "P0-03": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/p0-03/impl-r1",
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "P0-04": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/p0-04/impl-r1",
+        "head_sha": "d8e5db3eb346b651e4ce04cc997178abcbed56fe",
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W01-03": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w01-03/impl-r2",
+        "head_sha": "d5469efcd87a5190c1ff0b76d23575ec1155c67d",
+        "round": 2
+      },
+      "status": "ACCEPTED"
+    },
+    "W01-04": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w01-04/impl-r1",
+        "head_sha": "654695aa47bc844e23486d7bbb8b29511e7a956b",
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W02-01": {
+      "agent_counts": {
+        "completed": 4,
+        "failed": 0,
+        "launched": 4,
+        "requested": 4
+      },
+      "candidate": {
+        "branch": "devin/pp/w02-01/impl-r4",
+        "head_sha": "954a377835a28035d6884585f0de42c2a763cbe5",
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    },
+    "W02-02": {
+      "agent_counts": {
+        "completed": 4,
+        "failed": 0,
+        "launched": 4,
+        "requested": 4
+      },
+      "candidate": {
+        "branch": "devin/pp/w02-02/impl-r2",
+        "head_sha": "7c06c0b68c9b5f3d3a5c6942e284984631df211a",
+        "round": 2
+      },
+      "status": "ACCEPTED"
+    },
+    "W05-02": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W07-03": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W07-06": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w07-06/impl-r2",
+        "head_sha": "da57d8f7d7d3e1abab6dee01cce7dea1a5cadabb",
+        "round": 2
+      },
+      "status": "ACCEPTED"
+    },
+    "W09-02": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w09-02/impl-r1",
+        "head_sha": "0f7113b46db9153e307daf26b56286777ab1834a",
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    },
+    "W11-01": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-4"
+}

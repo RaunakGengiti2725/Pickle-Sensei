@@ -1,3 +1,4 @@
+import { setActiveDataOwner } from '../../src/data/accountScope';
 import React from 'react';
 import { Linking, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -283,6 +284,7 @@ async function openSavedTab(renderer: TestRenderer.ReactTestRenderer) {
 
 describe('Library flow · Reads tab', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.clearAllMocks();
     authState.session = { localOnly: false };
     mockListShots.mockResolvedValue([]);
@@ -322,15 +324,21 @@ describe('Library flow · Reads tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a failing local read never strands the spinner: it renders an error state with retry, never the first-run empty state', async () => {
-    mockListShots.mockRejectedValue(new Error('sqlite closed'));
+  it('a failing local read ends loading with retry; only a successful empty read shows the empty state', async () => {
+    mockListShots.mockRejectedValueOnce(new Error('sqlite closed'));
     const renderer = await renderLibrary();
-    const text = allText(renderer);
-    expect(text).not.toContain('Opening your library…');
-    expect(text).not.toContain('Your measured reads, in one place.');
-    expect(text).toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).not.toContain('Opening your library…');
+    expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).not.toContain(
+      'Your measured reads, in one place.',
+    );
+    expect(findByLabel(renderer, 'Analyze your first stroke')).toHaveLength(0);
     const retry = oneByLabel(renderer, 'Try again');
     expect(retry.props.accessibilityRole).toBe('button');
+    await pressByLabel(renderer, 'Try again');
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
+    expect(allText(renderer)).toContain('Your measured reads, in one place.');
     act(() => renderer.unmount());
   });
 
@@ -358,9 +366,13 @@ describe('Library flow · Reads tab', () => {
     // The empty state never coexists with rows.
     expect(text).not.toContain('Your measured reads, in one place.');
 
-    const dropRow = oneByLabel(renderer, 'Open third shot drop result');
+    // A scored row's label carries its estimated DUPR (7.4 → 3.60) and the
+    // 0–10 score; an unread row's label stays the bare stroke.
+    const dropLabel =
+      'Open third shot drop result, Estimated DUPR 3.60, technique score 7.4 out of 10';
+    const dropRow = oneByLabel(renderer, dropLabel);
     expect(dropRow.props.accessibilityRole).toBe('button');
-    await pressByLabel(renderer, 'Open third shot drop result');
+    await pressByLabel(renderer, dropLabel);
     expect(mockNavigate).toHaveBeenLastCalledWith('Result', {
       analysisId: 'shot-0001',
     });
@@ -396,13 +408,13 @@ describe('Library flow · Reads tab', () => {
     expect(text).toContain(
       'Saved evidence could not be verified — can’t be scored',
     );
-    expect(text).toContain('4 s clip');
+    expect(text).toContain('4s · Clip saved — analysis has not run yet');
     // Pending clips never claim they can be analyzed from here; the note
     // states the real next step and the Analyze CTA stays reachable so the
     // tab is never a dead end. No Result row exists for an unscored clip.
     expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain(
-      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     expect(text).toContain('Your measured reads, in one place.');
     expect(text).toContain('Analyze your first stroke');
@@ -435,6 +447,7 @@ describe('Library flow · Reads tab', () => {
 
 describe('Library flow · Saved drills tab', () => {
   beforeEach(() => {
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
     jest.clearAllMocks();
     authState.session = { localOnly: false };
     mockListShots.mockResolvedValue([readRow]);

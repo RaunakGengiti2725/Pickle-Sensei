@@ -370,11 +370,13 @@ describe('OnboardingScreen button ledger', () => {
     });
   });
 
-  describe('name step: First name input + Continue', () => {
-    it('Continue stays disabled for empty/whitespace names and advances once a real name is typed', () => {
+  describe('name step: required name or nickname input + Continue', () => {
+    it('Continue stays disabled for empty/whitespace names and advances once a nickname is typed', () => {
       const renderer = renderScreen();
       const input = renderer.root.findByType(TextInput);
-      expect(input.props.accessibilityLabel).toBe('First name');
+      expect(input.props.accessibilityLabel).toBe(
+        'Name or nickname (required)',
+      );
 
       const locked = hostPressable(renderer, 'Continue');
       expect(locked.props.accessibilityRole).toBe('button');
@@ -384,8 +386,8 @@ describe('OnboardingScreen button ledger', () => {
       typeName(renderer, '   ');
       expect(hostPressable(renderer, 'Continue').props.disabled).toBe(true);
 
-      typeName(renderer, ' Dana ');
-      expect(renderer.root.findByType(TextInput).props.value).toBe(' Dana ');
+      typeName(renderer, ' Ace ');
+      expect(renderer.root.findByType(TextInput).props.value).toBe(' Ace ');
       press(renderer, 'Continue');
       expect(stepNow(renderer)).toBe(2);
       expect(allText(renderer)).toContain(STEP_TITLES.gender);

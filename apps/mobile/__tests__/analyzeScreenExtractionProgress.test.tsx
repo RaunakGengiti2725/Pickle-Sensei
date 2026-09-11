@@ -16,7 +16,10 @@ jest.mock('../src/data/repository', () => ({
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
-jest.mock('../src/account/apiSession', () => ({ getApiSession: () => null }));
+jest.mock('../src/account/apiSession', () => ({
+  ...jest.requireActual('../src/account/apiSession'),
+  getApiSession: () => null,
+}));
 
 type CameraListener = (event: CameraEvent) => void;
 const mockCameraListeners = new Set<CameraListener>();
@@ -88,12 +91,17 @@ import { TargetSelector } from '../src/camera/TargetSelector';
 import {
   assertCapturedClip,
   captureStrokeVideo,
+  cancelCameraOperation,
   extractImportedPoseSequence,
   importStrokeVideo,
   type CameraEvent,
   type CapturedClip,
 } from '../src/camera/capture';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -120,7 +128,7 @@ const extractedPoseSequence = {
 };
 
 function guidedClip(): CapturedClip {
-  return {
+  return assertCapturedClip({
     uri: 'file:///captures/guided.mov',
     durationMs: 4200,
     fps: 60,
@@ -150,7 +158,7 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 120,
       poseFrameCount: 120,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 4200,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -179,7 +187,7 @@ function guidedClip(): CapturedClip {
       coordinateSystem: 'normalized_image_top_left',
       poseModelVersion: 'apple-vision-bodypose-1',
     },
-  };
+  });
 }
 
 // ─── Driving helpers ─────────────────────────────────────────────────────────
@@ -215,6 +223,13 @@ function extractionEvent(
       : {}),
     emittedAtIso: options.atIso,
   };
+}
+
+function currentExtractionId(): string {
+  const id = jest.mocked(extractImportedPoseSequence).mock.lastCall?.[2]
+    ?.operationId;
+  if (!id) throw new Error('The extraction must have an operation identity.');
+  return id;
 }
 
 function progressBarNode(renderer: ReactTestRenderer) {
@@ -289,12 +304,14 @@ function deferred<T>(mock: jest.Mock): {
 }
 
 beforeEach(() => {
+  setActiveDataOwner('11111111-1111-4111-8111-111111111111');
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockCameraListeners.clear();
 });
 
 afterEach(() => {
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   jest.useRealTimers();
 });
 
@@ -324,12 +341,21 @@ describe('imported-video extraction progress', () => {
       progressBarNode(renderer).props.accessibilityValue.now,
     ).toBeUndefined();
 
+    emit(
+      extractionEvent('extracting', {
+        progress: 0.6,
+        captureId: 'previous-pass',
+        atIso: '2026-08-29T17:59:59.000Z',
+      }),
+    );
+    expect(renderedText(renderer)).not.toContain('60%');
+
     // First REAL native event: percentage appears; still no ETA (a rate
     // needs two observations before "~Ns left" may be shown).
     emit(
       extractionEvent('extracting', {
         progress: 0.1,
-        captureId: 'native-pass-1',
+        captureId: currentExtractionId(),
         atIso: '2026-08-29T18:00:00.000Z',
       }),
     );
@@ -341,7 +367,7 @@ describe('imported-video extraction progress', () => {
     emit(
       extractionEvent('extracting', {
         progress: 0.2,
-        captureId: 'native-pass-1',
+        captureId: currentExtractionId(),
         atIso: '2026-08-29T18:00:01.000Z',
       }),
     );
@@ -351,7 +377,7 @@ describe('imported-video extraction progress', () => {
     emit(
       extractionEvent('extracting', {
         progress: 0.4,
-        captureId: 'native-pass-1',
+        captureId: currentExtractionId(),
         atIso: '2026-08-29T18:00:02.000Z',
       }),
     );
@@ -398,6 +424,31 @@ describe('imported-video extraction progress', () => {
     });
   });
 
+  it('aborts only its active extraction on unmount and never scores a late result', async () => {
+    jest.mocked(importStrokeVideo).mockResolvedValue(importedClip);
+    const extraction = deferred<unknown>(
+      extractImportedPoseSequence as jest.Mock,
+    );
+    const renderer = await renderScreen('library');
+    pressByLabel(renderer, 'Forehand drive');
+    const selector = renderer.root.findByType(TargetSelector);
+    await act(async () => selector.props.onSkip());
+    const options = jest.mocked(extractImportedPoseSequence).mock.lastCall?.[2];
+    expect(options?.signal?.aborted).toBe(false);
+    expect(options?.operationId).toBeTruthy();
+
+    await act(async () => renderer.unmount());
+
+    expect(options?.signal?.aborted).toBe(true);
+    expect(cancelCameraOperation).toHaveBeenCalledWith(options?.operationId);
+    await extraction.resolve({
+      poseSequence: extractedPoseSequence,
+      framesWithPose: 126,
+      framesTotal: 126,
+    });
+    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+  });
+
   it('extraction failure keeps the frozen error copy — no progress residue', async () => {
     (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
     const extraction = deferred<unknown>(
@@ -413,7 +464,7 @@ describe('imported-video extraction progress', () => {
     emit(
       extractionEvent('extracting', {
         progress: 0.3,
-        captureId: 'native-pass-2',
+        captureId: currentExtractionId(),
         atIso: '2026-08-29T18:00:00.000Z',
       }),
     );

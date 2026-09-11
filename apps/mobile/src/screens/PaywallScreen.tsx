@@ -3,6 +3,7 @@ import {
   Animated,
   BackHandler,
   Easing,
+  Linking,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -18,13 +19,36 @@ import {
 } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { Icon, type IconName } from '../design/icons';
-import { color, radius, space, type } from '../design/tokens';
+import { color, membership, radius, space, type } from '../design/tokens';
 import type { BillingPeriod, StorePlan } from '../billing/types';
-import { selectHasPremium, useAccessStore } from '../state/accessStore';
+import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import {
+  selectHasPremium,
+  selectMembershipState,
+  selectNeedsFulfilmentRecovery,
+  useAccessStore,
+} from '../state/accessStore';
+import { showBrandNotice } from '../design/BrandNotice';
+import {
+  FREE_PLAY_EYEBROW,
   freeRatingAllowanceCopy,
+  membershipHeroCopy,
   RATING_CONSUMPTION_RULE,
 } from './paywallCopy';
+
+async function openSubscriptionManagement(): Promise<void> {
+  try {
+    await Linking.openURL(APP_STORE_SUBSCRIPTIONS_URL);
+  } catch {
+    showBrandNotice({
+      title: 'Could not open subscriptions',
+      detail:
+        'Open App Store account settings to manage or cancel your subscription.',
+      tone: 'danger',
+      eyebrow: 'STORE UNAVAILABLE',
+    });
+  }
+}
 
 export interface PaywallScreenProps {
   onClose: () => void;
@@ -39,24 +63,24 @@ export interface PaywallScreenProps {
  * practice library, and the rank/progress system. */
 const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
   {
-    icon: 'stroke',
-    title: 'Unlimited validated ratings',
-    body: 'Automatic capture, evidence-backed checkpoints, and no invented score.',
+    icon: 'replay',
+    title: 'Unlimited technique analyses',
+    body: 'Automatic capture with replay and checkpoint feedback.',
   },
   {
-    icon: 'court',
+    icon: 'verdict',
     title: 'Coaching that follows evidence',
     body: 'When reviewed work exists, a server-accepted score sets its priority and reassessment baseline.',
   },
   {
-    icon: 'progress',
+    icon: 'ladder',
     title: 'Rank and progress from real scores',
-    body: 'Bronze-to-Diamond player rank and trend lines built only from server-accepted analyses.',
+    body: 'Player rank and trends built from your saved analysis results.',
   },
   {
-    icon: 'bookmark',
-    title: 'Reviewed practice, kept together',
-    body: 'Published drills and rights-cleared coaching videos can be saved with the plan that prescribed them.',
+    icon: 'cones',
+    title: 'Practice, kept together',
+    body: 'Save available drills and coaching videos with your practice plan.',
   },
 ];
 
@@ -80,27 +104,43 @@ function savingsLabel(annual: StorePlan | null, monthly: StorePlan | null) {
   return percent > 0 ? `SAVE ${percent}%` : null;
 }
 
-const PODIUM_TITLES: Record<BillingPeriod, string> = {
+const PLAN_TITLES: Record<BillingPeriod, string> = {
   monthly: 'Monthly',
   annual: 'Yearly',
   lifetime: 'Lifetime',
 };
 
-/** Winners'-podium column heights: yearly tallest, lifetime second, monthly third. */
-const PODIUM_HEIGHTS: Record<BillingPeriod, number> = {
-  monthly: 148,
-  annual: 188,
-  lifetime: 158,
+/** One glyph per plan: the renewal day, one orbit of the sun, no end. */
+const PLAN_ICONS: Record<BillingPeriod, IconName> = {
+  monthly: 'calendar',
+  annual: 'orbit',
+  lifetime: 'infinity',
 };
 
-function podiumQualifier(plan: StorePlan): string {
-  if (plan.period === 'lifetime') return 'one-time · yours forever';
+/** The unit the store amount is quoted in, set small beside it. */
+const PLAN_UNITS: Record<BillingPeriod, string> = {
+  monthly: '/mo',
+  annual: '/yr',
+  lifetime: 'once',
+};
+
+/** The recommended plan: first in the list and the one ink card on the chalk
+ * page — the dark "Pro" tile beside the white standard models — and
+ * pre-selected by the store. */
+const RECOMMENDED_PERIOD: BillingPeriod = 'monthly';
+
+/** Top-to-bottom order of the plan rows, the recommended plan first. */
+const PLAN_ORDER: readonly BillingPeriod[] = ['monthly', 'annual', 'lifetime'];
+
+/** The one line under a plan's name; every number in it is the store's. */
+function planDetail(plan: StorePlan): string {
+  if (plan.period === 'lifetime') return 'One-time purchase · no renewal';
   if (plan.period === 'annual') {
     return plan.pricePerMonthString
       ? `${plan.pricePerMonthString}/mo · billed yearly`
-      : '/year · billed yearly';
+      : 'Billed yearly';
   }
-  return '/month · billed monthly';
+  return 'Billed monthly · cancel anytime';
 }
 
 /** Restates the selected plan in plain words; prices come from the store. */
@@ -108,19 +148,20 @@ function selectedPlanSummary(plan: StorePlan): string {
   if (plan.period === 'lifetime') {
     return `Lifetime · ${plan.priceString} one-time payment. No renewal, no subscription.`;
   }
-  return `${PODIUM_TITLES[plan.period]} · ${plan.priceString} per ${periodLabel(
+  return `${PLAN_TITLES[plan.period]} · ${plan.priceString} per ${periodLabel(
     plan.period,
   )}, auto-renews. Cancel anytime.`;
 }
 
-function PodiumColumn(props: {
+function PlanRow(props: {
   plan: StorePlan;
   selected: boolean;
-  /** The recommended plan: wider, with a straddling value badge. */
+  /** The recommended plan: the one ink card, with the volt badge on its
+   * shoulder; every other row is a white card. */
   hero?: boolean;
   heroBadge?: string | null;
+  /** A quiet fact beside the name (the yearly saving, from store prices). */
   chip?: string | null;
-  chipTone?: 'volt' | 'dark';
   accessibleLayout: boolean;
   onNeedsWideLayout: () => void;
   onPress: () => void;
@@ -130,104 +171,108 @@ function PodiumColumn(props: {
     plan.period === 'lifetime'
       ? `${plan.priceString} one-time`
       : `${plan.priceString} per ${periodLabel(plan.period)}`;
+  const ink = hero ? styles.onHero : styles.onPlan;
+  const muted = hero ? styles.onHeroMuted : styles.onPlanMuted;
   return (
-    <View
+    <PressableScale
+      testID={`paywall-plan-${plan.period}`}
+      onPress={props.onPress}
+      accessibilityLabel={`${
+        PLAN_TITLES[plan.period]
+      } membership, ${priceA11y}${selected ? ', selected' : ''}`}
+      accessibilityState={{ selected }}
       style={[
-        styles.podiumColumn,
-        hero && styles.podiumColumnHero,
-        props.accessibleLayout && styles.podiumColumnAccessible,
+        styles.planCard,
+        hero ? styles.planCardHero : styles.planCardPlan,
+        selected &&
+          (hero ? styles.planCardHeroSelected : styles.planCardPlanSelected),
+        props.accessibleLayout && styles.planCardAccessible,
       ]}
     >
-      <PressableScale
-        testID={`paywall-plan-${plan.period}`}
-        onPress={props.onPress}
-        accessibilityLabel={`${
-          PODIUM_TITLES[plan.period]
-        } membership, ${priceA11y}${selected ? ', selected' : ''}`}
-        accessibilityState={{ selected }}
+      {hero && props.heroBadge ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.heroBadge,
+            props.accessibleLayout && styles.heroBadgeAccessible,
+          ]}
+        >
+          <Icon name="spark" size={11} strokeWidth={2.4} color={color.onVolt} />
+          <Text style={styles.heroBadgeText}>{props.heroBadge}</Text>
+        </View>
+      ) : null}
+      <View
         style={[
-          styles.podiumCard,
-          { minHeight: PODIUM_HEIGHTS[plan.period] },
-          hero && styles.podiumCardHero,
-          selected && styles.podiumCardSelected,
-          props.accessibleLayout && styles.podiumCardAccessible,
+          styles.planRow,
+          props.accessibleLayout && styles.planRowStacked,
         ]}
       >
-        {hero && props.heroBadge ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.heroBadge,
-              props.accessibleLayout && styles.heroBadgeAccessible,
-            ]}
-          >
-            <View
-              style={[
-                styles.heroBadgePill,
-                props.accessibleLayout && styles.badgePillAccessible,
-              ]}
-            >
-              <Text style={styles.heroBadgeText}>{props.heroBadge}</Text>
-            </View>
+        <View style={styles.planCopy}>
+          <View style={styles.planTitleRow}>
+            <Icon
+              name={PLAN_ICONS[plan.period]}
+              size={16}
+              strokeWidth={2}
+              color={hero ? color.onDarkMuted : color.inkSoft}
+            />
+            <Text style={[styles.planTitle, ink]}>
+              {PLAN_TITLES[plan.period]}
+            </Text>
+            {props.chip ? (
+              <View style={styles.planChip}>
+                <Text style={styles.planChipText}>{props.chip}</Text>
+              </View>
+            ) : null}
           </View>
-        ) : null}
-        <View
-          style={[styles.podiumRadio, selected && styles.podiumRadioSelected]}
-        >
-          {selected ? (
-            <Icon name="check" size={12} color={color.onVolt} />
+          <Text
+            style={[styles.planDetail, muted]}
+            testID={`paywall-plan-${plan.period}-qualifier`}
+          >
+            {planDetail(plan)}
+          </Text>
+          {plan.freeTrial ? (
+            <Text
+              style={[styles.planTrial, ink]}
+              testID={`paywall-plan-${plan.period}-trial`}
+            >
+              {plan.freeTrial.label}
+            </Text>
           ) : null}
         </View>
-        <Text style={styles.podiumTitle}>{PODIUM_TITLES[plan.period]}</Text>
-        <Text
-          style={styles.podiumPrice}
-          adjustsFontSizeToFit={false}
-          testID={`paywall-plan-${plan.period}-price`}
-          onTextLayout={event => {
-            if (!props.accessibleLayout && event.nativeEvent.lines.length > 1) {
-              props.onNeedsWideLayout();
-            }
-          }}
+        <View
+          style={[
+            styles.planPrice,
+            props.accessibleLayout && styles.planPriceStacked,
+          ]}
         >
-          {plan.priceString}
-        </Text>
-        <Text
-          style={styles.podiumQualifier}
-          testID={`paywall-plan-${plan.period}-qualifier`}
-        >
-          {podiumQualifier(plan)}
-        </Text>
-        {props.chip ? (
-          <View
-            style={[
-              styles.podiumChip,
-              props.chipTone === 'dark'
-                ? styles.podiumChipDark
-                : styles.podiumChipVolt,
-            ]}
-          >
-            <Text
-              style={[
-                styles.podiumChipText,
-                props.chipTone === 'dark'
-                  ? styles.podiumChipTextDark
-                  : styles.podiumChipTextVolt,
-              ]}
-            >
-              {props.chip}
-            </Text>
-          </View>
-        ) : null}
-        {plan.freeTrial ? (
           <Text
-            style={styles.trialText}
-            testID={`paywall-plan-${plan.period}-trial`}
+            style={[
+              styles.planAmount,
+              hero
+                ? selected
+                  ? styles.planAmountHeroSelected
+                  : styles.planAmountHero
+                : styles.planAmountPlan,
+            ]}
+            adjustsFontSizeToFit={false}
+            testID={`paywall-plan-${plan.period}-price`}
+            onTextLayout={event => {
+              if (
+                !props.accessibleLayout &&
+                event.nativeEvent.lines.length > 1
+              ) {
+                props.onNeedsWideLayout();
+              }
+            }}
           >
-            {plan.freeTrial.label}
+            {plan.priceString}
           </Text>
-        ) : null}
-      </PressableScale>
-    </View>
+          <Text style={[styles.planUnit, muted]}>
+            {PLAN_UNITS[plan.period]}
+          </Text>
+        </View>
+      </View>
+    </PressableScale>
   );
 }
 
@@ -235,7 +280,7 @@ function BenefitRow(props: (typeof BENEFITS)[number]) {
   return (
     <View style={styles.benefitRow}>
       <View style={styles.benefitIcon}>
-        <Icon name={props.icon} color={color.onDarkMuted} size={18} />
+        <Icon name={props.icon} color={color.ink} size={18} />
       </View>
       <View style={styles.benefitCopy}>
         <Text style={styles.benefitTitle}>{props.title}</Text>
@@ -251,20 +296,46 @@ export function PaywallScreen(props: PaywallScreenProps) {
   const [widePrices, setWidePrices] = useState(false);
   const accessibleLayout = useWindowDimensions().fontScale > 1.3 || widePrices;
   const useWidePrices = useCallback(() => setWidePrices(true), []);
+  const accessState = useAccessStore();
   const {
     status,
     operation,
     plans,
     selectedPeriod,
     canonicalAccess,
-    error,
+    fulfilmentStatus,
+    reconciliation,
+    error: accessError,
     initialize,
     selectPeriod,
     purchaseSelected,
     restorePurchases,
+    retryPendingFulfilment,
+    reconcileBilling,
     clearError,
-  } = useAccessStore();
+  } = accessState;
   const premium = useAccessStore(selectHasPremium);
+  const pendingRecovery = useAccessStore(selectNeedsFulfilmentRecovery);
+  const recoveryRequired =
+    pendingRecovery ||
+    reconciliation.status === 'unavailable' ||
+    reconciliation.status === 'checking';
+  const membership = selectMembershipState(accessState);
+  const hero = membershipHeroCopy(membership, recoveryRequired);
+  // A purchase the server has not settled is never re-offered: while it is
+  // pending or on hold the pricing page carries no plan or price at all.
+  const offerWithheld =
+    membership.kind === 'pending' || membership.kind === 'hold';
+  const error = accessError ?? reconciliation.error;
+  const mounted = useRef(true);
+  const pricingRequested = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Two-step flow: page 1 sells the value, page 2 (one deliberate tap later)
   // shows store-verified pricing. Entering content slides/fades in 220ms
@@ -313,8 +384,15 @@ export function PaywallScreen(props: PaywallScreenProps) {
   }, [pageOpacity, pageShift, reducedMotion]);
 
   useEffect(() => {
-    if (status === 'idle') void initialize();
-  }, [initialize, status]);
+    if (operation !== 'idle' || status === 'loading' || premium) return;
+    if (
+      status === 'idle' ||
+      (status === 'ready' && !plans && !pricingRequested.current)
+    ) {
+      pricingRequested.current = true;
+      void initialize();
+    }
+  }, [initialize, operation, plans, premium, status]);
 
   // Hardware back on the pricing page returns to the value page instead of
   // dismissing the paywall (predictable step-back navigation).
@@ -336,40 +414,67 @@ export function PaywallScreen(props: PaywallScreenProps) {
       : selectedPeriod === 'lifetime'
         ? plans?.lifetime
         : plans?.monthly;
-  const busy = operation !== 'idle';
+  const busy = operation !== 'idle' || status === 'loading';
   const annualSavings = savingsLabel(
     plans?.annual ?? null,
     plans?.monthly ?? null,
   );
+  // "RECOMMENDED" is a choice between plans; a lone plan carries no badge.
+  const planCount = plans
+    ? PLAN_ORDER.filter(period => plans[period]).length
+    : 0;
   const ctaSuffix: Record<BillingPeriod, string> = {
     monthly: '/mo',
     annual: '/yr',
     lifetime: ' once',
   };
-  const purchaseLabel = selectedPlan?.freeTrial
-    ? 'Start free trial'
-    : selectedPlan
-      ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
-      : 'Store pricing unavailable';
-  const canPurchase = Boolean(selectedPlan && canonicalAccess);
+  const purchaseLabel = recoveryRequired
+    ? 'Membership verification pending'
+    : selectedPlan?.freeTrial
+      ? 'Start free trial'
+      : selectedPlan
+        ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
+        : 'Store pricing unavailable';
+  const canPurchase = Boolean(
+    selectedPlan &&
+    canonicalAccess &&
+    fulfilmentStatus === 'clear' &&
+    !recoveryRequired,
+  );
   const showRetry =
-    status !== 'loading' && (!plans || canonicalAccess === null);
+    status !== 'loading' &&
+    (recoveryRequired || !plans || canonicalAccess === null);
 
   const purchase = async () => {
     const verified = await purchaseSelected();
-    if (verified) props.onPurchased?.();
+    if (verified && mounted.current) props.onPurchased?.();
   };
 
   const restore = async () => {
     const verified = await restorePurchases();
-    if (verified) props.onPurchased?.();
+    if (verified && mounted.current) props.onPurchased?.();
+  };
+
+  const retry = async () => {
+    if (selectNeedsFulfilmentRecovery(useAccessStore.getState())) {
+      const verified = await retryPendingFulfilment();
+      if (verified && mounted.current) props.onPurchased?.();
+    } else if (
+      useAccessStore.getState().reconciliation.status === 'unavailable' ||
+      useAccessStore.getState().reconciliation.status === 'checking'
+    ) {
+      const verified = await reconcileBilling({ force: true });
+      if (verified && mounted.current) props.onPurchased?.();
+    } else {
+      await initialize();
+    }
   };
 
   if (premium) {
     return (
       <View style={styles.screen}>
         <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
-          <StatusBar barStyle="light-content" />
+          <StatusBar barStyle="dark-content" />
           <View
             style={[
               styles.activeHeader,
@@ -381,27 +486,49 @@ export function PaywallScreen(props: PaywallScreenProps) {
               accessibilityLabel="Close membership"
               style={styles.closeButton}
             >
-              <Icon name="close" size={22} color={color.onDark} />
+              <Icon name="close" size={22} color={color.ink} />
             </PressableScale>
           </View>
           <View style={styles.activeBody}>
             <View style={styles.crownBadge}>
-              <Icon name="crown" size={28} color={color.onDarkMuted} />
+              <Icon name="crown" size={28} color={color.ink} />
             </View>
-            <Text style={styles.activeEyebrow}>MEMBERSHIP VERIFIED</Text>
-            <Text style={styles.activeTitle}>Your full court is open.</Text>
-            <Text style={styles.activeSub}>
-              Unlimited rating access is verified on this account. Published
-              reviewed coaching stays tied to it.
-            </Text>
+            <Text style={styles.activeEyebrow}>{membership.eyebrow}</Text>
+            <Text style={styles.activeTitle}>{membership.title}</Text>
+            <Text style={styles.activeSub}>{membership.detail}</Text>
             <PressableScale
               onPress={props.onClose}
               accessibilityLabel="Continue coaching"
               style={styles.primaryButton}
             >
               <Text style={styles.primaryButtonText}>Continue coaching</Text>
-              <Icon name="arrow" color={color.onVolt} size={20} />
+              <Icon name="arrow" color={color.onDark} size={20} />
             </PressableScale>
+            {membership.retryAllowed ? (
+              <PressableScale
+                testID="paywall-retry"
+                onPress={() => void retry()}
+                accessibilityLabel="Retry membership verification"
+                disabled={busy}
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  Retry verification
+                </Text>
+              </PressableScale>
+            ) : null}
+            {membership.manageSubscription ? (
+              <PressableScale
+                testID="paywall-manage-subscription"
+                onPress={() => void openSubscriptionManagement()}
+                accessibilityLabel="Manage subscription in the App Store"
+                style={styles.secondaryButton}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  Manage subscription
+                </Text>
+              </PressableScale>
+            ) : null}
           </View>
         </View>
       </View>
@@ -414,7 +541,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
   return (
     <View style={styles.screen}>
       <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="dark-content" />
         <View
           style={[
             styles.topBar,
@@ -428,11 +555,11 @@ export function PaywallScreen(props: PaywallScreenProps) {
               accessibilityLabel="Back to membership benefits"
               style={styles.closeButton}
             >
-              <Icon name="back" size={20} color={color.onDark} />
+              <Icon name="back" size={20} color={color.ink} />
             </PressableScale>
           ) : (
             <View style={styles.wordmarkRow}>
-              <BrandMark compact light size={24} />
+              <BrandMark compact size={24} />
               <Text style={styles.wordmark}>PICKLE SENSEI</Text>
             </View>
           )}
@@ -441,7 +568,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
             accessibilityLabel="Close membership offer"
             style={styles.closeButton}
           >
-            <Icon name="close" size={22} color={color.onDark} />
+            <Icon name="close" size={22} color={color.ink} />
           </PressableScale>
         </View>
 
@@ -474,83 +601,66 @@ export function PaywallScreen(props: PaywallScreenProps) {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.hero}>
-                <Text style={styles.eyebrow}>STORE-VERIFIED PRICING</Text>
-                <Text style={styles.title}>Choose your plan.</Text>
+                <Text style={styles.eyebrow}>
+                  {hero?.eyebrow ?? 'STORE-VERIFIED PRICING'}
+                </Text>
+                <Text style={styles.title}>
+                  {hero?.title ?? 'Choose your plan.'}
+                </Text>
                 <Text style={styles.subtitle}>
-                  {allowanceCopy} Every price below comes from your app store —
-                  never an estimate.
+                  {hero?.detail ??
+                    `${allowanceCopy} Every price below comes from your app store — never an estimate.`}
                 </Text>
               </View>
 
               <View style={styles.plans}>
-                {plans ? (
-                  <View
-                    testID="paywall-plan-options"
-                    style={[
-                      styles.podiumRow,
-                      accessibleLayout && styles.podiumRowAccessible,
-                    ]}
-                  >
-                    {plans.monthly ? (
-                      <PodiumColumn
-                        accessibleLayout={accessibleLayout}
-                        onNeedsWideLayout={useWidePrices}
-                        plan={plans.monthly}
-                        selected={selectedPeriod === 'monthly'}
-                        onPress={() => selectPeriod('monthly')}
-                      />
-                    ) : null}
-                    {plans.annual ? (
-                      <PodiumColumn
-                        accessibleLayout={accessibleLayout}
-                        onNeedsWideLayout={useWidePrices}
-                        plan={plans.annual}
-                        selected={selectedPeriod === 'annual'}
-                        hero
-                        heroBadge="BEST VALUE"
-                        chip={annualSavings}
-                        onPress={() => selectPeriod('annual')}
-                      />
-                    ) : null}
-                    {plans.lifetime ? (
-                      <PodiumColumn
-                        accessibleLayout={accessibleLayout}
-                        onNeedsWideLayout={useWidePrices}
-                        plan={plans.lifetime}
-                        selected={selectedPeriod === 'lifetime'}
-                        chip="PAY ONCE"
-                        chipTone="dark"
-                        onPress={() => selectPeriod('lifetime')}
-                      />
-                    ) : null}
+                {plans && !offerWithheld ? (
+                  <View testID="paywall-plan-options" style={styles.planList}>
+                    {PLAN_ORDER.map(period => {
+                      const plan = plans[period];
+                      if (!plan) return null;
+                      const recommended = period === RECOMMENDED_PERIOD;
+                      return (
+                        <PlanRow
+                          key={period}
+                          accessibleLayout={accessibleLayout}
+                          onNeedsWideLayout={useWidePrices}
+                          plan={plan}
+                          selected={selectedPeriod === period}
+                          hero={recommended}
+                          heroBadge={
+                            recommended && planCount > 1 ? 'RECOMMENDED' : null
+                          }
+                          chip={period === 'annual' ? annualSavings : null}
+                          onPress={() => selectPeriod(period)}
+                        />
+                      );
+                    })}
                   </View>
                 ) : null}
 
-                {selectedPlan ? (
+                {selectedPlan && !offerWithheld ? (
                   <Text style={styles.selectedSummary}>
                     {selectedPlanSummary(selectedPlan)}
                   </Text>
                 ) : null}
 
-                {status === 'loading' && !plans ? (
+                {status === 'loading' && !plans && !offerWithheld ? (
                   <View
                     accessibilityRole="progressbar"
                     accessibilityLabel="Loading App Store pricing"
                     style={styles.loadingCard}
                   >
-                    <BrandSpinner
-                      color={color.volt}
-                      trackColor={color.lineDark}
-                    />
+                    <BrandSpinner color={color.court} trackColor={color.line} />
                     <Text style={styles.loadingText}>
                       Loading secure store pricing…
                     </Text>
                   </View>
                 ) : null}
 
-                {!plans && status !== 'loading' ? (
+                {!plans && status !== 'loading' && !offerWithheld ? (
                   <View style={styles.unavailableCard}>
-                    <Icon name="shield" color={color.onDark} size={22} />
+                    <Icon name="shield" color={color.ink} size={22} />
                     <View style={styles.unavailableCopy}>
                       <Text style={styles.unavailableTitle}>
                         Store pricing is unavailable
@@ -572,7 +682,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   accessibilityLiveRegion="assertive"
                   style={styles.errorCard}
                 >
-                  <Icon name="shield" color={color.onDarkMuted} size={18} />
+                  <Icon name="shield" color={color.inkSoft} size={18} />
                   <Text accessibilityRole="alert" style={styles.errorText}>
                     {error.message}
                   </Text>
@@ -582,8 +692,12 @@ export function PaywallScreen(props: PaywallScreenProps) {
               {showRetry ? (
                 <PressableScale
                   testID="paywall-retry"
-                  onPress={() => void initialize()}
-                  accessibilityLabel="Retry loading membership"
+                  onPress={() => void retry()}
+                  accessibilityLabel={
+                    recoveryRequired
+                      ? 'Retry membership verification'
+                      : 'Retry loading membership'
+                  }
                   disabled={busy}
                   style={styles.secondaryButton}
                 >
@@ -599,13 +713,16 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 style={styles.primaryButton}
               >
                 {operation === 'purchasing' || operation === 'syncing' ? (
-                  <BrandSpinner color={color.onVolt} trackColor={color.court} />
+                  <BrandSpinner
+                    color={color.onDark}
+                    trackColor={color.lineStrongDark}
+                  />
                 ) : (
                   <>
                     <Text style={styles.primaryButtonText}>
                       {purchaseLabel}
                     </Text>
-                    <Icon name="arrow" color={color.onVolt} size={20} />
+                    <Icon name="arrow" color={color.onDark} size={20} />
                   </>
                 )}
               </PressableScale>
@@ -614,28 +731,25 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 testID="paywall-restore"
                 onPress={() => void restore()}
                 accessibilityLabel="Restore purchases"
-                disabled={busy}
+                disabled={busy || recoveryRequired}
                 style={styles.restoreButton}
               >
                 {operation === 'restoring' ? (
-                  <BrandSpinner
-                    color={color.onDark}
-                    trackColor={color.lineStrongDark}
-                  />
+                  <BrandSpinner color={color.ink} trackColor={color.line} />
                 ) : (
                   <Text style={styles.restoreText}>Restore purchases</Text>
                 )}
               </PressableScale>
 
               <View style={styles.trustRow}>
-                <Icon name="shield" color={color.onDarkMuted} size={17} />
+                <Icon name="shield" color={color.inkSoft} size={17} />
                 <Text style={styles.trustText}>
                   Purchase and renewal are confirmed by your app store. Cancel
                   in your store account settings.
                 </Text>
               </View>
 
-              {selectedPlan ? (
+              {selectedPlan && !offerWithheld ? (
                 <Text style={styles.legalText}>
                   {selectedPlan.period === 'lifetime'
                     ? `${selectedPlan.priceString} one-time purchase. Not a subscription — no renewal.`
@@ -682,37 +796,61 @@ export function PaywallScreen(props: PaywallScreenProps) {
             >
               <View style={styles.hero}>
                 <View style={styles.crownBadge}>
-                  <Icon name="crown" size={27} color={color.onDarkMuted} />
+                  <Icon name="crown" size={27} color={color.ink} />
                 </View>
-                <Text style={styles.eyebrow}>PLAY PAST THE FIRST TWO</Text>
-                <Text style={styles.title}>A coach for every stroke.</Text>
+                <Text style={styles.eyebrow}>
+                  {hero?.eyebrow ?? FREE_PLAY_EYEBROW}
+                </Text>
+                <Text style={styles.title}>
+                  {hero?.title ?? 'A coach for every stroke.'}
+                </Text>
                 <Text style={styles.subtitle}>
-                  {allowanceCopy} Membership keeps scoring, practice, and
-                  progress moving together.
+                  {hero?.detail ??
+                    `${allowanceCopy} Membership keeps scoring, practice, and progress moving together.`}
                 </Text>
                 <Text style={styles.ratingRule}>{RATING_CONSUMPTION_RULE}</Text>
               </View>
 
-              <View style={styles.benefits}>
-                {BENEFITS.map(benefit => (
-                  <BenefitRow key={benefit.title} {...benefit} />
-                ))}
-              </View>
+              {recoveryRequired ? (
+                <PressableScale
+                  testID="paywall-retry"
+                  onPress={() => void retry()}
+                  accessibilityLabel="Retry membership verification"
+                  disabled={busy}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    Retry verification
+                  </Text>
+                </PressableScale>
+              ) : (
+                <View style={styles.benefits}>
+                  {BENEFITS.map(benefit => (
+                    <BenefitRow key={benefit.title} {...benefit} />
+                  ))}
+                </View>
+              )}
 
               <PressableScale
                 testID="paywall-see-plans"
                 onPress={() => transitionTo('pricing')}
-                accessibilityLabel="See membership plans"
+                accessibilityLabel={
+                  recoveryRequired
+                    ? 'View membership details'
+                    : 'See membership plans'
+                }
                 style={styles.primaryButton}
               >
                 <Text style={styles.primaryButtonText}>
-                  See membership plans
+                  {recoveryRequired
+                    ? 'View membership details'
+                    : 'See membership plans'}
                 </Text>
-                <Icon name="arrow" color={color.onVolt} size={20} />
+                <Icon name="arrow" color={color.onDark} size={20} />
               </PressableScale>
 
               <View style={styles.trustRow}>
-                <Icon name="shield" color={color.onDarkMuted} size={17} />
+                <Icon name="shield" color={color.inkSoft} size={17} />
                 <Text style={styles.trustText}>
                   Store-verified pricing on the next step. Purchases are handled
                   by your app store — cancel anytime.
@@ -727,30 +865,33 @@ export function PaywallScreen(props: PaywallScreenProps) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.surfaceDark },
+  screen: { flex: 1, backgroundColor: color.surface },
   topBar: {
     minHeight: 64,
-    paddingHorizontal: space.lg,
-    paddingBottom: space.sm,
+    paddingHorizontal: space.md,
+    paddingBottom: space.xs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  wordmarkRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  wordmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingLeft: space.sm,
+  },
   wordmark: {
     ...type.micro,
-    color: color.onDark,
+    color: color.ink,
     letterSpacing: 1.25,
   },
   closeButton: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.onDarkTintFaint,
-    borderWidth: 1,
-    borderColor: color.lineMutedDark,
+    backgroundColor: color.surfaceAlt,
   },
   scroll: { flex: 1 },
   pageBody: { flex: 1 },
@@ -764,11 +905,11 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: color.lineMutedDark,
+    backgroundColor: color.line,
   },
   stepDotActive: {
     width: 18,
-    backgroundColor: color.volt,
+    backgroundColor: color.ink,
   },
   content: {
     width: '100%',
@@ -780,234 +921,211 @@ const styles = StyleSheet.create({
   },
   hero: { alignItems: 'center' },
   crownBadge: {
-    width: 58,
-    height: 58,
+    width: 56,
+    height: 56,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.inkElevated,
-    borderWidth: 1,
-    borderColor: color.lineDark,
+    backgroundColor: color.surfaceAlt,
   },
   eyebrow: {
     ...type.micro,
-    color: color.onDarkMuted,
+    color: color.inkSoft,
     marginTop: space.md,
     textAlign: 'center',
   },
   title: {
     ...type.h1,
-    color: color.onDark,
+    color: color.ink,
     textAlign: 'center',
     marginTop: space.sm,
     maxWidth: 410,
   },
   subtitle: {
     ...type.body,
-    color: color.onDarkMuted,
+    color: color.inkSoft,
     textAlign: 'center',
     marginTop: space.sm,
     maxWidth: 440,
   },
   ratingRule: {
     ...type.caption,
-    color: color.onDarkSubtle,
+    color: color.inkSoft,
     textAlign: 'center',
     marginTop: space.sm,
     maxWidth: 420,
   },
   benefits: {
-    marginTop: space.md,
-    gap: space.sm,
-    paddingVertical: space.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
+    alignSelf: 'stretch',
+    marginTop: space.lg,
   },
-  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm + space.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+  },
   benefitIcon: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.onDarkTintFaint,
-    borderWidth: 1,
-    borderColor: color.lineDark,
+    backgroundColor: color.surfaceAlt,
   },
   benefitCopy: { flex: 1 },
-  benefitTitle: { ...type.bodyBold, color: color.onDark },
-  benefitBody: { ...type.caption, color: color.onDarkMuted, marginTop: 2 },
+  benefitTitle: { ...type.bodyBold, color: color.ink },
+  benefitBody: { ...type.caption, color: color.inkSoft, marginTop: 2 },
   plans: { marginTop: space.lg, gap: space.sm + space.xs },
-  podiumRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: space.sm,
-    paddingTop: space.md,
-  },
-  podiumColumn: { flex: 1, minWidth: 0 },
-  podiumColumnHero: { flex: 1.18, zIndex: 1 },
-  podiumRowAccessible: {
+  // Full-width plan rows, the recommended plan first. Always a column, so
+  // localized amounts have the whole card; the row inside each card stacks
+  // when text is large or an amount wraps.
+  planList: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: space.lg,
+    gap: space.sm + space.xs,
   },
-  podiumColumnAccessible: { flex: 0 },
   pricingContentAccessible: { paddingHorizontal: space.md },
-  podiumCardAccessible: { paddingHorizontal: space.sm },
-  heroBadgeAccessible: {
-    position: 'relative',
-    top: 0,
-    marginBottom: space.sm,
-    alignSelf: 'center',
-    maxWidth: '100%',
-  },
-  badgePillAccessible: { borderRadius: radius.sm, maxWidth: '100%' },
-  podiumCard: {
-    borderRadius: radius.md,
+  planCard: {
+    minHeight: 88,
+    borderRadius: radius.lg,
     borderWidth: 2,
-    borderColor: color.lineMutedDark,
-    backgroundColor: color.onDarkTintFaint,
-    paddingVertical: space.md,
-    paddingHorizontal: space.sm,
-    alignItems: 'center',
+    paddingVertical: space.md + space.xs,
+    paddingHorizontal: space.md + space.xs,
     justifyContent: 'center',
   },
-  podiumCardHero: {
-    borderColor: color.lineStrongDark,
-    backgroundColor: color.inkElevated,
+  planCardAccessible: { paddingHorizontal: space.sm },
+  // Sibling plans: white cards on chalk; ink-edged when chosen.
+  planCardPlan: {
+    backgroundColor: membership.plan,
+    borderColor: membership.planLine,
   },
-  podiumCardSelected: {
-    borderColor: color.volt,
-    backgroundColor: color.voltTint,
+  planCardPlanSelected: { borderColor: membership.planSelectedLine },
+  // The recommended plan: the one ink card; volt-edged when chosen.
+  planCardHero: {
+    minHeight: 100,
+    backgroundColor: membership.hero,
+    borderColor: membership.hero,
   },
+  planCardHeroSelected: { borderColor: membership.heroSelectedLine },
   heroBadge: {
     position: 'absolute',
     top: -12,
-    left: 0,
-    right: 0,
+    right: space.md + space.xs,
+    flexDirection: 'row',
     alignItems: 'center',
-    zIndex: 2,
-  },
-  heroBadgePill: {
-    backgroundColor: color.inkElevated,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: color.lineStrongDark,
+    gap: space.xs,
+    backgroundColor: color.volt,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    maxWidth: '100%',
+    zIndex: 2,
   },
-  heroBadgeText: {
-    ...type.micro,
-    color: color.onDark,
-    textAlign: 'center',
-  },
-  podiumRadio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: color.onDarkMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroBadgeAccessible: {
+    position: 'relative',
+    top: 0,
+    right: 0,
+    alignSelf: 'flex-start',
     marginBottom: space.sm,
   },
-  podiumRadioSelected: {
-    borderColor: color.volt,
-    backgroundColor: color.volt,
+  heroBadgeText: { ...type.micro, color: color.onVolt },
+  planRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
   },
-  podiumTitle: {
-    ...type.caption,
-    color: color.onDarkMuted,
-    textAlign: 'center',
+  planRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: space.sm,
   },
-  podiumPrice: {
+  planCopy: { flex: 1, minWidth: 0 },
+  planTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexWrap: 'wrap',
+  },
+  planTitle: { ...type.h3 },
+  planDetail: { ...type.caption, marginTop: 3 },
+  planTrial: { ...type.caption, marginTop: 3 },
+  planChip: {
+    backgroundColor: color.courtSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+  },
+  planChipText: { ...type.micro, color: color.courtDeep },
+  planPrice: { alignItems: 'flex-end', flexShrink: 0 },
+  planPriceStacked: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space.xs,
+  },
+  planAmount: {
     ...type.h2,
     fontVariant: ['tabular-nums'],
-    color: color.onDark,
-    textAlign: 'center',
-    alignSelf: 'stretch',
-    marginTop: 2,
+    textAlign: 'right',
   },
-  podiumQualifier: {
-    ...type.caption,
-    color: color.onDarkMuted,
-    textAlign: 'center',
-    alignSelf: 'stretch',
-    marginTop: 3,
-  },
-  podiumChip: {
-    borderRadius: radius.sm,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
-    marginTop: space.sm,
-    maxWidth: '100%',
-  },
-  podiumChipVolt: { backgroundColor: color.voltTint },
-  podiumChipDark: {
-    backgroundColor: color.onDarkTintFaint,
-    borderWidth: 1,
-    borderColor: color.lineMutedDark,
-  },
-  podiumChipText: { ...type.micro, textAlign: 'center' },
-  podiumChipTextVolt: { color: color.volt },
-  podiumChipTextDark: { color: color.onDarkMuted },
-  trialText: {
-    ...type.caption,
-    color: color.onDark,
-    textAlign: 'center',
-    alignSelf: 'stretch',
-    marginTop: space.xs,
-  },
+  planAmountPlan: { color: color.ink },
+  planAmountHero: { ...type.score, color: color.onDark },
+  planAmountHeroSelected: { ...type.score, color: color.volt },
+  planUnit: { ...type.caption },
+  onPlan: { color: color.ink },
+  onPlanMuted: { color: color.inkSoft },
+  onHero: { color: color.onDark },
+  onHeroMuted: { color: color.onDarkMuted },
   selectedSummary: {
     ...type.caption,
-    color: color.onDark,
+    color: color.inkSoft,
     textAlign: 'center',
   },
   loadingCard: {
     minHeight: 96,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: color.lineMutedDark,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: space.sm,
   },
-  loadingText: { ...type.caption, color: color.onDarkMuted },
+  loadingText: { ...type.caption, color: color.inkSoft },
   unavailableCard: {
     minHeight: 96,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: color.lineMutedDark,
-    backgroundColor: color.onDarkTintFaint,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
     padding: space.md,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: space.md,
   },
   unavailableCopy: { flex: 1 },
-  unavailableTitle: { ...type.bodyBold, color: color.onDark },
-  unavailableBody: { ...type.caption, color: color.onDarkMuted, marginTop: 3 },
+  unavailableTitle: { ...type.bodyBold, color: color.ink },
+  unavailableBody: { ...type.caption, color: color.inkSoft, marginTop: 3 },
   errorCard: {
     minHeight: 44,
     marginTop: space.md,
     padding: space.md,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: space.sm,
-    backgroundColor: color.onDarkTintFaint,
+    backgroundColor: color.surfaceElevated,
     borderWidth: 1,
-    borderColor: color.lineMutedDark,
+    borderColor: color.line,
   },
-  errorText: { ...type.caption, color: color.onDark, flex: 1 },
+  errorText: { ...type.caption, color: color.ink, flex: 1 },
   primaryButton: {
     minHeight: 58,
     marginTop: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.volt,
+    borderRadius: radius.pill,
+    backgroundColor: color.ink,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     flexDirection: 'row',
@@ -1017,16 +1135,17 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     ...type.bodyBold,
-    color: color.onVolt,
+    color: color.onDark,
     flexShrink: 1,
     textAlign: 'center',
   },
   secondaryButton: {
     minHeight: 52,
     marginTop: space.md,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: color.lineMutedDark,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
     alignItems: 'center',
@@ -1034,7 +1153,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     ...type.bodyBold,
-    color: color.onDark,
+    color: color.ink,
     textAlign: 'center',
   },
   restoreButton: {
@@ -1043,7 +1162,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  restoreText: { ...type.bodyBold, color: color.onDark },
+  restoreText: { ...type.bodyBold, color: color.inkSoft },
   trustRow: {
     marginTop: space.md,
     flexDirection: 'row',
@@ -1054,13 +1173,13 @@ const styles = StyleSheet.create({
   },
   trustText: {
     ...type.caption,
-    color: color.onDarkMuted,
+    color: color.inkSoft,
     flexShrink: 1,
     maxWidth: 390,
   },
   legalText: {
     ...type.caption,
-    color: color.onDarkSubtle,
+    color: color.inkSoft,
     textAlign: 'center',
     marginTop: space.md,
     paddingHorizontal: space.md,
@@ -1079,12 +1198,12 @@ const styles = StyleSheet.create({
   },
   legalLinkText: {
     ...type.caption,
-    color: color.onDark,
+    color: color.ink,
     textDecorationLine: 'underline',
   },
   activeHeader: {
     alignItems: 'flex-end',
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.md,
     paddingBottom: space.sm,
   },
   activeBody: {
@@ -1095,19 +1214,19 @@ const styles = StyleSheet.create({
   },
   activeEyebrow: {
     ...type.micro,
-    color: color.onDarkMuted,
+    color: color.inkSoft,
     marginTop: space.lg,
     textAlign: 'center',
   },
   activeTitle: {
     ...type.h1,
-    color: color.onDark,
+    color: color.ink,
     textAlign: 'center',
     marginTop: space.sm,
   },
   activeSub: {
     ...type.body,
-    color: color.onDarkMuted,
+    color: color.inkSoft,
     textAlign: 'center',
     maxWidth: 390,
     marginTop: space.sm,

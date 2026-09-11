@@ -30,13 +30,20 @@ import { formatReminderMinutes } from '../notifications/types';
 import { useConsistencyStore } from '../consistency/store';
 import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
-import { useAccessStore } from '../state/accessStore';
+import { selectMembershipState, useAccessStore } from '../state/accessStore';
+import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
+import { useTabBarContentInset } from '../navigation/tabBarLayout';
+import { useTabScrollDock } from '../navigation/tabBarDock';
 import { showBrandNotice } from '../design/BrandNotice';
+import {
+  OfflineAllocationCard,
+  useOfflineJourney,
+} from '../components/OfflineAllocationCard';
 
 async function openLegalPage(label: string, url: string): Promise<void> {
   try {
@@ -47,6 +54,20 @@ async function openLegalPage(label: string, url: string): Promise<void> {
       detail: `Your phone could not open the page. You can read it in a browser at ${url}`,
       tone: 'danger',
       eyebrow: 'LINK UNAVAILABLE',
+    });
+  }
+}
+
+async function openSubscriptionManagement(): Promise<void> {
+  try {
+    await Linking.openURL(APP_STORE_SUBSCRIPTIONS_URL);
+  } catch {
+    showBrandNotice({
+      title: 'Could not open subscriptions',
+      detail:
+        'Open App Store account settings to manage or cancel your subscription.',
+      tone: 'danger',
+      eyebrow: 'STORE UNAVAILABLE',
     });
   }
 }
@@ -195,11 +216,13 @@ function SignOutSheet(props: {
 export function SettingsScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
+  const tabBarInset = useTabBarContentInset();
+  const tabBarDock = useTabScrollDock('Settings');
   const profile = useAppStore(s => s.profile);
   const session = useAuthStore(s => s.session);
   const signOut = useAuthStore(s => s.signOut);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
-  const access = useAccessStore(s => s.canonicalAccess);
+  const membership = selectMembershipState(useAccessStore());
   const refreshAccess = useAccessStore(s => s.refreshAccess);
   const consentAvailability = useConsentStore(s => s.availability);
   const modelTrainingActive = useConsentStore(s => s.modelTrainingActive);
@@ -230,11 +253,13 @@ export function SettingsScreen() {
     }, [refreshAccess, syncedAccount]),
   );
 
+  const offlineJourney = useOfflineJourney();
+
   const accountLabel =
     session === null
       ? '—'
       : session.provider === 'guest'
-        ? 'Guest · this device'
+        ? 'Local · this device'
         : (session.displayName ?? session.email ?? session.subject);
   // Guests with an onboarding first name are greeted by name; the guest
   // provider label moves down to the caption line.
@@ -243,7 +268,7 @@ export function SettingsScreen() {
     isGuest && profile?.firstName ? profile.firstName : accountLabel;
   const accountCaption = isGuest
     ? profile?.firstName
-      ? 'Guest · this device'
+      ? 'Local · this device'
       : 'Progress stays on this phone until you connect an account.'
     : `${session?.provider ?? ''} account`;
   const scoringStack = scoringStackStatus();
@@ -259,16 +284,7 @@ export function SettingsScreen() {
   // still syncing has already spent its rating even though `remaining`
   // only drops once the shot lands. This keeps the row in agreement with
   // the rating gate (canStartRating).
-  const membershipLabel = access?.premium
-    ? 'Pro active'
-    : access
-      ? access.canStartRating
-        ? `${access.freeRatings.availableToReserve} free ${plural(
-            access.freeRatings.availableToReserve,
-            'rating',
-          )} left`
-        : 'Upgrade required'
-      : 'Verify access';
+  const membershipLabel = membership.label;
   const notificationsValue = !notificationPrefs.enabled
     ? 'Off'
     : notificationPermission === 'denied'
@@ -283,7 +299,8 @@ export function SettingsScreen() {
     <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
       <ScrollView
-        contentContainerStyle={styles.content}
+        {...tabBarDock}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarInset }]}
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
@@ -339,14 +356,31 @@ export function SettingsScreen() {
             icon="crown"
             label="Pickle Sensei Pro"
             value={session?.localOnly ? 'Sign in first' : membershipLabel}
+            preserveCase
             onPress={() =>
               session?.localOnly
                 ? navigation.navigate('ConnectAccount')
                 : navigation.navigate('Paywall', { source: 'settings' })
             }
-            last
+            last={session?.localOnly || !membership.manageSubscription}
           />
+          {!session?.localOnly && membership.manageSubscription ? (
+            <SettingRow
+              icon="shield"
+              label="Manage subscription"
+              value="App Store"
+              preserveCase
+              onPress={() => void openSubscriptionManagement()}
+              last
+            />
+          ) : null}
         </Card>
+        {syncedAccount && offlineJourney ? (
+          <OfflineAllocationCard
+            state={offlineJourney}
+            style={styles.offlineCard}
+          />
+        ) : null}
 
         <SectionTitle title="Player" />
         <Card style={styles.groupCard}>
@@ -515,9 +549,12 @@ export function SettingsScreen() {
         </Card>
         <View style={styles.ratingNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
-          <Text style={[type.caption, { color: color.inkSoft, flex: 1 }]}>
-            Technique Score is coaching feedback—not a verified DUPR or player
-            rating. {DUPR_ESTIMATE_NOTE}
+          <Text
+            style={[type.caption, { color: color.inkSoft, flex: 1 }]}
+            testID="settings-dupr-note"
+          >
+            {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
+            describes stroke form.
           </Text>
         </View>
 
@@ -568,7 +605,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.xl,
-    paddingBottom: space.xl,
   },
   accountCard: { minHeight: 190, marginTop: space.xl },
   accountTop: {
@@ -585,6 +621,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   groupCard: { paddingHorizontal: space.md, paddingVertical: 2 },
+  offlineCard: { marginTop: space.sm },
   row: {
     minHeight: 66,
     flexDirection: 'row',

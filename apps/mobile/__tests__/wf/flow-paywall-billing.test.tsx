@@ -52,11 +52,33 @@ import {
 import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
 import {
   clearAccessStoreConfiguration,
-  configureAccessStore,
+  configureAccessStore as configureBillingAccessStore,
   useAccessStore,
 } from '../../src/state/accessStore';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
 import { BrandSpinner } from '../../src/design/components';
+import type { BillingAccessDependencies } from '../../src/billing/types';
+import {
+  createPendingFulfilmentStorage,
+  type PendingFulfilmentStorage,
+} from '../../src/billing/pendingFulfilment';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
+
+let pendingStorage: PendingFulfilmentStorage;
+function configureAccessStore(clients: BillingAccessDependencies): void {
+  setActiveDataOwner(CANONICAL_USER_ID);
+  configureBillingAccessStore(clients, {
+    owner: CANONICAL_USER_ID,
+    pendingFulfilmentStorage: pendingStorage,
+  });
+}
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -137,13 +159,15 @@ function fakeSdk(options?: {
 }): FakeSdk {
   const entitlement = options?.entitlement ?? 'pickle_sensei_pro';
   let appUserId = '';
+  let configured = false;
   let settle: {
     resolve: (value: { customerInfo: ReturnType<typeof customerInfo> }) => void;
     reject: (error: unknown) => void;
   } | null = null;
   const sdk: MockedSdk = {
-    isConfigured: jest.fn(async () => false),
+    isConfigured: jest.fn(async () => configured),
     configure: jest.fn(async (input: { appUserID: string }) => {
+      configured = true;
       appUserId = input.appUserID;
     }),
     getAppUserID: jest.fn(async () => appUserId),
@@ -432,6 +456,14 @@ const unmount = (renderer: TestRenderer.ReactTestRenderer) =>
 
 beforeEach(() => {
   clearAccessStoreConfiguration();
+  const { db } = createSqliteTestDb();
+  pendingStorage = createPendingFulfilmentStorage(() => db);
+});
+
+afterEach(() => {
+  clearAccessStoreConfiguration();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  closeSqliteTestDatabases();
 });
 
 // ─── Static invariants (AGENTS.md billing + App Review 3.1.2) ───────────────
@@ -630,7 +662,18 @@ describe('paywall-billing: pricing page controls', () => {
     const { renderer } = await renderPaywall();
     await openPricing(renderer);
 
-    // Annual is pre-selected with a trial CTA.
+    // The recommended monthly plan is pre-selected with its price in the CTA.
+    expect(
+      pressable(renderer, 'paywall-plan-monthly').props.accessibilityState,
+    ).toEqual({ selected: true });
+    expect(
+      pressable(renderer, 'paywall-plan-annual').props.accessibilityState,
+    ).toEqual({ selected: false });
+    expect(
+      pressable(renderer, 'paywall-continue').props.accessibilityLabel,
+    ).toBe('Continue · $7.99/mo');
+
+    await press(renderer, 'paywall-plan-annual');
     expect(
       pressable(renderer, 'paywall-plan-annual').props.accessibilityState,
     ).toEqual({ selected: true });
@@ -749,8 +792,8 @@ describe('paywall-billing: purchase', () => {
     unmount(renderer);
   });
 
-  it('never unlocks on store state alone: backend says not premium → pending copy, no callback', async () => {
-    const { backend } = wire({
+  it('never unlocks on store state alone and recovers only through backend verification', async () => {
+    const { backend, sdk } = wire({
       backend: fakeBackend({
         sync: () => ({
           method: 'POST',
@@ -768,21 +811,36 @@ describe('paywall-billing: purchase', () => {
     expect(useAccessStore.getState().canonicalAccess?.premium).toBe(false);
     const card = errorCard(renderer);
     expect(card?.props.accessibilityHint).toBe(
-      'The store completed your purchase, but membership verification is still pending. Try Restore purchases.',
+      'The store completed your purchase, but membership verification is still pending. Retry verification; do not purchase again.',
     );
     expect(allText(renderer)).toContain(
       'membership verification is still pending',
     );
     // Not a dead end: Restore (the copy's suggested path) and Continue are
     // both enabled again; the server verdict is kept, not erased.
-    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(false);
-    expect(pressable(renderer, 'paywall-continue').props.disabled).toBe(false);
+    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(true);
+    expect(pressable(renderer, 'paywall-continue').props.disabled).toBe(true);
+    expect(pressable(renderer, 'paywall-retry').props.disabled).toBe(false);
     expect(spinnerCount(renderer)).toBe(0);
+    backend.respond('POST', '/v1/billing/sync', () => ({
+      method: 'POST',
+      path: '/v1/billing/sync',
+      body: syncPayload(true),
+    }));
+    await press(renderer, 'paywall-retry');
+    expect(handlers.onPurchased).toHaveBeenCalledTimes(1);
+    expect(backend.calls.map(call => call.path)).toEqual([
+      '/v1/me/access',
+      '/v1/billing/sync',
+      '/v1/billing/sync',
+    ]);
+    expect(sdk.sdk.purchasePackage).toHaveBeenCalledTimes(1);
+    expect(sdk.sdk.restorePurchases).not.toHaveBeenCalled();
     unmount(renderer);
   });
 
-  it('backend outage after a completed store purchase → pending copy, Restore path stays open', async () => {
-    wire({
+  it('backend outage after a completed store purchase keeps backend retry open without another store request', async () => {
+    const { backend, sdk } = wire({
       backend: fakeBackend({
         sync: () => new Error('offline'),
       }),
@@ -795,11 +853,18 @@ describe('paywall-billing: purchase', () => {
     expect(useAccessStore.getState().status).toBe('error');
     expect(useAccessStore.getState().operation).toBe('idle');
     expect(errorCard(renderer)?.props.accessibilityHint).toContain(
-      'Try Restore purchases',
+      'Retry verification; do not purchase again.',
     );
-    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(true);
     expect(pressable(renderer, 'paywall-retry').props.disabled).toBe(false);
     expect(spinnerCount(renderer)).toBe(0);
+    await press(renderer, 'paywall-retry');
+    expect(backend.calls.filter(call => call.method === 'POST')).toHaveLength(
+      2,
+    );
+    expect(sdk.sdk.purchasePackage).toHaveBeenCalledTimes(1);
+    expect(sdk.sdk.restorePurchases).not.toHaveBeenCalled();
+    expect(handlers.onPurchased).not.toHaveBeenCalled();
     unmount(renderer);
   });
 
@@ -901,7 +966,7 @@ describe('paywall-billing: purchase', () => {
 
     const continueButton = pressable(renderer, 'paywall-continue');
     expect(continueButton.props.disabled).toBe(true);
-    expect(continueButton.props.accessibilityLabel).toBe('Start free trial');
+    expect(continueButton.props.accessibilityLabel).toBe('Continue · $7.99/mo');
     expect(errorCard(renderer)?.props.accessibilityHint).toBe(
       'Membership verification is temporarily unavailable.',
     );
@@ -983,16 +1048,24 @@ describe('paywall-billing: restore', () => {
     unmount(renderer);
 
     clearAccessStoreConfiguration();
-    wire({ backend: fakeBackend({ sync: () => new Error('offline') }) });
+    const pendingRestore = wire({
+      backend: fakeBackend({ sync: () => new Error('offline') }),
+    });
     ({ renderer } = await renderPaywall());
     await openPricing(renderer);
     await press(renderer, 'paywall-restore');
     expect(errorCard(renderer)?.props.accessibilityHint).toBe(
-      'Restored purchases could not be verified yet. Please try again.',
+      'Restored purchases could not be verified yet. Retry verification; do not restore or purchase again.',
     );
-    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(pressable(renderer, 'paywall-restore').props.disabled).toBe(true);
     expect(hasTestId(renderer, 'paywall-retry')).toBe(true);
     expect(spinnerCount(renderer)).toBe(0);
+    await press(renderer, 'paywall-retry');
+    expect(
+      pendingRestore.backend.calls.filter(call => call.method === 'POST'),
+    ).toHaveLength(2);
+    expect(pendingRestore.sdk.sdk.restorePurchases).toHaveBeenCalledTimes(1);
+    expect(pendingRestore.sdk.sdk.purchasePackage).not.toHaveBeenCalled();
     unmount(renderer);
   });
 });

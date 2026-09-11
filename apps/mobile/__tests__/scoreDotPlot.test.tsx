@@ -17,6 +17,7 @@ import {
   yForScore,
 } from '../src/progress/ScoreDotPlot';
 import { color, type } from '../src/design/tokens';
+import { duprAccessibilityLabel } from '../src/progress/duprEstimate';
 import type {
   ScoredReadPoint,
   ScoreTrendBucket,
@@ -287,7 +288,7 @@ describe('ScoreDotPlot', () => {
       expect(root.props.accessible).toBe(false);
       expect(root.props.importantForAccessibility).toBe('no');
       expect(root.props.accessibilityLabel).toBe(
-        'Seven day technique scores: 2 scored reads across 2 days, latest 0.0 out of 10.',
+        'Seven day estimated DUPR: 2 scored reads across 2 days, latest Estimated DUPR 2.00, technique score 0.0 out of 10.',
       );
       expect(dots(renderer)).toHaveLength(0);
       expect(renderer.root.findAllByType(Polyline)).toHaveLength(0);
@@ -295,8 +296,8 @@ describe('ScoreDotPlot', () => {
         .findAllByType(Text)
         .filter(node => node.props.testID === 'chart-data-row');
       expect(rows.map(node => node.props.children)).toEqual([
-        '2026-08-28 · Read 1: 10.0 out of 10',
-        '2026-09-03 · Read 2: 0.0 out of 10 · Latest read',
+        '2026-08-28 · Read 1: Estimated DUPR 6.00, technique score 10.0 out of 10',
+        '2026-09-03 · Read 2: Estimated DUPR 2.00, technique score 0.0 out of 10 · Latest read',
       ]);
       expect(texts(renderer)).toContain('Showing reads 1–2 of 2.');
       expect(texts(renderer).join(' ')).toContain('Aug 28–Sep 3');
@@ -361,7 +362,7 @@ describe('ScoreDotPlot', () => {
     expect(shown.size).toBe(reads.length);
     reads.forEach((point, index) => {
       expect(shown).toContain(
-        `${point.day} · Read ${index + 1}: ${point.score.toFixed(1)} out of 10${index === reads.length - 1 ? ' · Latest read' : ''}`,
+        `${point.day} · Read ${index + 1}: ${duprAccessibilityLabel(point.score)}${index === reads.length - 1 ? ' · Latest read' : ''}`,
       );
     });
     expect(earlier().props.accessibilityState).toEqual({ disabled: true });
@@ -443,16 +444,27 @@ describe('ScoreDotPlot', () => {
       drawn.filter(node => flat(node)['backgroundColor'] === color.volt),
     ).toHaveLength(1);
     const rendered = texts(renderer);
+    // Value labels are each read's estimated DUPR (5.5 → 2.85, 6.2 → 2.95,
+    // 3.7 → 2.57); the gridlines mark the Advanced (4.00) and Intermediate
+    // (3.00) bands.
     expect(rendered).toEqual(
-      expect.arrayContaining(['5.5', '6.2', '3.7', 'Aug 28', 'Sep 3']),
+      expect.arrayContaining([
+        '2.85',
+        '2.95',
+        '2.57',
+        '4.00',
+        '3.00',
+        'Aug 28',
+        'Sep 3',
+      ]),
     );
     // The latest value label wears the accent.
     const latestLabel = renderer.root
       .findAllByType(Text)
-      .find(node => node.props.children === '3.7')!;
+      .find(node => node.props.children === '2.57')!;
     expect(flat(latestLabel)['color']).toBe(color.volt);
     expect(summary(renderer)).toBe(
-      'Seven day technique scores: 3 scored reads across 3 days, latest 3.7 out of 10.',
+      'Seven day estimated DUPR: 3 scored reads across 3 days, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
     );
     act(() => renderer.unmount());
   });
@@ -513,7 +525,7 @@ describe('ScoreDotPlot', () => {
       />,
     );
     expect(summary(renderer)).toBe(
-      'Seven day technique scores: 1 scored read across 1 day, latest 3.7 out of 10.',
+      'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
     );
     act(() => renderer.unmount());
   });

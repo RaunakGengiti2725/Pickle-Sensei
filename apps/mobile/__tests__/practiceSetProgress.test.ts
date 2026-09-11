@@ -479,12 +479,14 @@ describe('practiceSetHeadline / practiceSetInsight', () => {
     return { ...summary, ...extra };
   }
 
-  it('headline states the exact tenths delta with a real minus sign, or a hold', () => {
+  it('headline states the exact tenths delta in estimated DUPR with a real minus sign, or a hold', () => {
+    // D-046: the trend is decided on exact tenths; the printed delta is the
+    // difference of the two estimated DUPRs (6.6 → 3.07, 7.4 → 3.60).
     expect(practiceSetHeadline(summaryWith([6.6, 7.4]))).toBe(
-      '+0.8 in this set',
+      '+0.53 DUPR in this set',
     );
     expect(practiceSetHeadline(summaryWith([7.2, 6.9]))).toBe(
-      `${MINUS}0.3 in this set`,
+      `${MINUS}0.20 DUPR in this set`,
     );
     expect(practiceSetHeadline(summaryWith([7.2, 7.4]))).toBe(
       'Held steady in this set',
@@ -492,7 +494,9 @@ describe('practiceSetHeadline / practiceSetInsight', () => {
     expect(practiceSetHeadline(summaryWith([7.4, 7.4]))).toBe(
       'Held steady in this set',
     );
-    expect(practiceSetHeadline(summaryWith([5, 6.5]))).toBe('+1.5 in this set');
+    expect(practiceSetHeadline(summaryWith([5, 6.5]))).toBe(
+      '+0.23 DUPR in this set',
+    );
   });
 
   it('insight reports count, best, and a fixed checkpoint’s measured before → after', () => {
@@ -516,7 +520,7 @@ describe('practiceSetHeadline / practiceSetInsight', () => {
       SET,
     )!;
     expect(practiceSetInsight(summary)).toBe(
-      '3 attempts · best 7.4 · contact position improved from 48 to 81',
+      '3 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
     );
   });
 
@@ -525,26 +529,26 @@ describe('practiceSetHeadline / practiceSetInsight', () => {
       practiceSetInsight(
         summaryWith([6.6, 7.4], { stillOpen: 'face_wrist_stability' }),
       ),
-    ).toBe('2 attempts · best 7.4 · face / wrist stability still open');
+    ).toBe('2 attempts · best 3.60 DUPR · face / wrist stability still open');
     expect(
       practiceSetInsight(summaryWith([6.6, 7.4], { excludedCount: 1 })),
     ).toBe(
-      '2 attempts · best 7.4 · 1 attempt on a different scoring model not compared',
+      '2 attempts · best 3.60 DUPR · 1 attempt on a different scoring model not compared',
     );
     expect(
       practiceSetInsight(summaryWith([6.6, 7.4, 7.0], { excludedCount: 2 })),
     ).toBe(
-      '3 attempts · best 7.4 · 2 attempts on a different scoring model not compared',
+      '3 attempts · best 3.60 DUPR · 2 attempts on a different scoring model not compared',
     );
     // Unknown checkpoint keys are humanized, never rendered raw.
     expect(
       practiceSetInsight(summaryWith([6.6, 7.4], { stillOpen: 'hip_turn' })),
-    ).toBe('2 attempts · best 7.4 · hip turn still open');
+    ).toBe('2 attempts · best 3.60 DUPR · hip turn still open');
   });
 
   it('insight never mentions checkpoints when neither a fix nor a priority was measured', () => {
     expect(practiceSetInsight(summaryWith([6.6, 7.4]))).toBe(
-      '2 attempts · best 7.4',
+      '2 attempts · best 3.60 DUPR',
     );
   });
 });

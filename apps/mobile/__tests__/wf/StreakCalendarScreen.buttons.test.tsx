@@ -296,7 +296,7 @@ describe('StreakCalendarScreen buttons', () => {
         ).toContain('shield protected');
         press(dayCell(renderer, '2026-03-09'));
         expect(allText(renderer)).toContain('2 ACTIVITIES');
-        expect(allText(renderer)).toContain('AVG 7.4');
+        expect(allText(renderer)).toContain('AVG 3.60 DUPR');
         press(byLabel(renderer, 'Previous month'));
         expect(allText(renderer)).toContain('February 2026');
         press(byLabel(renderer, 'Next month'));
@@ -371,7 +371,7 @@ describe('StreakCalendarScreen buttons', () => {
     );
     press(dayCell(renderer, '2026-03-07'));
     expect(allText(renderer)).toContain('4 ACTIVITIES');
-    expect(allText(renderer)).toContain('AVG 6.9');
+    expect(allText(renderer)).toContain('AVG 3.27 DUPR');
     act(() => renderer.unmount());
   });
 
@@ -443,7 +443,7 @@ describe('StreakCalendarScreen buttons', () => {
     // trainedToday -> today's detail is open on arrival.
     expect(detailCard(renderer)).toHaveLength(1);
     expect(allText(renderer)).toContain('1 ACTIVITY');
-    expect(allText(renderer)).toContain('AVG 8.1');
+    expect(allText(renderer)).toContain('AVG 4.07 DUPR');
 
     const today = dayCell(renderer, '2026-03-10');
     expect(today.props.accessibilityRole).toBe('button');
@@ -469,7 +469,7 @@ describe('StreakCalendarScreen buttons', () => {
     expect(detailCard(renderer)).toHaveLength(1);
     const copy = allText(renderer);
     expect(copy).toContain('2 ACTIVITIES');
-    expect(copy).toContain('AVG 7.4');
+    expect(copy).toContain('AVG 3.60 DUPR');
     expect(copy).toContain('forehand drive');
     expect(copy).toContain('Dink ladder');
     expect(copy).toContain('· DRILL');

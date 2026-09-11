@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fail, failure, ok } from "@pickle/shared-types";
 import { generateSwingSequence } from "@pickle/evaluation";
 import {
@@ -34,7 +34,7 @@ const TRIGGER_MODEL = {
 
 function providers(overrides: Partial<FusionProviders> = {}): FusionProviders {
   return {
-    phase: new GeometricPhaseSegmenter({ aspectRatio: 1 }),
+    phase: new GeometricPhaseSegmenter(),
     biomechanics: new GeometryBiomechanicsExtractor(),
     scorer: new Sm1TechniqueScorer(),
     faultDetector: new CheckpointThresholdFaultDetector(),
@@ -80,6 +80,25 @@ const options = () => ({
 });
 
 describe("analyzeCapture fusion engine", () => {
+  it("passes the recorded video geometry to the shared phase provider", async () => {
+    const input = captureInput();
+    input.pose.video = { ...input.pose.video, width: 1280, height: 640 };
+    const phase = new GeometricPhaseSegmenter();
+    const segment = vi.spyOn(phase, "segmentPhases");
+    const result = await analyzeCapture(providers({ phase }), input, options());
+    expect(result.ok).toBe(true);
+    expect(segment).toHaveBeenCalledWith(
+      expect.any(Array),
+      [],
+      expect.objectContaining({
+        startMs: input.trigger.startMs,
+        endMs: input.trigger.endMs,
+      }),
+      { width: 1280, height: 640 },
+    );
+    segment.mockRestore();
+  });
+
   it("produces a fully versioned, provenance-complete record from pose alone", async () => {
     const result = await analyzeCapture(providers(), captureInput(), options());
     expect(result.ok).toBe(true);
@@ -99,6 +118,18 @@ describe("analyzeCapture fusion engine", () => {
     });
     expect(record.uncertainty.limitingFactors).toContain("paddle_track_unavailable");
     expect(record.uncertainty.limitingFactors).toContain("ball_track_unavailable");
+    // Recovery has no measurable metric in this stack, so it is not
+    // applicable — never reported as an unobserved checkpoint (which would
+    // count as zero confidence against every capture).
+    expect(record.uncertainty.limitingFactors).not.toContain("checkpoint_unobserved:recovery");
+    expect(record.result?.checkpoints.some((checkpoint) => checkpoint.key === "recovery")).toBe(
+      false,
+    );
+    expect(
+      record.result?.measurements.some(
+        (measurement) => measurement.metricKey === "recovery_time_ms",
+      ),
+    ).toBe(false);
     // Every stage left a model run with provenance.
     const tasks = record.modelRuns.map((run) => run.task);
     expect(tasks).toEqual(
@@ -128,9 +159,11 @@ describe("analyzeCapture fusion engine", () => {
       captureInput({ declared: null, predicted: null }),
       options(),
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.failure.code).toBe("fusion.stroke_unresolved");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.kind).toBe("needs_technique_confirmation");
+    expect(result.value.result).toBeNull();
+    expect(result.value.strokeResolution.kind).toBe("unresolved");
   });
 
   it("supports reprocessing: same capture, two engines' records, capture untouched", async () => {
@@ -226,7 +259,7 @@ describe("analyzeCapture fusion engine", () => {
     expect(result.failure.code).toBe("technique_scoring.provider_crash");
   });
 
-  it("a confident classifier prediction overrides the declaration (recorded as predicted)", async () => {
+  it("a confident classifier prediction cannot replace an ambiguous user declaration", async () => {
     const classifier = {
       descriptor: {
         providerId: "classifier.test",
@@ -258,10 +291,14 @@ describe("analyzeCapture fusion engine", () => {
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.strokeResolution).toEqual({
-      kind: "predicted",
-      shotType: "forehand_drive",
-      confidence: 0.95,
+    expect(result.value.kind).toBe("needs_technique_confirmation");
+    expect(result.value.result).toBeNull();
+    expect(result.value.strokeIntent.declaredStroke).toBe("dink");
+    expect(result.value.strokeIntent.flatPrediction?.shotType).toBe("forehand_drive");
+    expect(result.value.strokeIntent.disagreement).toEqual({
+      declared: "dink",
+      predictedLabel: "forehand_drive",
+      basis: "slug_vs_declared",
     });
   });
 

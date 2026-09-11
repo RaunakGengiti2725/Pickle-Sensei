@@ -127,7 +127,7 @@ export function UncertaintyNote(props: { text: string }) {
       accessibilityRole="text"
       accessibilityLabel="Uncertainty note"
     >
-      <Icon name="shield" color={color.inkSoft} size={15} />
+      <Icon name="shield" color={color.onDarkSubtle} size={15} />
       <Text style={[type.caption, styles.text]}>{props.text}</Text>
     </View>
   );
@@ -158,8 +158,8 @@ const styles = StyleSheet.create({
     padding: space.md,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-    backgroundColor: color.surfaceElevated,
+    borderColor: color.lineDark,
+    backgroundColor: color.inkElevated,
   },
-  text: { color: color.inkSoft, flex: 1 },
+  text: { color: color.onDarkMuted, flex: 1 },
 });

@@ -19,6 +19,11 @@
 // call counters, an interleaving timeline and Deno.memoryUsage() — written as
 // JSON under XC_OUT_DIR (default artifacts/xc-matrix-concurrency-edge/latest/).
 
+import { billingRpcResponse } from "./routesHarness.ts";
+import { activeReleasePolicyRow } from "./releasePolicyFixture.ts";
+import { FREE_RATING_LIMIT } from "./freeRatingLimit.ts";
+
+export { FREE_RATING_LIMIT };
 export const SUPABASE_URL = "http://supabase.xc.test";
 export const WEBHOOK_SECRET = "xc-webhook-secret";
 export const RC_URL = "https://api.revenuecat.com/v1/subscribers/";
@@ -158,6 +163,7 @@ export class FakeSupabase {
   tables: Record<string, Array<Record<string, unknown>>> = {
     profiles: [],
     shots: [],
+    settlement_receipts: [],
     analysis_permits: [],
     billing_entitlements: [],
     sessions: [],
@@ -175,6 +181,8 @@ export class FakeSupabase {
    * a session minted in one scenario must never share an id with a session
    * minted from the same seed in another. */
   private epoch = 0;
+  billingOrder = 0;
+  billingMissingUsers: string[] = [];
   private t0 = performance.now();
 
   constructor(seed: number, latencyMaxMs: number) {
@@ -196,6 +204,8 @@ export class FakeSupabase {
     this.counters = {};
     this.timeline = [];
     this.mint = 0;
+    this.billingOrder = 0;
+    this.billingMissingUsers = [];
     this.epoch += 1;
     this.t0 = performance.now();
   }
@@ -400,7 +410,7 @@ export class FakeSupabase {
       const premium = this.premium(userId);
       const scored = this.lifetimeScoredCount(userId);
       const reserved = this.reservedCount(userId);
-      const remaining = 2 - Math.min(scored, 2);
+      const remaining = FREE_RATING_LIMIT - Math.min(scored, FREE_RATING_LIMIT);
       if (!premium && remaining <= reserved) {
         this.log("rpc.reserve", `user=${userId} key=${key} → paywall_required`);
         return [{ result: "access.paywall_required" }];
@@ -456,7 +466,7 @@ export class FakeSupabase {
         return "access.permit_not_reserved";
       }
       if (resultKind === "scored") {
-        if (!this.premium(userId) && this.lifetimeScoredCount(userId) >= 2) {
+        if (!this.premium(userId) && this.lifetimeScoredCount(userId) >= FREE_RATING_LIMIT) {
           permit.status = "released";
           permit.outcome = "free_limit_exceeded";
           this.log("rpc.apply", `user=${userId} shot=${id} → paywall_required`);
@@ -483,6 +493,16 @@ export class FakeSupabase {
         created_at: new Date().toISOString(),
       };
       this.tables.shots.push(row as unknown as Record<string, unknown>);
+      // 20260908110000: the settlement receipt is persisted beside the shot.
+      const receipt = isRecord(shot.settlementReceipt) ? shot.settlementReceipt : null;
+      if (receipt) {
+        this.tables.settlement_receipts.push({
+          shot_id: id,
+          user_id: userId,
+          receipt_canonical: receipt.canonical,
+          receipt_sha256: receipt.sha256,
+        });
+      }
       if (resultKind === "scored") {
         // shots_record_free_rating_ledger trigger
         const user = this.users.get(userId);
@@ -718,6 +738,39 @@ export class FakeSupabase {
               this.users.has(session.userId),
             ),
           );
+        }
+        if (
+          [
+            "claim_billing_webhook_delivery",
+            "release_billing_webhook_delivery",
+            "begin_billing_verification",
+            "persist_billing_verdict",
+            "complete_billing_webhook",
+          ].includes(fn)
+        ) {
+          this.count(`rpc.${fn}`);
+          if (who.role !== "service")
+            return jsonResponse(403, { code: "42501", message: "server credentials required" });
+          const payload = isRecord(body.p_payload) ? body.p_payload : {};
+          const event = isRecord(payload.event) ? payload.event : {};
+          const subjects = [
+            ...(Array.isArray(body.p_user_ids) ? body.p_user_ids : []),
+            body.p_user_id,
+            event.app_user_id,
+            ...(Array.isArray(event.aliases) ? event.aliases : []),
+            ...(Array.isArray(event.transferred_from) ? event.transferred_from : []),
+            ...(Array.isArray(event.transferred_to) ? event.transferred_to : []),
+          ];
+          this.billingMissingUsers = subjects.filter(
+            (id): id is string => typeof id === "string" && !this.users.has(id),
+          );
+          return billingRpcResponse(this, fn, body)!;
+        }
+        if (fn === "read_analysis_release_policy") {
+          this.count("rpc.read_analysis_release_policy");
+          return who.role === "service"
+            ? jsonResponse(200, await activeReleasePolicyRow())
+            : jsonResponse(403, { code: "42501", message: "server credentials required" });
         }
         if (fn === "access_state") {
           this.count("rpc.access_state");

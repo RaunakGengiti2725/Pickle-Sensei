@@ -1,0 +1,18 @@
+{
+  "agents": [],
+  "decided_at": "2026-09-09T00:47:17Z",
+  "held_candidate": null,
+  "integration_head_at_decision": "0c6b1c5a094267dbb172db40569392dd796f7765",
+  "manifest_sha256": "2623ed2d18a27e4d21c29199165a9709170cc424b39100bfcf4115bf75e9535e",
+  "note": "owner directive 2026-09-08 (1.0 release only): 'W03-01 conservative import admission. If this round fails again, drop it and continue. Import already works. Do not block GO on W03-01 after that.' Round 8 (wave-5, base 5c1859a8) was REJECTED (reviewer request_changes + 4 P1 adversarial breaks); package dropped from 1.0, findings preserved in wave-5/record.json for 1.0.1.",
+  "package_id": "W03-01",
+  "prior_records": [
+    "pilot-1:REQUEUE",
+    "wave-1:REQUEUE",
+    "wave-2:REQUEUE",
+    "wave-5:REQUEUE"
+  ],
+  "rounds": [],
+  "status": "DEFERRED_V1_1",
+  "wave_id": "deferred"
+}

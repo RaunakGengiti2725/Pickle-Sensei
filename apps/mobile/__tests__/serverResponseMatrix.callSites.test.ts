@@ -112,15 +112,6 @@ const KNOWN_VIOLATIONS: readonly ViolationPin[] = [
     scenarios: (_id, judgedAs) => judgedAs === 'client_error',
     violations: ['retry_class_permanent_expected'],
   },
-  {
-    finding:
-      'F5 (P3) data/api.ts:116 `return json as T` hands any 2xx body to the caller unvalidated; syncShots/uploadEvaluationTrials resolve null/{}/"ok"/[] — drainOutbox absorbs it as a TypeError → transient, no receipt, no attempt burned (pinned by serverResponseMatrix.outbox.test.ts)',
-    sites: id =>
-      id === 'data.transport.syncShots' ||
-      id === 'data.transport.uploadEvaluationTrials',
-    scenarios: (_id, judgedAs) => UNREADABLE_2XX.has(judgedAs),
-    violations: ['fake_success'],
-  },
 ];
 
 function pinFor(row: MatrixRow): ViolationPin | undefined {

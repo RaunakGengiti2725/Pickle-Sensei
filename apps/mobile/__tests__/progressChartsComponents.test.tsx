@@ -236,13 +236,15 @@ describe('ScoreTrendChart', () => {
         Object.freeze(bucket('2026-08-29:2026-08-31', 'Aug 29', 0, 1)),
       ]);
       const renderer = render(<ScoreTrendChart buckets={buckets} />);
+      // Rows speak the headline unit (estimated DUPR, D-046) and keep the
+      // 0–10 average beside it; 8.05 → 4.03, 0 → 2.00.
       expect(dataRows(renderer).map(node => node.props.children)).toEqual([
-        '2026-08-25–2026-08-26: 8.1 out of 10 · 2 scored reads',
+        '2026-08-25–2026-08-26: Estimated DUPR 4.03, technique score 8.1 out of 10 · 2 scored reads',
         '2026-08-27–2026-08-28: No comparable scored reads',
-        '2026-08-29–2026-08-31: 0.0 out of 10 · 1 scored read · Latest scored period',
+        '2026-08-29–2026-08-31: Estimated DUPR 2.00, technique score 0.0 out of 10 · 1 scored read · Latest scored period',
       ]);
       expect(texts(renderer)).toContain(
-        'Average technique score by period. 2 scored periods, latest average 0.0 out of 10.',
+        'Average estimated DUPR by period. 2 scored periods, latest average: Estimated DUPR 2.00, technique score 0.0 out of 10.',
       );
       expect(texts(renderer)).toContain('Showing periods 1–3 of 3.');
       expect(texts(renderer).join(' ')).toContain('grouped date range');
@@ -290,7 +292,7 @@ describe('ScoreTrendChart', () => {
     );
     expect(texts(renderer)).toContain('Showing periods 1–1 of 1.');
     expect(dataRows(renderer)[0]!.props.children).toBe(
-      'New day: 10.0 out of 10 · 1 scored read · Latest scored period',
+      'New day: Estimated DUPR 6.00, technique score 10.0 out of 10 · 1 scored read · Latest scored period',
     );
     expect(hostByTestId(renderer, 'chart-data-earlier')).toBeNull();
     act(() => {
@@ -302,12 +304,13 @@ describe('ScoreTrendChart', () => {
   it('labels every scored bar in a short window and skips honest gaps', () => {
     const renderer = render(<ScoreTrendChart buckets={SEVEN_BUCKETS} />);
     const rendered = texts(renderer);
-    expect(rendered).toContain('6.0');
-    expect(rendered).toContain('7.5');
-    // Bar labels round to one readable decimal.
-    expect(rendered).toContain('8.1');
+    // Bar labels are the estimated DUPR of each average, two decimals:
+    // 6.0 → 2.92, 7.5 → 3.67, 8.05 → 4.03.
+    expect(rendered).toContain('2.92');
+    expect(rendered).toContain('3.67');
+    expect(rendered).toContain('4.03');
     // Three scored buckets → exactly three value labels + three axis labels.
-    expect(rendered.filter(t => /^\d+\.\d$/.test(t))).toHaveLength(3);
+    expect(rendered.filter(t => /^\d+\.\d\d$/.test(t))).toHaveLength(3);
     act(() => {
       jest.runOnlyPendingTimers();
       renderer.unmount();
@@ -320,7 +323,7 @@ describe('ScoreTrendChart', () => {
       n => typeof n.props.accessibilityLabel === 'string' && n.props.accessible,
     );
     expect(root!.props.accessibilityLabel).toBe(
-      'Average technique score by day. 3 scored days, latest average 8.1 out of 10.',
+      'Average estimated DUPR by day. 3 scored days, latest average: Estimated DUPR 4.03, technique score 8.1 out of 10.',
     );
     act(() => {
       jest.runOnlyPendingTimers();
@@ -333,7 +336,7 @@ describe('ScoreTrendChart', () => {
       bucket(`k${index}:k${index}`, `Aug ${index + 1}`, 5 + index * 0.1, 1),
     );
     const renderer = render(<ScoreTrendChart buckets={dense} />);
-    expect(texts(renderer).filter(t => /^\d+\.\d$/.test(t))).toHaveLength(0);
+    expect(texts(renderer).filter(t => /^\d+\.\d\d$/.test(t))).toHaveLength(0);
     act(() => {
       jest.runOnlyPendingTimers();
       renderer.unmount();
@@ -349,7 +352,7 @@ describe('ScoreTrendChart', () => {
     expect(root!.props.accessibilityLabel).toBe(
       'No comparable scored reads in this window yet.',
     );
-    expect(texts(renderer).filter(t => /^\d+\.\d$/.test(t))).toHaveLength(0);
+    expect(texts(renderer).filter(t => /^\d+\.\d\d$/.test(t))).toHaveLength(0);
     act(() => {
       jest.runOnlyPendingTimers();
       renderer.unmount();
@@ -365,8 +368,10 @@ describe('ScoreTrendChart', () => {
         ]}
       />,
     );
-    expect(texts(renderer)).toContain('12.0');
-    expect(texts(renderer)).toContain('0.0');
+    // The estimate clamps to the app's scale ends rather than inventing a
+    // number past 6.00 or below 2.00.
+    expect(texts(renderer)).toContain('6.00');
+    expect(texts(renderer)).toContain('2.00');
     act(() => {
       jest.runOnlyPendingTimers();
       renderer.unmount();

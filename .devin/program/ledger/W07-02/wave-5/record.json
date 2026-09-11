@@ -1,0 +1,466 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W07-02-r3",
+      "phase": "implement",
+      "prompt_sha256": "23e2cab7a72c20e911d1a86f813c2c8ea2e4f3f4f4714e19d3e7bea52670240f",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-02-r3",
+      "phase": "review",
+      "prompt_sha256": "a96ceda0d0017e81ffed725083c8e52b7751fbdb38310d2574bf1d0693404abf",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-02-r3",
+      "phase": "adversary",
+      "prompt_sha256": "4e7dc515f4d60cfc296aa472a34cc9bf4ea86cb67ee05f703d350d620a7c487c",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W07-02-r4",
+      "phase": "implement",
+      "prompt_sha256": "c1f4d4ddeea64820e3c96c3f820ca1c464aeee7f363341808fee06a1705e4f68",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W07-02-r4",
+      "phase": "review",
+      "prompt_sha256": "a1258a5b6f8771b417a1ba6ad127b0705fac5403392fd4975841c90cd9fb23f5",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W07-02-r4",
+      "phase": "adversary",
+      "prompt_sha256": "27a5d597ab5c1c3960ddedd54d57d56cb48da20a4e2b446f9b619063ef9f3e23",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "candidate": {
+    "branch": "devin/pp/w07-02/impl-r4",
+    "head_sha": "226bb810ca0b2be27aa76475e127e1669305d653",
+    "round": 4
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W07-02",
+  "requeued_from": {
+    "branch": "devin/pp/w07-02/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w07-02/attack-712366f2",
+      "adversary_breaks": [
+        {
+          "expected": "'pending' — the implementer summary states 'an id present at another date remains a conflict → pending', but the conflict check (identified/matching) only inspects candidates for request.productId; billingFulfilmentOf never consults subscriptions[otherProduct] or non_subscriptions[otherProduct] before falling back to subscriptionLineageRow. Store transaction ids are unique across products, so provider evidence contradicting the device's productId must not be settled by another product's lineage.",
+          "observed": "POST /v1/billing/sync with fulfilment {productId: monthly, transactionId: 2000000833333333, purchasedAt: D-35} while subscriptions.annual.store_transaction_id === 2000000833333333 (purchase_date D-50) and subscriptions.monthly is a renewed lineage (original D-120, latest D-5) -> outcome 'fulfilled' (assert at attack_w07_02_lineage.test.ts:205 / :224). On base f250acd7 both stay 'pending'.",
+          "repro": "git checkout 712366f2 && git checkout devin/pp/w07-02/attack-712366f2 -- supabase/functions/api/__wf__/attack_w07_02_lineage.test.ts && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK A3' attack_w07_02_lineage.test.ts  (tests 'ATTACK A3' string id and 'ATTACK A3b' numeric id)",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w07_02_lineage.test.ts",
+          "title": "Cross-product transaction-id conflict is ignored: a journaled id RevenueCat attributes to ANOTHER subscription product is fulfilled via the lineage of the device-claimed product"
+        },
+        {
+          "expected": "'pending'. 'expired' is terminal on the device (accessStore.verifyPending removes the pending record for expired/refunded), so a purchase the provider records as belonging to an active product is discarded from reconciliation forever on a contradictory record — violates 'unknown/corrupt state never becomes … completed payment recovery'.",
+          "observed": "subscriptions.monthly = lapsed lineage (expires D-2, no entitlement), subscriptions.annual owns the journaled id 2000000833333333 and is the active entitled product (expires D+300); billing.premium=true yet fulfilment.outcome === 'expired' (assert at :251). Base: 'pending'.",
+          "repro": "same checkout; cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK A3c' attack_w07_02_lineage.test.ts",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w07_02_lineage.test.ts",
+          "title": "Terminal 'expired' fabricated for a transaction RevenueCat attributes to an ACTIVE product (lapsed lineage of the device-claimed product wins over the provider's own record of the id)"
+        },
+        {
+          "expected": "'pending' (same root cause as A3: the identified/matching conflict scan is scoped to request.productId only; the lineage fallback must be refused whenever the journaled id is identified under ANY product/row of the subscriber).",
+          "observed": "non_subscriptions.pickle_sensei_pro_lifetime[0].store_transaction_id === journaled id (purchase_date D-50), subscriptions.monthly renewed lineage -> outcome 'fulfilled' (assert at :286). Base: 'pending'.",
+          "repro": "same checkout; cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK A4' attack_w07_02_lineage.test.ts",
+          "severity": "P1",
+          "test_file": "supabase/functions/api/__wf__/attack_w07_02_lineage.test.ts",
+          "title": "Journaled id recorded as ANOTHER product's non-subscription (lifetime) purchase is not treated as a conflict; the monthly lineage fulfils it"
+        }
+      ],
+      "judge": [
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [],
+      "review_invariants": []
+    },
+    "head_sha": "712366f2ed4443be862781c9cffa98495f293842"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/00cdfe77-9ad9-44f1-82ec-bd0aa9462453/w07-02-attack-artifacts.tgz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e6866db-12b2-416d-b82e-3af0920b386c/attack_head_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7215e88b-5d76-46bc-890e-326829f2f18f/attack_base.log"
+        ],
+        "attack_branch": "devin/pp/w07-02/attack-1ded56a3",
+        "attack_branch_sha": "0f8848851a895e206294bbd0c58f1301fdf3a04a",
+        "attacked_sha": "1ded56a3e486b2721fa51f29c1cb132c11e3249d",
+        "attacks_tried": 26,
+        "breaks": [
+          {
+            "expected": "The lineage rule must not be more permissive than the exact-id rule: a row that is refunded yet still active is contradictory provider evidence and must leave the purchase 'pending' (HOLD), exactly as index.ts does for the exact-id row (`activeProduct` + refunded_at => return result/pending). The candidate's `if (lineage === null && row.refunded_at ...)` guard skips the refund check entirely for lineage rows, so refund state on the settlement record is never examined.",
+            "observed": "POST /v1/billing/sync with journaled evidence {monthly, tx 2000000811111111, purchasedAt T0} against a subscriber whose monthly subscription row has original_purchase_date=T0, purchase_date=T0+30d (store_transaction_id 2000000822222222), expires_date in the future AND refunded_at set (after T0, before checkedAt): outcome='fulfilled' (premium granted, entitlement written). The same subscriber with the row carrying the exact journaled id instead: outcome='pending'. AssertionError at attack_w07_02_r3_lineage.test.ts:~197 — Actual 'fulfilled' / Expected 'pending'. On BASE_SHA the same test passes (both 'pending').",
+            "repro": "git checkout 0f8848851a895e206294bbd0c58f1301fdf3a04a && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK B1' attack_w07_02_r3_lineage.test.ts  (exit 1)",
+            "severity": "P1",
+            "test_file": "supabase/functions/api/__wf__/attack_w07_02_r3_lineage.test.ts",
+            "title": "Lineage fallback ignores refunded_at: a refunded-but-still-active subscription row settles the pending purchase as 'fulfilled' while the exact-id rule for the identical evidence returns 'pending'"
+          },
+          {
+            "expected": "Either 400 (invalid evidence) or the evidence echoed byte-for-byte; a server must not bind a pending purchase to a different instant than the one the device journaled. Low severity: the mobile parser normalises the same way and RevenueCat never emits such dates; flagged for the reviewer as out of the candidate's diff.",
+            "observed": "200 with fulfilment.transaction.purchasedAt='2026-03-02T12:00:00.000Z' for input '2026-02-30T12:00:00.000Z' (Date.parse normalisation), outcome 'pending'. Base SHA: same rewrite.",
+            "repro": "git checkout 0f8848851a895e206294bbd0c58f1301fdf3a04a && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK B7b' attack_w07_02_r3_lineage.test.ts  (exit 1; identical failure with the file copied onto 5c1859a8)",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w07_02_r3_lineage.test.ts",
+            "title": "Calendar-invalid purchasedAt (2026-02-30T12:00:00.000Z) is accepted and silently rewritten to 2026-03-02T12:00:00.000Z in the echoed fulfilment evidence (pre-existing: also fails on BASE_SHA, not introduced by the candidate)"
+          }
+        ],
+        "package_id": "W07-02",
+        "summary": "ADVERSARY W07-02 vs 1ded56a3 (attack branch devin/pp/w07-02/attack-1ded56a3 @ 0f884885, pushed, no PR).\n\nCANDIDATE ACCEPTANCE (VERIFIED on 1ded56a3):\n- AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (artifacts/w07-02-attack/ac1_deno_check.log).\n- AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=<same> deno task test` → ok | 847 passed (31 steps) | 0 failed | 0 ignored, exit 0 (ac2_full_suite_head_run2.log). Note: without PICKLE_AUDIT_PG_URL the audit test tries to `docker pull postgres:16` and this box hit Docker Hub 429 → 834 passed / 1 failed / 12 ignored (ac2_full_suite_head.log); environmental, not a candidate defect.\n- AC3 base 5c1859a8 + candidate's billing_renewal_lineage.test.ts only: FAILED | 17 passed | 13 failed, exit 1 (ac3_base_candidate_tests.log); on HEAD the same file passes inside AC2 (30/30).\n\nATTACKS (26 Deno tests, two files on the attack branch):\n- attack_w07_02_r3_lineage.test.ts (NEW, 12 tests B1–B11): refund+active conflict on lineage row (B1); account switch / service-role / anon callers (B2); concurrent duplicate syncs + verdict superseded between RC verification and persistence (B3); RC 429/5xx/malformed-200 + persistence 5xx never yield verdict or entitlement write (B4); unidentifiable latest id — negative/fractional/unsafe int/bool/object/array/''/null and latest==journaled (B5); far-future/far-past provider clock, future-dated renewal, verification-clock rollback (B6); identifier length 256/257/path chars/empty (B7a); calendar-invalid date (B7b); free-rating conservation (B8); replay idempotence + terminal expiry stability (B9); second-truncated provider dates (B10); grace-period horizon (B11).\n- attack_w07_02_lineage.test.ts (prior round A1–A12, 14 tests) re-run.\nResults on HEAD: `deno test -A --no-check --config deno.json attack_w07_02_r3_lineage.test.ts attack_w07_02_lineage.test.ts` → FAILED | 24 passed | 2 failed (B1, B7b), exit 1 (attack_head_final.log). Same files on BASE: 14 passed | 12 failed (B2,B3,B6,B7b,B8,B9,B10,B11,A7,A8,A11,A12 fail on base — i.e. the candidate genuinely fixes those; B1 PASSES on base and FAILS on head → regression introduced by the lineage rule) (attack_base.log).\n\nCONFIRMED BREAKS: 1× P1 (B1: lineage row with refunded_at + active entitlement → 'fulfilled' while exact-id row with identical evidence → 'pending'; candidate skips the refund check for lineage rows), 1× P3 pre-existing (B7b: calendar-invalid purchasedAt normalised instead of refused/echoed; fails identically on base, outside candidate diff).\n\nHYGIENE: only two new test files added; production code and candidate tests untouched; root prettier --check on both files exit 0; git diff --check clean; pushed without force; no PR; no Mac runner used; no secrets printed. NOT TESTED: live Postgres-backed SQL attacks (no new SQL surface in this package), process-death/restart (Edge isolate has no cross-request state on this path beyond the DB row covered by B3/B9), mobile-client behaviour (outside write_paths)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 1"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9db2d38-cdb5-48ae-b569-28fa48dd9750/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC1",
+            "note": "VERIFIED on HEAD 1ded56a3 from repo root. Only the pre-existing Deno workspace warnings about lock/nodeModulesDir fields in supabase/functions/api/deno.json were emitted; no type errors.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/414f45c3-567c-4fcc-8ae8-e57b94f26abb/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 847,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC2",
+            "note": "VERIFIED on HEAD 1ded56a3: `ok | 847 passed (31 steps) | 0 failed`, ignored == 0. Disposable Postgres 16 container on 127.0.0.1:55433 created via the repo's xc_pg_up.sh setup (removed afterwards); production project untouched. PICKLE_AUDIT_PG_URL was additionally exported to the same disposable DB because w06_01_golden_parity.test.ts gates its 12 SQL-plane/GET /v1/rank tests on that variable, not XC_PG_URL; with XC_PG_URL alone the same suite reported 835 passed / 0 failed / 12 ignored (exit 0).",
+            "passed": 847,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06eb387f-cd96-4e35-9502-4df1a146212e/ac3_proof.txt",
+            "command": "git checkout 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp <HEAD>/supabase/functions/api/__wf__/billing_renewal_lineage.test.ts supabase/functions/api/__wf__/ && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts   # then same on devin/pp/w07-02/impl-r3",
+            "executed": 30,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC3",
+            "note": "VERIFIED. BASE run (5c1859a8 + only the new test file copied over): exit 1, `FAILED | 17 passed | 13 failed`, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/37201f09-d518-43c0-9c77-1e78c2f3e4bc/ac3_base.log (failing tests include the post-renewal lineage fulfilment fixtures — pending purchase stuck on base). HEAD run (1ded56a3): exit 0, `ok | 30 passed | 0 failed`, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ab75c8f-93de-4531-8fd9-c53e2e7d992c/ac3_head.log. Proof outcome 0 (fails on base, passes on candidate). Additional checks: root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/43a9820d-8634-4f0c-9ce0-4a7cab6ecc81/format_check.log); `git diff --check` clean.",
+            "passed": 30,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Test-first: committed the failing fixture file (445aaccc) then the minimal additive fix (1ded56a3) in the same billingFulfilmentOf hunk of index.ts (two new helper functions + ~10 changed lines; no existing comments modified, no lockfile change). Lineage fallback is only consulted when exactly zero direct matches exist AND the journaled id is not identified under any other subscription/non-subscription record of the subscriber.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9db2d38-cdb5-48ae-b569-28fa48dd9750/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/414f45c3-567c-4fcc-8ae8-e57b94f26abb/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06eb387f-cd96-4e35-9502-4df1a146212e/ac3_proof.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37201f09-d518-43c0-9c77-1e78c2f3e4bc/ac3_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ab75c8f-93de-4531-8fd9-c53e2e7d992c/ac3_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/43a9820d-8634-4f0c-9ce0-4a7cab6ecc81/format_check.log"
+        ],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w07-02/impl-r3",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/billing_renewal_lineage.test.ts"
+        ],
+        "head_sha": "1ded56a3e486b2721fa51f29c1cb132c11e3249d",
+        "out_of_scope_files": [],
+        "package_id": "W07-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/billing_renewal_lineage.test.ts (30 Deno tests: post-renewal lineage fulfilment, refund/expiry on the lineage row, and refusal cases — journaled id present under ANOTHER subscription product (string and numeric store_transaction_id), journaled id recorded as another product's non-subscription purchase (store_transaction_id string/number and RC `id` fallback), lineage that ended before the journaled purchase → pending not expired, plus the r2 fixtures)"
+        ],
+        "residual_risks": [
+          "AC2's manifest command only sets XC_PG_URL; w06_01_golden_parity.test.ts gates its 12 SQL-plane tests on PICKLE_AUDIT_PG_URL, so ignored==0 required also exporting PICKLE_AUDIT_PG_URL to the same disposable Postgres (with XC_PG_URL alone the run was 835 passed / 0 failed / 12 ignored). Both env vars pointed at the disposable container, never production.",
+          "Lineage fulfilment relies on RevenueCat's original_purchase_date/purchase_date being accurate for the subscription group; a provider row with a clock-skewed purchase_date earlier than the journaled purchasedAt keeps the purchase 'pending' (safe direction) rather than fulfilling it.",
+          "Attack suite from round 2 (attack_w07_02_lineage.test.ts) was verified locally (14/14) but is not part of the committed branch since it is outside write_paths."
+        ],
+        "summary": "Defect on BASE_SHA (VERIFIED): billingFulfilmentOf in supabase/functions/api/index.ts (~L3230-3260 on base) matched the journaled transaction only against subscriptions[productId] / non_subscriptions[productId] rows whose store_transaction_id === transactionId AND purchase_date === purchasedAt; after a renewal RevenueCat's subscription row carries only the latest transaction, so the original pending purchase stayed 'pending' forever (13/30 new tests fail on base: FAILED | 17 passed | 13 failed, exit 1). Round-3 fix (commit 1ded56a3, on top of test-only commit 445aaccc): (1) subscriptionLineageRow() accepts the claimed product's subscription row as the settlement record when original_purchase_date <= journaled purchasedAt < purchase_date <= checkedAt and the row's latest id differs from the journaled id; (2) NEW subscriberIdentifiesTransaction() scans EVERY subscriptions[*] row and EVERY non_subscriptions[*][] row of the subscriber (using providerTransactionIdentity with the same subscription/non-subscription id semantics) and the lineage fallback is refused whenever the journaled id is identified anywhere else — resolves adversary A3/A3b (cross-product subscription id), A3c (active other product owning the id while the claimed lineage lapsed → stays 'pending', no fabricated terminal 'expired'), and A4 (id under another product's non-subscription purchase); (3) a lineage whose expiry/grace horizon is <= the journaled purchasedAt is contradictory evidence and returns 'pending' instead of terminal 'expired'; (4) refunded_at on a lineage row is not attributed to the earlier journaled transaction. Direct-match behaviour for exact-id rows is unchanged. The prior adversary suite (attack_w07_02_lineage.test.ts from devin/pp/w07-02/attack-712366f2, A1–A12) was run locally against HEAD: ok | 14 passed | 0 failed (not committed; outside write_paths). Verified: AC1 frozen deno check exit 0; AC2 full Edge suite with disposable Postgres 847 passed / 0 failed / 0 ignored, exit 0; AC3 base FAIL (exit 1) → head PASS (exit 0); root `pnpm format:check` exit 0; `git diff --check` clean. Pushed devin/pp/w07-02/impl-r3 = 1ded56a3e486b2721fa51f29c1cb132c11e3249d (origin confirmed). No PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3e380b4-b243-4f36-a21e-7640c3cc6226/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC1",
+            "note": "VERIFIED on 1ded56a3 from the repo root. Only the pre-existing Deno workspace warnings about the `lock`/`nodeModulesDir` fields in supabase/functions/api/deno.json were emitted; `Check file:///.../supabase/functions/api/index.ts` completed with no type errors.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c9492a60-eef7-4efa-8e1e-f314b24b5d60/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 847,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC2",
+            "note": "VERIFIED on 1ded56a3: `ok | 847 passed (31 steps) | 0 failed (1m38s)`, no ignored count printed (ignored == 0). Disposable postgres:16 container created with the repo's supabase/functions/api/__wf__/xc_pg_up.sh (shim_auth.sql + every migration applied), removed afterwards; production project untouched. PICKLE_AUDIT_PG_URL was also pointed at the disposable DB because w06_01_golden_parity.test.ts gates 12 tests on it (VERIFIED: with XC_PG_URL alone that file alone reports 5 passed / 12 ignored). The 30 new billing_renewal_lineage tests ran inside this suite (log line `running 30 tests from ./billing_renewal_lineage.test.ts`).",
+            "passed": 847,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/538c24a6-5438-46ac-9bb9-545e78ab4ceb/ac3_proof.txt",
+            "command": "git worktree add <dir> 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp <HEAD>/supabase/functions/api/__wf__/billing_renewal_lineage.test.ts <dir>/supabase/functions/api/__wf__/ && cd <dir>/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts  # then the same file on 1ded56a3",
+            "executed": 30,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC3",
+            "note": "VERIFIED. BASE run (5c1859a8 worktree, only the new test file copied; `git status` showed exactly one untracked file): exit 1, `FAILED | 17 passed | 13 failed`, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/7995c7e1-2173-43fc-b7f0-fb0f909db95e/ac3_base.log — the 13 failures are the post-renewal lineage fulfilment/expiry fixtures (pending purchase stuck 'pending' on base). HEAD run (1ded56a3): exit 0, `ok | 30 passed | 0 failed`, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/1a7be63a-75fa-4d13-9b71-a65454fddd0d/ac3_head.log. Proof outcome 0. The test file contains no `ignore`, `.only`, or sanitizer opt-outs; it exercises the real handler in-process via webhookSim/routesHarness (POST /v1/billing/sync).",
+            "passed": 30,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3e380b4-b243-4f36-a21e-7640c3cc6226/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c9492a60-eef7-4efa-8e1e-f314b24b5d60/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/538c24a6-5438-46ac-9bb9-545e78ab4ceb/ac3_proof.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7995c7e1-2173-43fc-b7f0-fb0f909db95e/ac3_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1a7be63a-75fa-4d13-9b71-a65454fddd0d/ac3_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/322034ee-ce3e-46b7-a0cf-de387c978122/prettier_check.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AC2 manifest command exports only XC_PG_URL, but w06_01_golden_parity.test.ts gates its 12 SQL-plane tests on PICKLE_AUDIT_PG_URL; VERIFIED with XC_PG_URL alone that file reports `ok | 5 passed | 0 failed | 12 ignored`. ignored==0 required exporting BOTH variables to the same disposable Postgres (as the implementer did). Pre-existing manifest/test-env mismatch, not introduced by this candidate.",
+          "docs/devin/TEST_MATRIX.md still documents the Edge suite as `122 passed / 6 ignored`; the suite is now 847 tests. Stale documentation outside this package's write_paths.",
+          "Design note (INFERRED, not a defect): the lineage fallback attributes a journaled id that RevenueCat reports NOWHERE to the claimed product's subscription row purely by the time window [original_purchase_date, purchase_date). Because RC v1 subscriber rows carry no original_transaction_id, a journaled purchase made under a different App Store account for the same product could be settled ('fulfilled'/'expired') against this subscriber's lineage. Impact is bounded: on mobile (accessStore.ts L530-560) 'fulfilled' clears the pending journal only when the server also reports premium, and terminal 'expired' only clears the journal and shows the settled copy — neither grants access nor consumes a credit. This is the behaviour the objective asks for."
+        ],
+        "package_id": "W07-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "1ded56a3e486b2721fa51f29c1cb132c11e3249d",
+        "scope_violation": false,
+        "summary": "APPROVE W07-02 candidate devin/pp/w07-02/impl-r3 @ 1ded56a3e486b2721fa51f29c1cb132c11e3249d (2 commits over BASE 5c1859a8: test-only 445aaccc, then fix 1ded56a3). SCOPE (VERIFIED): `git diff --stat` touches exactly supabase/functions/api/index.ts (+77/-3) and supabase/functions/api/__wf__/billing_renewal_lineage.test.ts (+714, new) — both in write_paths; edge-index serial group is held; no lockfile, migration, mobile or docs changes; scope_violation=false. BEHAVIOUR (VERIFIED by diff read, index.ts L3113-3240): the objective is met as shipped behaviour — billingFulfilmentOf (called from the /v1/billing/sync verdict path, L3387) now, when exactly zero direct id+date matches exist AND the journaled id is identified by NO subscription or non-subscription record of the subscriber (new subscriberIdentifiesTransaction), accepts the claimed product's subscription row as the settlement record iff original_purchase_date <= journaled purchasedAt < purchase_date <= checkedAt and the row's latest id is present and differs (new subscriptionLineageRow). Direct-match semantics unchanged (`matching.length > 1` still refuses; 0 matches without lineage still returns 'pending'). Safe-direction guards: refunded_at on a lineage row is never attributed to the journaled purchase; a lineage horizon <= purchasedAt yields 'pending' not 'expired'; malformed/missing dates, unidentified latest tx, future latest tx and lifetime rows all yield 'pending'. HARD RULES (VERIFIED): the only removed lines are 3 code lines (`if (matching.length !== 1)`, `const row = matching[0]`, the refunded_at `if`); no existing comment modified; diff contains no any/@ts-ignore/eslint-disable/|| true/ignore:/only(; no test weakened or reordered; no RLS/grant/session/migration/copy changes; no secrets. Prettier check on both files exit 0; `git diff --check` clean. ACCEPTANCE (my re-execution): AC1 deno@2.5.6 frozen check exit 0; AC2 full Edge suite with disposable postgres:16 `ok | 847 passed (31 steps) | 0 failed`, ignored 0, exit 0 (requires PICKLE_AUDIT_PG_URL in addition to the manifest's XC_PG_URL — see non-blocking); AC3 base `FAILED | 17 passed | 13 failed` exit 1 → head `ok | 30 passed | 0 failed` exit 0, regression_fails_on_base=true. Implementer's numbers match mine. No blocking issues; three non-blocking notes (env-var gap in the AC2 manifest command, stale TEST_MATRIX counts, and an INFERRED design note on window-based lineage attribution whose impact is bounded on the mobile consumer).",
+        "verdict": "approve"
+      },
+      "round": 3
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/884121ab-9a85-4e55-9c10-52c3314f2ea1/r4_on_head_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/274e9501-6e2f-4dcb-8f51-a0bef2ecaf2f/r4_on_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/950a0c05-bad1-489c-a8fc-97e252a16cf3/ac3_on_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a30196ea-99fe-476f-9afd-c6df17b52ed2/ac2_head_run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7bebea45-336c-4afb-bb25-cddef457880d/ac2_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2a347fc1-aa48-43ca-9a0b-697c39944c40/ac1_head.log"
+        ],
+        "attack_branch": "devin/pp/w07-02/attack-226bb810",
+        "attack_branch_sha": "c1cd7c58ce1b890e68e05990896a620fb06d0cbb",
+        "attacked_sha": "226bb810ca0b2be27aa76475e127e1669305d653",
+        "attacks_tried": 13,
+        "breaks": [
+          {
+            "expected": "A journaled App Store transaction whose id is present nowhere should only be attributed to a lineage the provider reports as an App Store subscription owned by the subscriber; a row from another store or a FAMILY_SHARED row is not that purchase's lineage and the record should remain 'pending' (HOLD), as on base. Severity P2: the shipping product is iPhone-only, Family Sharing is never enabled (project hard rule) and no Play/Stripe purchase path exists, so the realistic reachable cell is a RevenueCat dashboard promotional grant on the same product (store=promotional) closing a still-unmatched App Store purchase record; the user is entitled in every failing cell (no money/access loss, entitlement write is correct), but the pending record is settled on evidence that does not belong to it and the App Store transaction is no longer tracked.",
+            "observed": "VERIFIED on 226bb810: C13a FAILED (exit 1) — `AssertionError: play_store row: not this purchase's lineage — Actual: fulfilled / Expected: pending`; the same fixture with store=stripe, store=promotional (store_transaction_id 'promo_abc') and ownership_type=FAMILY_SHARED also returns outcome 'fulfilled'. On BASE 5c1859a8 C13a passes (no lineage rule → pending) and C13b (identical app_store/PURCHASED row → 'fulfilled') fails, so the behaviour is candidate-specific. subscriptionLineageRow (index.ts ~L3150-3167) proves lineage from original_purchase_date/purchase_date/store_transaction_id only; `store`/`ownership_type` are never read (rg confirms no reference in index.ts).",
+            "repro": "git checkout 226bb810 && git show origin/devin/pp/w07-02/attack-226bb810:supabase/functions/api/__wf__/attack_w07_02_r4_lineage.test.ts > supabase/functions/api/__wf__/attack_w07_02_r4_lineage.test.ts && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json ./attack_w07_02_r4_lineage.test.ts --filter C13a",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w07_02_r4_lineage.test.ts (ATTACK C13a, on devin/pp/w07-02/attack-226bb810 @ c1cd7c58)",
+            "title": "Lineage inference ignores the row's `store` and `ownership_type`: a same-product subscription RevenueCat attributes to another store (play_store / stripe / promotional) or to a family-shared purchase settles an App Store purchase this device journaled as 'fulfilled'"
+          }
+        ],
+        "package_id": "W07-02",
+        "summary": "ADVERSARY W07-02 r4 — candidate 226bb810 (branch devin/pp/w07-02/impl-r4), base 5c1859a8. Attack suite: supabase/functions/api/__wf__/attack_w07_02_r4_lineage.test.ts on devin/pp/w07-02/attack-226bb810 @ c1cd7c58 (pushed; only that branch touched; no PR; no production code or candidate tests modified). 13 attacks (14 Deno.test blocks, all through the real edge handler via webhookSim): C1 refund-parity matrix (8 refund shapes × 3 horizons, lineage vs exact-id row); C2 contradictory access horizon at 1ms resolution incl. grace; C3 duplicate identities (string/number store ids, RC own id, other product, unknown key, same-product other date) + harmless look-alikes; C4 corrupt/partial provider state (non-object rows, garbage anchors, garbage expiry, wrong product); C5 replay across 0/1/2 renewals; C6 crash between steps (begin RPC 503, verdict RPC 503, retry settles once); C7 provider timeout (10s abort → 502, then settles); C8 trusted-skewed provider clock (23h behind / 4min ahead); C9 boundary instants (year 0001/1970/9999, invalid → 400, coincident dates); C10 free-rating conservation for expired/pending outcomes; C11 double submit with distinct attemptIds; C12 upgrade inside the group after renewal; C13a/b foreign-store / family-shared lineage vs identical app_store lineage.\n\nVERIFIED on candidate 226bb810: `cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json ./attack_w07_02_r4_lineage.test.ts` → exit 1, 13 passed / 1 failed / 0 ignored; sole failure C13a (r4_on_head_final.log). VERIFIED on base 5c1859a8 (git worktree, attack file copied over): same command → exit 1, 2 passed (C4, C13a) / 12 failed / 0 ignored (r4_on_base.log) — every lineage-dependent expectation fails on base as intended, so C1–C12 confirm the fix and C13a is the only candidate-specific regression relative to base (base holds those rows pending; candidate settles them 'fulfilled').\n\nConfirmed breaks: 1 × P2 (C13a: store/ownership_type not consulted by subscriptionLineageRow). No P0/P1/P2 found: refund parity between lineage and exact-id rows holds in all 24 cells (prior-round B1 resolved), horizon boundary is exact at 1ms, any attribution of the journaled id elsewhere blocks lineage, corrupt provider state never crashes or settles, provider/persistence failures never yield a verdict or an entitlement write, one verdict per sync with monotonic verifiedAt, free-rating snapshot untouched, echoes bind bit-for-bit.\n\nAcceptance re-run on candidate: AC1 VERIFIED `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1_head.log). AC2 VERIFIED `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=<same> deno task test` (disposable postgres via ./xc_pg_up.sh, attack file moved aside so the suite is the candidate's) → exit 0, 849 passed (31 steps) / 0 failed / 0 ignored (ac2_head_run2.log). NOTE (harness, not candidate): with ONLY XC_PG_URL as the AC2 command literally reads, 12 W06-01 golden tests are `ignore`d because w06_01_golden_parity.test.ts reads PICKLE_AUDIT_PG_URL only (ac2_head.log: 850 passed / 1 failed [my C13a] / 12 ignored) — the implementer's '0 ignored' claim holds only if both aliases were exported. AC3 VERIFIED: candidate's billing_renewal_lineage.test.ts on base → exit 1, 18 passed / 14 failed (ac3_on_base.log); on candidate → exit 0, 32 passed / 0 failed. Prior-round suite attack_w07_02_r3_lineage.test.ts (not on the candidate branch) re-run on candidate earlier: 11 passed / 1 failed (B7b, calendar-invalid purchase date accepted by isoTimestamp) — INFERRED baseline (isoTimestamp unchanged by the candidate), not a candidate-specific break. Formatting: root `npx prettier --check` on the attack file passes; `git diff --check` clean. Not run: Mac/iOS gates (no native change), scripts/verify-cloud.sh (out of role)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef46fbaa-2c32-40da-b9d5-1fef1b4e29ce/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC1",
+            "note": "VERIFIED on HEAD 226bb810. Local copy: artifacts/w07-02-r4/ac1_deno_check.log (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5ab3c687-87d8-47ba-ab4a-1dca60c3ab9b/ac2_edge_suite.clean.log",
+            "command": "cd supabase/functions/api/__wf__ && ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 849,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC2",
+            "note": "VERIFIED: 'ok | 849 passed (31 steps) | 0 failed', ignored == 0 (grep '... ignored' count 0). Disposable postgres = xc_pg_up.sh (shim_auth.sql + every migration). PICKLE_AUDIT_PG_URL also set because w06_01_golden_parity.test.ts reads only that variable; db_migrations_rls_indexes.audit.test.ts booted its own throwaway container. Environment note: Docker Hub returned 429 for postgres:16, so the locally present postgres:16-alpine image was tagged postgres:16 (no repo change).",
+            "passed": 849,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a4b672f-1864-4baf-b030-5ede23ecba73/ac3_head.log",
+            "command": "git worktree add /tmp/w07base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp supabase/functions/api/__wf__/billing_renewal_lineage.test.ts /tmp/w07base/supabase/functions/api/__wf__/ && (cd /tmp/w07base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts)  # base; then on HEAD: cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts",
+            "executed": 32,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC3",
+            "note": "VERIFIED. BASE run: exit 1, 'FAILED | 18 passed | 14 failed' — https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e16e026-c68c-41da-8a6f-6449e67e1926/ac3_base.log. HEAD run: exit 0, 32 passed / 0 failed. Prior-round adversary suite (attack_w07_02_r3_lineage.test.ts from devin/pp/w07-02/attack-1ded56a3) on HEAD: 11 passed / 1 failed, B1 (the reported break) PASSES; the one failure is B7b, which fails identically on BASE_SHA (see baseline_failures_observed) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/4439fb72-597e-4446-8634-145dee4fcc3b/attack_r3_on_head.log",
+            "passed": 32,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Start from BASE_SHA, branch devin/pp/w07-02/impl-r4. Commit 1: regression fixtures (r3 lineage suite + new refund-parity cases: refunded-but-active lineage row must be 'pending' exactly like the exact-id row; a lineage refund is never attributed to the journaled transaction). Commit 2: cherry-pick the sound r3 lineage helpers (subscriberIdentifiesTransaction, subscriptionLineageRow) and change the refund block from `lineage === null && refunded_at` to an unconditional refund guard with `refunded` emitted only for exact-id rows. Minimal additive diff in index.ts (+77/-3): two new helper functions plus a small hunk in billingFulfilmentOf.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef46fbaa-2c32-40da-b9d5-1fef1b4e29ce/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5ab3c687-87d8-47ba-ab4a-1dca60c3ab9b/ac2_edge_suite.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e16e026-c68c-41da-8a6f-6449e67e1926/ac3_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a4b672f-1864-4baf-b030-5ede23ecba73/ac3_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4439fb72-597e-4446-8634-145dee4fcc3b/attack_r3_on_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bdb5f067-b583-44f6-bbec-28ff70db1c1d/attack_r3_B7b_on_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ae64a1c-0d3e-4dda-913a-2853bebcdba1/format_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8a80f1f4-b2b7-4f82-b4d8-8e83d1f8c8cd/git_diff_check.log"
+        ],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [
+          "ATTACK B7b (attack_w07_02_r3_lineage.test.ts, adversary branch devin/pp/w07-02/attack-1ded56a3): a calendar-invalid purchasedAt '2026-02-30T12:00:00.000Z' is accepted by parseBillingFulfilment and echoed as '2026-03-02T12:00:00.000Z' because isoTimestamp() normalises via Date.parse. Fails on BASE_SHA unchanged: `git checkout 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp <attack file> supabase/functions/api/__wf__/ && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json --filter 'ATTACK B7b' attack_w07_02_r3_lineage.test.ts` → exit 1, 0 passed / 1 failed. Log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/bdb5f067-b583-44f6-bbec-28ff70db1c1d/attack_r3_B7b_on_base.log. Not listed as a break in the prior-round findings; unrelated to renewal lineage; not fixed here to keep the edge-index hunk minimal."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w07-02/impl-r4",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/__wf__/billing_renewal_lineage.test.ts"
+        ],
+        "head_sha": "226bb810ca0b2be27aa76475e127e1669305d653",
+        "out_of_scope_files": [],
+        "package_id": "W07-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/billing_renewal_lineage.test.ts"
+        ],
+        "residual_risks": [
+          "isoTimestamp() normalisation of calendar-invalid timestamps (B7b above) is pre-existing on base and untouched; the mobile app sends Date.toISOString() so it cannot produce such input, but a hardening pass on parseBillingFulfilment/isoTimestamp would be a separate package.",
+          "A validly refunded lineage row settles the journaled purchase as 'expired' (never 'refunded') when the lineage's access has ended, because the refund cannot be attributed to the journaled transaction; while access is still active with refunded_at set the purchase is held 'pending'. This matches the exact-id HOLD rule but means a refund of the renewal never surfaces as 'refunded' on the original purchase."
+        ],
+        "summary": "Defect on BASE_SHA (supabase/functions/api/index.ts, billingFulfilmentOf ~L3108-3130): reconciliation required a subscriber row whose providerTransactionIdentity equalled the journaled store_transaction_id AND whose purchase_date equalled the journaled purchasedAt (`matching.length !== 1 -> pending`). RevenueCat replaces the latest subscription transaction on renewal, so after a renewal the original pending purchase never matched and stayed 'pending' forever (14/32 new fixtures fail on base). Fix (r4, commit 226bb810): reuse the sound r3 lineage rule — when the journaled id is attributed to NO record anywhere in the subscriber (subscriberIdentifiesTransaction), settle against the claimed product's subscription lineage row when original_purchase_date <= journaled purchasedAt < latest purchase_date <= checkedAt and the latest transaction has a different identifiable id (subscriptionLineageRow); a lineage whose access horizon ended no later than the journaled purchase is contradictory and stays pending. Prior-round adversary B1 resolved: the refund guard now applies to lineage rows exactly as to exact-id rows (`if (row.refunded_at != null)` — malformed/future/pre-purchase refund or refund+active entitlement => pending/HOLD); only an exact-id row may become 'refunded' (`if (lineage === null) return refunded`), a validly refunded lineage row settles on access state (expired) since the refund cannot be attributed to the journaled transaction. Regression test committed first (731baa47, fails on base 18 pass/14 fail), fix committed second (226bb810). VERIFIED: AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite on disposable shim+migrated postgres (./xc_pg_up.sh) 849 passed/0 failed/0 ignored exit 0; AC3 base FAIL (exit 1, 18/14) -> head PASS (exit 0, 32/0); adversary attack suite attack_w07_02_r3_lineage.test.ts on HEAD: 11 passed, 1 failed — the sole failure is B7b (calendar-invalid purchase date normalised by isoTimestamp), which fails identically on BASE_SHA (baseline, not a break listed by the prior round, outside this package's objective); pnpm format:check exit 0; git diff --check exit 0. No PR opened; nothing pushed to main."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e4ca63f-0cd3-4669-8312-250612a6964b/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC1",
+            "note": "VERIFIED on HEAD 226bb810: 'Check file:///.../supabase/functions/api/index.ts', EXIT=0. Local copy artifacts/review-w07-02/ac1_deno_check.log.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/53270d34-e6f7-4d5f-ad1f-70b97e593ef4/ac2_edge_suite.clean.log",
+            "command": "cd supabase/functions/api/__wf__ && ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 849,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC2",
+            "note": "VERIFIED on HEAD 226bb810: 'ok | 849 passed (31 steps) | 0 failed (1m48s)', grep -c '... ignored' == 0, grep -c '... FAILED' == 0. Disposable postgres via xc_pg_up.sh (shim_auth.sql + every migration through 20260908100000). PICKLE_AUDIT_PG_URL set because w06_01_golden_parity.test.ts reads only that variable; be-edge-routes-shots-rank ran 12 tests unignored; db_migrations_rls_indexes.audit matrix ran (18s). Environment: Docker Hub returned 429 for postgres:16 so the locally present postgres:16-alpine image was tagged postgres:16 (local docker only, no repo change). Deno runtime 2.9.6 for the suite (deno.json task; AC1 used the frozen 2.5.6).",
+            "passed": 849,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/16ba871f-4c6e-43f2-b2be-3be8bdccd74b/ac3_head.log",
+            "command": "git worktree add /home/ubuntu/w07base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp supabase/functions/api/__wf__/billing_renewal_lineage.test.ts /home/ubuntu/w07base/supabase/functions/api/__wf__/ && (cd /home/ubuntu/w07base/supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts); cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json billing_renewal_lineage.test.ts",
+            "executed": 32,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W07-02-AC3",
+            "note": "VERIFIED proof holds. BASE run (only the new test file copied onto a clean 5c1859a8 worktree; git status showed just the untracked test): exit 1, 'FAILED | 18 passed | 14 failed' — the 14 failures are exactly the renewal-lineage fulfil/expire/window cases (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3cdf08f-37b1-4ac4-94c5-5ee010a1fb16/ac3_base.log). HEAD run: exit 0, 'ok | 32 passed | 0 failed'.",
+            "passed": 32,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e4ca63f-0cd3-4669-8312-250612a6964b/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/53270d34-e6f7-4d5f-ad1f-70b97e593ef4/ac2_edge_suite.clean.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3cdf08f-37b1-4ac4-94c5-5ee010a1fb16/ac3_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/16ba871f-4c6e-43f2-b2be-3be8bdccd74b/ac3_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/71a46725-06c2-4d40-8b6f-06dcf74de6a4/attack_suites_on_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a2d16396-a832-4fd4-ae42-ddbf1b2620a7/attack_B7b_on_base.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Baseline (not introduced by this candidate): prior-round adversary test 'ATTACK B7b' (attack_w07_02_r3_lineage.test.ts from devin/pp/w07-02/attack-1ded56a3) fails identically on BASE_SHA and HEAD — parseBillingFulfilment/isoTimestamp() accepts a calendar-invalid purchasedAt ('2026-02-30T12:00:00.000Z') and normalises it via Date.parse. VERIFIED: on BASE worktree `deno test -A --no-check --config deno.json --filter 'ATTACK B7b' attack_w07_02_r3_lineage.test.ts` exit 1 (0 passed/1 failed); on HEAD both adversary suites: 25 passed / 1 failed (only B7b). Outside this package's objective; belongs in a separate hardening package.",
+          "Semantics note (design, not a defect): a validly refunded renewal-headed lineage row settles the journaled purchase as 'expired' (never 'refunded') because the refund cannot be attributed to the journaled transaction; both outcomes are terminal on the device (apps/mobile/src/state/accessStore.ts L541-543) and only differ in the settled-copy string, so no billing-conservation impact."
+        ],
+        "package_id": "W07-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "226bb810ca0b2be27aa76475e127e1669305d653",
+        "scope_violation": false,
+        "summary": "APPROVE W07-02 candidate 226bb810 (branch devin/pp/w07-02/impl-r4, 2 commits on BASE 5c1859a8: test-first 731baa47 then fix 226bb810). SCOPE (VERIFIED): `git diff --stat` lists exactly supabase/functions/api/index.ts (+77/-3) and supabase/functions/api/__wf__/billing_renewal_lineage.test.ts (+801) — both in write_paths; edge-index serial group is held by this package; no out_of_scope_files; no migrations, grants, RLS, session code, mobile code or user-facing copy touched. BEHAVIOUR (INFERRED from diff + VERIFIED by tests): billingFulfilmentOf (index.ts L3169-3240) previously required a subscriber row with the exact journaled store_transaction_id AND purchase_date (`matching.length !== 1 -> pending`), so after RevenueCat replaced the latest transaction on renewal the original pending purchase stayed pending forever. Fix: `matching.length > 1 -> pending` (conflict) unchanged; when matching is empty AND subscriberIdentifiesTransaction() finds the id attributed to NO subscription or non-subscription record anywhere in the subscriber, subscriptionLineageRow() settles against the claimed product's subscription row only when original_purchase_date <= purchasedAt < purchase_date <= checkedAt and the latest transaction has a different, identifiable store id; a lineage whose access horizon <= purchasedAt is contradictory and stays pending. The refund guard (malformed/future/pre-purchase refund or refund with active entitlement -> HOLD) applies identically to lineage rows; 'refunded' is emitted only for exact-id rows (`if (lineage === null)`), a validly refunded lineage settles on access state ('expired'). Exact-id path behaviour is unchanged (matching.length===1 -> same row, same rules). The change is wired into the shipping path (POST /v1/billing/sync -> verifyBillingWithProvider -> billingFulfilmentOf, index.ts L3387/L5114-5119) and the outcome is only released to the client when persistence applied. RISK ASSESSMENT: fulfilment outcomes only settle the device's pending-purchase journal; premium/access is still derived solely from RevenueCat's entitlements + the persisted row (effectivePremium), and the mobile side additionally requires access.premium before treating 'fulfilled' as settled (accessStore.ts L544-545), so a permissive lineage cannot grant entitlement, consume or refund a credit, or touch owner isolation; 'expired' via lineage requires the claimed product's own row to have lapsed and the id to be attributed to no other (possibly active) product (pinned by tests). No test weakened/skipped/deleted; no `any`/@ts-ignore/eslint-disable/`|| true`/passWithNoTests; existing comments untouched (only new comments added); prettier --check clean on both files; git diff --check clean. INVARIANTS: none violated. ACCEPTANCE (all VERIFIED by my own runs): AC1 frozen deno@2.5.6 check exit 0; AC2 full Edge suite on disposable shim+migrated postgres 849 passed / 0 failed / 0 ignored exit 0; AC3 base 18 pass / 14 fail exit 1 -> HEAD 32 pass / 0 fail exit 0 (regression_fails_on_base=true). EXTRA: prior-round adversary suites (attack_w07_02_lineage + attack_w07_02_r3_lineage from devin/pp/w07-02/attack-1ded56a3) on HEAD: 25 passed / 1 failed; the sole failure B7b (calendar-invalid purchasedAt normalised by isoTimestamp) fails identically on BASE (exit 1) and is unrelated to lineage — recorded as non-blocking baseline. Nothing pushed, no PR opened, worktree and container removed.",
+        "verdict": "approve"
+      },
+      "round": 4
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-5"
+}

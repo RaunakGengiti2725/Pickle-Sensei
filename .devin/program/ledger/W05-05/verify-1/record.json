@@ -1,0 +1,240 @@
+{
+  "agent_counts": {
+    "completed": 2,
+    "failed": 0,
+    "launched": 2,
+    "requested": 2
+  },
+  "agents": [
+    {
+      "label": "review-W05-05-v9ef411a3",
+      "phase": "review",
+      "prompt_sha256": "dab0fcecfd5b633a176e0a75dc89712ea14bea3888aa8b6e2ed1700b581400a5",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-05-v9ef411a3",
+      "phase": "adversary",
+      "prompt_sha256": "0a1c2dbe19867f545c4f097754587cc428cfbc2aa287d2d5292a9bf4b215bca5",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "05b7f8ced11f1f8a74b1539bf3c3aa49a89cb00a",
+  "candidate": {
+    "branch": "devin/pp/w05-05/impl-r1",
+    "head_sha": "9ef411a378fc8c752930b64f7a36e169f517afc5",
+    "lane": 1,
+    "round": 1
+  },
+  "coordinator_evidence": [
+    {
+      "criterion_id": "W05-05-AC1",
+      "head_sha": "9ef411a378fc8c752930b64f7a36e169f517afc5",
+      "host": "26.7 arm64",
+      "run_id": 34407226563,
+      "run_json": "artifacts/mac-full-verify/w05-05-r1/run.json",
+      "run_url": "https://github.com/RaunakGengiti2725/Pickle-Sensei/actions/runs/34407226563",
+      "stages": [
+        {
+          "log": "environment.log",
+          "name": "environment",
+          "note": "",
+          "seconds": 18,
+          "status": "passed"
+        },
+        {
+          "log": "swift-native.log",
+          "name": "swift-native",
+          "note": "",
+          "seconds": 100,
+          "status": "passed"
+        },
+        {
+          "log": "ios-app.log",
+          "name": "ios-app",
+          "note": "",
+          "seconds": 544,
+          "status": "passed"
+        }
+      ],
+      "summary_json": "artifacts/mac-full-verify/w05-05-r1/summary.json",
+      "xcode": "Xcode 26.4.1 Build version 17E202"
+    }
+  ],
+  "integration_branch": "devin/pp/w05-05/impl-r1",
+  "kind": "candidate_verification",
+  "lib_version": "2026-09-08.9",
+  "manifest_sha256": "e432ac947feaa1ea5a920574e1137429a4fa9ab355d41a746ae44283b0317eee",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-05",
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ac9cf216-c44f-4004-8eb3-4b4829985f79/attack_wallet_run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a7ce3cec-6c9f-4f10-9121-08e29959f51e/attack_wiring.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5157fb95-e84d-46f5-9327-42655530ed95/attack_artifact_audit.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3cf4206-6d02-4ec3-844e-81c48cd9feb9/candidate_test_wallet.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1b83f0a-03fc-45de-996d-8e3b289b51b2/candidate_test_launch.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/90aeb75a-4ccc-4271-ae5d-cc73c7be458a/mac-run-34407226563-summary.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/01165cfe-c7c5-4f95-8a24-ca39aefaced9/mac-run-34407226563-wallet-summary.txt",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5d5a123c-901f-4219-af55-4722189e3318/mac-run-34407226563-wallet-store.png",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e16d1ec2-f999-4447-b693-84e39459e0da/mac-run-34407226563-wallet-restore.png"
+        ],
+        "attack_branch": "devin/pp/w05-05/attack-9ef411a3",
+        "attack_branch_sha": "bb0c2d87b12050dfabe8ffc32ddda68a8ac0d7df",
+        "attacked_sha": "9ef411a378fc8c752930b64f7a36e169f517afc5",
+        "attacks_tried": 21,
+        "breaks": [
+          {
+            "expected": "The new suite is listed in stage_scripts next to test_simulator_launch_check.sh so `scripts/verify-cloud.sh --tier pr` (CI) runs it; a test nothing runs cannot protect the helper against regressions. (Implementer's write_paths were tools/macos-ci/ only, so the omission is a scope/wiring gap rather than a helper defect.)",
+            "observed": "stage_scripts lists 6 scripts/tests/*.sh including test_simulator_launch_check.sh; test_wallet_persistence_check.sh appears 0 times. .github/workflows/ci.yml runs only scripts/verify-cloud.sh (--only ...,scripts). Exit 1 from attack_w05_05_wiring.sh (2 of 4 wiring checks broke).",
+            "repro": "git checkout 9ef411a378fc8c752930b64f7a36e169f517afc5 && git checkout devin/pp/w05-05/attack-9ef411a3 -- scripts/tests/attack_w05_05_wiring.sh && scripts/tests/attack_w05_05_wiring.sh  (case verify-cloud-runs-wallet-suite); also: sed -n '/^stage_scripts() {/,/^}/p' scripts/verify-cloud.sh | grep -c test_wallet_persistence_check.sh -> 0",
+            "severity": "P2",
+            "test_file": "scripts/tests/attack_w05_05_wiring.sh",
+            "title": "Candidate's regression suite scripts/tests/test_wallet_persistence_check.sh is not executed by any CI stage (verify-cloud stage_scripts omits it) — the red-on-base/green-on-candidate evidence is not a gate"
+          },
+          {
+            "expected": "OfflineWallet.replace() can never yield revision < 1 (nextRevision = max(stored, fence) + 1) and revisions are integers; a certifier that compares store vs restore only by equality should reject a non-positive-integer revision (a product/bridge misreport must not become a green verdict). Minor: the real product cannot produce this on the supported path (Mac run 34407226563 reported revision 1).",
+            "observed": "Fake probe returns stored.revision=0 (and separately revision=true) for both phases: helper exits 0, prints 'wallet persistence check passed: revision 0 stored ... revision 0 restored', wallet-summary.txt has wallet_persistence_ok=1, wallet_store_revision=0 / wallet_store_revision=True.",
+            "repro": "git checkout 9ef411a378fc8c752930b64f7a36e169f517afc5 && git checkout devin/pp/w05-05/attack-9ef411a3 -- scripts/tests/attack_w05_05_wallet_persistence.sh && scripts/tests/attack_w05_05_wallet_persistence.sh  (cases store-revision-zero, store-revision-bool)",
+            "severity": "P3",
+            "test_file": "scripts/tests/attack_w05_05_wallet_persistence.sh",
+            "title": "wallet-persistence-check.sh certifies any probe-reported revision, including 0 and boolean true, as wallet_persistence_ok=1"
+          },
+          {
+            "expected": "wallet_persistence_ok=0 recorded for every non-zero exit. Impact is minor because simulator-launch-check.sh treats a missing verdict as failure (fails closed).",
+            "observed": "Helper exits 1 with '::error::app bundle not found at ...' and no wallet-summary.txt is written (wallet_persistence_ok absent).",
+            "repro": "scripts/tests/attack_w05_05_wallet_persistence.sh  (case missing-app-bundle): helper invoked with a non-existent APP_PATH",
+            "severity": "P3",
+            "test_file": "scripts/tests/attack_w05_05_wallet_persistence.sh",
+            "title": "No wallet-summary.txt verdict on the earliest exit paths (e.g. app bundle missing) — the documented 'verdict on every exit path' contract does not hold before the EXIT trap is armed"
+          },
+          {
+            "expected": "Preflight names the new helper and probe source so a broken checkout fails in seconds. Outside write_paths (scripts/), so a wiring gap, not a helper defect.",
+            "observed": "Preflight loop lists select-simulator.sh inspect-environment.sh simulator-launch-check.sh pod-install.sh xcresult-summary.py check-swing-lab-extract.py describe-package.py only; a checkout missing the new helper fails only after the ~9 min Xcode build, inside simulator-launch-check.sh.",
+            "repro": "scripts/tests/attack_w05_05_wiring.sh  (case mac-full-verify-preflights-helper)",
+            "severity": "P3",
+            "test_file": "scripts/tests/attack_w05_05_wiring.sh",
+            "title": "scripts/mac-full-verify.sh missing-helper preflight does not cover wallet-persistence-check.sh / wallet-probe.m"
+          },
+          {
+            "expected": "The objective asks to 'capture logs/screenshots' as proof; two identical images prove nothing beyond the log/JSON evidence (which is consistent and does prove store→SIGKILL→restore). Minor evidentiary weakness, not a behaviour defect.",
+            "observed": "Both PNGs are 52343 bytes, md5 c71d163d69cf4c60292e2cfd4a5a3529, 750x1334, showing the launch screen (probe finishes ~1.1s after launch, before the RN UI appears, and the screenshot is taken immediately). Attack audit exit 1 (3 of 4 checks pass).",
+            "repro": "gh api repos/RaunakGengiti2725/Pickle-Sensei/actions/artifacts/10126198341/zip > art.zip && unzip art.zip -d art && scripts/tests/attack_w05_05_artifact_audit.sh art/launch  (case screenshots-distinct); cmp art/launch/wallet/wallet-store.png art/launch/wallet/wallet-restore.png",
+            "severity": "P3",
+            "test_file": "scripts/tests/attack_w05_05_artifact_audit.sh",
+            "title": "Mac run 34407226563: wallet-store.png and wallet-restore.png are byte-identical launch-screen captures (no phase-specific screenshot evidence)"
+          }
+        ],
+        "package_id": "W05-05",
+        "summary": "ADVERSARIAL RESULT for W05-05 candidate 9ef411a378fc8c752930b64f7a36e169f517afc5 (attack branch devin/pp/w05-05/attack-9ef411a3 @ bb0c2d87b12050dfabe8ffc32ddda68a8ac0d7df; no PR, no push to main/ci/mac-*, candidate code and candidate tests untouched, `scripts/mac-full-verify.sh --remote` NOT run).\n\nNo P0/P1. 21 attacks across 3 executable test files; 5 minor breaks (1 P2 wiring, 4 P3). The helper's core fail-closed contract held under every runtime boundary attack.\n\nVERIFIED (Linux, exact commands, exit codes):\n1. Baseline candidate suites on 9ef411a3: `scripts/tests/test_wallet_persistence_check.sh` exit 0 (9 cases + bash -n), `scripts/tests/test_simulator_launch_check.sh` exit 0 (candidate_test_wallet.log / candidate_test_launch.log).\n2. `scripts/tests/attack_w05_05_wallet_persistence.sh` (fake simctl/codesign/PlistBuddy/sleep + virtual pids, same technique as the candidate suite; runs the helper byte-for-byte under Bash 5): exit 1, 13 executed / 10 passed / 3 failed / 0 skipped, stable over 3 runs. PASSED (candidate failed closed, exit 1 or 143, wallet_persistence_ok=0, no success line, app + log stream stopped): sigterm-while-waiting [harness process death / CI cancel: EXIT trap ran, app terminated, exit 143], crash-after-store [crash between steps: exit 1, 1 launch, no force_quit=SIGKILL claim], survive-sigkill [SIGKILL ignored: 'survived SIGKILL', no restore launch], log-dies-after-kill [evidence channel death between kill and restore], restore-other-owner [interleaved account / owner isolation: 'owner differs from the probe owner', restored_match=0], restore-replay-previous-run [replay/rollback of an older revision-5 wallet with old nonce: revision + grants + receipts mismatch reported], restore-cleared-envelope-leak [corrupt state -> fabricated empty history: after_clear_empty=0], store-result-not-json + restore-result-not-json [corrupt/partial persisted result], stale-evidence [previous ok=1 summary/results in the artifact dir: overwritten with ok=0, stale store result removed]. BROKE: store-revision-zero, store-revision-bool (P3, revision sanity), missing-app-bundle (P3, no verdict file on the earliest exit).\n3. `scripts/tests/attack_w05_05_wiring.sh`: exit 1, 4/2/2/0. BROKE: verify-cloud stage_scripts does not run test_wallet_persistence_check.sh (P2 — CI never executes the candidate's regression suite; ci.yml only calls verify-cloud.sh), mac-full-verify preflight omits the new helper/probe (P3). PASSED: helper git mode 100755; simulator-launch-check.sh forwards wallet_persistence_ok into launch-summary.txt.\n4. `scripts/tests/attack_w05_05_artifact_audit.sh <launch>` against the downloaded artifact of run 34407226563 (artifact id 10126198341, mac-full-verify-30): exit 1, 4/3/1/0. PASSED: verdict-consistency (store pid 27147 rev 1 -> restore pid 27170, force_quit=SIGKILL, entitlement errors 0, launch-summary agrees), restore-matches-store (restore.loaded == store.stored == input, owner 0c1c0c1c-…, cleared and afterClear null), probe-log-both-pids (4 PickleWalletProbe lines from each pid). BROKE: screenshots-distinct (store/restore PNGs byte-identical, P3).\n\nW05-05-AC1 (coordinator-owned `scripts/mac-full-verify.sh --remote`): independently re-verified from GitHub, NOT run by me. `gh api .../actions/runs/34407226563`: status=completed, conclusion=success, head_sha=9ef411a378fc8c752930b64f7a36e169f517afc5 (exactly the candidate), head_branch=ci/mac-w05-05-r1, job 'scripts/mac-full-verify.sh' on runner 'mac' success. Artifact summary.json: git_sha=9ef411a3…, ok=true, stages environment/swift-native/ios-app all 'passed' (18s/100s/544s), host '26.7 arm64', Xcode 26.4.1 (17E202). launch/wallet/wallet-summary.txt: wallet_persistence_ok=1, store pid 27147 rev 1, force_quit=SIGKILL, restore pid 27170 rev 1, restored_match=1, cleared=1, after_clear_empty=1, keychain_entitlement_errors=0; ios-app.log shows 'force-quitting PickleSensei (pid 27147) with SIGKILL' then 'com.picklesensei: 27170'. acceptance_reverified: W05-05-AC1 status PASS, exit_code 0, executed/passed/failed/skipped 0/0/0/0, artifact https://github.com/RaunakGengiti2725/Pickle-Sensei/actions/runs/34407226563 (+ uploaded summary.json / wallet-summary.txt / both screenshots). Caveat (INFERRED from artifacts): the probe completes ~1.1 s after launch, so the app was killed and re-launched while still on its launch screen; the Keychain evidence is real but the screenshots do not add phase-specific proof.\n\nINFERRED/UNKNOWN: SIGTERM cleanup behaviour was verified under Linux Bash 5 only; the Mac runner's Bash version and CI-cancel signal semantics were not observed (UNKNOWN). No Apple runtime claim is made from Linux beyond reading the downloaded artifacts. shellcheck is not installed on this box (not run); prettier does not cover .sh files in this repo."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://github.com/RaunakGengiti2725/Pickle-Sensei/actions/runs/34407226563",
+            "command": "scripts/mac-full-verify.sh --remote",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-05-AC1",
+            "note": "Coordinator-owned Mac slot: GitHub Actions run 34407226563 conclusion=success on exactly 9ef411a378fc8c752930b64f7a36e169f517afc5; summary.json ok=true, stages ['environment:passed', 'swift-native:passed', 'ios-app:passed']; copies in artifacts/mac-full-verify/w05-05-r1/run.json and artifacts/mac-full-verify/w05-05-r1/summary.json.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression tests first (fixture fakes for the Mac toolchain, committed separately, proven failing at BASE_SHA in a worktree), then a probe dylib injected into the real app process via SIMCTL_CHILD_DYLD_INSERT_LIBRARIES that drives the shipping PickleOfflineWallet module through its exported Objective-C selectors, orchestrated by a bash-3.2-compatible helper wired into simulator-launch-check.sh; no mobile/native production code touched.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/21118ce7-da11-4940-b232-7347cb765ca4/w05-05-linux-evidence.tgz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/106265db-928c-4256-8a40-4a8ee9bc3809/head-test_wallet_persistence_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cfbe4933-3fdf-4131-a97e-18333c663aa8/head-test_simulator_launch_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2039e5d9-e7e8-40fa-a038-97ffe172abcf/base-test_wallet_persistence_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/eda47b4f-ea43-4152-844d-1c4064865eae/base-test_simulator_launch_check.log"
+        ],
+        "base_sha": "05b7f8ced11f1f8a74b1539bf3c3aa49a89cb00a",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w05-05/impl-r1",
+        "files_changed": [
+          "scripts/tests/test_simulator_launch_check.sh",
+          "scripts/tests/test_wallet_persistence_check.sh",
+          "tools/macos-ci/simulator-launch-check.sh",
+          "tools/macos-ci/wallet-persistence-check.sh",
+          "tools/macos-ci/wallet-probe.m"
+        ],
+        "head_sha": "9ef411a378fc8c752930b64f7a36e169f517afc5",
+        "out_of_scope_files": [
+          "scripts/tests/test_simulator_launch_check.sh — regression fixture for the launch-check wiring; under serial group ci-scripts (scripts/), which W05-05 holds; additive cases only (wallet-fail, wallet-silent) plus a fake wallet helper in the fixture's fake bin",
+          "scripts/tests/test_wallet_persistence_check.sh — new regression fixture for tools/macos-ci/wallet-persistence-check.sh; under serial group ci-scripts (scripts/), which W05-05 holds; new file, nothing existing touched"
+        ],
+        "package_id": "W05-05",
+        "regression_tests_added": [
+          "scripts/tests/test_wallet_persistence_check.sh (cases: normal, compile-fail, store-denied, probe-silent, restore-lost, restore-stale, entitlements, screenshot-fail, bash -n)",
+          "scripts/tests/test_simulator_launch_check.sh (new cases: wallet-fail, wallet-silent; every existing case now also asserts wallet_persistence_ok=1 in launch-summary.txt and that the wallet helper was invoked with udid/bundle/app/artifact-dir/pid after the launch log stream stopped)"
+        ],
+        "residual_risks": [
+          "UNVERIFIED on Apple: wallet-probe.m has not been compiled against the iPhoneSimulator SDK in this session (no Xcode on Linux); a compile or codesign error would surface as `::error::wallet probe did not compile` in probe-compile.log on the first M4 run.",
+          "UNVERIFIED on Apple: DYLD_INSERT_LIBRARIES injection into the simulator app (SIMCTL_CHILD_ prefix) and direct alloc/init of the Swift `PickleOfflineWallet` module outside the React Native bridge lifecycle; the module holds no bridge reference and serialises on its own queue (INFERRED from PickleOfflineWallet.swift), so it should work, but only the M4 run proves it.",
+          "The probe's grant uses an ES256-shaped placeholder signature (86 'A's); OfflineWalletShape.isCompactJws validates shape only (INFERRED, OfflineWallet.swift:919-927) so the wallet accepts it, and the slot is cleared at the end of every run, but if the restore phase is interrupted the synthetic owner 0c1c0c1c-0c1c-4c1c-8c1c-0c1c0c1c0c1c may leave a wallet in the simulator Keychain until the next run's store phase replaces it (the app is uninstalled by simulator-launch-check.sh's cleanup, which on the simulator also drops the app's Keychain items — INFERRED).",
+          "Host-side `kill -KILL <pid>` relies on `simctl launch` reporting the host-visible pid, which the existing launch check already depends on; if a future Xcode changes that output format both checks fail loudly rather than pass.",
+          "Regression proof exists only through direct-host fakes of PlistBuddy/codesign/xcrun; the fixtures model promise envelopes, pids and the Keychain deterministically but cannot stand in for Apple runtime evidence."
+        ],
+        "round": 1,
+        "summary": "Gap on BASE_SHA (INFERRED from code): tools/macos-ci/simulator-launch-check.sh (the only simulator step scripts/mac-full-verify.sh runs, mac-full-verify.sh line ~`simulator-launch-check.sh \"$UDID\" \"$BUNDLE_ID\" \"$APP_PATH\" ...`) only proves launch survival — it installs, launches once, screenshots, checks the pid after SETTLE_SECONDS, scans crash reports and the -34018 entitlement string in the unified log (simulator-launch-check.sh:118-190 on base). Nothing on the Mac plane ever stored wallet contents through the shipping Keychain wallet (apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift -> native/vision-core/Sources/OfflineWallet.swift KeychainOfflineWalletStore, service com.picklesensei.offline.wallet, kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly), killed the process and read them back, so 'wallet persistence across kill' had no evidence at all; base launch-summary.txt has no wallet field. Fix (all inside write_paths tools/macos-ci/): (1) tools/macos-ci/wallet-probe.m — an Objective-C dylib compiled per run for the iPhoneSimulator SDK (app's own archs + MinimumOSVersion), ad-hoc signed, injected via SIMCTL_CHILD_DYLD_INSERT_LIBRARIES into the installed Release app; inside the process it resolves the real `PickleOfflineWallet` RN module (NSClassFromString) and calls its exported selectors loadWallet/replaceWallet/clearWallet/discardCorruptWallet exactly as the bridge does (so the bytes reaching the Keychain are the product's sealed envelopes under the same certificate-free signature), with a `store` phase (load, discard known-unreadable leftover state, replace at the loaded revision) and a `restore` phase (load, clear at the read-back revision, load again → must be empty), each writing a JSON result atomically and logging under the `PickleWalletProbe` tag. (2) tools/macos-ci/wallet-persistence-check.sh — compiles/signs the probe, stops the running instance, starts a unified log stream, generates a fresh non-secret payload in the exact validated shape (canonical UUID owner, ES256-length compact JWS grant, `result` receipt, nonce per run), launches the store phase, waits for its result while requiring the app and log stream alive, screenshots (wallet-store.png), SIGKILLs the pid from the host, relaunches the restore phase, screenshots (wallet-restore.png), compares ownerId/revision/grants/receipts against both the store snapshot and the input, requires clear + empty-after-clear, scans the log for -34018 / missing keychain-access-groups, and writes wallet-summary.txt (wallet_persistence_ok=0|1 plus pids, revisions, force_quit=SIGKILL, match/cleared flags, entitlement error count, log-stream status); every failure mode exits non-zero and never reports ok. (3) simulator-launch-check.sh runs the helper after the plain launch settles (same install, same signature, passes the live pid), fails on helper failure or a missing verdict, and adds wallet_persistence_ok to launch-summary.txt — so the shipping Mac path (`scripts/mac-full-verify.sh` → simulator-launch-check.sh) now carries the store→kill→restore evidence as behaviour. Regression-first: scripts/tests/test_wallet_persistence_check.sh (new, 9 cases with fake PlistBuddy/codesign/xcrun modelling launch pids, a fake Keychain that survives SIGKILL, promise-envelope results, screenshots and the log stream) and two new cases + wallet assertions in scripts/tests/test_simulator_launch_check.sh were committed first (4ea5325f) and fail on BASE_SHA (exit 1 each), then the implementation (9ef411a3) makes them pass. Branch pushed: devin/pp/w05-05/impl-r1 @ 9ef411a378fc8c752930b64f7a36e169f517afc5. AC1 is UNKNOWN: the exact acceptance command is coordinator-only and was not run; no Apple runtime claim is made from Linux."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://github.com/RaunakGengiti2725/Pickle-Sensei/actions/runs/34407226563",
+            "command": "scripts/mac-full-verify.sh --remote (coordinator-owned; NOT re-run by reviewer — verified via GitHub Actions API: `gh api repos/RaunakGengiti2725/Pickle-Sensei/actions/runs/34407226563` and the run's uploaded artifact `mac-full-verify-30`)",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-05-AC1",
+            "note": "VERIFIED: run 34407226563 name='Mac Full Verify', event=push, head_branch=ci/mac-w05-05-r1, head_sha=9ef411a378fc8c752930b64f7a36e169f517afc5 (exactly the candidate), status=completed, conclusion=success; job 'scripts/mac-full-verify.sh' on runner 'mac' all steps success. Downloaded artifact 10126198341: summary.json git_sha=9ef411a3…, ok=true, stages environment/swift-native/ios-app all 'passed' (18s/100s/544s), host '26.7 arm64', Xcode 26.4.1 (17E202). Wallet evidence inside the artifact: launch/launch-summary.txt has alive_after_25s=1, crash_reports=0, keychain_entitlement_errors=0, wallet_persistence_ok=1; launch/wallet/wallet-summary.txt: wallet_store_pid=27147, wallet_store_revision=1, wallet_force_quit=SIGKILL, wallet_restore_pid=27170 (a different pid — the process really was killed), wallet_restore_revision=1, wallet_restored_match=1, wallet_cleared=1, wallet_after_clear_empty=1, wallet_keychain_entitlement_errors=0, wallet_probe_log_lines=8; probe-compile.log empty (clean compile); wallet-store-result.json / wallet-restore-result.json carry identical grants/receipts for nonce 548ac013e54e5b07 and the restore result shows cleared.resolved=null and afterClear.resolved=null; wallet-store.png and wallet-restore.png are real 750x1334 simulator screenshots; unified log shows 8 PickleWalletProbe lines across pids 27147/27170 (store written → restore read back → cleared). ios-app.log line 159: 'launch check passed: PickleSensei stayed alive for 25s … and wallet contents survived force-quit'. Reviewer copies: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d93790f3-3631-4d06-aedd-f27690568dde/mac-summary.json , https://la-hacks-rttothemoon.devinenterprise.com/attachments/b6186398-28d4-44e8-9b0e-56fcd9b63117/mac-wallet-summary.txt , https://la-hacks-rttothemoon.devinenterprise.com/attachments/d32f9e33-2f68-4b58-ac8f-8fd75ef80444/mac-launch-summary.txt , https://la-hacks-rttothemoon.devinenterprise.com/attachments/39056db2-c212-46d5-9b9a-3f39455fd5cd/mac-ios-app.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/4ffe23f3-72f8-4bc3-a237-a892106ab0ac/mac-wallet-log-stream.txt , https://la-hacks-rttothemoon.devinenterprise.com/attachments/7b1cfd7d-d13d-45c9-9c6c-c1822e6ae208/mac-wallet-store.png , https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f66382a-e2ea-4bc6-a78e-501e83cd6296/mac-wallet-restore.png",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "scripts/verify-cloud.sh:268-277 (stage_scripts) runs scripts/tests/test_simulator_launch_check.sh but NOT the new scripts/tests/test_wallet_persistence_check.sh, so the 9-case fixture for tools/macos-ci/wallet-persistence-check.sh is not wired into any Linux CI gate and only runs when invoked by hand. scripts/ is in the ci-scripts group this package holds; add the one line to stage_scripts in a follow-up (the launch-check fixture, which IS gated, does cover the wiring and verdict propagation).",
+          "scripts/mac-full-verify.sh:138-141 checks for the presence of the other tools/macos-ci helpers up front but not wallet-persistence-check.sh / wallet-probe.m; a missing file would still fail loudly later (simulator-launch-check.sh reports 'wallet persistence check failed (status 127)'), so this is cosmetic.",
+          "tools/macos-ci/wallet-persistence-check.sh:334 grep alternation 'Code=-34018|-34018|…' — the first alternative is subsumed by the second; harmless.",
+          "The wallet-store.png / wallet-restore.png screenshots are taken ~1-2s after launch and show the app's splash/launch screen (black circle on white), not a wallet UI — expected, since the probe drives the native module directly and the app has no wallet screen; the JSON results + unified log are the substantive evidence, screenshots only prove the app process was on screen."
+        ],
+        "package_id": "W05-05",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "9ef411a378fc8c752930b64f7a36e169f517afc5",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope (VERIFIED, `git diff --stat 05b7f8ce..9ef411a3`): 5 files — tools/macos-ci/{simulator-launch-check.sh,wallet-persistence-check.sh,wallet-probe.m} are inside write_paths; scripts/tests/test_wallet_persistence_check.sh (new) and scripts/tests/test_simulator_launch_check.sh (additive: new fake wallet helper, two new cases wallet-fail/wallet-silent, extra wallet assertions on existing cases; only line removed is the chmod list that gained a file) are under scripts/ = serial group ci-scripts which W05-05 holds and are declared in out_of_scope_files → justified wiring, scope_violation=false. Objective met as shipped behaviour (VERIFIED from the Mac artifact, INFERRED from code): scripts/mac-full-verify.sh:294 → tools/macos-ci/simulator-launch-check.sh → (new, lines 143-153) tools/macos-ci/wallet-persistence-check.sh, which compiles/ad-hoc-signs wallet-probe.m for the iPhoneSimulator SDK, injects it via SIMCTL_CHILD_DYLD_INSERT_LIBRARIES into the same Release install, drives the real @objc(PickleOfflineWallet) module (selectors loadWallet:resolver:rejecter:, replaceWallet:expectedRevision:contents:…, clearWallet:…, discardCorruptWallet:… match apps/mobile/ios/LocalPods/PickleNative/Sources/PickleOfflineWallet.swift:24-62), SIGKILLs the pid from the host, relaunches, compares ownerId/revision/grants/receipts to both the store snapshot and the input, requires clear + empty-after-clear, scans for -34018, and writes wallet_persistence_ok into launch-summary.txt; every failure path exits non-zero. AC1 (coordinator-owned, not re-run): GitHub run 34407226563 is conclusion=success on exactly 9ef411a3, summary.json ok=true with all 3 stages passed, and the uploaded artifact contains the real store→SIGKILL→restore evidence (store pid 27147 → restore pid 27170, revision 1 identical contents, cleared, 0 entitlement errors, 8 probe log lines, two screenshots). Regression proof (VERIFIED): on BASE_SHA worktree with only the two test files copied over — `bash scripts/tests/test_wallet_persistence_check.sh` exit 1 (helper missing: 'cp: cannot stat …/tools/macos-ci/wallet-persistence-check.sh'), `bash scripts/tests/test_simulator_launch_check.sh` exit 1 ('launch summary lacks the wallet verdict: normal-signal'); on candidate HEAD both exit 0 — wallet fixture 9/9 PASS lines (normal, compile-fail, store-denied, probe-silent, restore-lost, restore-stale, entitlements, screenshot-fail, bash -n), launch fixture 16/16 PASS lines incl. wallet-fail and wallet-silent (logs: https://la-hacks-rttothemoon.devinenterprise.com/attachments/57f69a0b-4a17-454f-a447-9792a99b2d2e/head-test_wallet_persistence_check.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3853f55-6b97-4448-b6d5-809b20212511/head-test_simulator_launch_check.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/695e1977-fe30-49ec-bcbb-4ae3456d9e77/base-test_wallet_persistence_check.log , https://la-hacks-rttothemoon.devinenterprise.com/attachments/19d8754f-25b1-4737-936f-9d9eb80c0ad2/base-test_simulator_launch_check.log ). Invariants (VERIFIED by reading the full diff): no test weakened/deleted/reordered, no `|| true` / `--passWithNoTests` / `@ts-ignore` / `any` / `eslint-disable`, no force-exit; no existing comments modified (diff removes only 2 non-comment lines, both replaced additively); no migrations, RLS, grants, edge fn, mobile src, native pod or workflow files touched; no production code touched (probe is injected only in CI, nothing linked into the product); no secrets stored/printed (synthetic owner UUID, placeholder ES256-length signature, per-run nonce; wallet slot cleared at end); no user-facing copy; mac-full-verify.yml untouched (no pull_request trigger added). Not run by reviewer: the Apple command itself (coordinator-only, per instructions); shellcheck not installed on this box and not part of any repo gate. Non-blocking: the new wallet fixture is not yet listed in scripts/verify-cloud.sh stage_scripts (see non_blocking_issues).",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "status": "ACCEPTED",
+  "wave_id": "verify-1"
+}

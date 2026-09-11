@@ -5,18 +5,22 @@ import {
 import type { ConsentFetch } from '../../src/account/consentApi';
 import { MODEL_TRAINING_CONSENT_VERSION } from '../../src/account/consentApi';
 import { useConsentStore } from '../../src/state/consentStore';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 
 const sessionA = {
   apiBaseUrl: 'https://api.test',
   bearerToken: 'token-a',
-  canonicalAppUserId: 'a0000000-0000-0000-0000-00000000000a',
+  canonicalAppUserId: 'a0000000-0000-4000-8000-00000000000a',
   provider: 'apple' as const,
 };
 
 const sessionB = {
   apiBaseUrl: 'https://api.test',
   bearerToken: 'token-b',
-  canonicalAppUserId: 'b0000000-0000-0000-0000-00000000000b',
+  canonicalAppUserId: 'b0000000-0000-4000-8000-00000000000b',
   provider: 'google' as const,
 };
 
@@ -74,15 +78,18 @@ function resetStore() {
 describe('consentStore stale-session guard', () => {
   beforeEach(() => {
     resetStore();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
   });
 
   it('a consent fetch resolving after sign-out keeps the signed-out state', async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     const pending = deferredFetch(statusBody(true));
     const inFlight = useConsentStore.getState().hydrate(pending.fetchFn);
     expect(useConsentStore.getState().availability).toBe('loading');
 
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
     await useConsentStore.getState().hydrate();
     expect(useConsentStore.getState().availability).toBe('signed_out');
@@ -97,10 +104,12 @@ describe('consentStore stale-session guard', () => {
   });
 
   it('a consent fetch failing after sign-out does not surface the old account error', async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     const pending = deferredFetch(null);
     const inFlight = useConsentStore.getState().hydrate(pending.fetchFn);
 
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
     await useConsentStore.getState().hydrate();
 
@@ -113,11 +122,14 @@ describe('consentStore stale-session guard', () => {
   });
 
   it("a previous account's late response never overwrites the next account's ledger", async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     const pendingA = deferredFetch(statusBody(true));
     const inFlightA = useConsentStore.getState().hydrate(pendingA.fetchFn);
 
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
+    setActiveDataOwner(sessionB.canonicalAppUserId);
     establishApiSession(sessionB);
     const fetchB = jest.fn(() =>
       Promise.resolve(jsonResponse(statusBody(false))),
@@ -155,6 +167,7 @@ describe('consentStore stale-session guard', () => {
   });
 
   it('a grant that lands after sign-out leaves the store signed out and not busy', async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     useConsentStore.setState({ availability: 'ready' });
     const pending = deferredFetch(statusBody(true));
@@ -163,6 +176,7 @@ describe('consentStore stale-session guard', () => {
       .setModelTrainingConsent(true, pending.fetchFn);
     expect(useConsentStore.getState().busy).toBe(true);
 
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
     await useConsentStore.getState().hydrate();
 
@@ -177,6 +191,7 @@ describe('consentStore stale-session guard', () => {
   });
 
   it('a grant that lands after an account switch only clears busy', async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     useConsentStore.setState({ availability: 'ready' });
     const pending = deferredFetch(statusBody(true));
@@ -184,7 +199,9 @@ describe('consentStore stale-session guard', () => {
       .getState()
       .setModelTrainingConsent(true, pending.fetchFn);
 
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     clearApiSession();
+    setActiveDataOwner(sessionB.canonicalAppUserId);
     establishApiSession(sessionB);
     const fetchB = jest.fn(() =>
       Promise.resolve(jsonResponse(statusBody(false))),
@@ -201,6 +218,7 @@ describe('consentStore stale-session guard', () => {
   });
 
   it('a response for the still-signed-in account is applied normally', async () => {
+    setActiveDataOwner(sessionA.canonicalAppUserId);
     establishApiSession(sessionA);
     const fetchFn = jest.fn(() =>
       Promise.resolve(jsonResponse(statusBody(true))),

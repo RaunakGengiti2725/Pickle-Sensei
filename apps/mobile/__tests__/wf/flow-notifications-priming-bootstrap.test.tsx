@@ -19,6 +19,10 @@ import {
 } from '../../src/data/accountScope';
 import { buildNotificationPlan } from '../../src/notifications/plan';
 import {
+  buildConsistencySnapshot,
+  type ConsistencySnapshot,
+} from '../../src/consistency/engine';
+import {
   COMEBACK_COPY,
   practiceReminderCopy,
   streakDefenseCopy,
@@ -89,26 +93,59 @@ jest.mock('../../src/notifications/service', () => ({
   getScheduler: () => mockScheduler,
 }));
 
-const mockSnapshot = {
+const mockSnapshot: ConsistencySnapshot = {
+  ...buildConsistencySnapshot([], {
+    asOfIso: '2026-08-25T10:00:00Z',
+    timeZone: 'UTC',
+  }),
   currentStreak: 3,
   trainedToday: false,
   totalActivities: 9,
   shieldsAvailable: 1,
-  nextStreakMilestone: null as null | {
-    title: string;
-    days: number;
-    daysAway: number;
-  },
+  nextStreakMilestone: null,
 };
-jest.mock('../../src/consistency/store', () => ({
-  computeConsistencySnapshot: async () => mockSnapshot,
+const mockComputeConsistencySnapshot = jest.fn(async () => ({
+  ...mockSnapshot,
 }));
+jest.mock('../../src/consistency/store', () => {
+  const { create } = jest.requireActual<typeof import('zustand')>('zustand');
+  return {
+    computeConsistencySnapshot: () => mockComputeConsistencySnapshot(),
+    useConsistencyStore: create(() => ({
+      ownerKey: null as string | null,
+      snapshot: null as ConsistencySnapshot | null,
+      loadError: false,
+    })),
+  };
+});
 
 import { useNotificationStore } from '../../src/notifications/notificationStore';
 import { NotificationPrimingCard } from '../../src/notifications/NotificationPrimingCard';
 import { useNotificationBootstrap } from '../../src/notifications/useNotificationBootstrap';
+import { useConsistencyStore } from '../../src/consistency/store';
 
 const owner = '66666666-6666-4666-8666-666666666666';
+const otherOwner = '77777777-7777-4777-8777-777777777777';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function publishSnapshot(
+  patch: Partial<ConsistencySnapshot> = {},
+  forOwner = owner,
+) {
+  Object.assign(mockSnapshot, patch);
+  useConsistencyStore.setState({
+    ownerKey: forOwner,
+    snapshot: { ...mockSnapshot },
+    loadError: false,
+  });
+}
 
 function resetStore() {
   useNotificationStore.setState({
@@ -211,9 +248,21 @@ beforeEach(() => {
   mockKvTable.clear();
   resetScheduler();
   resetStore();
+  mockSnapshot.asOfDay = '2026-08-25';
+  mockSnapshot.timeZone = 'UTC';
   mockSnapshot.trainedToday = false;
   mockSnapshot.currentStreak = 3;
+  mockSnapshot.totalActivities = 9;
+  mockSnapshot.shieldsAvailable = 1;
   mockSnapshot.nextStreakMilestone = null;
+  mockComputeConsistencySnapshot
+    .mockReset()
+    .mockImplementation(async () => ({ ...mockSnapshot }));
+  useConsistencyStore.setState({
+    ownerKey: null,
+    snapshot: null,
+    loadError: false,
+  });
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
@@ -353,6 +402,7 @@ describe('Home priming card', () => {
 describe('App bootstrap (owner changes + foreground)', () => {
   let appStateHandler: ((state: string) => void) | null = null;
   let removed = 0;
+  const initialAppState = AppState.currentState;
 
   function Host({ ownerKey }: { ownerKey: string | null }) {
     useNotificationBootstrap(ownerKey);
@@ -360,6 +410,7 @@ describe('App bootstrap (owner changes + foreground)', () => {
   }
 
   beforeEach(() => {
+    AppState.currentState = 'active';
     appStateHandler = null;
     removed = 0;
     jest
@@ -372,6 +423,10 @@ describe('App bootstrap (owner changes + foreground)', () => {
       });
   });
 
+  afterEach(() => {
+    AppState.currentState = initialAppState;
+  });
+
   async function renderHost(ownerKey: string | null) {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -380,6 +435,240 @@ describe('App bootstrap (owner changes + foreground)', () => {
     await flush();
     return renderer;
   }
+
+  async function renderEnabledHost() {
+    setActiveDataOwner(owner);
+    mockScheduler.permission = 'granted';
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({ ...DEFAULT_NOTIFICATION_PREFS, enabled: true }),
+    );
+    publishSnapshot();
+    const renderer = await renderHost(owner);
+    mockScheduler.appliedPlans = [];
+    mockScheduler.cancelAllCalls = 0;
+    mockComputeConsistencySnapshot.mockClear();
+    return renderer;
+  }
+
+  it.each(['stroke', 'session_stroke', 'drill'] as const)(
+    're-arms streak defense after meaningful %s activity without a foreground transition or permission prompt',
+    async kind => {
+      const renderer = await renderEnabledHost();
+      try {
+        const permissionChecks = mockScheduler.permissionStateCalls;
+        await act(async () => {
+          publishSnapshot(
+            buildConsistencySnapshot(
+              [
+                {
+                  kind,
+                  atIso: '2026-08-25T12:00:00Z',
+                  resultKind: 'low_confidence',
+                },
+              ],
+              { asOfIso: '2026-08-25T12:00:00Z', timeZone: 'UTC' },
+            ),
+          );
+        });
+        await flush();
+        expect(mockScheduler.appliedPlans).toHaveLength(1);
+        const streak = mockScheduler.appliedPlans[0]!.find(
+          item => item.id === 'ps.reminder.streak',
+        );
+        expect(new Date(streak!.timestampMs).getDate()).toBe(26);
+        expect(mockScheduler.permissionStateCalls).toBe(permissionChecks);
+        expect(mockScheduler.requestCalls).toBe(0);
+      } finally {
+        await unmount(renderer);
+      }
+    },
+  );
+
+  it('coalesces bursts and ignores unchanged snapshots, ceremony state, and failed refreshes', async () => {
+    const renderer = await renderEnabledHost();
+    try {
+      await act(async () => {
+        publishSnapshot();
+        useConsistencyStore.setState({ daySecured: null, celebration: null });
+        publishSnapshot({ momentumXp: mockSnapshot.momentumXp + 20 });
+        useConsistencyStore.setState({ loadError: true });
+      });
+      await flush();
+      expect(mockScheduler.appliedPlans).toEqual([]);
+      expect(mockComputeConsistencySnapshot).not.toHaveBeenCalled();
+      await act(async () => {
+        publishSnapshot({ trainedToday: true, totalActivities: 10 });
+        publishSnapshot({ totalActivities: 11 });
+        publishSnapshot({ totalActivities: 12 });
+      });
+      await flush();
+      expect(mockScheduler.appliedPlans).toHaveLength(1);
+      expect(mockComputeConsistencySnapshot).toHaveBeenCalledTimes(1);
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
+  it('keeps at most one sync in flight and follows it with one coalesced fresh pass', async () => {
+    const renderer = await renderEnabledHost();
+    const pending = deferred<ConsistencySnapshot>();
+    try {
+      mockComputeConsistencySnapshot.mockReturnValueOnce(pending.promise);
+      await act(async () => publishSnapshot({ totalActivities: 10 }));
+      await flush();
+      expect(mockComputeConsistencySnapshot).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        publishSnapshot({ totalActivities: 11, trainedToday: true });
+        publishSnapshot({ totalActivities: 12 });
+        appStateHandler!('active');
+      });
+      await flush();
+      expect(mockComputeConsistencySnapshot).toHaveBeenCalledTimes(1);
+      expect(mockScheduler.appliedPlans).toEqual([]);
+      await act(async () =>
+        pending.resolve({ ...mockSnapshot, trainedToday: false }),
+      );
+      await flush();
+      expect(mockComputeConsistencySnapshot).toHaveBeenCalledTimes(2);
+      const streak = mockScheduler.appliedPlans
+        .at(-1)!
+        .find(item => item.id === 'ps.reminder.streak');
+      expect(new Date(streak!.timestampMs).getDate()).toBe(26);
+    } finally {
+      pending.resolve({ ...mockSnapshot });
+      await unmount(renderer);
+    }
+  });
+
+  it('does not sync activity in the background and coalesces it with the next foreground check', async () => {
+    const renderer = await renderEnabledHost();
+    try {
+      const checks = mockScheduler.permissionStateCalls;
+      await act(async () => {
+        appStateHandler!('background');
+        publishSnapshot({ trainedToday: true, totalActivities: 10 });
+      });
+      await flush();
+      expect(mockScheduler.appliedPlans).toEqual([]);
+      expect(mockScheduler.permissionStateCalls).toBe(checks);
+      await act(async () => {
+        appStateHandler!('active');
+        publishSnapshot({ totalActivities: 11 });
+        appStateHandler!('active');
+      });
+      await flush();
+      expect(mockScheduler.appliedPlans).toHaveLength(1);
+      expect(mockScheduler.permissionStateCalls).toBe(checks + 1);
+    } finally {
+      await unmount(renderer);
+    }
+  });
+
+  it('unsubscribes and drops queued work when the hook unmounts', async () => {
+    const renderer = await renderEnabledHost();
+    act(() => {
+      publishSnapshot({ totalActivities: 10 });
+      renderer.unmount();
+    });
+    publishSnapshot({ totalActivities: 11 });
+    appStateHandler!('active');
+    await flush();
+    expect(mockScheduler.appliedPlans).toEqual([]);
+    expect(mockComputeConsistencySnapshot).not.toHaveBeenCalled();
+    expect(removed).toBe(1);
+  });
+
+  it('does not schedule after an in-flight context load resolves following unmount', async () => {
+    const renderer = await renderEnabledHost();
+    const pending = deferred<ConsistencySnapshot>();
+    mockComputeConsistencySnapshot.mockReturnValueOnce(pending.promise);
+    await act(async () => publishSnapshot({ totalActivities: 10 }));
+    await flush();
+    expect(mockComputeConsistencySnapshot).toHaveBeenCalledTimes(1);
+    await unmount(renderer);
+    await act(async () => pending.resolve({ ...mockSnapshot }));
+    await flush();
+    expect(mockScheduler.appliedPlans).toEqual([]);
+  });
+
+  it('does not continue a foreground permission refresh after unmount', async () => {
+    const renderer = await renderEnabledHost();
+    const pending = deferred<PermissionState>();
+    jest
+      .spyOn(mockScheduler, 'permissionState')
+      .mockReturnValueOnce(pending.promise);
+    await act(async () => appStateHandler!('active'));
+    await flush();
+    await unmount(renderer);
+    await act(async () => pending.resolve('granted'));
+    await flush();
+    expect(mockScheduler.appliedPlans).toEqual([]);
+    expect(mockComputeConsistencySnapshot).not.toHaveBeenCalled();
+  });
+
+  it('rejects pending and stale-owner activity after an owner switch', async () => {
+    const renderer = await renderEnabledHost();
+    const pending = deferred<ConsistencySnapshot>();
+    try {
+      mockComputeConsistencySnapshot.mockReturnValueOnce(pending.promise);
+      await act(async () => publishSnapshot({ totalActivities: 10 }));
+      await flush();
+      setActiveDataOwner(otherOwner);
+      await act(async () => renderer.update(<Host ownerKey={otherOwner} />));
+      await flush();
+      await act(async () => {
+        pending.resolve({ ...mockSnapshot });
+        publishSnapshot({ totalActivities: 11 }, owner);
+      });
+      await flush();
+      expect(mockScheduler.appliedPlans).toEqual([]);
+      expect(useNotificationStore.getState().ownerKey).toBe(otherOwner);
+      expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+    } finally {
+      pending.resolve({ ...mockSnapshot });
+      await unmount(renderer);
+    }
+  });
+
+  it('rejects in-flight work across an owner round-trip before the hook rerenders', async () => {
+    const renderer = await renderEnabledHost();
+    const pending = deferred<ConsistencySnapshot>();
+    try {
+      mockComputeConsistencySnapshot.mockReturnValueOnce(pending.promise);
+      await act(async () => publishSnapshot({ totalActivities: 10 }));
+      await flush();
+      setActiveDataOwner(otherOwner);
+      setActiveDataOwner(owner);
+      await act(async () => pending.resolve({ ...mockSnapshot }));
+      await flush();
+      expect(mockScheduler.appliedPlans).toEqual([]);
+      await act(async () => renderer.update(<Host ownerKey={owner} />));
+      await flush();
+      expect(mockScheduler.appliedPlans).toHaveLength(1);
+    } finally {
+      pending.resolve({ ...mockSnapshot });
+      await unmount(renderer);
+    }
+  });
+
+  it('contains scheduler failures and retries on the next meaningful activity', async () => {
+    const renderer = await renderEnabledHost();
+    try {
+      jest
+        .spyOn(mockScheduler, 'applyPlan')
+        .mockRejectedValueOnce(new Error('scheduler unavailable'));
+      await act(async () => publishSnapshot({ totalActivities: 10 }));
+      await flush();
+      expect(useNotificationStore.getState().scheduleFailed).toBe(true);
+      await act(async () => publishSnapshot({ totalActivities: 11 }));
+      await flush();
+      expect(mockScheduler.appliedPlans).toHaveLength(1);
+      expect(useNotificationStore.getState().scheduleFailed).toBe(false);
+    } finally {
+      await unmount(renderer);
+    }
+  });
 
   it('waits for auth (null owner), then hydrates the real owner OFF by default with nothing scheduled', async () => {
     const renderer = await renderHost(null);

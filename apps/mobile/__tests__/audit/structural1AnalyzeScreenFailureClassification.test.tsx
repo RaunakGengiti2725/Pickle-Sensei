@@ -22,9 +22,7 @@ jest.mock('../../src/data/repository', () => ({
   getKv: jest.fn(() => Promise.resolve(null)),
   setKv: jest.fn(() => Promise.resolve()),
 }));
-jest.mock('../../src/account/apiSession', () => ({
-  getApiSession: jest.fn(() => null),
-}));
+
 jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
   runCaptureAnalysis: jest.fn(),
 }));
@@ -46,6 +44,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../../src/camera/capture', () => ({
+  ...jest.requireActual('../../src/camera/capture'),
   subscribeToCameraEvents: () => () => {},
   captureStrokeVideo: jest.fn(),
   importStrokeVideo: jest.fn(),
@@ -54,6 +53,14 @@ jest.mock('../../src/camera/capture', () => ({
 
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
+import {
+  establishApiSession,
+  clearApiSession,
+} from '../../src/account/apiSession';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
 import {
   armTryAgain,
@@ -132,11 +139,20 @@ describe('structural audit #1 — AnalyzeScreen run() failure classification', (
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    setActiveDataOwner('11111111-1111-4111-8111-111111111111');
+    establishApiSession({
+      apiBaseUrl: 'https://api.test',
+      bearerToken: 'token',
+      canonicalAppUserId: '11111111-1111-4111-8111-111111111111',
+      provider: 'apple',
+    });
     stabilitySlo.reset();
     usabilityFunnel.reset();
   });
 
   afterEach(() => {
+    clearApiSession();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     consumeTryAgainHandoff();
     jest.useRealTimers();
   });

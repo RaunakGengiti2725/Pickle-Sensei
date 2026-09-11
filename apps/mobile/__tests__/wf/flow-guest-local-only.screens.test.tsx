@@ -171,7 +171,12 @@ import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import { useAppStore } from '../../src/state/appStore';
 import { useAccessStore } from '../../src/state/accessStore';
 import { useConsentStore } from '../../src/state/consentStore';
-import { clearApiSession, getApiSession } from '../../src/account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  getApiSession,
+  type ApiSession,
+} from '../../src/account/apiSession';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -338,7 +343,7 @@ describe('SettingsScreen — guest', () => {
 
     const copy = allText(renderer);
     expect(copy).toContain('LOCAL');
-    expect(copy).toContain('Guest · this device');
+    expect(copy).toContain('Local · this device');
     expect(copy).not.toContain('SYNCED');
     expect(pressables(renderer, 'Manage account, Details')).toHaveLength(0);
     expect(copy).not.toContain('Manage account');
@@ -724,6 +729,31 @@ function visibleModalOf(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe('ManageAccountScreen', () => {
+  const deletionApiSession: ApiSession = {
+    apiBaseUrl: 'https://api.example.test',
+    bearerToken: 'test-deletion-access-token',
+    canonicalAppUserId: syncedSession.canonicalAppUserId!,
+    provider: 'google',
+  };
+
+  function asSyncedForDeletion() {
+    asSynced();
+    // Deletion captures the canonical owner at presentation and checks the
+    // matching API session before either request. A signed-out owner is not
+    // a valid nominal synced-account fixture.
+    setActiveDataOwner(deletionApiSession.canonicalAppUserId);
+    establishApiSession(deletionApiSession);
+  }
+
+  beforeEach(() => {
+    mockRequestAccountDeletion.mockReset();
+    mockConfirmAccountDeletion.mockReset();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('a guest sees LOCAL details and no Delete account control', () => {
     asGuest();
     const renderer = render(<ManageAccountScreen />);
@@ -735,7 +765,7 @@ describe('ManageAccountScreen', () => {
   });
 
   it('synced: cancelling the deletion dialog from every page and control deletes nothing, and re-opening starts the survey over', async () => {
-    asSynced();
+    asSyncedForDeletion();
     const renderer = render(<ManageAccountScreen />);
 
     const cancelPaths: Array<{ reach: () => Promise<void>; cancel: string }> = [
@@ -794,7 +824,7 @@ describe('ManageAccountScreen', () => {
   });
 
   it('synced: a failed deletion request shows copy, returns to review, and nothing is deleted', async () => {
-    asSynced();
+    asSyncedForDeletion();
     mockRequestAccountDeletion.mockRejectedValue(new Error('boom'));
     const renderer = render(<ManageAccountScreen />);
 
@@ -806,7 +836,10 @@ describe('ManageAccountScreen', () => {
 
     // A skipped survey sends nothing: the request carries a null survey.
     expect(mockRequestAccountDeletion).toHaveBeenCalledTimes(1);
-    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
+      deletionApiSession,
+      null,
+    );
     expect(allText(renderer)).toContain(
       'The deletion request could not be completed. Nothing was deleted.',
     );
@@ -819,7 +852,7 @@ describe('ManageAccountScreen', () => {
   });
 
   it('synced: while requesting, every dialog control is disabled (double-tap guard, no dismiss) and busy ends on failure', async () => {
-    asSynced();
+    asSyncedForDeletion();
     let rejectRequest!: (error: Error) => void;
     mockRequestAccountDeletion.mockReturnValue(
       new Promise((_resolve, reject) => {
@@ -866,9 +899,9 @@ describe('ManageAccountScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('synced: a failed confirm keeps the account, shows copy, and re-arms the final button', async () => {
+  it('synced: an unknown confirm outcome keeps local state, shows uncertainty, and offers a retry', async () => {
     jest.useFakeTimers();
-    asSynced();
+    asSyncedForDeletion();
     mockRequestAccountDeletion.mockResolvedValue({
       challenge: 'challenge-1',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -896,19 +929,24 @@ describe('ManageAccountScreen', () => {
       await Promise.resolve();
     });
 
+    expect(mockConfirmAccountDeletion).toHaveBeenCalledTimes(1);
     expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
-      null,
+      deletionApiSession,
       'challenge-1',
     );
-    expect(allText(renderer)).toContain(
-      'The deletion could not be completed. Nothing was deleted.',
+    const copy = allText(renderer);
+    expect(copy).toContain('Deletion status unknown');
+    expect(copy).toContain(
+      'We could not confirm whether your account was deleted. The request may have completed.',
     );
-    expect(pressable(renderer, 'Permanently delete').props.disabled).toBe(
-      false,
-    );
+    expect(copy).not.toContain('Nothing was deleted');
+    expect(pressable(renderer, 'Retry deletion').props.disabled).toBe(false);
     expect(useAuthStore.getState().session).toEqual(syncedSession);
-    expect(pressable(renderer, 'Keep my account').props.disabled).toBe(false);
+    expect(getActiveDataOwner()).toBe(deletionApiSession.canonicalAppUserId);
+    expect(getApiSession()).toBe(deletionApiSession);
+    expect(pressable(renderer, 'Close').props.disabled).toBe(false);
+    // Closing cannot promise to keep an account the server may have deleted.
+    expect(pressables(renderer, 'Keep my account')).toHaveLength(0);
     act(() => renderer.unmount());
-    jest.useRealTimers();
   });
 });

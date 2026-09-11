@@ -137,6 +137,44 @@ export interface LimitingFactorCopy {
   ledger: string | null;
 }
 
+/**
+ * Capture-quality advisories the pre-analysis gate measured on a DEGRADED but
+ * still scored read (`capture_quality:<reason>`, analysis-pipeline
+ * `ADVISORY_GATE_REASONS`). Each says what the camera could not fully see,
+ * never that nothing was rated.
+ */
+const CAPTURE_QUALITY_COPY: Record<string, LimitingFactorCopy> = {
+  body_not_fully_visible: {
+    noun: 'the whole body in view for the swing',
+    reason: 'part of the body being out of view',
+    ledger: 'The whole body in view — part of it was out of frame.',
+  },
+  person_implausible_scale: {
+    noun: 'a player-sized body in frame',
+    reason: 'the player being very small or very close in the frame',
+    ledger:
+      'A player at a measurable size — too far from or too close to the camera.',
+  },
+  tracking_dropout_gap: {
+    noun: 'continuous tracking through the clip',
+    reason: 'tracking dropping out during the clip',
+    ledger: 'Continuous tracking — it dropped out for part of the clip.',
+  },
+  stroke_window_tracking_gap: {
+    noun: 'continuous tracking through the stroke',
+    reason: 'tracking dropping out during the stroke',
+    ledger:
+      'Continuous tracking through the stroke — it dropped out mid-swing.',
+  },
+  low_pose_confidence: {
+    noun: 'a confidently tracked body',
+    reason: 'low tracking confidence',
+    ledger: 'A confidently tracked body — the pose read was uncertain.',
+  },
+};
+
+export const CAPTURE_QUALITY_FACTOR_PREFIX = 'capture_quality:';
+
 export function limitingFactorCopy(factor: string): LimitingFactorCopy {
   if (factor.startsWith('checkpoint_unobserved:')) {
     const name = checkpointName(factor.slice('checkpoint_unobserved:'.length));
@@ -145,6 +183,16 @@ export function limitingFactorCopy(factor: string): LimitingFactorCopy {
       reason: `an unobserved ${name.toLowerCase()} checkpoint`,
       ledger: `The ${name.toLowerCase()} checkpoint — not observed in this clip.`,
     };
+  }
+  if (factor.startsWith(CAPTURE_QUALITY_FACTOR_PREFIX)) {
+    const reason = factor.slice(CAPTURE_QUALITY_FACTOR_PREFIX.length);
+    return (
+      CAPTURE_QUALITY_COPY[reason] ?? {
+        noun: humanizeToken(reason),
+        reason: humanizeToken(reason),
+        ledger: `${titleCase(reason)} — capture quality.`,
+      }
+    );
   }
   switch (factor) {
     case 'paddle_track_unavailable':
@@ -223,6 +271,9 @@ export function limitingFactorCopy(factor: string): LimitingFactorCopy {
 function knownLimitingFactor(factor: string): boolean {
   return (
     factor.startsWith('checkpoint_unobserved:') ||
+    (factor.startsWith(CAPTURE_QUALITY_FACTOR_PREFIX) &&
+      factor.slice(CAPTURE_QUALITY_FACTOR_PREFIX.length) in
+        CAPTURE_QUALITY_COPY) ||
     [
       'paddle_track_unavailable',
       'ball_track_unavailable',

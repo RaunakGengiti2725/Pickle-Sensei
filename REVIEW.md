@@ -104,8 +104,12 @@ URL), never "the code looks right".
 - Onboarding before sign-in, non-skippable (`launchGate.test.ts`,
   `onboardingScreen.test.tsx`). Any new skip affordance is a Bug.
 - User-facing/store copy: no Android, Google Play, guest mode, Live Court,
-  DUPR, competitor names, accuracy percentages, or superlatives
-  (`docs/APP_STORE_SUBMISSION.md` is authoritative). Typography must use
+  competitor names, accuracy percentages, or superlatives
+  (`docs/APP_STORE_SUBMISSION.md` is authoritative). DUPR is banned in store
+  metadata and Info.plist; in-app it is the headline rating (D-046) and must
+  always come through `src/progress/duprEstimate.ts` — labelled an estimate,
+  with the 0–10 technique score as the smaller secondary line, never a bare
+  "DUPR" claim (`h06ForbiddenClaims.test.ts`). Typography must use
   `src/design/tokens.ts` roles, never ad-hoc font sizes.
 
 ### CI, runner and verification scripts — `.github/workflows/`, `scripts/`, `tools/macos-ci/`

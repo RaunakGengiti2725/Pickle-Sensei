@@ -58,8 +58,9 @@ describe("cross-subsystem rollback drills (linux-test measurements)", () => {
     const badConfig: ShotScoringConfig = {
       ...knownGoodConfig,
       scoringModelVersion: "sm-v99-bad-candidate",
-      // A scorer that never abstains is exactly the failure rollback exists for.
-      minAnalysisConfidence: 0,
+      // A scorer that presents every read as fully confident is exactly the
+      // failure rollback exists for.
+      lowerConfidenceThreshold: 0,
     };
 
     let live: ShotScoringConfig | null = null;
@@ -78,8 +79,8 @@ describe("cross-subsystem rollback drills (linux-test measurements)", () => {
         knownGoodLive: () =>
           live !== null &&
           live.scoringModelVersion === SCORING_MODEL_VERSION &&
-          live.minAnalysisConfidence > 0,
-        badLive: () => live !== null && live.minAnalysisConfidence === 0,
+          live.lowerConfidenceThreshold > 0,
+        badLive: () => live !== null && live.lowerConfidenceThreshold === 0,
       },
     );
     expectDrillRecovered(result);

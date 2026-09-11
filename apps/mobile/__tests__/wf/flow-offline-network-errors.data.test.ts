@@ -14,6 +14,7 @@ jest.mock('../../src/account/apiSession', () => {
   let session: unknown = null;
   return {
     getApiSession: () => session,
+    subscribeToApiSession: () => () => {},
     reportApiUnauthorized: jest.fn(),
     __setSession: (next: unknown) => {
       session = next;
@@ -58,6 +59,10 @@ import type {
   StorePlans,
 } from '../../src/billing/types';
 import * as apiSessionModule from '../../src/account/apiSession';
+import {
+  drainRows,
+  executeSyncSql,
+} from '../../test-support/outboxScheduleFake';
 
 const setSession = (
   apiSessionModule as unknown as { __setSession: (s: unknown) => void }
@@ -135,16 +140,10 @@ function fakeDb() {
         else receipts.push(String(params[1]));
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (sql.startsWith('DELETE FROM outbox')) {
         const row = outbox.find(
@@ -481,6 +480,7 @@ const session = {
 
 describe('consent store: no silent toggle failure', () => {
   beforeEach(() => {
+    setActiveDataOwner(session.canonicalAppUserId);
     setSession(session);
     useConsentStore.setState({
       availability: 'loading',
@@ -490,7 +490,10 @@ describe('consent store: no silent toggle failure', () => {
       error: null,
     });
   });
-  afterEach(() => setSession(null));
+  afterEach(() => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    setSession(null);
+  });
 
   it('offline hydrate → unavailable with visible copy, consent stays off', async () => {
     await useConsentStore.getState().hydrate(offlineFetch);
@@ -556,6 +559,7 @@ describe('consent store: no silent toggle failure', () => {
   });
 
   it('signed out → toggling is a no-op that never touches the network', async () => {
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     setSession(null);
     const fetchFn = jest.fn();
     await useConsentStore.getState().hydrate(fetchFn);

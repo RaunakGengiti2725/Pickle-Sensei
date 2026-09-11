@@ -1,0 +1,101 @@
+{
+ "acceptance_results": [
+  {
+   "artifact": "coordinator shell transcript",
+   "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+   "executed": 0,
+   "exit_code": 0,
+   "failed": 0,
+   "id": "W04-04-AC1",
+   "note": "Coordinator run on 6441f505: 'Check file:///home/ubuntu/wt-w0404/supabase/functions/api/index.ts', EXIT 0.",
+   "passed": 0,
+   "skipped": 0,
+   "status": "PASS"
+  },
+  {
+   "artifact": "artifacts/program/w04-04-r8/edge-w0404-r8.log (coordinator VM)",
+   "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test",
+   "executed": 1015,
+   "exit_code": 0,
+   "failed": 0,
+   "id": "W04-04-AC2",
+   "note": "Coordinator run on 6441f505 against a freshly built disposable postgres:16 (container pp-w0404-pg, xc_pg_up.sh, every migration incl. 20260910130000/140000/150000): 'ok | 1015 passed (31 steps) | 0 failed', EXIT 0 (1014 lane-2 tests + the new starvation regression).",
+   "passed": 1015,
+   "skipped": 0,
+   "status": "PASS"
+  },
+  {
+   "artifact": "artifacts/program/w04-04-r8/rls-w0404-r8.log (coordinator VM)",
+   "command": "./supabase/tests/run_rls_tests.sh",
+   "executed": 4,
+   "exit_code": 0,
+   "failed": 0,
+   "id": "W04-04-AC3",
+   "note": "Coordinator run on 6441f505: run_rls_tests.sh EXIT 0, every history prints ALL CASES PASSED and 'Analysis release policy authority: PASS'.",
+   "passed": 4,
+   "skipped": 0,
+   "status": "PASS"
+  },
+  {
+   "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3efb7c69-e284-43a2-9c0b-12a817466ae9/ac4_head_edge.log",
+   "command": "BASE: git worktree add /home/ubuntu/w04base d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4; copy ONLY supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts and packages/shared-types/src/__tests__/offlineDeviceReceipt.contract.test.ts from HEAD; base-migrated disposable DB via XC_PG_CONTAINER=pickle-xc-pg-base XC_PG_PORT=55434 ./supabase/functions/api/__wf__/xc_pg_up.sh; cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno test -A --no-check --config deno.json offline_receipt_reconciliation.test.ts; pnpm --filter @pickle/shared-types exec vitest run src/__tests__/offlineDeviceReceipt.contract.test.ts. HEAD: same two commands against the HEAD-migrated DB on 55433.",
+   "executed": 40,
+   "exit_code": 0,
+   "failed": 0,
+   "id": "W04-04-AC4",
+   "note": "PROOF exit 0: new tests FAIL on BASE and PASS on HEAD. BASE Edge file: exit 1, `FAILED | 7 passed | 26 failed` (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/8d51c18a-003a-4e30-9dce-b296e142700f/ac4_base_edge.log). BASE shared-types: exit 1, `Tests 5 failed | 1 passed (6)` \u2014 validateOfflineDeviceReceiptShape is not a function (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/3f48d871-7e9f-4402-a66b-2c696d68cd68/ac4_base_shared_types.log). HEAD Edge file: exit 0, `ok | 33 passed | 0 failed`; HEAD shared-types: exit 0, `Tests 6 passed (6)` (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/61254b72-bcd0-4754-ab9e-26399ff3579d/ac4_head_shared_types.log). Candidate counts above = 33 + 6. Criterion coverage: duplicate batch settles once (replayed, no second shot row, ledger unchanged); ambiguous receipt stays HOLD (durable, replays as HOLD, never consumed/refunded). r8 ADDS: offline_receipt_reconciliation.test.ts 'a queue of durable HOLDs never starves the fresh receipt behind it' \u2014 250 durable evidence_missing HOLDs re-presented ahead of one fresh Pro receipt across 3 drains: fresh is settled on drain 1 and replayed after, settleCalls == 251, durable == 251. Coordinator proof: with the r8 index.ts change stashed (lane-2 route) the test FAILS (fresh answered pending, 0 passed / 1 failed); with it, ok 1 passed.",
+   "passed": 40,
+   "skipped": 0,
+   "status": "PASS"
+  }
+ ],
+ "approach": "r8 (coordinator, on top of lane-2 r7): Round-7 adversary P1 \u2014 after 250 durable HOLDs every later receipt was answered pending forever because each HOLD replay consumed the settlement budget before the fresh receipt was looked at. Fix in reconcileOfflineReceipts(): `settlements` increments only when the RPC's delivery !== 'replayed' (the RPC is still called for every entry until the budget of new decisions is spent; replays are single indexed lookups under the owner lock and the 2 MB body cap bounds their count). Regression test pins 250 durable HOLDs + 1 fresh receipt over three drains. Round-7 P2 (device queue never chunks a >2 MB body) is a MOBILE queue concern (apps/mobile/src/data/offlineWallet.ts drain) owned by the W05-07/W04-05 mobile path and tracked there; the Edge already answers any byte-bounded batch of any length. --- lane-2 r7 approach: Started from BASE_SHA, reused the sound r6 SQL ordering (replay/conflict/HOLD before freeze, p_defer_new) and shared-types validator, wrote the r7 regression tests first (fail on base, committed separately), then implemented: Edge route byte-bounded batches + parseSyncShot normalisation of the frozen output + per-receipt HOLD of ingress-refused evidence; forward migration 20260910150000 with a private lease shot writer and gate vouch; security_regression.sql U3/U8b corrections and new U3b. Verified against disposable postgres:16 (Edge suite with ignored==0, RLS matrices fresh + upgrades), frozen deno 2.5.6 typecheck, prettier, and the AC4 base-vs-candidate proof in a separate worktree with a base-migrated DB.",
+ "attachment_urls": [
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/17e613a9-486a-4fc6-9969-aafa1a2b1562/ac1_deno_check.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6f79c0f2-7350-4bf7-9d7a-c5678871b336/ac2_edge_suite.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/96282bf7-7b99-47b1-9f51-58937756782f/ac3_rls.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8d51c18a-003a-4e30-9dce-b296e142700f/ac4_base_edge.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3efb7c69-e284-43a2-9c0b-12a817466ae9/ac4_head_edge.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3f48d871-7e9f-4402-a66b-2c696d68cd68/ac4_base_shared_types.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/61254b72-bcd0-4754-ab9e-26399ff3579d/ac4_head_shared_types.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/35684a4e-9ef4-4e9e-9ed2-a8dec82a7fa0/format_check.log",
+  "https://la-hacks-rttothemoon.devinenterprise.com/attachments/578b9989-ceb9-425e-b218-ee1816bcff18/shared_types_test.log"
+ ],
+ "base_sha": "d446dcddee32d6ee43e8519b4fe2cd16a35cf1a4",
+ "baseline_failures_observed": [
+  "Not a BASE_SHA failure per se but observed once on the candidate full suite: `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` -> rate_limit_test.ts 'authfail: 31 genuinely invalid bearers from one IP \u2026' failed with `429 must carry a bucket-bounded Retry-After, got 0` (1001 passed / 1 failed / 12 ignored). Re-running `deno test -A --no-check --config deno.json rate_limit_test.ts` 3\u00d7 \u2192 `ok | 3 passed | 0 failed` each time, and the recorded AC2 full run passed it. rateLimit.ts and rate_limit_test.ts are unchanged by this package (git diff d446dcd -- supabase/functions/api/rateLimit.ts supabase/functions/api/__wf__/rate_limit_test.ts is empty). Not fixed, not skipped."
+ ],
+ "blocked": false,
+ "blocked_reason": "",
+ "branch": "devin/pp/w04-04/impl-r8",
+ "files_changed": [
+  "packages/shared-types/src/__tests__/offlineDeviceReceipt.contract.test.ts",
+  "packages/shared-types/src/offlineAuthorization.ts",
+  "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts",
+  "supabase/functions/api/index.ts",
+  "supabase/migrations/20260910130000_offline_receipt_freeze_defer.sql",
+  "supabase/migrations/20260910150000_offline_lease_shot_persistence.sql",
+  "supabase/tests/security_regression.sql"
+ ],
+ "head_sha": "6441f5050d7d2f5897a5c0acdc1819722e89f134",
+ "out_of_scope_files": [
+  "supabase/migrations/20260910150000_offline_lease_shot_persistence.sql \u2014 additive forward migration (fresh later timestamp, under the `sql` serial group this package holds). Required for the P0 prior-round break: settle_offline_receipt's Pro/no-ticket branch answered result_recorded without writing public.shots. It adds api_private.record_offline_lease_shot(uuid, jsonb), extends public.enforce_scored_shot_permit() with a transaction-local verified_store lease vouch, and drops/recreates settle_offline_receipt(jsonb,text,jsonb,text,boolean) with the exact grants/revokes re-applied. No applied migration edited."
+ ],
+ "package_id": "W04-04",
+ "regression_tests_added": [
+  "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts (33 tests on HEAD; 26 new/changed fail on BASE): exact mobile OfflineReceiptSubmission entry + parseOfflineReceiptVerdicts response shape; 26-entry Pro batch answered 200 with every receiptId exactly once (no whole-batch 400); entries past the per-request settlement budget answered pending with nothing written and settled on the next drain while earlier accepted entries replay; frozen nested-timestamp output normalised through parseSyncShot and settled/shot persisted; negative/INT_MIN/out-of-range ms, flat shape, non-real source, malformed phases, analysisPermitId and settlement extras held evidence_ambiguous per receipt while valid siblings settle; Pro/no-ticket result_recorded only after public.shots row exists; duplicate delivery replays without a second shot row; same-id/different-digest -> offline.receipt_conflict; durable HOLD replays as HOLD; not_chargeable beside scored output HOLDs; terminal ticket -> conflicting_receipt HOLD; reversible deny_new freeze -> pending only for genuinely new chargeable receipts, decided in SQL; cross-owner/other-installation/other-generation lineage held; private lease writer has no client EXECUTE; scored-shot gate refuses free-grant, stacked ticket+lease, other-owner and malformed (22P02) lease vouches.",
+  "packages/shared-types/src/__tests__/offlineDeviceReceipt.contract.test.ts (6 tests; 5 fail on BASE): validateOfflineDeviceReceiptShape accepts exactly the mobile device receipt (ticket|null, both billing dispositions), freezes the copy, refuses every server/full-evidence field (schemaVersion, nativeTime, attestation, settlement fields) and arbitrary extras; v1 result-receipt validator intact.",
+  "supabase/tests/security_regression.sql: U3/U8b \u2014 free-grant/no-ticket receipts are durable evidence_ambiguous HOLDs (not_applicable, ledger unchanged, no shot, replay HOLD, also under and after the freeze); new U3b \u2014 verified_store lease (premium user Ulf) settles a scored shot into public.shots with flat normalised ms, replays once, private writer revoked from authenticated/anon/service_role, gate refuses free-grant / stacked / other-owner vouches, unsynced-session pending, freeze pending for new chargeable receipts.",
+  "supabase/functions/api/__wf__/offline_receipt_reconciliation.test.ts ('a queue of durable HOLDs never starves the fresh receipt behind it: replays do not spend the per-request decision budget')"
+ ],
+ "residual_risks": [
+  "Per-request settlement budget (OFFLINE_RECEIPT_BATCH_SETTLE_MAX = 250 in supabase/functions/api/index.ts): entries past 250 in a single POST are answered `pending` by the route without an RPC call (nothing durable written, ticket still reserved, the app keeps them queued and redelivers on the next drain \u2014 covered by a route test). This is a route-level pending for not-yet-evaluated receipts, distinct from the SQL-owned freeze pending; the objective's 'decide pending in SQL' clause is about the freeze path, but a reviewer may prefer no route-side pending at all. Removing the constant makes every entry under the 2 MB cap reach SQL at the cost of unbounded RPC round trips per request.",
+  "rate_limit_test.ts 'authfail \u2026' failed once in a full-suite run with Retry-After 0 at a bucket boundary (untouched by this package; 3/3 green in isolation and green in the recorded AC2 run) \u2014 timing-dependent test outside write_paths, reported not fixed.",
+  "AC2 as literally written (XC_PG_URL only) leaves the 12 PICKLE_AUDIT_PG_URL-gated w06_01 tests ignored; the recorded run sets both env vars to the same disposable DB to meet the ignored==0 criterion.",
+  "Mobile (W05-07) is outside write_paths: the route now tolerates any batch size, but the device still sends every pending receipt in one request; body > 2 MB would still be refused whole (413/400) \u2014 at ~1.6 KB per entry that is > 1200 queued ratings, beyond a 7-day lease's realistic volume, but not impossible.",
+  "Base-run proof used `deno test --no-check` (same as `deno task test`), so on BASE the Edge test file fails at runtime assertions/missing symbols rather than at typecheck; counts are reported from that mode.",
+  "Mobile drain still POSTs every queued receipt in one body; a queue whose JSON exceeds 2 MB (~700 receipts) gets 413 until chunked on the device \u2014 mobile-side fix tracked for the offlineWallet drain (W05-07 integration follow-up), not an Edge concern."
+ ],
+ "summary": "W04-04 r8 = lane-2 r7 candidate (58c46a3a) + coordinator fix for the round-7 P1: the per-request decision budget (OFFLINE_RECEIPT_BATCH_SETTLE_MAX=250) now counts only NEW decisions (settled/held/deferred); a replay of a durable verdict is free, so an owner's queue of durable HOLDs (which the app re-presents every drain) can no longer starve the fresh receipt queued behind it. Regression added (fails on the r7 route, passes on r8). deno check EXIT 0, Edge 1015/0, RLS PASS, prettier clean on 6441f505.",
+ "round": 8
+}

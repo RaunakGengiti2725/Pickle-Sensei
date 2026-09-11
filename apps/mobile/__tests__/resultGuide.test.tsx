@@ -25,9 +25,17 @@ jest.mock('../src/review/poseSidecar', () => ({
 }));
 
 const mockHasShotSyncReceipt = jest.fn();
+const mockGetShotOutboxStatus = jest.fn();
+const mockRetryShotSync = jest.fn();
+const mockTriggerOutboxSync = jest.fn();
+jest.mock('../src/data/syncRuntime', () => ({
+  triggerOutboxSync: () => mockTriggerOutboxSync(),
+}));
 const mockListRealAnalysisFacts = jest.fn();
 jest.mock('../src/data/repository', () => ({
   hasShotSyncReceipt: (...args: unknown[]) => mockHasShotSyncReceipt(...args),
+  getShotOutboxStatus: (...args: unknown[]) => mockGetShotOutboxStatus(...args),
+  retryShotSync: (...args: unknown[]) => mockRetryShotSync(...args),
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
 }));
@@ -110,6 +118,11 @@ import type {
   ShotAnalysis,
 } from '@pickle/shared-types';
 import { ResultScreen } from '../src/screens/ResultScreen';
+import {
+  getDataOwnerSnapshot,
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../src/data/accountScope';
 import {
   clearTryAgainHandoff,
   peekTryAgainHandoff,
@@ -478,6 +491,14 @@ beforeEach(() => {
   mockLoadEvidence.mockResolvedValue(scoredEvidence());
   mockLoadSequence.mockResolvedValue(fullBodySequence());
   mockHasShotSyncReceipt.mockResolvedValue(false);
+  mockGetShotOutboxStatus.mockResolvedValue({
+    state: 'queued',
+    attempts: 0,
+    lastError: null,
+  });
+  mockRetryShotSync.mockResolvedValue(true);
+  mockTriggerOutboxSync.mockResolvedValue(undefined);
+  setActiveDataOwner(session.canonicalAppUserId);
   mockListRealAnalysisFacts.mockResolvedValue([]);
   mockGetApiSession.mockReturnValue(session);
   mockListCatalogDrills.mockResolvedValue(CATALOG);
@@ -490,27 +511,137 @@ afterEach(async () => {
     });
   }
   jest.useRealTimers();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+});
+
+describe('Result guide — saved read recovery', () => {
+  beforeEach(() => {
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'needs_repair',
+      attempts: 0,
+      lastError: 'session.missing',
+    });
+  });
+
+  it('makes recovery reachable on the score page and refreshes the receipt after an owner-bound retry', async () => {
+    const context = getDataOwnerSnapshot();
+    const renderer = await renderScreen();
+    expect(allText(renderer)).toContain('Saved on this device');
+    expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
+    mockHasShotSyncReceipt.mockResolvedValue(true);
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledWith({}, 'analysis-1', context);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(hostByTestId(renderer, 'result-sync-repair')).toHaveLength(0);
+    expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('keeps the saved read visible when retry storage fails and permits an explicit retry', async () => {
+    const renderer = await renderScreen();
+    mockRetryShotSync.mockRejectedValueOnce(
+      new Error('private SQLite diagnostic'),
+    );
+    await press(renderer, 'result-sync-retry');
+    expect(allText(renderer)).toContain('Your read is still saved here');
+    expect(allText(renderer)).not.toContain('private SQLite diagnostic');
+    expect(mockTriggerOutboxSync).not.toHaveBeenCalled();
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledTimes(2);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces repeated presses and never triggers the new account after an A→B→A switch', async () => {
+    let finish!: (value: boolean) => void;
+    mockRetryShotSync.mockImplementationOnce(
+      () =>
+        new Promise<boolean>(resolve => {
+          finish = resolve;
+        }),
+    );
+    const renderer = await renderScreen();
+    const retry = pressableByTestId(renderer, 'result-sync-retry').props
+      .onPress;
+    await act(async () => {
+      retry();
+      retry();
+    });
+    expect(mockRetryShotSync).toHaveBeenCalledTimes(1);
+    setActiveDataOwner('22222222-2222-4222-8222-222222222222');
+    setActiveDataOwner(session.canonicalAppUserId);
+    await act(async () => {
+      finish(true);
+    });
+    await settle();
+    expect(mockTriggerOutboxSync).not.toHaveBeenCalled();
+    expect(mockHasShotSyncReceipt).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the same explicit retry for a read the server exhausted, naming its last refusal', async () => {
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'exhausted',
+      attempts: 8,
+      lastError: 'access.permit_expired',
+    });
+    const context = getDataOwnerSnapshot();
+    const renderer = await renderScreen();
+    const copy = allText(renderer);
+    expect(copy).toContain('Saved on this device');
+    expect(copy).toContain('The server refused this read 8 times');
+    expect(copy).toContain('access.permit_expired');
+    expect(copy).toContain('once the rating service has been updated');
+    mockHasShotSyncReceipt.mockResolvedValue(true);
+    await press(renderer, 'result-sync-retry');
+    expect(mockRetryShotSync).toHaveBeenCalledWith({}, 'analysis-1', context);
+    expect(mockTriggerOutboxSync).toHaveBeenCalledTimes(1);
+    expect(hostByTestId(renderer, 'result-sync-repair')).toHaveLength(0);
+  });
+
+  it('keeps retry on the unscored result page too', async () => {
+    const unscored = {
+      ...scoredAnalysis,
+      resultKind: 'low_confidence' as const,
+      overallScore: null,
+    };
+    mockLoadEvidence.mockResolvedValue({
+      ...scoredEvidence(),
+      analysis: unscored,
+      record: null,
+    });
+    const renderer = await renderScreen();
+    expect(hostByTestId(renderer, 'result-guide-step-abstained')).toHaveLength(
+      1,
+    );
+    expect(pressableByTestId(renderer, 'result-sync-retry')).toBeDefined();
+  });
 });
 
 // ─── Scored: the four pages ─────────────────────────────────────────────────
 
 describe('Result guide — scored analysis', () => {
-  it('opens on the SCORE page: ring, DUPR estimate, ONE measured insight — and no drills, replay or plan', async () => {
+  it('opens on the SCORE page: estimated-DUPR ring over the /10, its disclaimer, ONE measured insight — and no drills, replay or plan', async () => {
     const renderer = await renderScreen();
     expect(mockLoadEvidence).toHaveBeenCalledWith({}, 'analysis-1');
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
     expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
 
     const copy = allText(renderer);
-    expect(copy).toContain('TECHNIQUE SCORE · FOREHAND DRIVE');
+    // D-046: the big number is the estimated DUPR (7.1 → 3.40), labelled
+    // as such, with the 0–10 score as the smaller line and the "not an
+    // official DUPR" note directly under the ring.
+    expect(copy).toContain('ESTIMATED DUPR · FOREHAND DRIVE');
     expect(
       renderer.root.findAll(
         node =>
-          node.props.accessibilityLabel === 'Technique score 7.1 out of 10',
+          node.props.accessibilityLabel ===
+          'Estimated DUPR 3.40, technique score 7.1 out of 10',
       ).length,
     ).toBeGreaterThan(0);
-    expect(copy).toContain('(≈ DUPR 5.3)');
+    expect(copy).toContain('EST. DUPR');
+    expect(copy).toContain('7.1 /10');
+    expect(copy).not.toMatch(/≈/);
     expect(copy).toContain(DUPR_ESTIMATE_NOTE);
+    expect(hostByTestId(renderer, 'result-dupr-note')).toHaveLength(1);
     // The ONE insight is the engine's worst measured checkpoint + its cue.
     expect(copy).toContain('WHAT THE CAMERA MEASURED');
     expect(copy).toContain('Contact position scored 48 — contact came late.');
@@ -622,6 +753,15 @@ describe('Result guide — scored analysis', () => {
     expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
     copy = allText(renderer);
     expect(copy).toContain('Drills to fix it');
+    // The header is two lines: the fault in the recap's words and the one
+    // instruction. No "where saved drills land" paragraph, no second
+    // section title, no per-card catalog byline.
+    expect(copy).toContain(
+      'Contact position — contact came late. Pick one drill and run it before your next forehand drive.',
+    );
+    expect(copy).not.toContain('Saved drills');
+    expect(copy).not.toContain('Drills for this stroke');
+    expect(copy).not.toContain('PICKLE SENSEI TRAINING LIBRARY');
     expect(mockListCatalogDrills).toHaveBeenCalledTimes(1);
     expect(mockListCatalogDrills).toHaveBeenCalledWith({ family: 'drive' });
     expect(hostByTestId(renderer, 'recommended-drills')).toHaveLength(1);
@@ -633,7 +773,8 @@ describe('Result guide — scored analysis', () => {
     ).toBe(0);
     expect(primaryLabel(renderer, 'result-guide-next')).toBe('Continue');
 
-    // ── 4. NEXT: ONE recap card — three tiles + two rows — and no link ──
+    // ── 4. NEXT: ONE recap card — three tiles + two rows — ONE coach's
+    //    note, and no link ──
     await press(renderer, 'result-guide-next');
     expect(hostByTestId(renderer, 'result-guide-step-next')).toHaveLength(1);
     expect(stepLabel(renderer)).toBe('4 OF 4 · NEXT');
@@ -644,13 +785,13 @@ describe('Result guide — scored analysis', () => {
     // held, 3 (one yellow, two red) are to fix — the inapplicable and the
     // unscored ones count for nothing.
     expect(hostByTestId(renderer, 'result-guide-summary')).toHaveLength(1);
-    expect(copy).toContain('7.1 /10 SCORE');
+    expect(copy).toContain('3.40 EST. DUPR 7.1 /10');
     expect(copy).toContain('6 HELD');
     expect(copy).toContain('3 TO FIX');
     expect(
       hostByTestId(renderer, 'result-guide-tile-score')[0]!.props
         .accessibilityLabel,
-    ).toBe('Score 7.1 out of 10');
+    ).toBe('Estimated DUPR 3.40, technique score 7.1 out of 10');
     expect(
       hostByTestId(renderer, 'result-guide-tile-held')[0]!.props
         .accessibilityLabel,
@@ -660,9 +801,24 @@ describe('Result guide — scored analysis', () => {
         .accessibilityLabel,
     ).toBe('3 checkpoints to fix');
     // The rows: the priority fix and the strongest checkpoint, in the same
-    // words the earlier pages used. Nothing else is said on this page.
+    // words the earlier pages used.
     expect(copy).toContain('Priority fix Contact position — contact came late');
     expect(copy).toContain('Strongest Recovery · 92');
+    // The coach's note: the cue matched to the MEASURED direction of the
+    // priority fault (the same line the replay's stop card speaks) and the
+    // one next step. Nothing else is said on this page.
+    expect(hostByTestId(renderer, 'result-guide-note')).toHaveLength(1);
+    expect(copy).toContain('COACH’S NOTE');
+    expect(
+      hostByTestId(renderer, 'result-guide-note-cue')[0]!.props.children,
+    ).toBe(
+      'Meet the ball further out in front — start the swing earlier so contact happens ahead of your front hip.',
+    );
+    expect(
+      hostByTestId(renderer, 'result-guide-note-next')[0]!.props.children,
+    ).toBe(
+      'Work one drill, then film another forehand drive and see whether contact position moves.',
+    );
     expect(copy).not.toContain('Drills');
     // No full-breakdown link (product decision 2026-09-02) and NOTHING of the
     // breakdown inline — no disclosure, no evidence surface, no plan, no
@@ -688,8 +844,9 @@ describe('Result guide — scored analysis', () => {
     expect(copy).not.toContain('Stroke map');
     expect(copy).not.toContain('Personalized training');
     expect(copy).not.toContain('What to fix');
-    // No scrolling here either: the page is a fixed column.
-    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    // Two cards fit a 6.1" phone without scrolling, but the page scrolls so
+    // large text never clips the note.
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
     // The last page's primary is TRY AGAIN, with Back and Done beside it.
     expect(
       renderer.root.findAll(node => node.props.testID === 'result-guide-next'),
@@ -732,11 +889,23 @@ describe('Result guide — scored analysis', () => {
     expect(hostByTestId(renderer, 'fix-list')).toHaveLength(0);
     await press(renderer, 'result-guide-next');
     copy = allText(renderer);
-    expect(copy).toContain('7.1 /10 SCORE');
+    expect(copy).toContain('3.40 EST. DUPR 7.1 /10');
     expect(copy).toContain('2 HELD');
     expect(copy).toContain('0 TO FIX');
     expect(copy).toContain('Priority fix Every checkpoint held');
     expect(copy).toContain('Strongest Contact position · 91');
+    // With no fault the note speaks the strongest checkpoint's own "keep it"
+    // cue — no correction is invented for a clean stroke.
+    expect(
+      hostByTestId(renderer, 'result-guide-note-cue')[0]!.props.children,
+    ).toBe(
+      'Contact point held its range — out front at a good height. Keep meeting it there.',
+    );
+    expect(
+      hostByTestId(renderer, 'result-guide-note-next')[0]!.props.children,
+    ).toBe(
+      'Film another forehand drive and see whether every checkpoint holds again.',
+    );
   });
 
   it('Try it again re-arms the same-intent handoff and opens the guided camera; Done and Close pop to top', async () => {
@@ -835,7 +1004,6 @@ describe('Result guide — scored analysis', () => {
       'Remove Drive And Recover from your library',
     );
     expect(saved.props.accessibilityState).toMatchObject({ selected: true });
-    expect(allText(renderer)).toContain('SAVED');
     // Untouched drills keep their catalog state.
     expect(
       pressableByTestId(renderer, 'recommended-drill-shadow-swing-ladder-save')
@@ -871,7 +1039,8 @@ describe('Result guide — scored analysis', () => {
     expect(hostByTestId(renderer, 'result-guide-practice-set')).toHaveLength(1);
     const copy = allText(renderer);
     expect(copy).toContain('THIS SET');
-    expect(copy).toContain('+0.7');
+    // The set's first attempt (6.4 → 2.98) to its latest (7.1 → 3.40).
+    expect(copy).toContain('+0.42 DUPR in this set');
   });
 
   it('without replay evidence THE PROBLEM page shows the fix cards alone — no player, no full-screen link', async () => {
@@ -942,7 +1111,8 @@ describe('Result guide — abstained result', () => {
       'Enough analysis confidence to clear the scoring threshold.',
     );
     expect(copy).not.toContain('out of 10');
-    expect(copy).not.toContain('TECHNIQUE SCORE');
+    expect(copy).not.toContain('/10');
+    expect(copy).not.toContain('ESTIMATED DUPR ·');
     expect(copy.toLowerCase()).not.toContain('drill');
     expect(mockLoadSequence).not.toHaveBeenCalled();
     expect(mockListCatalogDrills).not.toHaveBeenCalled();
@@ -971,13 +1141,68 @@ describe('Result guide — abstained result', () => {
     expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
   });
 
+  it('a not-scored read with replay evidence hosts the form-review player inline — whole body, exoskeleton, ONE honest contact stop', async () => {
+    // The engine abstained (low_confidence) but the clip and the verified
+    // pose sidecar exist: the page replays them with the exoskeleton — the
+    // same player the scored pages use — instead of a cropped replay card.
+    const unscored = {
+      ...scoredAnalysis,
+      resultKind: 'low_confidence' as const,
+      overallScore: null,
+      checkpoints: scoredAnalysis.checkpoints.map(cp => ({
+        ...cp,
+        score: null,
+        band: 'unscored' as const,
+      })),
+      priorityFix: null,
+      guidance: 'Couldn’t read this stroke clearly. Reposition the phone.',
+    };
+    mockLoadEvidence.mockResolvedValue({
+      ...scoredEvidence(),
+      analysis: unscored,
+      record: null,
+    });
+    const renderer = await renderScreen();
+    expect(hostByTestId(renderer, 'result-guide-step-abstained')).toHaveLength(
+      1,
+    );
+    expect(stepLabel(renderer)).toBe('RESULT · NOT SCORED');
+    // The sidecar IS verified for an unscored read — the exoskeleton needs it.
+    expect(mockLoadSequence).toHaveBeenCalledWith(sidecarRef);
+    expect(hostByTestId(renderer, 'form-review-player')).toHaveLength(1);
+    expect(hostByTestId(renderer, 'form-review-stage')).toHaveLength(1);
+    // The player REPLACES the replay card (no second, cropped replay).
+    expect(hostByTestId(renderer, 'stroke-result-replay')).toHaveLength(0);
+    // The video card sits at the letterbox rect of the recorded portrait
+    // frame — the whole body is in frame, nothing is cropped or boxed black.
+    expect(hostByTestId(renderer, 'form-review-video-card')).toHaveLength(1);
+    const copy = allText(renderer);
+    // With no checkpoint scored, the script has exactly ONE stop — the
+    // measured wrist-speed peak — and claims nothing about what is seen.
+    expect(copy).toContain('STOP 1 OF 1');
+    expect(copy).toContain('Contact — the fastest wrist moment in this swing.');
+    // No verdict word for a stop nothing was scored at: the badge says what
+    // the stop IS (a measured moment), never STRONG / WATCH / FIX.
+    expect(copy).toContain('MEASURED · CONTACT');
+    expect(copy).not.toContain('STRONG');
+    expect(copy).not.toContain('PRIORITY FIX');
+    expect(copy).not.toContain('out of 10');
+    expect(copy).not.toContain('/10');
+    // The honest ledger and the engine's own guidance stay on the page.
+    expect(hostByTestId(renderer, 'abstention-ledger')).toHaveLength(1);
+    expect(copy).toContain('WHAT WE COULDN’T ESTABLISH');
+    expect(copy).toContain('Reposition the phone.');
+    expect(hostByTestId(renderer, 'fix-list')).toHaveLength(0);
+    expect(hostByTestId(renderer, 'recommended-drills')).toHaveLength(0);
+  });
+
   it('a legacy row with a product analysis but no record still renders', async () => {
     mockLoadEvidence.mockResolvedValue(
       scoredEvidence({ record: null, clip: null, review: null }),
     );
     const renderer = await renderScreen();
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
-    expect(allText(renderer)).toContain('TECHNIQUE SCORE · FOREHAND DRIVE');
+    expect(allText(renderer)).toContain('ESTIMATED DUPR · FOREHAND DRIVE');
   });
 
   it('shows the missing state when neither analysis nor record exists', async () => {

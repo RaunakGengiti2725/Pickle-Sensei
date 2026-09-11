@@ -49,6 +49,7 @@
  * Replay one row: XC_SQLITE_ONLY='<scenario name>' npx jest … this file.
  */
 import type { LocalDb } from '../../../src/data/db';
+import type { QueryResult, Transaction } from '@op-engineering/op-sqlite';
 import {
   childProcess,
   fs,
@@ -102,16 +103,54 @@ const mockSqlite = {
     if (!sqlite) throw new Error('node:sqlite unavailable');
     mockSqlite.opens += 1;
     const inner = new sqlite.DatabaseSync(path.join(mockSqlite.dir, name));
+    let queue = Promise.resolve();
     const run = (sql: string, params: unknown[]) => {
       mockSqlite.statements.push(sql);
       const rows = inner
         .prepare(sql)
-        .all(...(params as SqlInputValue[])) as Record<string, unknown>[];
-      return { rows };
+        .all(...(params as SqlInputValue[])) as QueryResult['rows'];
+      return {
+        rows,
+        rowsAffected: Number(
+          (
+            inner.prepare('SELECT changes() AS changed').get() as {
+              changed: number;
+            }
+          ).changed,
+        ),
+      };
     };
     return {
       executeSync: (sql: string, params: unknown[] = []) => run(sql, params),
       execute: async (sql: string, params: unknown[] = []) => run(sql, params),
+      transaction(operation: (connection: Transaction) => Promise<void>) {
+        const task = queue.then(async () => {
+          run('BEGIN IMMEDIATE', []);
+          let open = true;
+          const connection: Transaction = {
+            execute: async (sql, params = []) => run(sql, params),
+            async commit() {
+              const result = run('COMMIT', []);
+              open = false;
+              return result;
+            },
+            rollback() {
+              const result = open
+                ? run('ROLLBACK', [])
+                : { rows: [], rowsAffected: 0 };
+              open = false;
+              return result;
+            },
+          };
+          try {
+            await operation(connection);
+          } finally {
+            if (open) run('ROLLBACK', []);
+          }
+        });
+        queue = task.catch(() => {});
+        return task;
+      },
       close: () => inner.close(),
     };
   },
@@ -456,7 +495,7 @@ const KV_KEYS = [
   `rank.celebrated:${CANONICAL_ID}`,
   'review.prompt-state',
   `practice.set:${CANONICAL_ID}`,
-  'walkthrough.device-complete',
+  `walkthrough.complete:${CANONICAL_ID}`,
   'consent.training',
 ] as const;
 

@@ -14,6 +14,12 @@
  */
 jest.mock('../src/data/db', () => ({ getDb: () => mockCurrentDb() }));
 jest.mock('../src/analysis/runCaptureAnalysis', () => ({
+  ...jest.requireActual('../src/analysis/runCaptureAnalysis'),
+  prepareOriginalCaptureAnalysis: jest.fn(
+    jest.requireActual('../src/analysis/runCaptureAnalysis')
+      .prepareOriginalCaptureAnalysis,
+  ),
+  runOriginalCaptureAnalysis: jest.fn(),
   runCaptureAnalysis: jest.fn(),
 }));
 jest.mock('../src/data/syncRuntime', () => ({
@@ -31,6 +37,11 @@ jest.mock('../src/camera/capture', () => {
     importStrokeVideo: jest.fn(),
     cancelCameraOperation: jest.fn(),
     importedPoseExtractionAvailable: jest.fn(() => true),
+    verifyCapturedClipCurrentBytes: jest.fn(async (clip: CapturedClip) => ({
+      status: 'verified-current-bytes',
+      comparedExpectation: clip.nativeMediaIdentity,
+    })),
+    readCaptureArtifact: jest.fn(),
     extractImportedPoseSequence: jest.fn(),
     subscribeToCameraEvents: (listener: CameraListener) => {
       mockCameraListeners.add(listener);
@@ -84,6 +95,16 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
+import { guidedClipFixture } from '../testSupport/guidedClipFixture';
+import {
+  activeReleaseAuthorityResponse,
+  isReleasePolicyRequest,
+} from '../testSupport/releasePolicyFixture';
+import type {
+  RunOriginalCaptureAnalysisRequest,
+  RunCaptureAnalysisOutcome,
+} from '../src/analysis/runCaptureAnalysis';
+import { createPendingFulfilmentStorage } from '../src/billing/pendingFulfilment';
 import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
@@ -94,15 +115,21 @@ import {
   captureStrokeVideo,
   extractImportedPoseSequence,
   importStrokeVideo,
+  readCaptureArtifact,
   type CameraEvent,
   type CapturedClip,
 } from '../src/camera/capture';
 import {
-  runCaptureAnalysis,
+  runOriginalCaptureAnalysis,
+  prepareOriginalCaptureAnalysis,
   type CaptureAnalysisOutcome,
   type RunCaptureAnalysisRequest,
 } from '../src/analysis/runCaptureAnalysis';
 import type { LocalDb } from '../src/data/db';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../testSupport/sqlite';
 import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
@@ -130,23 +157,9 @@ interface Statement {
   params: unknown[];
 }
 let statements: Statement[] = [];
-const kv = new Map<string, string>();
-const recordingDb: LocalDb = {
-  async execute(sql: string, params: unknown[] = []) {
-    statements.push({ sql, params });
-    if (sql.startsWith('SELECT value FROM kv')) {
-      const value = kv.get(String(params[0]));
-      return { rows: value === undefined ? [] : [{ value }] };
-    }
-    if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
-      kv.set(String(params[0]), String(params[1]));
-    }
-    return { rows: [] };
-  },
-  close() {},
-};
+let sqlite: ReturnType<typeof createSqliteTestDb>;
 function mockCurrentDb(): LocalDb {
-  return recordingDb;
+  return sqlite.db;
 }
 
 const owner = '44444444-4444-4444-8444-444444444444';
@@ -155,6 +168,18 @@ const owner = '44444444-4444-4444-8444-444444444444';
 
 const importedClip = assertCapturedClip({
   uri: 'file:///private/var/mobile/import.mov',
+  byteSize: 25,
+  nativeMediaIdentity: {
+    schemaVersion: 1,
+    format: 'pickle.native-media-identity.v1',
+    receiptId: '77777777-7777-4777-8777-777777777777',
+    operationId: '88888888-8888-4888-8888-888888888888',
+    origin: 'import_copy',
+    algorithm: 'sha256',
+    videoFileName: 'import.mov',
+    byteSize: 25,
+    sha256: 'a'.repeat(64),
+  },
   durationMs: 4200,
   fps: 30,
   width: 1920,
@@ -197,7 +222,7 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 120,
       poseFrameCount: 120,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 4200,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -326,6 +351,7 @@ async function flush() {
   await act(async () => {});
 }
 
+const mountedScreens = new Set<ReactTestRenderer>();
 async function renderScreen(
   source: 'library' | 'camera',
 ): Promise<ReactTestRenderer> {
@@ -333,6 +359,7 @@ async function renderScreen(
   let renderer!: ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<AnalyzeScreen />);
+    mountedScreens.add(renderer);
   });
   if (source === 'library') {
     await act(async () => {
@@ -380,11 +407,11 @@ async function startCameraRun(renderer: ReactTestRenderer) {
   pressByLabel(renderer, 'Open automatic camera');
   await flush();
   await flush();
-  expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
+  expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
 }
 
 function analysisRequest(): RunCaptureAnalysisRequest {
-  const call = (runCaptureAnalysis as jest.Mock).mock.calls[0];
+  const call = (prepareOriginalCaptureAnalysis as jest.Mock).mock.calls[0];
   if (!call) throw new Error('runCaptureAnalysis was not called');
   return call[0] as RunCaptureAnalysisRequest;
 }
@@ -399,8 +426,8 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockCameraListeners.clear();
-  statements = [];
-  kv.clear();
+  sqlite = createSqliteTestDb();
+  statements = sqlite.calls;
   setActiveDataOwner(owner);
   establishApiSession({
     apiBaseUrl: 'https://api.test',
@@ -410,11 +437,19 @@ beforeEach(() => {
   });
   clearAccessStoreConfiguration();
   clients = backendReturning(async () => freeAccess(0));
-  configureAccessStore(clients);
+  configureAccessStore(clients, {
+    owner,
+    pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+  });
   useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    for (const renderer of mountedScreens) renderer.unmount();
+    mountedScreens.clear();
+  });
+  closeSqliteTestDatabases();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   jest.useRealTimers();
@@ -527,14 +562,17 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
       observed.push(serverLedger);
       return serverLedger === 'reserved' ? freeAccess(1, 1) : freeAccess(2, 0);
     });
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),
     });
 
     const analysis = deferred<CaptureAnalysisOutcome>(
-      runCaptureAnalysis as jest.Mock,
+      runOriginalCaptureAnalysis as jest.Mock,
     );
     const renderer = await renderScreen('camera');
     await startCameraRun(renderer);
@@ -571,13 +609,16 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
     clients = backendReturning(async () =>
       serverLedger === 'reserved' ? freeAccess(1, 1) : freeAccess(1, 0),
     );
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),
     });
     const analysis = deferred<CaptureAnalysisOutcome>(
-      runCaptureAnalysis as jest.Mock,
+      runOriginalCaptureAnalysis as jest.Mock,
     );
     const renderer = await renderScreen('camera');
     await startCameraRun(renderer);
@@ -610,13 +651,16 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
     clients = backendReturning(async () => {
       throw new Error('network down');
     });
-    configureAccessStore(clients);
+    configureAccessStore(clients, {
+      owner,
+      pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+    });
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(0),
     });
     const analysis = deferred<CaptureAnalysisOutcome>(
-      runCaptureAnalysis as jest.Mock,
+      runOriginalCaptureAnalysis as jest.Mock,
     );
     const renderer = await renderScreen('camera');
     await startCameraRun(renderer);
@@ -643,76 +687,122 @@ describe('S8 — unmount while runCaptureAnalysis is in flight', () => {
   });
 });
 
-// ─── S10 (extra): unmount mid-run orphans the practice set ──────────────────
+// ─── S10: the runner atomically owns result and practice-set persistence ───
 
-describe('S10 (extra) — practice set commit skipped for a run whose screen was left', () => {
-  it('[BROKEN] a scored analysis saved with a NEW sessionId never gets its local_session row / session.create outbox entry / kv stamp when the screen unmounts mid-run', async () => {
-    const analysis = deferred<CaptureAnalysisOutcome>(
-      runCaptureAnalysis as jest.Mock,
-    );
-    const renderer = await renderScreen('camera');
-    await startCameraRun(renderer);
-    const request = analysisRequest();
-    // The plan chose a fresh set id and handed it to the analysis (the shot
-    // row and its shot.sync outbox payload will carry this sessionId).
-    expect(request.sessionId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
-    expect(sqlMatching(/local_session/i)).toHaveLength(0);
-
-    // Player taps X on "Measuring your swing…" / navigates away.
-    await act(async () => renderer.unmount());
-    await flush();
-    await analysis.resolve(scoredOutcome(false));
-    await flush();
-
-    // OBSERVED on 4d812e1a: `if (abandoned.current) return;` (AnalyzeScreen
-    // ~L891) runs BEFORE `commitPracticeSet` (~L925): no session row, no
-    // session.create outbox entry, no practice.set kv record — yet the
-    // scored shot already persisted inside runCaptureAnalysis references
-    // request.sessionId. Its shot.sync will hit `shot.session_not_found`
-    // (transient → retried) until the permit ages out (24h) and then be
-    // rejected for good; a TRY AGAIN from that Result rearms with the same
-    // orphan id (`preferredSessionId` → resumed:true → no row ever written).
-    // EXPECTED: the set is committed whenever the scored shot was saved,
-    // regardless of whether the screen is still mounted.
-    expect(sqlMatching(/local_session/i)).toHaveLength(0);
-    expect(sqlMatching(/INSERT INTO outbox/i)).toHaveLength(0);
-    expect(kv.get(practiceSetKeyForOwner(owner))).toBeUndefined();
-    // …and the outbox drain for the orphaned shot.sync row WAS kicked off
-    // (triggerOutboxSync runs before the abandoned check).
-    expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
-  });
-
-  it('[HELD] control: the same run with the screen still mounted commits the set (session row + kv stamp)', async () => {
-    const analysis = deferred<CaptureAnalysisOutcome>(
-      runCaptureAnalysis as jest.Mock,
-    );
-    const renderer = await renderScreen('camera');
-    await startCameraRun(renderer);
-    const request = analysisRequest();
-    await analysis.resolve(scoredOutcome(false));
-    await flush();
-    const sessionInserts = sqlMatching(/local_session/i);
-    expect(sessionInserts.length).toBeGreaterThan(0);
-    expect(
-      sessionInserts.some(statement =>
-        statement.params.includes(request.sessionId),
-      ),
-    ).toBe(true);
-    const stored = kv.get(practiceSetKeyForOwner(owner));
-    expect(stored).toBeDefined();
-    expect(JSON.parse(stored!).sessionId).toBe(request.sessionId);
-    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
-      analysisId: 'analysis-attack-1',
-    });
-  });
+describe('S10 — practice set commits with its result before screen publication', () => {
+  it.each([false, true])(
+    'a committed result and practice set survive before publication (unmounted=%s)',
+    async unmountBeforePublication => {
+      const fixture = guidedClipFixture('atomic-screen');
+      jest.mocked(readCaptureArtifact).mockResolvedValue(fixture.sidecarJson);
+      let acknowledge!: () => void;
+      const acknowledgement = new Promise<void>(resolve => {
+        acknowledge = resolve;
+      });
+      let committed!: (outcome: RunCaptureAnalysisOutcome) => void;
+      const completed = new Promise<RunCaptureAnalysisOutcome>(resolve => {
+        committed = resolve;
+      });
+      jest
+        .mocked(runOriginalCaptureAnalysis)
+        .mockImplementation(
+          async (request: RunOriginalCaptureAnalysisRequest) => {
+            const outcome = await jest
+              .requireActual<
+                typeof import('../src/analysis/runCaptureAnalysis')
+              >('../src/analysis/runCaptureAnalysis')
+              .runOriginalCaptureAnalysis(request);
+            committed(outcome);
+            await acknowledgement;
+            return outcome;
+          },
+        );
+      const previousFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async (url: string) =>
+        isReleasePolicyRequest(url)
+          ? activeReleaseAuthorityResponse()
+          : {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                permit: {
+                  id: '55555555-5555-4555-8555-555555555555',
+                  accessSource: 'free',
+                  status: 'reserved',
+                  expiresAt: new Date(Date.now() + 86400000).toISOString(),
+                },
+              }),
+            },
+      ) as unknown as typeof fetch;
+      try {
+        const renderer = await renderScreen('camera');
+        pressByLabel(renderer, 'Forehand Drive');
+        jest.mocked(captureStrokeVideo).mockResolvedValue(fixture.clip);
+        pressByLabel(renderer, 'Open automatic camera');
+        let outcome!: RunCaptureAnalysisOutcome;
+        await act(async () => {
+          outcome = await completed;
+        });
+        expect(outcome.kind).toBe('scored');
+        if (outcome.kind !== 'scored')
+          throw new Error('Fixture did not produce a scored result.');
+        const request = analysisRequest();
+        expect(sqlite.count('local_session', owner)).toBe(1);
+        expect(sqlite.count('local_shot', owner)).toBe(1);
+        expect(sqlite.count('local_analysis_record', owner)).toBe(1);
+        const writes = sqlMatching(
+          /INSERT INTO (local_session|local_shot|local_analysis_record|outbox)/i,
+        );
+        const transactions = new Set(
+          writes.map(
+            write => sqlite.calls.find(call => call === write)?.transaction,
+          ),
+        );
+        expect(transactions.size).toBe(1);
+        expect(
+          sqlite.native
+            .prepare('SELECT value FROM kv WHERE key = ?')
+            .get(practiceSetKeyForOwner(owner))?.value,
+        ).toContain(request.sessionId);
+        expect(mockNavigation.replace).not.toHaveBeenCalled();
+        if (unmountBeforePublication) await act(async () => renderer.unmount());
+        await act(async () => {
+          acknowledge();
+        });
+        await flush();
+        expect(sqlite.count('local_session', owner)).toBe(1);
+        expect(sqlite.count('local_shot', owner)).toBe(1);
+        if (unmountBeforePublication) {
+          expect(mockNavigation.replace).not.toHaveBeenCalled();
+          expect(triggerOutboxSync).not.toHaveBeenCalled();
+        } else {
+          expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+            analysisId: outcome.analysisId,
+          });
+          expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
+          await act(async () => renderer.unmount());
+        }
+      } finally {
+        acknowledge?.();
+        globalThis.fetch = previousFetch;
+      }
+    },
+  );
 });
 
 // ─── S9: unmount while extractImportedPoseSequence is pending ───────────────
 
 describe('S9 — unmount during imported pose extraction', () => {
-  it('[BROKEN] native cancel() is NOT invoked for a pending extraction (operationActive is already false once the picker returned)', async () => {
+  beforeEach(() => {
+    jest
+      .mocked(runOriginalCaptureAnalysis)
+      .mockImplementation(
+        jest.requireActual<typeof import('../src/analysis/runCaptureAnalysis')>(
+          '../src/analysis/runCaptureAnalysis',
+        ).runOriginalCaptureAnalysis,
+      );
+  });
+  it('[FIXED] unmount aborts the signal forwarded to native extraction and rejects late results', async () => {
     (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
     const extraction = deferred<unknown>(
       extractImportedPoseSequence as jest.Mock,
@@ -736,7 +826,10 @@ describe('S9 — unmount during imported pose extraction', () => {
     // screen that no longer exists. EXPECTED (REVIEW.md lifecycle
     // cancellation): cancelCameraOperation() on unmount while the extraction
     // is pending.
-    expect(cancelCameraOperation).not.toHaveBeenCalled();
+    expect(
+      jest.mocked(extractImportedPoseSequence).mock.calls[0]?.[2]?.signal
+        ?.aborted,
+    ).toBe(true);
 
     // The late result is discarded (abandoned) — no analysis is started.
     await extraction.resolve({
@@ -748,10 +841,12 @@ describe('S9 — unmount during imported pose extraction', () => {
       coordinateSystem: 'normalized_image_top_left',
       poseModelVersion: 'apple-vision-bodypose-1',
     });
-    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    expect(runOriginalCaptureAnalysis).toHaveBeenCalledTimes(1);
+    expect(sqlite.count('analysis_run_journal', owner)).toBe(0);
+    expect(sqlite.count('local_analysis_record', owner)).toBe(0);
   });
 
-  it('[HELD] the working-screen X during extraction DOES call cancelCameraOperation once and pops the screen', async () => {
+  it('[HELD] the working-screen X aborts the extraction signal and pops once', async () => {
     (importStrokeVideo as jest.Mock).mockResolvedValue(importedClip);
     deferred<unknown>(extractImportedPoseSequence as jest.Mock);
     const renderer = await renderScreen('library');
@@ -766,11 +861,18 @@ describe('S9 — unmount during imported pose extraction', () => {
     );
     if (!header) throw new Error('No working header with onClose');
     act(() => header.props.onClose());
-    expect(cancelCameraOperation).toHaveBeenCalledTimes(1);
+    expect(
+      jest.mocked(extractImportedPoseSequence).mock.calls[0]?.[2]?.signal
+        ?.aborted,
+    ).toBe(true);
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
     await act(async () => renderer.unmount());
-    // Unmount after the explicit close does not double-cancel.
-    expect(cancelCameraOperation).toHaveBeenCalledTimes(1);
+    // Unmount after explicit Close keeps the same aborted extraction; no new pass starts.
+    expect(extractImportedPoseSequence).toHaveBeenCalledTimes(1);
+    expect(
+      jest.mocked(extractImportedPoseSequence).mock.calls[0]?.[2]?.signal
+        ?.aborted,
+    ).toBe(true);
   });
 
   it('[HELD] unmount while the picker itself is still open cancels natively exactly once', async () => {

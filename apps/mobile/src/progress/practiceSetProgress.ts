@@ -1,6 +1,7 @@
 import type { RealAnalysisFact } from '../data/repository';
 import { CHECKPOINT_NAMES } from '../components/strokeResultModel';
 import { plural } from '../util/plural';
+import { formatDupr, formatDuprDelta } from './duprEstimate';
 
 /**
  * PRACTICE SET progress — "did the re-record improve on the read before it?"
@@ -282,10 +283,17 @@ export function formatTenthsDelta(deltaTenths: number): string {
   return `+${tenthsToDecimal(deltaTenths)}`;
 }
 
-/** "+0.8 in this set" / "−0.3 in this set" / "Held steady in this set". */
+/**
+ * "+0.48 DUPR in this set" / "−0.18 DUPR in this set" / "Held steady in this
+ * set". The trend is decided on exact tenths; only the printed delta is
+ * expressed in the headline unit (estimated DUPR, D-046).
+ */
 export function practiceSetHeadline(summary: PracticeSetSummary): string {
   if (summary.trend === 'held') return 'Held steady in this set';
-  return `${formatTenthsDelta(summary.deltaTenths)} in this set`;
+  return `${formatDuprDelta(
+    summary.first.overallScore,
+    summary.latest.overallScore,
+  )} DUPR in this set`;
 }
 
 /** Lower-cased display name for mid-sentence use ("contact position"). */
@@ -304,7 +312,7 @@ export function practiceSetInsight(summary: PracticeSetSummary): string {
   const count = summary.attempts.length;
   const clauses = [
     `${count} ${plural(count, 'attempt')}`,
-    `best ${summary.best.overallScore.toFixed(1)}`,
+    `best ${formatDupr(summary.best.overallScore)} DUPR`,
   ];
   const fixed = summary.fixedCheckpoints[0];
   if (fixed !== undefined) {

@@ -1,5 +1,12 @@
 import { open, type DB } from '@op-engineering/op-sqlite';
-import { GUEST_DATA_OWNER } from './accountScope';
+import { GUEST_DATA_OWNER, type DataOwnerContext } from './accountScope';
+import { OFFLINE_WALLET_DDL } from './offlineCapabilities';
+import { OFFLINE_WALLET_JOURNAL_DDL } from './offlineWallet';
+import { createTransactionalDb } from './transactions';
+import {
+  ORIGINAL_ANALYSIS_DDL,
+  RUN_JOURNAL_DDL,
+} from '../analysis/runJournalSchema';
 
 /**
  * Durable local store (directive §32): SQLite for structured state, with a
@@ -8,10 +15,12 @@ import { GUEST_DATA_OWNER } from './accountScope';
  */
 
 export interface LocalDb {
+  readonly ownerContext?: DataOwnerContext;
   execute(
     sql: string,
     params?: unknown[],
-  ): Promise<{ rows: Record<string, unknown>[] }>;
+  ): Promise<{ rows: Record<string, unknown>[]; rowsAffected?: number }>;
+  transaction?<T>(operation: (transaction: LocalDb) => Promise<T>): Promise<T>;
   close(): void;
 }
 
@@ -89,6 +98,9 @@ const LOCAL_MIGRATIONS: string[] = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_local_analysis_capture
      ON local_analysis_record (owner_key, capture_id, created_at DESC)`,
+  ...RUN_JOURNAL_DDL,
+  ...OFFLINE_WALLET_DDL,
+  ...OFFLINE_WALLET_JOURNAL_DDL,
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
   // into history, scores, trends, session summaries, or sync. A payload that
@@ -228,6 +240,17 @@ function ensureAccountScopedSchema(db: DB): void {
         `ALTER TABLE outbox ADD COLUMN owner_key TEXT NOT NULL DEFAULT '${GUEST_DATA_OWNER}'`,
       );
     }
+    if (!hasColumn(db, 'outbox', 'last_attempt_order')) {
+      db.executeSync(
+        'ALTER TABLE outbox ADD COLUMN last_attempt_order INTEGER NOT NULL DEFAULT 0',
+      );
+    }
+    if (!hasColumn(db, 'outbox', 'repair_reason')) {
+      db.executeSync('ALTER TABLE outbox ADD COLUMN repair_reason TEXT');
+    }
+    db.executeSync(
+      'CREATE INDEX IF NOT EXISTS idx_outbox_owner_drain ON outbox (owner_key, repair_reason, last_attempt_order, id)',
+    );
     db.executeSync(
       'CREATE INDEX IF NOT EXISTS idx_local_shot_owner_time ON local_shot (owner_key, captured_at DESC)',
     );
@@ -253,6 +276,7 @@ function ensureAccountScopedSchema(db: DB): void {
 }
 
 let instance: DB | null = null;
+let localInstance: LocalDb | null = null;
 
 function openMigrated(): DB {
   const db = open({ name: 'pickle-sensei.db' });
@@ -261,6 +285,10 @@ function openMigrated(): DB {
       db.executeSync(sql);
     }
     ensureAccountScopedSchema(db);
+    // Install the additive version only after legacy account-key upgrades.
+    // Its deferred FKs bind attempts, the final record and logical ownership.
+    db.executeSync('PRAGMA foreign_keys = ON');
+    for (const sql of ORIGINAL_ANALYSIS_DDL) db.executeSync(sql);
   } catch (error) {
     try {
       db.close();
@@ -277,14 +305,15 @@ export function getDb(): LocalDb {
     instance = openMigrated();
   }
   const db = instance;
-  return {
-    async execute(sql, params = []) {
-      const result = await db.execute(sql, params as never[]);
-      return { rows: (result.rows ?? []) as Record<string, unknown>[] };
-    },
-    close() {
-      db.close();
-      instance = null;
-    },
-  };
+  if (!localInstance) {
+    localInstance = createTransactionalDb({
+      transaction: operation => db.transaction(operation),
+      close() {
+        db.close();
+        instance = null;
+        localInstance = null;
+      },
+    });
+  }
+  return localInstance;
 }

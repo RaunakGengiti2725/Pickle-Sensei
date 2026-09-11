@@ -1,3 +1,4 @@
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import {
   AccessibilityInfo,
@@ -49,7 +50,7 @@ import { useRankCelebrationStore } from '../../src/progress/rankCelebration';
  *
  *   1. backdrop Pressable ("Dismiss rank celebration")  -> store.dismiss
  *   2. Continue Button (testID rank-up-continue)          -> store.dismiss
- *   3. Modal onRequestClose (Android back / iOS swipe)    -> store.dismiss
+ *   3. Hardware back / accessibility escape             -> store.dismiss
  *
  * All three are synchronous store mutations (no async path, nothing to
  * fail), so the failure-path coverage is idempotence: repeated presses and
@@ -146,8 +147,20 @@ beforeEach(() => {
   (AccessibilityInfo.announceForAccessibility as jest.Mock).mockClear();
 });
 
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
+}
+
 afterEach(() => {
-  useRankCelebrationStore.setState({ current: null });
+  for (const renderer of mounted) unmount(renderer);
+  useRankCelebrationStore.setState({
+    current: null,
+    pending: null,
+    queued: [],
+  });
   jest.restoreAllMocks();
 });
 
@@ -161,6 +174,7 @@ async function render(
         <RankUpCelebration />
       </SafeAreaInsetsContext.Provider>,
     );
+    mounted.add(renderer);
   });
   return renderer;
 }
@@ -198,11 +212,9 @@ function continueButton(renderer: TestRenderer.ReactTestRenderer) {
   );
 }
 
-function modal(renderer: TestRenderer.ReactTestRenderer) {
-  const nodes = renderer.root.findAll(
-    node => typeof node.props.onRequestClose === 'function',
-  );
-  expect(nodes.length).toBeGreaterThanOrEqual(1);
+function overlay(renderer: TestRenderer.ReactTestRenderer) {
+  const nodes = hostNodes(renderer, 'ceremony-overlay');
+  expect(nodes).toHaveLength(1);
   return nodes[0]!;
 }
 
@@ -241,7 +253,7 @@ describe('RankUpCelebration button ledger', () => {
         right: 0,
       });
       try {
-        const root = hostNodes(renderer, 'rank-up-celebration')[0]!;
+        const root = hostNodes(renderer, 'rank-up-safe-content')[0]!;
         expect(StyleSheet.flatten(root.props.style)).toMatchObject({
           flex: 1,
           paddingTop: 59,
@@ -261,11 +273,15 @@ describe('RankUpCelebration button ledger', () => {
           'light-content',
         );
         expect(rendered(renderer)).toContain('Diamond unlocked');
-        expect(rendered(renderer)).toContain('7.62');
-        expect(rendered(renderer)).toContain('DUPR');
-        const dismiss = useRankCelebrationStore.getState().dismiss;
+        // D-046: estimated DUPR (7.62 → 3.75) headlines; the 0–10 rating
+        // stays as the smaller "/10" line.
+        expect(rendered(renderer)).toContain('3.75');
+        expect(rendered(renderer)).toContain(' DUPR');
+        expect(rendered(renderer)).toContain('7.62 /10');
+        expect(rendered(renderer)).not.toMatch(/≈/);
+        const dismiss = overlay(renderer).props.onAccessibilityEscape;
+        expect(typeof dismiss).toBe('function');
         expect(backdrop(renderer).props.onPress).toBe(dismiss);
-        expect(modal(renderer).props.onRequestClose).toBe(dismiss);
         expect(continueButton(renderer).props.onPress).toBe(dismiss);
         await act(async () => continueButton(renderer).props.onPress());
         expect(useRankCelebrationStore.getState().current).toBeNull();
@@ -300,8 +316,8 @@ describe('RankUpCelebration button ledger', () => {
           expect(text.props.allowFontScaling).not.toBe(false);
         }
         backdrop(renderer);
-        expect(modal(renderer).props.onRequestClose).toBe(
-          useRankCelebrationStore.getState().dismiss,
+        expect(overlay(renderer).props.onAccessibilityEscape).toBe(
+          continueButton(renderer).props.onPress,
         );
         await act(async () => continueButton(renderer).props.onPress());
         expect(useRankCelebrationStore.getState().current).toBeNull();
@@ -311,11 +327,11 @@ describe('RankUpCelebration button ledger', () => {
     },
   );
 
-  it('enumerates exactly three interactive elements while open', async () => {
+  it('enumerates the press targets and routes duplicate dismissals through the host', async () => {
     setPromotion();
     const renderer = await render();
     expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(1);
-    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(1);
 
     const pressables = renderer.root.findAll(
       node =>
@@ -334,15 +350,17 @@ describe('RankUpCelebration button ledger', () => {
       'Dismiss rank celebration',
       'rank-up-continue',
     ]);
-    // Every press handler in the overlay is the store's own dismiss — no
-    // inline no-ops, nothing left unwired.
-    const { dismiss } = useRankCelebrationStore.getState();
-    for (const node of pressables) {
-      expect(node.props.onPress).toBe(dismiss);
-    }
-    expect(modal(renderer).props.onRequestClose).toBe(dismiss);
+    // Every press handler in the overlay uses the host's guarded dismissal;
+    // duplicate events must not consume any other request.
+    const escape = overlay(renderer).props.onAccessibilityEscape;
+    await act(async () => {
+      for (const node of pressables) node.props.onPress();
+      escape();
+    });
+    expect(useRankCelebrationStore.getState().current).toBeNull();
+    expect(hostNodes(renderer, 'ceremony-overlay')).toHaveLength(0);
 
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   describe('backdrop tap -> dismiss', () => {
@@ -357,7 +375,7 @@ describe('RankUpCelebration button ledger', () => {
 
       expect(useRankCelebrationStore.getState().current).toBeNull();
       expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('fills the whole overlay (>= 44pt hit target) and is never disabled', async () => {
@@ -375,7 +393,7 @@ describe('RankUpCelebration button ledger', () => {
       expect(node.props.accessibilityLabel).toBe('Dismiss rank celebration');
       // WF-ISSUE: Backdrop dismiss Pressable has no accessibilityRole
       // expect(node.props.accessibilityRole).toBe('button');
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('is harmless when tapped twice in a row', async () => {
@@ -388,7 +406,7 @@ describe('RankUpCelebration button ledger', () => {
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
       expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
   });
 
@@ -403,7 +421,7 @@ describe('RankUpCelebration button ledger', () => {
 
       expect(useRankCelebrationStore.getState().current).toBeNull();
       expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('is an enabled, labelled button with a >= 44pt target', async () => {
@@ -424,7 +442,7 @@ describe('RankUpCelebration button ledger', () => {
       ) as { minHeight?: number };
       expect(flattened.minHeight).toBeGreaterThanOrEqual(44);
       expect(rendered(renderer)).toContain('Continue');
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('is harmless when pressed twice in a row', async () => {
@@ -436,7 +454,7 @@ describe('RankUpCelebration button ledger', () => {
         node.props.onPress();
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('also dismisses a placement (first-ever rank) ceremony', async () => {
@@ -452,39 +470,40 @@ describe('RankUpCelebration button ledger', () => {
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
       expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
   });
 
-  describe('Modal onRequestClose (hardware back) -> dismiss', () => {
-    it('closes the ceremony', async () => {
+  describe('hardware back and accessibility escape -> dismiss', () => {
+    it('hardware back closes the ceremony and removes its handler', async () => {
       setPromotion();
       const renderer = await render();
-      const node = modal(renderer);
-      expect(node.props.visible).toBe(true);
+      expect(hostNodes(renderer, 'ceremony-overlay')).toHaveLength(1);
 
       await act(async () => {
-        node.props.onRequestClose();
+        expect(dispatchHardwareBack()).toBe(true);
       });
 
       expect(useRankCelebrationStore.getState().current).toBeNull();
-      expect(modal(renderer).props.visible).toBe(false);
+      expect(hostNodes(renderer, 'ceremony-overlay')).toHaveLength(0);
       expect(hostNodes(renderer, 'rank-up-celebration')).toHaveLength(0);
-      act(() => renderer.unmount());
+      expect(dispatchHardwareBack()).toBe(false);
+      unmount(renderer);
     });
 
-    it('is harmless when the store is already closed', async () => {
+    it('accessibility escape closes the ceremony and a late duplicate is harmless', async () => {
       setPromotion();
       const renderer = await render();
-      const node = modal(renderer);
+      const escape = overlay(renderer).props.onAccessibilityEscape;
       await act(async () => {
-        node.props.onRequestClose();
+        escape();
       });
       await act(async () => {
-        node.props.onRequestClose();
+        escape();
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
-      act(() => renderer.unmount());
+      expect(hostNodes(renderer, 'ceremony-overlay')).toHaveLength(0);
+      unmount(renderer);
     });
   });
 
@@ -495,31 +514,36 @@ describe('RankUpCelebration button ledger', () => {
       expect(
         renderer.root.findAll(node => typeof node.props.onPress === 'function'),
       ).toHaveLength(0);
-      expect(modal(renderer).props.visible).toBe(false);
-      act(() => renderer.unmount());
+      expect(hostNodes(renderer, 'ceremony-overlay')).toHaveLength(0);
+      unmount(renderer);
     });
 
     it('announces the promotion for screen readers on open', async () => {
       setPromotion();
       const renderer = await render();
       expect(AccessibilityInfo.announceForAccessibility).toHaveBeenCalledWith(
-        'Rank up: Diamond. Rating 7.62 out of 10.',
+        'Rank up: Diamond. Estimated DUPR 3.75, technique rating 7.62 out of 10.',
       );
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('shows the exact earned rating immediately without requesting count-up frames', async () => {
       setPromotion();
       const renderer = await render();
-      expect(rendered(renderer)).toContain('7.62');
+      const rating = () => hostNodes(renderer, 'rank-up-rating')[0]!;
+      expect(rating().children[0]).toBe('3.75');
+      expect(rating().props.accessibilityLabel).toBe(
+        'Estimated DUPR 3.75, technique rating 7.62 out of 10',
+      );
+      expect(rendered(renderer)).toContain('7.62 /10');
       expect(rendered(renderer)).not.toContain('7.10');
       expect(frames.size).toBe(0);
 
       act(() => flushFrame(0));
       act(() => flushFrame(1500));
-      expect(rendered(renderer)).toContain('7.62');
+      expect(rating().children[0]).toBe('3.75');
       expect(frames.size).toBe(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('cancels the brief entry when dismissed without leaving animation frames', async () => {
@@ -541,7 +565,7 @@ describe('RankUpCelebration button ledger', () => {
       expect(cancel).toHaveBeenCalled();
       expect(cancelledFrames).toHaveLength(0);
       expect(frames.size).toBe(0);
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('renders the final layout at rest under reduced motion, controls intact', async () => {
@@ -555,7 +579,7 @@ describe('RankUpCelebration button ledger', () => {
         continueButton(renderer).props.onPress();
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
 
     it('survives a summary that lacks a next tier and a null fromRating', async () => {
@@ -574,7 +598,7 @@ describe('RankUpCelebration button ledger', () => {
         backdrop(renderer).props.onPress();
       });
       expect(useRankCelebrationStore.getState().current).toBeNull();
-      act(() => renderer.unmount());
+      unmount(renderer);
     });
   });
 });

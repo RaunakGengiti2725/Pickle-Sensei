@@ -153,7 +153,14 @@ omitted so scoring abstains rather than receives fabricated values.
 | `contact_height_ratio`        | Wrist height above ground ÷ shoulder height above ground at contact.                   |
 | `wrist_angle_variance_deg`    | Std-dev of the unwrapped forearm (elbow→wrist) angle through the contact neighborhood. |
 | `follow_through_length_norm`  | Wrist path length across follow-through ÷ torso length.                                |
-| `recovery_time_ms`            | Recover span duration after follow-through ends.                                       |
+
+`recovery` has no metric in this stack. The former `recovery_time_ms` was the
+recover-span duration after follow-through — i.e. the trigger window's tail
+padding, which scored ~100 on every read — and geometry-2 stopped emitting it
+(the segmenter ends at the follow-through's decay to quiet). The sm-v1 config
+therefore carries `recovery` with an empty target list: it is not applicable
+(excluded from confidence and score) rather than an unobserved checkpoint,
+which would count as zero confidence against every capture.
 
 ## F. Fusion / scoring
 

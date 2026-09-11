@@ -6,7 +6,7 @@ This is the forward plan from the current implementation. Completed infrastructu
 
 - React Native product shell, premium navigation and account-aware state.
 - Canonical auth/bootstrap/onboarding/progress APIs and account-scoped local SQLite/outbox data.
-- Permit-bound analysis accounting with exactly two lifetime successful free ratings and an entitlement gate after them.
+- Permit-bound analysis accounting with exactly one lifetime successful free rating (D-045) and an entitlement gate after it.
 - iOS AVFoundation + Apple Vision and Android CameraX + MediaPipe native camera paths.
 - Automatic motion-triggered short-clip capture with a live real-pose body heat map and measured joint-motion visualization.
 - Typed `unknown`/`awaiting_model` outcomes instead of sample stroke labels, scores, drills, or speed.

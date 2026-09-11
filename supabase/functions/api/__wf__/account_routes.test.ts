@@ -12,6 +12,13 @@
 //     supabase/functions/api/__wf__/
 
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
+import { ACCOUNT_OWNER_NAMESPACES, deletionChallengeHash } from "../accountDeletionOperations.ts";
+import { isPagedSelect, postgrestSelect } from "./postgrestStandIn.ts";
+import {
+  AccountDeletionStub,
+  SERVICE_ROLE_READABLE_TABLES,
+  filteredRows,
+} from "./routesHarness.ts";
 
 // ─── Fake Supabase ──────────────────────────────────────────────────────────
 
@@ -32,11 +39,13 @@ interface FakeState {
   databaseRequests: Request[];
   /** Rows PostgREST returns for account_deletion_requests selects. */
   deletionRows: Array<{ challenge: string; created_at: string; expires_at: string }>;
-  /** Last upsert payload PostgREST received for account_deletion_requests. */
+  /** Last service-only deletion admission RPC payload. */
   lastUpsert: Record<string, unknown> | null;
   /** Queue of statuses for DELETE /auth/v1/admin/users/:id. */
   adminDeleteStatuses: number[];
   adminDeleteCalls: number;
+  adminDeleteGate: Promise<void> | null;
+  onAdminDelete: (() => void) | null;
   revenueCatDeleteCalls: number;
   profileRows: Array<Record<string, unknown>>;
 }
@@ -59,9 +68,24 @@ const state: FakeState = {
   lastUpsert: null,
   adminDeleteStatuses: [],
   adminDeleteCalls: 0,
+  adminDeleteGate: null,
+  onAdminDelete: null,
   revenueCatDeleteCalls: 0,
   profileRows: [],
 };
+
+const externalCredentials: unknown[] = [];
+/** Every other account-keyed table starts empty and is cascaded like the rest. */
+const emptyOwnerTables: Record<string, unknown[]> = Object.fromEntries(
+  ACCOUNT_OWNER_NAMESPACES.map((namespace) => [namespace.table, []]),
+);
+const ownerTables = (): Record<string, unknown[]> => ({
+  ...emptyOwnerTables,
+  account_deletion_requests: state.deletionRows,
+  account_external_credentials: externalCredentials,
+  profiles: state.profileRows,
+});
+const deletions = new AccountDeletionStub(ownerTables);
 
 function resetState(): void {
   state.tokenStatus = 200;
@@ -81,8 +105,12 @@ function resetState(): void {
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
   state.adminDeleteCalls = 0;
+  state.adminDeleteGate = null;
+  state.onAdminDelete = null;
   state.revenueCatDeleteCalls = 0;
   state.profileRows = [];
+  deletions.reset();
+  externalCredentials.length = 0;
 }
 
 const jsonResponse = (status: number, body: unknown): Response =>
@@ -178,6 +206,8 @@ async function fakeSupabase(request: Request): Promise<Response> {
   if (path === "/auth/v1/user") {
     const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /, "");
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (deletions.missingOwners.has(payload.sub))
+      return jsonResponse(404, { code: "user_not_found" });
     return jsonResponse(200, {
       id: payload.sub,
       email: "u@example.com",
@@ -199,13 +229,15 @@ async function fakeSupabase(request: Request): Promise<Response> {
 
   if (request.method === "DELETE" && path.startsWith("/auth/v1/admin/users/")) {
     state.adminDeleteCalls += 1;
+    state.onAdminDelete?.();
+    if (state.adminDeleteGate) await state.adminDeleteGate;
     const status = state.adminDeleteStatuses.shift() ?? 200;
-    if (status === 200) return jsonResponse(200, {});
-    return jsonResponse(status, {
-      code: status,
-      error_code: "user_not_found",
-      msg: "User not found",
-    });
+    if (status === 200) {
+      deletions.observeAuthDeletion(decodeURIComponent(path.slice("/auth/v1/admin/users/".length)));
+      state.sessionActive = false;
+      return jsonResponse(200, {});
+    }
+    return jsonResponse(status, { code: status === 404 ? "user_not_found" : "unexpected_failure" });
   }
 
   if (path === "/rest/v1/rpc/get_api_request_key") {
@@ -224,23 +256,38 @@ async function fakeSupabase(request: Request): Promise<Response> {
         });
   }
 
-  if (path === "/rest/v1/account_deletion_requests") {
-    if (request.method === "POST") {
-      state.lastUpsert = (await request.json()) as Record<string, unknown>;
-      return new Response(null, { status: 201 });
-    }
-    if (request.method === "GET") return jsonResponse(200, state.deletionRows);
+  if (
+    path.startsWith("/rest/v1/rpc/") &&
+    (path.includes("account_deletion") || path.endsWith("store_account_apple_credential"))
+  ) {
+    if (request.headers.get("authorization") !== "Bearer service-role-key")
+      return jsonResponse(403, { code: "42501" });
+    const name = path.slice("/rest/v1/rpc/".length);
+    const args = await request.json();
+    if (name === "begin_account_deletion_operation") state.lastUpsert = args;
+    return jsonResponse(200, await deletions.rpc(name, args));
   }
 
   if (path === "/rest/v1/account_external_credentials") {
-    if (request.method === "GET") return jsonResponse(200, []);
-    if (request.method === "POST" || request.method === "PATCH") {
-      return new Response(null, { status: 201 });
-    }
+    return request.method === "GET"
+      ? jsonResponse(200, externalCredentials)
+      : jsonResponse(403, { code: "42501", message: "fenced credential helpers required" });
   }
 
-  if (path === "/rest/v1/profiles" && request.method === "GET") {
-    return jsonResponse(200, state.profileRows);
+  const ownerTable = path.slice("/rest/v1/".length);
+  if (request.method === "GET" && Object.hasOwn(emptyOwnerTables, ownerTable)) {
+    if (!isPagedSelect(url)) return jsonResponse(200, ownerTables()[ownerTable]);
+    // the deletion sweep: PostgREST semantics under the grant model
+    if (
+      request.headers.get("authorization") === "Bearer service-role-key" &&
+      !SERVICE_ROLE_READABLE_TABLES.has(ownerTable)
+    ) {
+      return jsonResponse(403, {
+        code: "42501",
+        message: `permission denied for table ${ownerTable}`,
+      });
+    }
+    return jsonResponse(200, postgrestSelect(url, filteredRows(url, ownerTables()[ownerTable])));
   }
 
   if (path === "/rest/v1/rpc/access_state" && request.method === "POST") {
@@ -253,10 +300,13 @@ async function fakeSupabase(request: Request): Promise<Response> {
 
 // ─── Boot the Edge Function in-process ───────────────────────────────────────
 
-const fake = Deno.serve({ port: 0, onListen: () => undefined }, fakeSupabase);
+const fake = Deno.serve(
+  { port: 0, hostname: "127.0.0.1", onListen: () => undefined },
+  fakeSupabase,
+);
 const fakeUrl = `http://127.0.0.1:${fake.addr.port}`;
 
-Deno.env.set("SUPABASE_URL", fakeUrl);
+Deno.env.set("SUPABASE_URL", `${fakeUrl}/`);
 Deno.env.set("SUPABASE_ANON_KEY", "anon-key");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
 Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
@@ -335,11 +385,22 @@ const futureIso = (msAhead: number): string => new Date(Date.now() + msAhead).to
 
 Deno.test("delete-request mints a UUID challenge with a 15-minute expiry", async () => {
   resetState();
-  const token = providerToken(crypto.randomUUID());
+  const ownerId = crypto.randomUUID();
+  const token = providerToken(ownerId);
   const res = await call("POST", "/v1/me/delete-request", token);
   assertEquals(res.status, 200);
-  const body = (await res.json()) as { challenge: string; expiresAt: string };
-  assertEquals(body.challenge, state.lastUpsert?.challenge);
+  const body = (await res.json()) as {
+    challenge: string;
+    expiresAt: string;
+    operationId: string;
+    statusCapability: string;
+  };
+  assertEquals(
+    state.lastUpsert?.p_challenge_hash,
+    await deletionChallengeHash(ownerId, body.challenge),
+  );
+  assertEquals(body.operationId, state.lastUpsert?.p_operation_id);
+  assertEquals(body.statusCapability.length, 43);
   const ttlMs = Date.parse(body.expiresAt) - Date.now();
   assertEquals(ttlMs > 14 * 60_000 && ttlMs <= 15 * 60_000, true);
 });
@@ -419,10 +480,10 @@ Deno.test(
   },
 );
 
-// ─── REPRO: delete-confirm is not idempotent under duplicate requests ────────
+// ─── W08: duplicate confirms share one leased operation ─────────────────────
 
 Deno.test(
-  "two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone",
+  "two concurrent legacy delete-confirms share a single Auth delete and a receipt",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -430,23 +491,40 @@ Deno.test(
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
     ];
-    // The first admin deleteUser succeeds; the duplicate finds the user gone.
-    state.adminDeleteStatuses = [200, 404];
-
-    const [a, b] = await Promise.all([
-      call("POST", "/v1/me/delete-confirm", token, { challenge }),
-      call("POST", "/v1/me/delete-confirm", token, { challenge }),
+    let release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      state.onAdminDelete = resolve;
+    });
+    state.adminDeleteGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const first = call("POST", "/v1/me/delete-confirm", token, { challenge });
+    await Promise.race([
+      entered,
+      first.then(() => {
+        throw new Error("confirm returned before Auth gate");
+      }),
     ]);
-    const statuses = [a.status, b.status].sort();
-    assertEquals(statuses, [200, 200]);
-    assertEquals(((await a.json()) as { deleted: boolean }).deleted, true);
-    assertEquals(((await b.json()) as { deleted: boolean }).deleted, true);
-    assertEquals(state.adminDeleteCalls, 2);
+    try {
+      const duplicate = await call("POST", "/v1/me/delete-confirm", token, { challenge });
+      assertEquals(duplicate.status, 202);
+      assertEquals((await duplicate.json()).state, "in_progress");
+      assertEquals(state.adminDeleteCalls, 1);
+    } finally {
+      release();
+    }
+    const response = await first;
+    assertEquals(response.status, 200);
+    const completed = await response.json();
+    assertEquals(completed.deleted, true);
+    assertEquals(typeof completed.completionReceipt.completedAt, "string");
+    assertEquals(state.adminDeleteCalls, 1);
+    assertEquals(state.revenueCatDeleteCalls, 1);
   },
 );
 
 Deno.test(
-  "replaying delete-confirm after deleteUser succeeded remains a successful deletion",
+  "an intended Auth user_not_found without a durable trigger receipt remains unverified",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -454,24 +532,23 @@ Deno.test(
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
     ];
-    // Simulates the client retrying after a lost response while the pending row
-    // is still visible (deleteUser committed but the cascade/replica is behind
-    // or the two requests interleave). GoTrue answers 404 user_not_found.
+    // Auth absence alone cannot certify that this operation performed cleanup
+    // or observed a committed Auth cascade; the trigger receipt is mandatory.
     state.adminDeleteStatuses = [404];
     const res = await call("POST", "/v1/me/delete-confirm", token, { challenge });
-    assertEquals(res.status, 200);
-    assertEquals(((await res.json()) as { deleted: boolean }).deleted, true);
+    assertEquals(res.status, 503);
+    assertEquals((await res.json()).deleted, undefined);
   },
 );
 
 // ─── Verified-session cache is evicted by account deletion ──────────────────
 
 Deno.test(
-  "after a successful delete-confirm the bearer is re-verified with Supabase Auth, not served from cache",
+  "after successful deletion a revocation tombstone refuses the bearer before another Auth call",
   async () => {
     resetState();
     const userId = crypto.randomUUID();
-    const token = providerToken(userId);
+    const token = sessionToken(userId);
     const challenge = crypto.randomUUID();
     state.deletionRows = [
       { challenge, created_at: pastIso(10_000), expires_at: futureIso(60_000) },
@@ -480,26 +557,28 @@ Deno.test(
 
     const deleted = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(deleted.status, 200);
-    assertEquals(state.tokenCalls, 1);
+    assertEquals((await deleted.json()).deleted, true);
+    assertEquals(
+      state.authRequests.filter((request) => new URL(request.url).pathname === "/auth/v1/user")
+        .length,
+      1,
+    );
 
-    // Post-deletion: the profile and deletion rows are gone (cascade).
     state.deletionRows = [];
     state.profileRows = [];
-
-    // The cached session for the deleted user id must not be reused: the next
-    // request with the same bearer goes back to Supabase Auth.
     const access = await call("GET", "/v1/me/access", token);
-    assertEquals(state.tokenCalls, 2);
-    assertEquals(access.status, 200);
-
-    // Every further request keeps being verified from a fresh cache entry, so
-    // a stale identity can never outlive the account.
-    const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
-    assertEquals(again.status, 403);
     assertEquals(
-      ((await again.json()) as { error: { code: string } }).error.code,
-      "account.deletion_challenge_invalid",
+      state.authRequests.filter((request) => new URL(request.url).pathname === "/auth/v1/user")
+        .length,
+      1,
     );
+    assertEquals(access.status, 401);
+    await access.text();
+    const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
+    assertEquals(again.status, 401);
+    await again.text();
+    assertEquals(state.adminDeleteCalls, 1);
+    assertEquals(state.tokenCalls, 0);
   },
 );
 
@@ -512,6 +591,485 @@ function authFailure(kind: AuthFailure): Response {
   if (kind === 0) return Response.error();
   return jsonResponse(kind, { error_code: "injected_auth_failure", msg: AUTH_SECRET });
 }
+
+for (const flow of ["bootstrap", "provider fallback", "getUser"] as const) {
+  for (const failure of [
+    400,
+    401,
+    403,
+    429,
+    500,
+    503,
+    520,
+    530,
+    599,
+    0,
+    "network",
+    "no-status",
+  ] as const) {
+    Deno.test(
+      `${flow}: Auth ${failure} is ${typeof failure === "number" && [400, 401, 403].includes(failure) ? "a rejection" : "retryable"} without credential logs`,
+      async () => {
+        resetState();
+        state.authResponse = () => authFailure(failure);
+        const token =
+          flow === "getUser"
+            ? sessionToken(crypto.randomUUID())
+            : providerToken(crypto.randomUUID());
+        const logs: string[] = [];
+        const realError = console.error;
+        console.error = (...args: unknown[]) => {
+          logs.push(args.map(String).join(" "));
+        };
+        try {
+          const response = await call(
+            flow === "bootstrap" ? "POST" : "GET",
+            flow === "bootstrap" ? "/v1/account/bootstrap" : "/v1/me/access",
+            token,
+            undefined,
+            flow === "bootstrap" ? "203.0.113.101" : "203.0.113.102",
+          );
+          const expected =
+            typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503;
+          assertEquals(response.status, expected);
+          assertEquals((await response.text()).includes(AUTH_SECRET), false);
+          assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+          assertEquals(logs.join(" ").includes(token), false);
+          assertEquals(state.authRequests.length, 1);
+          assertEquals(state.databaseRequests.length, 0);
+        } finally {
+          console.error = realError;
+        }
+      },
+    );
+  }
+}
+
+Deno.test("Auth fetch uses a 10-second signal and refuses redirects", async () => {
+  resetState();
+  state.authResponse = () => authFailure(401);
+  const realTimeout = AbortSignal.timeout;
+  const timeouts: number[] = [];
+  AbortSignal.timeout = (ms: number) => {
+    timeouts.push(ms);
+    return realTimeout.call(AbortSignal, ms);
+  };
+  try {
+    const response = await call(
+      "POST",
+      "/v1/account/bootstrap",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      "203.0.113.103",
+    );
+    assertEquals(response.status, 401);
+    await response.text();
+    assertEquals(state.authRequests[0].redirect, "error");
+    assertEquals(timeouts, [10_000]);
+  } finally {
+    AbortSignal.timeout = realTimeout;
+  }
+});
+
+Deno.test("Auth 5xx bodies are cancelled without waiting for an error payload", async () => {
+  resetState();
+  let cancelled = false;
+  const upstream = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(AUTH_SECRET));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }),
+    { status: 503 },
+  );
+  state.authResponse = () => upstream;
+  try {
+    const response = await call(
+      "POST",
+      "/v1/account/bootstrap",
+      providerToken(crypto.randomUUID()),
+      undefined,
+      "203.0.113.104",
+    );
+    assertEquals(response.status, 503);
+    await response.text();
+    assertEquals(cancelled, true);
+    assertEquals(upstream.bodyUsed, true);
+  } finally {
+    await upstream.body?.cancel().catch(() => undefined);
+  }
+});
+
+Deno.test("trailing-slash Supabase configuration preserves direct refresh and logout", async () => {
+  resetState();
+  assertEquals(Deno.env.get("SUPABASE_URL"), `${fakeUrl}/`);
+  const refreshed = await refresh({ refreshToken: "fixture-refresh-token" });
+  assertEquals(refreshed.status, 200);
+  await refreshed.text();
+  const loggedOut = await call("POST", "/v1/auth/logout", sessionToken(crypto.randomUUID()));
+  assertEquals(loggedOut.status, 204);
+  await loggedOut.text();
+  assertEquals(state.refreshCalls, 1);
+  assertEquals(state.logoutCalls.length, 1);
+  assert(
+    state.authRequests.every((request) => new URL(request.url).pathname.startsWith("/auth/v1/")),
+  );
+});
+
+Deno.test(
+  "refresh rotates through GoTrue once and returns the durable session contract",
+  async () => {
+    resetState();
+    const response = await refresh({ refreshToken: "  old-refresh-token  " });
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    assertEquals(Object.keys(body), ["session"]);
+    assertEquals(Object.keys(body.session).sort(), ["accessToken", "expiresAt", "refreshToken"]);
+    assertEquals(body.session.accessToken, "sb-access-rotated");
+    assertEquals(body.session.refreshToken, "sb-refresh-rotated");
+    assertEquals(body.session.expiresAt > Date.now() / 1000, true);
+    assertEquals(state.refreshCalls, 1);
+    assertEquals(state.lastRefreshToken, "old-refresh-token");
+    assertEquals(state.authRequests[0].headers.get("apikey"), "anon-key");
+    assertEquals(state.sessionChecks, 0);
+  },
+);
+
+Deno.test(
+  "refresh accepts a 4096-character token and derives expiry from expires_in when needed",
+  async () => {
+    resetState();
+    const session = rotatedSession();
+    delete session.expires_at;
+    state.authResponse = () => jsonResponse(200, session);
+    const before = Math.floor(Date.now() / 1000);
+    const response = await refresh({ refreshToken: "r".repeat(4096) });
+    assertEquals(response.status, 200);
+    const expires = (await response.json()).session.expiresAt;
+    assertEquals(expires >= before + 3600 && expires <= Math.floor(Date.now() / 1000) + 3600, true);
+    assertEquals(state.authRequests.length, 1);
+  },
+);
+
+Deno.test(
+  "refresh rejects missing, empty, non-string and overlong tokens before Auth",
+  async () => {
+    resetState();
+    for (const body of [
+      {},
+      { refreshToken: null },
+      { refreshToken: 7 },
+      { refreshToken: "" },
+      { refreshToken: "  " },
+      { refreshToken: "r".repeat(4097) },
+    ]) {
+      const response = await refresh(body);
+      assertEquals(response.status, 400);
+      assertEquals((await response.json()).error.code, "validation.refresh");
+    }
+    assertEquals(state.authRequests.length, 0);
+  },
+);
+
+for (const failure of [
+  400,
+  401,
+  403,
+  429,
+  500,
+  503,
+  520,
+  530,
+  599,
+  0,
+  "network",
+  "no-status",
+] as const) {
+  Deno.test(
+    `refresh: Auth ${failure} makes one attempt and returns ${typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503}`,
+    async () => {
+      resetState();
+      state.authResponse = () => {
+        if (state.authRequests.length > 1) return authFailure(401);
+        if (failure === "no-status") throw { name: "AuthUnknownError", message: AUTH_SECRET };
+        return authFailure(failure);
+      };
+      const logs: string[] = [];
+      const realError = console.error;
+      console.error = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      try {
+        const response = await refresh({ refreshToken: "old-refresh-token" }, "203.0.113.111");
+        assertEquals(
+          response.status,
+          typeof failure === "number" && [400, 401, 403].includes(failure) ? 401 : 503,
+        );
+        assertEquals((await response.text()).includes(AUTH_SECRET), false);
+        assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+        assertEquals(state.authRequests.length, 1);
+        assertEquals(state.sessionChecks, 0);
+      } finally {
+        console.error = realError;
+      }
+    },
+  );
+}
+
+Deno.test(
+  "refresh refuses malformed successful sessions instead of fabricating usable expiry",
+  async () => {
+    resetState();
+    const valid = rotatedSession();
+    for (const session of [
+      { ...valid, expires_at: Number.MAX_SAFE_INTEGER },
+      { ...valid, expires_at: "later" },
+      { ...valid, expires_at: 0 },
+      { ...valid, expires_at: Math.floor(Date.now() / 1000) - 1 },
+      { ...valid, expires_in: -1 },
+      { ...valid, expires_at: undefined, expires_in: undefined },
+      { ...valid, expires_at: undefined, expires_in: 1e308 },
+      { ...valid, access_token: "   " },
+      { ...valid, refresh_token: "" },
+      { ...valid, refresh_token: "r".repeat(4097) },
+      null,
+      [],
+    ]) {
+      state.authResponse = () => jsonResponse(200, session);
+      const malformed = await refresh({ refreshToken: "r" }, "203.0.113.112");
+      assertEquals(malformed.status, 503);
+      assertEquals((await malformed.text()).includes("sb-refresh-rotated"), false);
+    }
+  },
+);
+
+Deno.test("refresh rejects 100 KB JSON bodies before any Auth call", async () => {
+  resetState();
+  const response = await refresh({ refreshToken: "r", pad: "x".repeat(100_000) }, "203.0.113.113");
+  assertEquals(response.status, 413);
+  await response.text();
+  assertEquals(state.authRequests.length, 0);
+});
+
+Deno.test(
+  "logout revokes only the current device, bypasses liveness and evicts its warm bearer",
+  async () => {
+    resetState();
+    const userId = crypto.randomUUID();
+    const token = sessionToken(userId);
+    const otherDevice = sessionToken(userId);
+    const warm = await call("GET", "/v1/me/access", token);
+    assertEquals(warm.status, 200);
+    await warm.text();
+    const before = state.sessionChecks;
+    state.sessionActive = false;
+    const response = await call("POST", "/v1/auth/logout", token);
+    assertEquals(response.status, 204);
+    assertEquals(await response.text(), "");
+    assertEquals(state.logoutCalls, [{ scope: "local", authorization: `Bearer ${token}` }]);
+    assertEquals(state.sessionChecks, before);
+    state.sessionActive = true;
+    const revoked = await call("GET", "/v1/me/access", token);
+    assertEquals(revoked.status, 401);
+    await revoked.text();
+    assertEquals(state.sessionChecks, before);
+    const after = await call("GET", "/v1/me/access", otherDevice);
+    assertEquals(after.status, 200);
+    await after.text();
+    assertEquals(
+      state.authRequests.filter((r) => new URL(r.url).pathname === "/auth/v1/user").length,
+      2,
+    );
+  },
+);
+
+for (const status of [200, 204, 401, 403, 404, 429, 500, 503, 520, 530, 0, "network"] as const) {
+  Deno.test(
+    `logout: Auth ${status} is consumed and returns ${typeof status === "number" && [200, 204, 401, 403, 404].includes(status) ? 204 : 503}`,
+    async () => {
+      resetState();
+      const token = sessionToken(crypto.randomUUID());
+      let upstream: Response | undefined;
+      state.authResponse = (request) => {
+        if (new URL(request.url).pathname !== "/auth/v1/logout") return realFetch(request);
+        upstream = status === 204 ? new Response(null, { status: 204 }) : authFailure(status);
+        return upstream;
+      };
+      const logs: string[] = [];
+      const realError = console.error;
+      console.error = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+      try {
+        const response = await call("POST", "/v1/auth/logout", token, undefined, "203.0.113.114");
+        assertEquals(
+          response.status,
+          typeof status === "number" && [200, 204, 401, 403, 404].includes(status) ? 204 : 503,
+        );
+        assertEquals((await response.text()).includes(AUTH_SECRET), false);
+        assertEquals(logs.join(" ").includes(AUTH_SECRET), false);
+        assertEquals(state.sessionChecks, 0);
+        if (upstream?.body) assertEquals(upstream.bodyUsed, true);
+        const logout = state.authRequests.find(
+          (r) => new URL(r.url).pathname === "/auth/v1/logout",
+        )!;
+        assertEquals(new URL(logout.url).searchParams.get("scope"), "local");
+        assertEquals(logout.headers.get("authorization"), `Bearer ${token}`);
+        assertEquals(logout.headers.get("apikey"), "anon-key");
+      } finally {
+        console.error = realError;
+        await upstream?.body?.cancel().catch(() => undefined);
+      }
+    },
+  );
+}
+
+Deno.test(
+  "delete-request rejects malformed and non-object JSON without minting a challenge",
+  async () => {
+    for (const raw of ["{not json", "[]", "null", '"survey"']) {
+      resetState();
+      const response = await rawCall("/v1/me/delete-request", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${providerToken(crypto.randomUUID())}` },
+        body: raw,
+      });
+      assertEquals(response.status, 400, raw);
+      await response.text();
+      assertEquals(state.lastUpsert, null);
+      assertEquals(
+        state.databaseRequests.some((r) => r.url.includes("account_deletion_requests")),
+        false,
+      );
+    }
+  },
+);
+
+Deno.test(
+  "delete-request stream failures are 400, release the reader and never write",
+  async () => {
+    resetState();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"survey":'));
+      },
+      pull(controller) {
+        controller.error(new Error("client stream failed"));
+      },
+    });
+    const response = await rawCall("/v1/me/delete-request", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${providerToken(crypto.randomUUID())}` },
+      body: stream,
+    });
+    assertEquals(response.status, 400);
+    await response.text();
+    assertEquals(state.lastUpsert, null);
+    assertEquals(stream.locked, false);
+  },
+);
+
+Deno.test(
+  "bootstrap validates optional JSON for Google too before any profile access",
+  async () => {
+    for (const [raw, status] of [
+      ["{not json", 400],
+      ["[]", 400],
+      [JSON.stringify({ pad: "x".repeat(100_000) }), 413],
+    ] as const) {
+      resetState();
+      const userId = crypto.randomUUID();
+      state.profileRows = [profileRow(userId)];
+      const response = await rawCall(
+        "/v1/account/bootstrap",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${providerToken(userId)}` },
+          body: raw,
+        },
+        "203.0.113.121",
+      );
+      assertEquals(response.status, status);
+      await response.text();
+      assertEquals(state.databaseRequests.length, 0);
+    }
+  },
+);
+
+Deno.test("bootstrap has a 30/min per-IP budget before any provider exchange", async () => {
+  resetState();
+  const realNow = Date.now;
+  const frozen = realNow();
+  Date.now = () => frozen;
+  try {
+    const userId = crypto.randomUUID();
+    const token = providerToken(userId);
+    state.profileRows = [profileRow(userId)];
+    for (let i = 0; i < 30; i += 1) {
+      const response = await call(
+        "POST",
+        "/v1/account/bootstrap",
+        token,
+        undefined,
+        "203.0.113.120",
+      );
+      assertEquals(response.status, 200, `bootstrap ${i + 1}`);
+      await response.text();
+    }
+    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.120");
+    assertEquals(blocked.status, 429);
+    assertEquals(Number(blocked.headers.get("Retry-After")) >= 1, true);
+    await blocked.text();
+    assertEquals(state.tokenCalls, 30);
+    assertEquals(state.sessionChecks, 0);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+Deno.test(
+  "a warm auth cache cannot bypass revocation; false evicts it and RPC outages stay retryable",
+  async () => {
+    resetState();
+    const token = sessionToken(crypto.randomUUID());
+    const warm = await call("GET", "/v1/me/access", token);
+    assertEquals(warm.status, 200);
+    await warm.text();
+    assertEquals(state.authRequests.length, 1);
+    state.sessionActive = false;
+    const denied = await call("GET", "/v1/me/access", token);
+    assertEquals(denied.status, 401);
+    await denied.text();
+    assertEquals(state.authRequests.length, 1);
+    assertEquals(state.accessStateCalls, 1);
+    state.sessionActive = true;
+    const restored = await call("GET", "/v1/me/access", token);
+    assertEquals(restored.status, 200);
+    await restored.text();
+    assertEquals(state.authRequests.length, 2);
+    for (const verdict of [null, "true", [], {}]) {
+      state.sessionActive = verdict;
+      const invalid = await call("GET", "/v1/me/access", token);
+      assertEquals(invalid.status, 503);
+      await invalid.text();
+      assertEquals(state.accessStateCalls, 2);
+    }
+    state.sessionActive = true;
+    state.sessionActiveStatus = 500;
+    const outage = await call("GET", "/v1/me/access", token);
+    assertEquals(outage.status, 503);
+    assertEquals((await outage.text()).includes("injected session check failure"), false);
+    state.sessionActiveStatus = 200;
+    const recovered = await call("GET", "/v1/me/access", token);
+    assertEquals(recovered.status, 200);
+    await recovered.text();
+    assertEquals(state.authRequests.length, 2);
+    assertEquals(state.sessionChecks, 9);
+  },
+);
 
 for (const flow of ["bootstrap", "provider fallback", "getUser"] as const) {
   for (const failure of [
@@ -919,12 +1477,12 @@ Deno.test("bootstrap has a 30/min per-IP budget before any provider exchange", a
         "/v1/account/bootstrap",
         token,
         undefined,
-        "203.0.113.120",
+        "203.0.113.123",
       );
       assertEquals(response.status, 200, `bootstrap ${i + 1}`);
       await response.text();
     }
-    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.120");
+    const blocked = await call("POST", "/v1/account/bootstrap", token, undefined, "203.0.113.123");
     assertEquals(blocked.status, 429);
     assertEquals(Number(blocked.headers.get("Retry-After")) >= 1, true);
     await blocked.text();

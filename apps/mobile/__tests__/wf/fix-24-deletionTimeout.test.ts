@@ -129,7 +129,7 @@ describe('account deletion request deadline', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('step 2 aborts a hung delete-confirm after 15s with retryable offline copy', async () => {
+  it('step 2 aborts a hung delete-confirm after 15s with an honest unknown outcome', async () => {
     const fetchFn = hangingFetch();
     const settled = confirmAccountDeletion(session, 'challenge', fetchFn).then(
       () => 'resolved',
@@ -141,9 +141,59 @@ describe('account deletion request deadline', () => {
     const error = await settled;
     expect(error).toBeInstanceOf(AccountDeletionError);
     expect(error).toMatchObject({
-      code: 'deletion.unavailable',
+      code: 'deletion.unknown',
       retryable: true,
+      message: expect.stringContaining('may have completed'),
     });
+    expect((error as Error).message).not.toContain('Nothing was deleted');
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it.each(['fetch', 'body'])(
+    'bounds a stalled final %s even when abort is ignored',
+    async stage => {
+      const fetchFn = jest.fn((_input: string, _init?: RequestInit) =>
+        stage === 'fetch'
+          ? new Promise<Response>(() => {})
+          : Promise.resolve({
+              ok: true,
+              status: 200,
+              json: () => new Promise<unknown>(() => {}),
+            } as Response),
+      );
+      let error: unknown;
+      void confirmAccountDeletion(session, 'challenge', fetchFn).catch(
+        value => {
+          error = value;
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(15_000);
+
+      expect(error).toMatchObject({
+        code: 'deletion.unknown',
+        retryable: true,
+      });
+      expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+      expect(jest.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('never interprets a generic 401 as confirmation of deletion', async () => {
+    const fetchFn = jest.fn(
+      async () =>
+        ({
+          status: 401,
+          ok: false,
+          json: async () => ({ error: { message: 'Unauthorized' } }),
+        }) as Response,
+    );
+
+    await expect(
+      confirmAccountDeletion(session, 'challenge', fetchFn),
+    ).rejects.toMatchObject({
+      code: 'deletion.session_expired',
+      message: expect.stringContaining('does not confirm'),
+    });
   });
 });

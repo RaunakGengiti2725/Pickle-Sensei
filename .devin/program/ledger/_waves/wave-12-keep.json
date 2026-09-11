@@ -1,0 +1,18 @@
+{
+  "base_sha": "ba68912413edf7ad0cbac3bdbfd8fc82ced49e5b",
+  "integration_order": {},
+  "packages": {
+    "W08-01": {
+      "agent_counts": {
+        "completed": 12,
+        "failed": 0,
+        "launched": 12,
+        "requested": 12
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-12-keep"
+}

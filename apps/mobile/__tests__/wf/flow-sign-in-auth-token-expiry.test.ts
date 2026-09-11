@@ -146,10 +146,12 @@ describe('sign-in-auth token expiry (Apple: no silent refresh, honest sign-out)'
     );
     expect(actions.sort()).toEqual(
       [
+        'acknowledgeReturningSession',
         'clearError',
         'completeAccountDeletion',
         'continueAsGuest',
         'hydrate',
+        'retrySessionPersistence',
         'signInWithApple',
         'signInWithGoogle',
         'signOut',
@@ -157,7 +159,7 @@ describe('sign-in-auth token expiry (Apple: no silent refresh, honest sign-out)'
     );
   });
 
-  it('a 401 on /v1/me/access is a non-retryable sign-in-expired error and the expired session is signed out with an honest reason', async () => {
+  it('a membership 401 is retryable, while auth separately ends this legacy session without a refresh credential', async () => {
     const api = getApiSession()!;
     const fetchFn = jest
       .fn()
@@ -183,9 +185,9 @@ describe('sign-in-auth token expiry (Apple: no silent refresh, honest sign-out)'
     const billing = caught as BillingError;
     expect(billing.code).toBe('billing.backend_unavailable');
     expect(billing.message).toBe(
-      'Your sign-in has expired. Sign in again to check membership access.',
+      'Your account connection needs to refresh. Please try verification again.',
     );
-    expect(billing.retryable).toBe(false);
+    expect(billing.retryable).toBe(true);
     expect(fetchFn).toHaveBeenCalledWith(
       'https://api.example.test/v1/me/access',
       expect.objectContaining({

@@ -17,9 +17,14 @@
  *   - abandoning the screen mid-capture cancels the native operation once.
  */
 import React from 'react';
+import { createPendingFulfilmentStorage } from '../../src/billing/pendingFulfilment';
 import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalDb } from '../../src/data/db';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
 import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
@@ -79,6 +84,11 @@ let mockOutcome: () => Promise<CaptureAnalysisOutcome> = () =>
   Promise.reject(new Error('outcome not configured'));
 let mockAnalysisCalls = 0;
 jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
+  ...jest.requireActual('../../src/analysis/runCaptureAnalysis'),
+  runOriginalCaptureAnalysis: () => {
+    mockAnalysisCalls += 1;
+    return mockOutcome();
+  },
   runCaptureAnalysis: () => {
     mockAnalysisCalls += 1;
     return mockOutcome();
@@ -115,15 +125,9 @@ interface RecordedCall {
   params: unknown[];
 }
 let dbCalls: RecordedCall[] = [];
-const recordingDb: LocalDb = {
-  async execute(sql, params = []) {
-    dbCalls.push({ sql, params });
-    return { rows: [] };
-  },
-  close() {},
-};
+let sqlite: ReturnType<typeof createSqliteTestDb>;
 function mockCurrentDb(): LocalDb {
-  return recordingDb;
+  return sqlite.db;
 }
 
 function freeAccess(used: number, reserved = 0): CanonicalAccessState {
@@ -156,9 +160,11 @@ function billing(): BillingAccessDependencies {
   };
 }
 
+let fixtureClipIndex = 0;
 function guidedClip(withPose: boolean): CapturedClip {
+  const identity = `run-${++fixtureClipIndex}`;
   return {
-    uri: 'file:///captures/run.mov',
+    uri: `file:///captures/${identity}.mov`,
     durationMs: 2700,
     fps: 60,
     width: 1080,
@@ -183,7 +189,7 @@ function guidedClip(withPose: boolean): CapturedClip {
           poseSequence: {
             schemaVersion: 1 as const,
             format: 'pickle.pose-sequence.v1' as const,
-            uri: 'file:///captures/run.pose.json',
+            uri: `file:///captures/${identity}.pose.json`,
             frameCount: 40,
             sha256: 'a'.repeat(64),
             coordinateSystem: 'normalized_image_top_left' as const,
@@ -201,12 +207,19 @@ function guidedClip(withPose: boolean): CapturedClip {
       analysisInputFrameCount: 40,
       poseFrameCount: 40,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 2700,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
       fullBodyVisibleFrameCount: 40,
-      jointMotion: [],
+      jointMotion: [
+        {
+          joint: 'right_wrist',
+          sampleCount: 4,
+          meanNormalizedPerSecond: 0.6,
+          peakNormalizedPerSecond: 1.4,
+        },
+      ],
     },
     ballSpeed: {
       status: 'unavailable',
@@ -346,7 +359,9 @@ let clients: BillingAccessDependencies;
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
   mockSource = 'camera';
-  dbCalls = [];
+  fixtureClipIndex = 0;
+  sqlite = createSqliteTestDb();
+  dbCalls = sqlite.calls;
   mockCaptureCalls = 0;
   mockAnalysisCalls = 0;
   mockCancelSpy.mockClear();
@@ -364,11 +379,15 @@ beforeEach(() => {
   });
   clearAccessStoreConfiguration();
   clients = billing();
-  configureAccessStore(clients);
+  configureAccessStore(clients, {
+    owner,
+    pendingFulfilmentStorage: createPendingFulfilmentStorage(() => sqlite.db),
+  });
   useAccessStore.setState({ status: 'ready', canonicalAccess: freeAccess(0) });
 });
 
 afterEach(() => {
+  closeSqliteTestDatabases();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   jest.useRealTimers();
@@ -414,11 +433,17 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             } else {
               // No orphan loading state once the single run settles.
               expect(isWorking(renderer)).toBe(false);
-              expect(hasText(renderer, 'Nothing was rated.')).toBe(true);
+              expect(hasText(renderer, 'Your saved analysis is held.')).toBe(
+                true,
+              );
+              expect(sqlite.count('analysis_logical_operations', owner)).toBe(
+                1,
+              );
+              expect(sqlite.count('local_analysis_record', owner)).toBe(0);
               expect(mockTriggerSync).not.toHaveBeenCalled();
               // The Try-again surface is live: a fresh tap starts ONE new
               // capture, not a second scoring of the old clip.
-              const again = byText(renderer, 'Try again');
+              const again = byText(renderer, 'Record another clip');
               const before = mockCaptureCalls;
               mockCaptureImpl = () => deferred<CapturedClip>().promise;
               await stormPress(again, randomInt(random, 2, 6), random);
@@ -537,11 +562,9 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             expect(mockNavigation.goBack.mock.calls.length).toBe(
               goBacksAtClose,
             );
-            if (outcomeKind === 'scored') {
-              // The rating is durable and leaves for the server even
-              // though the user navigated away.
-              expect(mockTriggerSync).toHaveBeenCalledTimes(1);
-            } else expect(mockTriggerSync).not.toHaveBeenCalled();
+            // The retired screen cannot publish or trigger a new owner's sync.
+            // The durable runner/outbox owns recovery after navigation.
+            expect(mockTriggerSync).not.toHaveBeenCalled();
             if (!unmountBeforeSettle) {
               // Still mounted (navigator not yet torn down): the working
               // surface must not be left spinning forever.
@@ -607,8 +630,8 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             await stormPress(close, closeTaps, random);
             const cancelsAtClose = mockCancelSpy.mock.calls.length;
             const goBacksAtClose = mockNavigation.goBack.mock.calls.length;
-            expect(cancelsAtClose).toBe(closeTaps);
-            expect(goBacksAtClose).toBe(closeTaps);
+            expect(cancelsAtClose).toBe(1);
+            expect(goBacksAtClose).toBe(1);
             // The native side answers the cancel (Swift finishWithError
             // "camera.cancelled" → message contains "canceled").
             if (nativeSettles === 'cancel') {
@@ -628,7 +651,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             // Observed, not asserted: whether an analysis (permit) starts
             // for a clip the user had already abandoned.
             const analysesAfterAbandon = mockAnalysisCalls;
-            expect(mockAnalysisCalls).toBeLessThanOrEqual(1);
+            expect(mockAnalysisCalls).toBe(0);
             const pendingCaptureRows = dbCalls.filter(c =>
               c.sql.includes('INSERT INTO local_capture'),
             ).length;
@@ -640,10 +663,8 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             expect(mockNavigation.replace).not.toHaveBeenCalled();
             await act(async () => renderer.unmount());
             await settle(1);
-            // Unmount with the operation still pending cancels once more;
-            // a settled operation is not re-cancelled.
-            const expectedCancels =
-              nativeSettles === 'never' ? cancelsAtClose + 1 : cancelsAtClose;
+            // Close owns cancellation; neither late completion nor unmount repeats it.
+            const expectedCancels = cancelsAtClose;
             expect(mockCancelSpy.mock.calls.length).toBe(expectedCancels);
             expect(clients.backend.getAccess).toHaveBeenCalledTimes(
               analysesAfterAbandon,
@@ -663,7 +684,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
     }
   });
 
-  describe('simultaneous scoring + re-capture in one tick: one analysis, one capture, camera cancelled on unmount', () => {
+  describe('simultaneous scoring + re-capture in one tick: only the first action owns the clip', () => {
     for (const seed of scenarioSeeds('simultaneousScoreAndCapture')) {
       it(`seed ${seed}`, async () => {
         const random = seededRandom(seed);
@@ -683,7 +704,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             mockCaptureImpl = () => camera.promise;
             const score = byText(renderer, 'Get my Technique Score').props
               .onPress as () => void;
-            const again = byText(renderer, 'Capture another').props
+            const again = byText(renderer, 'Record another clip').props
               .onPress as () => void;
             const capturesBefore = mockCaptureCalls;
             // Both handlers fire inside ONE act — the saved surface has not
@@ -702,22 +723,26 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
               }
             });
             await settle();
-            expect(mockAnalysisCalls).toBe(1);
-            expect(mockCaptureCalls).toBe(capturesBefore + 1);
+            expect(mockAnalysisCalls).toBe(scoreFirst ? 1 : 0);
+            expect(mockCaptureCalls).toBe(
+              capturesBefore + (scoreFirst ? 0 : 1),
+            );
             expect(isWorking(renderer)).toBe(true);
-            // Scoring lands first: Result navigation replaces this screen
-            // while the camera is still open natively...
-            analysis.resolve(scoredOutcome());
-            await settle();
-            expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
-            expect(mockTriggerSync).toHaveBeenCalledTimes(1);
-            // ...so the navigator unmounts it: the pending capture MUST be
-            // cancelled natively, exactly once.
+            if (scoreFirst) {
+              analysis.resolve(scoredOutcome());
+              await settle();
+              expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
+              expect(mockTriggerSync).toHaveBeenCalledTimes(1);
+            } else {
+              expect(mockNavigation.replace).not.toHaveBeenCalled();
+              expect(mockTriggerSync).not.toHaveBeenCalled();
+            }
             await act(async () => renderer.unmount());
-            expect(mockCancelSpy).toHaveBeenCalledTimes(1);
-            camera.reject(new Error('Camera capture was canceled.'));
+            expect(mockCancelSpy).toHaveBeenCalledTimes(scoreFirst ? 0 : 1);
+            if (!scoreFirst)
+              camera.reject(new Error('Camera capture was canceled.'));
             await settle();
-            expect(mockAnalysisCalls).toBe(1);
+            expect(mockAnalysisCalls).toBe(scoreFirst ? 1 : 0);
             expect(mockNavigation.goBack).not.toHaveBeenCalled();
             return {
               analysisCalls: mockAnalysisCalls,
@@ -741,6 +766,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
           await settle(1);
           let captureCalls = 0;
           let analysisCalls = 0;
+          let retryLabel = 'Try again';
           for (let round = 0; round < rounds; round += 1) {
             const failAt = random() < 0.5 ? 'capture' : 'analysis';
             const camera = deferred<CapturedClip>();
@@ -750,7 +776,7 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             const button =
               round === 0
                 ? byLabel(renderer, 'Open automatic camera')
-                : byText(renderer, 'Try again');
+                : byText(renderer, retryLabel);
             await stormPress(button, randomInt(random, 1, 5), random);
             captureCalls += 1;
             expect(mockCaptureCalls).toBe(captureCalls);
@@ -758,24 +784,40 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
               camera.reject(new Error('Camera session interrupted.'));
               await settle();
               expect(hasText(renderer, 'Capture interrupted')).toBe(true);
+              retryLabel = 'Try again';
             } else {
               camera.resolve(guidedClip(true));
               await settle();
               analysisCalls += 1;
               expect(mockAnalysisCalls).toBe(analysisCalls);
               expect(isWorking(renderer)).toBe(true);
-              analysis.reject(new Error('pipeline exploded'));
+              analysis.resolve({
+                kind: 'unavailable',
+                reason: 'The model could not complete this read.',
+              });
               await settle();
               expect(hasText(renderer, 'Analysis stopped')).toBe(true);
+              retryLabel = 'Record another clip';
             }
             expect(isWorking(renderer)).toBe(false);
-            expect(hasText(renderer, 'Nothing was rated.')).toBe(true);
+            expect(
+              hasText(
+                renderer,
+                failAt === 'capture'
+                  ? 'Nothing was rated.'
+                  : 'Your saved analysis is held.',
+              ),
+            ).toBe(true);
+            expect(sqlite.count('analysis_logical_operations', owner)).toBe(
+              analysisCalls,
+            );
+            expect(sqlite.count('local_analysis_record', owner)).toBe(0);
           }
           // Final successful round proves the retry surface is not stuck.
           const camera = deferred<CapturedClip>();
           mockCaptureImpl = () => camera.promise;
           mockOutcome = async () => scoredOutcome();
-          act(() => byText(renderer, 'Try again').props.onPress());
+          act(() => byText(renderer, retryLabel).props.onPress());
           await settle(1);
           camera.resolve(guidedClip(true));
           await settle();

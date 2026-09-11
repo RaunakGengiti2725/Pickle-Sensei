@@ -56,7 +56,7 @@ Last reviewed: 2026-08-28
 - Calibrated ball tracking is not implemented, so the app does not display MPH.
 - Live Court scoring is unavailable. Cue/session logic and native TTS exist, but they are not exposed as a working coaching loop without validated repetitions and scores.
 - The production training catalog contains no seeded placeholder drills or media. It remains empty until reviewed, rights-cleared content is published.
-- The account service enforces two lifetime free successful ratings followed by a hard entitlement gate. Only a successful server-accepted rating consumes one; current `awaiting_model` captures consume none.
+- The account service enforces one lifetime free successful rating (D-045; two before 2026-09-10) followed by a hard entitlement gate. Only a successful server-accepted rating consumes one; current `awaiting_model` captures consume none.
 - Seeded scoring configurations are validating hypotheses, not active releases. Migration `0013` leaves a fresh database with zero active scoring models and makes canonical score sync require an audited, evidence-backed release record.
 - Deterministic data may be used by tests of pure math and orchestration. It is isolated to test code and is not a production/demo inference path.
 

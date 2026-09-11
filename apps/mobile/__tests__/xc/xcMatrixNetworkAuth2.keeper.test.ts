@@ -71,6 +71,45 @@ function abortError(): Error {
 
 /** Captured before fake timers are installed: real wall clock for stamps/durations. */
 const REAL_NOW: () => number = Date.now.bind(Date);
+const VIRTUAL_EPOCH = Date.parse('2026-09-04T00:00:00.000Z');
+const DEFAULT_SEEDS = 1500;
+const MAX_SEEDS = 10_000;
+const BATCH_SIZE = 25;
+const REQUEST_TIMEOUT_MS = 15_000;
+
+function seedInteger(name: string, value: string, min: number, max: number) {
+  const parsed = Number(value);
+  if (
+    !/^(0|[1-9]\d*)$/.test(value) ||
+    !Number.isSafeInteger(parsed) ||
+    parsed < min ||
+    parsed > max
+  ) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}.`);
+  }
+  return parsed;
+}
+
+function seedPlan(env: Record<string, string | undefined>) {
+  const only =
+    env.XC_SEED === undefined
+      ? null
+      : seedInteger('XC_SEED', env.XC_SEED, 0, 0xffffffff);
+  const count =
+    env.XC_SEEDS === undefined
+      ? DEFAULT_SEEDS
+      : seedInteger('XC_SEEDS', env.XC_SEEDS, 1, MAX_SEEDS);
+  const seeds =
+    only === null ? Array.from({ length: count }, (_, i) => i) : [only];
+  const batches = Array.from(
+    { length: Math.ceil(seeds.length / BATCH_SIZE) },
+    (_, index) => {
+      const batch = seeds.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE);
+      return { first: batch[0]!, last: batch[batch.length - 1]!, seeds: batch };
+    },
+  );
+  return { only, seeds, batches };
+}
 
 // ─── Seeded PRNG ─────────────────────────────────────────────────────────────
 
@@ -342,7 +381,16 @@ interface Attempt {
   settled: boolean;
 }
 
+interface CleanupState {
+  pendingAtStop: number;
+  pendingRequests: number;
+  timers: number;
+  appStateListeners: number;
+  abortListeners: number;
+}
+
 interface SeedResult {
+  cleanup: CleanupState;
   seed: number;
   network: Network;
   verdict: 'PASS' | 'FAIL';
@@ -428,8 +476,71 @@ function buildScenario(seed: number): Scenario {
 // ─── Runner ──────────────────────────────────────────────────────────────────
 
 let appStateHandler: ((state: string) => void) | null = null;
+const appStateListeners = new Set<(state: string) => void>();
+const abortListeners = new Set<() => void>();
+
+function waitForAbort(signal: RequestInit['signal']): Promise<never> {
+  return new Promise<never>((_, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const onAbort = () => {
+      signal?.removeEventListener('abort', onAbort);
+      abortListeners.delete(onAbort);
+      reject(abortError());
+    };
+    if (signal) {
+      abortListeners.add(onAbort);
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function trackRequest(
+  pendingRequests: Set<Promise<Response>>,
+  request: Promise<Response>,
+): Promise<Response> {
+  pendingRequests.add(request);
+  const settled = () => {
+    pendingRequests.delete(request);
+  };
+  void request.then(settled, settled);
+  return request;
+}
+
+async function stopAndSettle(
+  pendingRequests: Set<Promise<Response>>,
+): Promise<CleanupState> {
+  const pending = [...pendingRequests];
+  stopSessionKeeper();
+  await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+  const state = {
+    pendingAtStop: pending.length,
+    pendingRequests: pendingRequests.size,
+    timers: jest.getTimerCount(),
+    appStateListeners: appStateListeners.size,
+    abortListeners: abortListeners.size,
+  };
+  expect(state).toEqual({
+    pendingAtStop: pending.length,
+    pendingRequests: 0,
+    timers: 0,
+    appStateListeners: 0,
+    abortListeners: 0,
+  });
+  await Promise.allSettled(pending);
+  expect(appStateHandler).toBeNull();
+  return state;
+}
 
 async function runScenario(scenario: Scenario): Promise<SeedResult> {
+  expect(jest.getTimerCount()).toBe(0);
+  expect(appStateListeners.size).toBe(0);
+  expect(abortListeners.size).toBe(0);
+  jest.setSystemTime(VIRTUAL_EPOCH);
+  rotationCounter = 0;
+  const pendingRequests = new Set<Promise<Response>>();
   const rng = mulberry32(scenario.seed ^ 0x9e3779b9);
   const log: Attempt[] = [];
   const violations: string[] = [];
@@ -467,10 +578,7 @@ async function runScenario(scenario: Scenario): Promise<SeedResult> {
   // A plain function on purpose: jest.fn() would retain every call's
   // arguments (bodies, AbortSignals) for the whole run and swamp the heap
   // numbers that are meant to reflect the keeper, not the harness.
-  const fetchFn = async (
-    url: string,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  const send = async (url: string, init?: RequestInit): Promise<Response> => {
     const body = JSON.parse(String(init?.body ?? '{}')) as {
       refreshToken?: string;
     };
@@ -501,11 +609,7 @@ async function runScenario(scenario: Scenario): Promise<SeedResult> {
         throw new TypeError('Network request failed');
       }
       if (attempt.transport === 'hang_until_timeout') {
-        await new Promise<never>((_, reject) => {
-          const signal = init?.signal;
-          if (signal?.aborted) reject(abortError());
-          signal?.addEventListener('abort', () => reject(abortError()));
-        });
+        await waitForAbort(init?.signal);
       }
       const outcome =
         scenario.authScript[scriptIndex % scenario.authScript.length]!;
@@ -532,110 +636,124 @@ async function runScenario(scenario: Scenario): Promise<SeedResult> {
     }
   };
 
-  startSessionKeeper({
-    apiBaseUrl: 'https://api.example.test',
-    refreshToken: currentRefreshToken,
-    bearerExpiresAtMs:
-      scenario.initialBearerExpiresInMs === null
-        ? null
-        : Date.now() + scenario.initialBearerExpiresInMs,
-    fetchFn,
-    onRotated: tokens => {
-      rotated.push(tokens);
-      if (
-        !lastIssued ||
-        tokens.bearerToken !== lastIssued.access ||
-        tokens.refreshToken !== lastIssued.refresh ||
-        tokens.bearerExpiresAtMs !== lastIssued.expiresAt * 1000
-      ) {
-        violations.push(
-          `I6 onRotated tokens differ from what the server issued`,
-        );
+  const fetchFn = (url: string, init?: RequestInit): Promise<Response> =>
+    trackRequest(pendingRequests, send(url, init));
+  let result: Omit<SeedResult, 'cleanup'>;
+  let cleanup: CleanupState;
+  try {
+    startSessionKeeper({
+      apiBaseUrl: 'https://api.example.test',
+      refreshToken: currentRefreshToken,
+      bearerExpiresAtMs:
+        scenario.initialBearerExpiresInMs === null
+          ? null
+          : Date.now() + scenario.initialBearerExpiresInMs,
+      fetchFn,
+      onRotated: tokens => {
+        rotated.push(tokens);
+        if (
+          !lastIssued ||
+          tokens.bearerToken !== lastIssued.access ||
+          tokens.refreshToken !== lastIssued.refresh ||
+          tokens.bearerExpiresAtMs !== lastIssued.expiresAt * 1000
+        ) {
+          violations.push(
+            `I6 onRotated tokens differ from what the server issued`,
+          );
+        }
+      },
+      onRevoked: () => {
+        revokedCalls += 1;
+      },
+      onDeferred: () => {
+        deferredCalls += 1;
+      },
+    });
+
+    for (const event of scenario.events) {
+      if (event.kind === 'advance') {
+        await jest.advanceTimersByTimeAsync(event.ms);
+      } else if (event.kind === 'foreground') {
+        appStateHandler?.('background');
+        appStateHandler?.('active');
+        await jest.advanceTimersByTimeAsync(0);
+      } else {
+        refreshSessionNow();
+        await jest.advanceTimersByTimeAsync(0);
       }
-    },
-    onRevoked: () => {
-      revokedCalls += 1;
-    },
-    onDeferred: () => {
-      deferredCalls += 1;
-    },
-  });
-
-  for (const event of scenario.events) {
-    if (event.kind === 'advance') {
-      await jest.advanceTimersByTimeAsync(event.ms);
-    } else if (event.kind === 'foreground') {
-      appStateHandler?.('background');
-      appStateHandler?.('active');
-      await jest.advanceTimersByTimeAsync(0);
-    } else {
-      refreshSessionNow();
-      await jest.advanceTimersByTimeAsync(0);
     }
-  }
-  // Drain: past the hang timeout, the max backoff AND a full bearer lifetime
-  // (a healthy rotation schedules the next refresh ~59 min out), so every
-  // pending attempt settles and (unless revoked) the keeper proves it is
-  // still alive by sending at least one more request.
-  const attemptsBeforeDrain = log.length;
-  await jest.advanceTimersByTimeAsync(
-    15_000 + retryDelayMs(99) + 3_600_000 + 1_000,
-  );
-  const simulatedMs = Date.now() - start;
-
-  // I1
-  if (revokedCalls > 1)
-    violations.push(`I1 onRevoked called ${revokedCalls} times`);
-  if (refusalsDelivered > 0 && revokedCalls === 0)
-    violations.push('I1 refusal delivered but onRevoked never fired');
-  if (refusalsDelivered === 0 && revokedCalls > 0)
-    violations.push('I1 onRevoked fired without a delivered 401/403');
-  // I3
-  // The last attempt may still be hanging inside its 15 s timeout when the
-  // drain window ends; only settled attempts owe an onDeferred.
-  const failuresNotRefused = log.filter(
-    a =>
-      a.settled &&
-      (a.outcome === null ||
-        (!isRefusal(a.outcome) &&
-          a.outcome !== 'ok' &&
-          a.outcome !== 'ok_expires_in_past')),
-  ).length;
-  if (deferredCalls !== failuresNotRefused) {
-    violations.push(
-      `I3 onDeferred count ${deferredCalls} != settled non-refusal failures ${failuresNotRefused}`,
+    // Drain: past the hang timeout, the max backoff AND a full bearer lifetime
+    // (a healthy rotation schedules the next refresh ~59 min out), so every
+    // pending attempt settles and (unless revoked) the keeper proves it is
+    // still alive by sending at least one more request.
+    const attemptsBeforeDrain = log.length;
+    await jest.advanceTimersByTimeAsync(
+      15_000 + retryDelayMs(99) + 3_600_000 + 1_000,
     );
-  }
-  if (revokedCalls === 0 && log.length === attemptsBeforeDrain) {
-    violations.push(
-      'I3 keeper went silent: no attempt after max backoff drain',
-    );
-  }
-  // Request-rate observation (per-IP refresh budget on the edge is 30/min).
-  let maxRequestsInAny60s = 0;
-  for (let i = 0; i < log.length; i++) {
-    let j = i;
-    while (j < log.length && log[j]!.t - log[i]!.t < 60_000) j++;
-    maxRequestsInAny60s = Math.max(maxRequestsInAny60s, j - i);
-  }
+    const simulatedMs = Date.now() - start;
 
-  stopSessionKeeper();
-  return {
-    seed: scenario.seed,
-    network: scenario.network,
-    verdict: violations.length === 0 ? 'PASS' : 'FAIL',
-    violations,
-    attempts: log.length,
-    delivered,
-    refusalsDelivered,
-    revokedCalls,
-    rotatedCalls: rotated.length,
-    deferredCalls,
-    authClasses,
-    maxRequestsInAny60s,
-    simulatedMs,
-    log,
-  };
+    // I1
+    if (revokedCalls > 1)
+      violations.push(`I1 onRevoked called ${revokedCalls} times`);
+    if (refusalsDelivered > 0 && revokedCalls === 0)
+      violations.push('I1 refusal delivered but onRevoked never fired');
+    if (refusalsDelivered === 0 && revokedCalls > 0)
+      violations.push('I1 onRevoked fired without a delivered 401/403');
+    // I3
+    // The last attempt may still be hanging inside its 15 s timeout when the
+    // drain window ends; only settled attempts owe an onDeferred.
+    const failuresNotRefused = log.filter(
+      a =>
+        a.settled &&
+        (a.outcome === null ||
+          (!isRefusal(a.outcome) &&
+            a.outcome !== 'ok' &&
+            a.outcome !== 'ok_expires_in_past')),
+    ).length;
+    if (deferredCalls !== failuresNotRefused) {
+      violations.push(
+        `I3 onDeferred count ${deferredCalls} != settled non-refusal failures ${failuresNotRefused}`,
+      );
+    }
+    if (revokedCalls === 0 && log.length === attemptsBeforeDrain) {
+      violations.push(
+        'I3 keeper went silent: no attempt after max backoff drain',
+      );
+    }
+    // Request-rate observation (per-IP refresh budget on the edge is 30/min).
+    let maxRequestsInAny60s = 0;
+    for (let i = 0; i < log.length; i++) {
+      let j = i;
+      while (j < log.length && log[j]!.t - log[i]!.t < 60_000) j++;
+      maxRequestsInAny60s = Math.max(maxRequestsInAny60s, j - i);
+    }
+
+    result = {
+      seed: scenario.seed,
+      network: scenario.network,
+      verdict: violations.length === 0 ? 'PASS' : 'FAIL',
+      violations,
+      attempts: log.length,
+      delivered,
+      refusalsDelivered,
+      revokedCalls,
+      rotatedCalls: rotated.length,
+      deferredCalls,
+      authClasses,
+      maxRequestsInAny60s,
+      simulatedMs,
+      log,
+    };
+  } finally {
+    const callbacks = [rotated.length, revokedCalls, deferredCalls];
+    const attempts = log.length;
+    cleanup = await stopAndSettle(pendingRequests);
+    expect([rotated.length, revokedCalls, deferredCalls]).toEqual(callbacks);
+    expect(log).toHaveLength(attempts);
+    expect(log.every(attempt => attempt.settled)).toBe(true);
+    expect(inflight).toBe(0);
+  }
+  return { ...result, cleanup };
 }
 
 // ─── Test ────────────────────────────────────────────────────────────────────
@@ -648,56 +766,252 @@ const OUT_DIR =
   );
 
 describe('xc-matrix-network-auth-2 keeper fuzz: {offline, intermittent, reconnect} × {revoked, malformed, 4xx/5xx}', () => {
+  const { only, seeds, batches } = seedPlan(process.env);
+  let heapBefore: ReturnType<typeof process.memoryUsage>;
+  let wallStart: number;
+  const results: SeedResult[] = [];
+  const heapSamples: Array<{
+    afterSeeds: number;
+    heapUsed: number;
+    rss: number;
+    attemptsLogged: number;
+  }> = [];
+  const batchSamples: Array<{
+    first: number;
+    last: number;
+    seeds: number;
+    wallMs: number;
+  }> = [];
+  const cleanupProbes: Array<{ outcome: string; state: CleanupState }> = [];
+
+  beforeAll(() => {
+    heapBefore = process.memoryUsage();
+    wallStart = REAL_NOW();
+  });
+
   beforeEach(() => {
-    jest.useFakeTimers();
+    expect(appStateListeners.size).toBe(0);
+    expect(abortListeners.size).toBe(0);
+    jest.useFakeTimers({ now: VIRTUAL_EPOCH });
     appStateHandler = null;
     jest.spyOn(AppState, 'addEventListener').mockImplementation(((
       _type: string,
       handler: (state: string) => void,
     ) => {
       appStateHandler = handler;
+      appStateListeners.add(handler);
       return {
         remove: () => {
+          appStateListeners.delete(handler);
           if (appStateHandler === handler) appStateHandler = null;
         },
       };
     }) as unknown as typeof AppState.addEventListener);
   });
 
-  afterEach(() => {
-    stopSessionKeeper();
-    jest.useRealTimers();
-    jest.restoreAllMocks();
+  afterEach(async () => {
+    try {
+      stopSessionKeeper();
+      await jest.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+      expect(jest.getTimerCount()).toBe(0);
+      expect(appStateListeners.size).toBe(0);
+      expect(abortListeners.size).toBe(0);
+      expect(appStateHandler).toBeNull();
+    } finally {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    }
   });
 
-  it('holds the ONE implicit sign-out rule across every seeded schedule', async () => {
-    const only = process.env.XC_SEED ? Number(process.env.XC_SEED) : null;
-    const seedCount = only !== null ? 1 : Number(process.env.XC_SEEDS ?? 1500);
-    const seeds =
-      only !== null ? [only] : Array.from({ length: seedCount }, (_, i) => i);
+  it('retains every default seed exactly once in bounded batches and supports the documented extended run', () => {
+    const plan = seedPlan({});
+    expect(plan.only).toBeNull();
+    expect(plan.seeds).toEqual(Array.from({ length: 1500 }, (_, i) => i));
+    expect(plan.batches.flatMap(batch => batch.seeds)).toEqual(plan.seeds);
+    expect(plan.batches).toHaveLength(60);
+    expect(
+      plan.batches.every(
+        batch => batch.seeds.length > 0 && batch.seeds.length <= BATCH_SIZE,
+      ),
+    ).toBe(true);
+    expect(seedPlan({ XC_SEEDS: '5000' }).seeds).toHaveLength(5000);
+    expect(seedPlan({ XC_SEEDS: String(MAX_SEEDS) }).seeds).toHaveLength(
+      MAX_SEEDS,
+    );
+  });
 
-    const heapBefore = process.memoryUsage();
-    const wallStart = REAL_NOW();
-    const results: SeedResult[] = [];
-    const heapSamples: Array<{
-      afterSeeds: number;
-      heapUsed: number;
-      rss: number;
-      attemptsLogged: number;
-    }> = [];
-    for (const seed of seeds) {
-      rotationCounter = 0;
-      results.push(await runScenario(buildScenario(seed)));
-      if (results.length % 250 === 0) {
-        const m = process.memoryUsage();
-        heapSamples.push({
-          afterSeeds: results.length,
-          heapUsed: m.heapUsed,
-          rss: m.rss,
-          attemptsLogged: results.reduce((s, r) => s + r.attempts, 0),
-        });
+  it.each([0, 1234, 0xffffffff])(
+    'replays uint32 seed %i without allocating the full matrix',
+    seed => {
+      const plan = seedPlan({ XC_SEED: String(seed) });
+      expect(plan.only).toBe(seed);
+      expect(plan.seeds).toEqual([seed]);
+      expect(plan.batches).toEqual([
+        { first: seed, last: seed, seeds: [seed] },
+      ]);
+    },
+  );
+
+  it.each(['', ' ', '-1', '1.5', 'NaN', 'Infinity', '0x10', '1e3'])(
+    'rejects non-decimal or invalid seed input %j',
+    value => {
+      for (const name of ['XC_SEED', 'XC_SEEDS']) {
+        expect(() => seedPlan({ [name]: value })).toThrow(
+          `${name} must be an integer between`,
+        );
       }
-    }
+    },
+  );
+
+  it.each([
+    { name: 'XC_SEEDS', value: '0' },
+    { name: 'XC_SEEDS', value: String(MAX_SEEDS + 1) },
+    { name: 'XC_SEEDS', value: '9007199254740993' },
+    { name: 'XC_SEED', value: '4294967296' },
+  ])(
+    'rejects out-of-bounds $name=$value before allocation',
+    ({ name, value }) => {
+      expect(() => seedPlan({ [name]: value })).toThrow(
+        `${name} must be an integer between`,
+      );
+    },
+  );
+
+  it('validates the count even when an individual replay is selected', () => {
+    expect(() => seedPlan({ XC_SEED: '0', XC_SEEDS: 'Infinity' })).toThrow(
+      'XC_SEEDS must be an integer between',
+    );
+  });
+
+  it.each([
+    { outcome: 'ok', rotated: 1, deferred: 0, revoked: 0, pending: 0 },
+    { outcome: 'error', rotated: 0, deferred: 1, revoked: 0, pending: 0 },
+    { outcome: 'hanging', rotated: 0, deferred: 0, revoked: 0, pending: 1 },
+    { outcome: 'refused_401', rotated: 0, deferred: 0, revoked: 1, pending: 0 },
+    { outcome: 'refused_403', rotated: 0, deferred: 0, revoked: 1, pending: 0 },
+    {
+      outcome: 'malformed_json_throws_sync',
+      rotated: 0,
+      deferred: 1,
+      revoked: 0,
+      pending: 0,
+    },
+  ] as const)(
+    'settles $outcome cleanup with no requests, timers, listeners or late callbacks',
+    async ({ outcome, rotated, deferred, revoked, pending }) => {
+      const pendingRequests = new Set<Promise<Response>>();
+      const onRotated = jest.fn();
+      const onDeferred = jest.fn();
+      const onRevoked = jest.fn();
+      const fetchFn = jest.fn((_url: string, init?: RequestInit) => {
+        const request =
+          outcome === 'hanging'
+            ? waitForAbort(init?.signal)
+            : outcome === 'error'
+              ? Promise.reject<Response>(
+                  new TypeError('Network request failed'),
+                )
+              : Promise.resolve(serve(outcome, Date.now()).response);
+        return trackRequest(pendingRequests, request);
+      });
+      let staleHandler: ((state: string) => void) | null = null;
+      try {
+        startSessionKeeper({
+          apiBaseUrl: 'https://api.example.test',
+          refreshToken: 'cleanup-refresh',
+          bearerExpiresAtMs: null,
+          fetchFn,
+          onRotated,
+          onDeferred,
+          onRevoked,
+        });
+        await jest.advanceTimersByTimeAsync(0);
+        staleHandler = appStateHandler;
+        expect(pendingRequests.size).toBe(pending);
+        expect(onRotated).toHaveBeenCalledTimes(rotated);
+        expect(onDeferred).toHaveBeenCalledTimes(deferred);
+        expect(onRevoked).toHaveBeenCalledTimes(revoked);
+        expect(jest.getTimerCount()).toBe(revoked ? 0 : 1);
+        expect(appStateListeners.size).toBe(revoked ? 0 : 1);
+      } finally {
+        const state = await stopAndSettle(pendingRequests);
+        cleanupProbes.push({ outcome, state });
+        expect(state.pendingAtStop).toBe(pending);
+      }
+      staleHandler?.('active');
+      refreshSessionNow();
+      await jest.advanceTimersByTimeAsync(3_600_000);
+      expect(fetchFn).toHaveBeenCalledTimes(1);
+      expect(onRotated).toHaveBeenCalledTimes(rotated);
+      expect(onDeferred).toHaveBeenCalledTimes(deferred);
+      expect(onRevoked).toHaveBeenCalledTimes(revoked);
+    },
+  );
+
+  it('awaits cleanup even when a schedule throws with a fetch pending', async () => {
+    await expect(
+      runScenario({
+        seed: 0,
+        network: 'offline',
+        reconnectAfterAttempts: 1,
+        dropProbability: 1,
+        hangProbability: 1,
+        authScript: ['ok'],
+        initialBearerExpiresInMs: null,
+        events: [{ kind: 'advance', ms: -1 }],
+      }),
+    ).rejects.toThrow('Negative ticks');
+    expect(jest.getTimerCount()).toBe(0);
+    expect(appStateListeners.size).toBe(0);
+    expect(abortListeners.size).toBe(0);
+    expect(appStateHandler).toBeNull();
+  });
+
+  it('replays the same schedule identically after another seed has advanced virtual time', async () => {
+    const first = await runScenario(buildScenario(8));
+    await runScenario(buildScenario(0));
+    expect(await runScenario(buildScenario(8))).toEqual(first);
+  });
+
+  it.each(batches)(
+    'holds the ONE implicit sign-out rule across every seeded schedule $first-$last',
+    async ({ first, last, seeds: batch }) => {
+      const batchStart = REAL_NOW();
+      const batchResults: SeedResult[] = [];
+      for (const seed of batch) {
+        const result = await runScenario(buildScenario(seed));
+        results.push(result);
+        batchResults.push(result);
+        if (results.length % 250 === 0) {
+          const m = process.memoryUsage();
+          heapSamples.push({
+            afterSeeds: results.length,
+            heapUsed: m.heapUsed,
+            rss: m.rss,
+            attemptsLogged: results.reduce((s, r) => s + r.attempts, 0),
+          });
+        }
+      }
+      batchSamples.push({
+        first,
+        last,
+        seeds: batchResults.length,
+        wallMs: REAL_NOW() - batchStart,
+      });
+      expect(batchResults.map(result => result.seed)).toEqual(batch);
+      expect(
+        batchResults
+          .filter(result => result.verdict === 'FAIL')
+          .map(result => ({
+            seed: result.seed,
+            violations: result.violations,
+          })),
+      ).toEqual([]);
+    },
+  );
+
+  afterAll(() => {
+    results.sort((a, b) => a.seed - b.seed);
     const wallMs = REAL_NOW() - wallStart;
     const heapAfter = process.memoryUsage();
 
@@ -750,9 +1064,20 @@ describe('xc-matrix-network-auth-2 keeper fuzz: {offline, intermittent, reconnec
       net_error: 0,
       hang_until_timeout: 0,
     };
+    const outcomeTotals: Partial<Record<AuthOutcome, number>> = {};
+    const cleanupRemaining = {
+      pendingRequests: 0,
+      timers: 0,
+      appStateListeners: 0,
+      abortListeners: 0,
+    };
     let maxRate = 0;
     let skewSeeds = 0;
     for (const r of results) {
+      cleanupRemaining.pendingRequests += r.cleanup.pendingRequests;
+      cleanupRemaining.timers += r.cleanup.timers;
+      cleanupRemaining.appStateListeners += r.cleanup.appStateListeners;
+      cleanupRemaining.abortListeners += r.cleanup.abortListeners;
       const row = matrix[r.network];
       row.seeds += 1;
       row[r.verdict === 'PASS' ? 'pass' : 'fail'] += 1;
@@ -765,6 +1090,8 @@ describe('xc-matrix-network-auth-2 keeper fuzz: {offline, intermittent, reconnec
       authTotals.transient_http += r.authClasses.transient_http;
       authTotals.malformed += r.authClasses.malformed;
       for (const a of r.log) {
+        if (a.outcome !== null)
+          outcomeTotals[a.outcome] = (outcomeTotals[a.outcome] ?? 0) + 1;
         if (a.transport === 'net_error') authTotals.net_error += 1;
         if (a.transport === 'hang_until_timeout')
           authTotals.hang_until_timeout += 1;
@@ -798,6 +1125,22 @@ describe('xc-matrix-network-auth-2 keeper fuzz: {offline, intermittent, reconnec
           'XC_SEED=<seed> npx jest --ci __tests__/xc/xcMatrixNetworkAuth2.keeper.test.ts',
       },
       wallMs,
+      virtualEpochMs: VIRTUAL_EPOCH,
+      batches: {
+        maxSeeds: BATCH_SIZE,
+        slowestWallMs: Math.max(0, ...batchSamples.map(batch => batch.wallMs)),
+        samples: batchSamples,
+      },
+      cleanup: {
+        scenarios: results.length,
+        settledAfterStop: results.reduce(
+          (sum, r) => sum + r.cleanup.pendingAtStop,
+          0,
+        ),
+        remaining: cleanupRemaining,
+        probes: cleanupProbes,
+      },
+      outcomeTotals,
       heap: {
         before: heapBefore,
         after: heapAfter,

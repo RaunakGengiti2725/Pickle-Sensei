@@ -177,7 +177,7 @@ const PROBLEMS: Choice[] = [
  */
 const NAME_QUESTION = {
   title: 'What should we call you?',
-  sub: 'Your coach personalizes every session.',
+  sub: 'Enter a preferred name or nickname to continue. No legal name needed.',
 } as const;
 
 const QUESTIONS: Record<
@@ -510,7 +510,7 @@ export function OnboardingScreen(props: {
             {step === 'name' ? (
               <>
                 <TextInput
-                  accessibilityLabel="First name"
+                  accessibilityLabel="Name or nickname (required)"
                   autoFocus
                   autoCapitalize="words"
                   autoComplete="given-name"
@@ -518,7 +518,7 @@ export function OnboardingScreen(props: {
                   autoCorrect={false}
                   returnKeyType="next"
                   maxLength={40}
-                  placeholder="First name"
+                  placeholder="Name or nickname"
                   placeholderTextColor={color.inkSoft}
                   value={answers['name'] ?? ''}
                   onChangeText={text => select('name', text)}
@@ -664,10 +664,10 @@ export function OnboardingScreen(props: {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[type.h3, { color: color.ink }]}>
-                  Two ratings are on us.
+                  Your first rating is on us.
                 </Text>
                 <Text style={[type.caption, styles.accessCopy]}>
-                  After your second successful, server-accepted Technique Score,
+                  After your first successful, server-accepted Technique Score,
                   Pickle Sensei Pro is required before another rating can start.
                   Unscored attempts do not count. Past results and saved drills
                   stay available; reviewed plans appear only when matching work

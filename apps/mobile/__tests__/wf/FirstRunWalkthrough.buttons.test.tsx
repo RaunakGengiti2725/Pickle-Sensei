@@ -1,3 +1,4 @@
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import { AccessibilityInfo, StyleSheet } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -34,7 +35,7 @@ import { useWalkthroughStore } from '../../src/walkthrough/walkthroughStore';
  *   Skip      (testID walkthrough-skip)                   -> store.dismiss
  *   Next      (testID walkthrough-advance, steps 1..n-1)  -> next step
  *   Got it    (testID walkthrough-advance, last step)     -> store.dismiss
- *   Modal.onRequestClose (Android back)                   -> store.dismiss
+ *   Hardware back / accessibility escape                 -> store.dismiss
  *
  * Plus the async target-measurement path the buttons depend on: a target
  * that rejects, measures null, or is unregistered is skipped (never a dead
@@ -44,6 +45,7 @@ import { useWalkthroughStore } from '../../src/walkthrough/walkthroughStore';
 const TARGET_RECTS: Record<WalkthroughTargetKey, TargetRect> = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
+  'home-streak': { x: 313, y: 62, width: 56, height: 32 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },
   'tab-progress': { x: 236, y: 760, width: 70, height: 54 },
 };
@@ -53,6 +55,7 @@ const ALL_TARGETS = Object.keys(TARGET_RECTS) as WalkthroughTargetKey[];
 const RETRY_BUDGET_MS = 6 * 120 + 50;
 
 let unregister: Array<() => void> = [];
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
 
 function registerTargets(
   keys: WalkthroughTargetKey[],
@@ -69,10 +72,18 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  act(() => {
+    for (const renderer of mounted) renderer.unmount();
+  });
+  mounted.clear();
   for (const cleanup of unregister) cleanup();
   unregister = [];
   act(() => {
-    useWalkthroughStore.setState({ visible: false });
+    useWalkthroughStore.setState({
+      visible: false,
+      queued: false,
+      request: null,
+    });
   });
   jest.useRealTimers();
   jest.restoreAllMocks();
@@ -85,6 +96,7 @@ async function renderVisible() {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<FirstRunWalkthrough />);
+    mounted.add(renderer);
   });
   return renderer;
 }
@@ -151,9 +163,10 @@ function findBackdrop(renderer: TestRenderer.ReactTestRenderer) {
   )[0];
 }
 
-function findModal(renderer: TestRenderer.ReactTestRenderer) {
+function findOverlay(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll(
-    node => typeof node.props.onRequestClose === 'function',
+    node =>
+      typeof node.type === 'string' && node.props.testID === 'ceremony-overlay',
   )[0];
 }
 
@@ -180,7 +193,9 @@ describe('FirstRunWalkthrough button ledger', () => {
       'Next',
       'Skip walkthrough',
     ]);
-    expect(findModal(renderer)).toBeDefined();
+    expect(findOverlay(renderer)?.props.onAccessibilityEscape).toEqual(
+      expect.any(Function),
+    );
   });
 
   it('renders no pressables at all while the store is hidden', () => {
@@ -188,6 +203,7 @@ describe('FirstRunWalkthrough button ledger', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      mounted.add(renderer);
     });
     expect(stageMounted(renderer)).toBe(false);
     expect(pressables(renderer)).toHaveLength(0);
@@ -315,21 +331,29 @@ describe('FirstRunWalkthrough button ledger', () => {
     expect(useWalkthroughStore.getState().visible).toBe(false);
   });
 
-  it('Modal.onRequestClose (hardware back) -> dismiss', async () => {
+  it('hardware back -> dismiss and return back handling to the app', async () => {
     registerTargets(ALL_TARGETS);
     const renderer = await renderVisible();
-    const modal = findModal(renderer);
-    expect(modal).toBeDefined();
-    expect(modal!.props.visible).toBe(true);
-    expect(modal!.props.transparent).toBe(true);
+    expect(findOverlay(renderer)).toBeDefined();
 
     await act(async () => {
-      modal!.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
 
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    expect(findModal(renderer)!.props.visible).toBe(false);
+    expect(findOverlay(renderer)).toBeUndefined();
     expect(stageMounted(renderer)).toBe(false);
+    expect(dispatchHardwareBack()).toBe(false);
+  });
+
+  it('accessibility escape dismisses the modal overlay', async () => {
+    registerTargets(ALL_TARGETS);
+    const renderer = await renderVisible();
+    const overlay = findOverlay(renderer)!;
+    expect(overlay.props.accessibilityViewIsModal).toBe(true);
+    await act(async () => overlay.props.onAccessibilityEscape());
+    expect(useWalkthroughStore.getState().visible).toBe(false);
+    expect(findOverlay(renderer)).toBeUndefined();
   });
 
   it('Next/Got it button is role=button with a >=44pt min height', async () => {
@@ -426,7 +450,8 @@ describe('FirstRunWalkthrough measurement (async path behind the buttons)', () =
     const renderer = await renderVisible();
     expect(stageMounted(renderer)).toBe(true);
     expect(findByTestId(renderer, 'walkthrough-advance')).toBeUndefined();
-    expect(pressableLabels(renderer)).toEqual(['Dismiss walkthrough']);
+    expect(pressableLabels(renderer)).toEqual(['Dismiss walkthrough', 'Skip']);
+    expect(textContent(renderer)).toContain('Finding this part of the app');
 
     await press(findBackdrop(renderer));
 
@@ -434,6 +459,17 @@ describe('FirstRunWalkthrough measurement (async path behind the buttons)', () =
     expect(stageMounted(renderer)).toBe(false);
     await settle(RETRY_BUDGET_MS);
     expect(useWalkthroughStore.getState().visible).toBe(false);
+  });
+
+  it('the visible Skip dismisses even when the current target measurement never settles', async () => {
+    registerTargets(ALL_TARGETS, () => new Promise<TargetRect>(() => {}));
+    const renderer = await renderVisible();
+    expect(textContent(renderer)).toContain('Finding this part of the app');
+    const skip = findByTestId(renderer, 'walkthrough-skip');
+    expect(skip).toBeDefined();
+    await press(skip);
+    expect(useWalkthroughStore.getState().visible).toBe(false);
+    expect(findOverlay(renderer)).toBeUndefined();
   });
 
   it('a late-resolving measurement after dismiss does not resurrect the tour', async () => {

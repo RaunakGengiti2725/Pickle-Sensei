@@ -18,6 +18,18 @@ import type {
 
 export const SCORING_MODEL_VERSION = "sm-v1";
 
+/**
+ * Analysis-confidence floor under which the engine withholds the numeric
+ * grade. 0 since 2026-09-10: the engine abstains only when NO applicable
+ * checkpoint was observed. The former 0.65 floor was calibrated against
+ * blueprint fixtures at 0.95 visibility; real Apple-Vision footage measures
+ * 0.60–0.70 mean joint visibility even with every checkpoint observed, so
+ * genuine swings came back NOT SCORED. Coverage and visibility are disclosed
+ * instead — `analysisConfidence`, the `lower_confidence` presentation below
+ * `lowerConfidenceThreshold`, and unobserved checkpoints kept at score null.
+ */
+export const MIN_ANALYSIS_CONFIDENCE = 0;
+
 /** Columns per spec p. 32; every column sums to 100. */
 export const WEIGHT_MATRIX: Record<ShotTypeSlug, Record<CheckpointKey, number>> = {
   serve: {
@@ -194,6 +206,16 @@ const CHANGEABILITY: Record<CheckpointKey, number> = {
  * blueprint-hypothesis method as the original four (spec p. 32 style):
  * starting hypotheses pending coach-panel calibration, versioned so
  * recalibration produces sm-v2 without rescoring history.
+ *
+ * `recovery` carries NO metric target in this stack: the only candidate,
+ * `recovery_time_ms`, was the trigger window's tail padding (recover-span
+ * end minus follow-through end), not the player's return to ready, and
+ * geometry-2 stopped emitting it. A checkpoint no extractor can measure is
+ * not applicable (`metrics: []` → excluded from confidence and the score);
+ * it is NOT an unobserved checkpoint, which would count as zero confidence
+ * against every capture and push real reads under `minAnalysisConfidence`.
+ * The weight stays in WEIGHT_MATRIX for the day a real recovery measurement
+ * exists.
  */
 const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, MetricTarget[]>>>> = {
   forehand_drive: {
@@ -216,7 +238,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.5, 1.2, 0.35, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 900, 350, 1, "none", "long")],
   },
   dink: {
     ready_position: [target("paddle_ready_height_ratio", 0.3, 0.65, 0.18, 1, "low", "high")],
@@ -235,7 +256,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 8, 6, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.05, 0.45, 0.18, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 700, 300, 1, "none", "long")],
   },
   third_shot_drop: {
     ready_position: [target("paddle_ready_height_ratio", 0.25, 0.6, 0.2, 1, "low", "high")],
@@ -254,7 +274,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 9, 6, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.2, 0.7, 0.2, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 800, 320, 1, "none", "long")],
   },
   serve: {
     ready_position: [target("paddle_ready_height_ratio", 0.15, 0.5, 0.18, 1, "low", "high")],
@@ -276,7 +295,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.5, 1.2, 0.35, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 1000, 400, 1, "none", "long")],
   },
   return: {
     // Compact drive off the serve: shorter backswing than a rally drive,
@@ -300,7 +318,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.4, 1.0, 0.3, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 800, 320, 1, "none", "long")],
   },
   backhand_drive: {
     // Mirror of the forehand drive hypothesis set: measurements are computed
@@ -324,7 +341,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.5, 1.2, 0.35, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 900, 350, 1, "none", "long")],
   },
   volley: {
     // Compact punch at the net: paddle up in ready, minimal turn and
@@ -345,7 +361,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 8, 6, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.05, 0.4, 0.16, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 600, 260, 1, "none", "long")],
   },
   overhead: {
     // Overhead smash: big shoulder turn, paddle set high behind the head,
@@ -369,7 +384,6 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     ],
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 25, 12, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.5, 1.4, 0.35, 1, "short", "long")],
-    recovery: [target("recovery_time_ms", 0, 900, 350, 1, "none", "long")],
   },
 };
 
@@ -387,7 +401,7 @@ function buildShotConfig(shotType: ShotTypeSlug): ShotScoringConfig {
     shotType,
     shotConfigVersion: `${shotType}@1`,
     scoringModelVersion: SCORING_MODEL_VERSION,
-    minAnalysisConfidence: 0.65,
+    minAnalysisConfidence: MIN_ANALYSIS_CONFIDENCE,
     lowerConfidenceThreshold: 0.8,
     checkpoints,
     dependencies: DEPENDENCIES_V1,

@@ -21,7 +21,6 @@ import { useReducedMotion } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
-import { formatDuprEstimate } from '../progress/duprEstimate';
 import {
   fetchPlayerRank,
   resolvePlayerRank,
@@ -29,6 +28,14 @@ import {
   type ServerPlayerRank,
 } from '../progress/playerRank';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
+import {
+  DUPR_ESTIMATE_NOTE,
+  DUPR_LABEL,
+  duprFromScore,
+  formatDupr,
+  formatDuprDistance,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { flameIntensityForStreak } from '../consistency/engine';
 import { AnimatedFlame } from '../consistency/FlameIcon';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
@@ -45,6 +52,11 @@ import { plural } from '../util/plural';
  * Data rules are unchanged from PlayerRankCard: account-saved rank when it
  * has seen the most evidence, local compute otherwise; no rank is ever
  * invented for an unranked player.
+ *
+ * Every rating figure here is printed as an estimated DUPR (D-046): the
+ * headline rating (with its "/10" reading beneath), the tier ranges, the
+ * distance to the next tier and the per-technique chips. The tier math
+ * itself stays on the 0–10 rating; only the display converts.
  */
 
 const TOP_OF_SCALE = 10;
@@ -59,12 +71,13 @@ function segmentFill(rating: number, index: number): number {
   return Math.max(0, Math.min(1, (rating - floor) / (ceiling - floor)));
 }
 
-function tierRangeLabel(index: number): string {
+/** The tier's DUPR band, e.g. "4.10 – 4.99" or "6.50+" for the top tier. */
+export function tierRangeLabel(index: number): string {
   const floor = PLAYER_RANK_TIERS[index]!.minRating;
   const ceiling = PLAYER_RANK_TIERS[index + 1]?.minRating ?? null;
   return ceiling === null
-    ? `${floor.toFixed(1)}+`
-    : `${floor.toFixed(1)} – ${(ceiling - 0.01).toFixed(2)}`;
+    ? `${formatDupr(floor)}+`
+    : `${formatDupr(floor)} – ${(duprFromScore(ceiling) - 0.01).toFixed(2)}`;
 }
 
 export function PlayerRankBanner(props: {
@@ -78,7 +91,8 @@ export function PlayerRankBanner(props: {
   const [foldOutMounted, setFoldOutMounted] = useState(false);
   const foldAwayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useReducedMotion();
-  const largeText = useWindowDimensions().fontScale >= 1.5;
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = fontScale >= 1.5 || width / fontScale < 360;
 
   useEffect(
     () => () => {
@@ -169,26 +183,32 @@ export function PlayerRankBanner(props: {
   const detailLine = summary
     ? `Best: ${
         best
-          ? `${best.shotType.replace(/_/g, ' ')} ${best.score.toFixed(1)}`
+          ? `${best.shotType.replace(/_/g, ' ')} ${formatDupr(best.score)}`
           : '—'
       }${
         summary.nextTier
-          ? ` · ${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-              summary.nextTier.label
-            }`
+          ? ` · ${formatDuprDistance(
+              summary.rating,
+              summary.nextTier.minRating,
+            )} to ${summary.nextTier.label}`
           : ' · Top tier'
       }`
     : 'Your first scored analysis places you.';
   const rankLabel = summary
     ? `Player rank ${summary.tierLabel} ${
         summary.divisionLabel
-      }, rating ${summary.rating.toFixed(2)} out of 10.`
+      }, estimated DUPR ${formatDupr(
+        summary.rating,
+      )}, technique rating ${summary.rating.toFixed(2)} out of 10.`
     : 'Player rank: unranked.';
   const intensity = flameIntensityForStreak(props.streakDays);
 
   return (
     <View style={styles.banner} testID="player-rank-banner">
-      <View style={[styles.row, largeText && styles.rowStacked]}>
+      <View
+        style={[styles.row, stacked && styles.rowStacked]}
+        testID="player-rank-banner-row"
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${rankLabel} ${detailLine}`}
@@ -199,37 +219,63 @@ export function PlayerRankBanner(props: {
           }
           accessibilityState={{ expanded }}
           onPress={toggle}
-          style={[styles.mainPress, largeText && styles.mainPressStacked]}
+          style={[styles.mainPress, stacked && styles.mainPressStacked]}
           testID="player-rank-banner-toggle"
         >
-          <RankIcon tier={summary?.tier ?? null} size={46} />
-          <View style={[styles.body, largeText && styles.bodyStacked]}>
+          <View style={stacked && styles.emblemStacked}>
+            <RankIcon
+              tier={summary?.tier ?? null}
+              division={summary?.division ?? null}
+              size={46}
+            />
+          </View>
+          <View
+            style={[styles.body, stacked && styles.bodyStacked]}
+            testID="player-rank-banner-body"
+          >
             <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
-            <View style={[styles.tierRow, largeText && styles.tierRowStacked]}>
+            <View
+              style={[styles.tierRow, stacked && styles.tierRowStacked]}
+              testID="player-rank-banner-tier"
+            >
               <Text style={[type.h3, styles.tierLabel]}>
                 {summary
                   ? `${summary.tierLabel} ${summary.divisionLabel}`
                   : 'Unranked'}
               </Text>
               {summary ? (
-                <Text style={[type.bodyBold, { color: color.onDark }]}>
-                  {summary.rating.toFixed(2)}
-                  <Text style={[type.micro, styles.ratingScale]}>
-                    {' /10 '}
-                    {formatDuprEstimate(summary.rating)}
+                <View style={styles.ratingBlock}>
+                  <Text
+                    style={[
+                      type.bodyBold,
+                      styles.rating,
+                      { color: color.onDark },
+                    ]}
+                    accessibilityLabel={`Estimated DUPR ${formatDupr(
+                      summary.rating,
+                    )}, technique rating ${summary.rating.toFixed(
+                      2,
+                    )} out of 10`}
+                    testID="player-rank-banner-rating"
+                  >
+                    {formatDupr(summary.rating)}
+                    <Text style={[type.micro, styles.ratingScale]}>
+                      {` ${DUPR_LABEL}`}
+                    </Text>
                   </Text>
-                </Text>
+                  <Text
+                    style={[type.micro, styles.ratingTechnique]}
+                    testID="player-rank-banner-technique-rating"
+                  >
+                    {formatTechniqueScore(summary.rating, 2)}
+                  </Text>
+                </View>
               ) : null}
             </View>
-            <Text
-              style={[type.caption, styles.detail]}
-              numberOfLines={largeText ? undefined : 1}
-            >
-              {detailLine}
-            </Text>
+            <Text style={[type.caption, styles.detail]}>{detailLine}</Text>
           </View>
           <Animated.View
-            style={[chevronStyle, largeText && styles.chevronStacked]}
+            style={[chevronStyle, stacked && styles.chevronStacked]}
           >
             <Icon name="chevron" color={color.onDarkFaint} size={16} />
           </Animated.View>
@@ -244,7 +290,7 @@ export function PlayerRankBanner(props: {
           }. Opens the consistency calendar.`}
           disabled={!props.onPressStreak}
           onPress={props.onPressStreak}
-          style={[styles.streakBlock, largeText && styles.streakBlockStacked]}
+          style={[styles.streakBlock, stacked && styles.streakBlockStacked]}
           testID="player-rank-banner-streak"
         >
           <View style={styles.streakTop}>
@@ -303,7 +349,9 @@ export function PlayerRankBanner(props: {
                     style={[
                       styles.tierListRow,
                       active && styles.tierListRowActive,
+                      stacked && styles.tierListRowStacked,
                     ]}
+                    testID={`player-rank-banner-tier-${tier.key}`}
                   >
                     <RankIcon tier={tier.key} size={26} />
                     <Text
@@ -311,6 +359,7 @@ export function PlayerRankBanner(props: {
                         type.caption,
                         styles.tierListLabel,
                         active && styles.tierListLabelActive,
+                        stacked && styles.tierListLabelStacked,
                       ]}
                     >
                       {tier.label}
@@ -335,7 +384,7 @@ export function PlayerRankBanner(props: {
                   <View key={technique.shotType} style={styles.techniqueChip}>
                     <Text style={[type.micro, styles.techniqueChipLabel]}>
                       {technique.shotType.replace(/_/g, ' ')}{' '}
-                      {technique.score.toFixed(1)}
+                      {formatDupr(technique.score)}
                     </Text>
                   </View>
                 ))}
@@ -345,10 +394,17 @@ export function PlayerRankBanner(props: {
                 set its score — newest count most. Strokes with more evidence
                 weigh more (up to {RANK_CONFIDENCE_CAP} analyses each).{' '}
                 {summary.nextTier
-                  ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                      summary.nextTier.label
-                    }.`
+                  ? `${formatDuprDistance(
+                      summary.rating,
+                      summary.nextTier.minRating,
+                    )} to ${summary.nextTier.label}.`
                   : 'Top tier — every new analysis defends it.'}
+              </Text>
+              <Text
+                style={[type.caption, styles.formulaNote]}
+                testID="player-rank-banner-dupr-note"
+              >
+                {DUPR_ESTIMATE_NOTE}
               </Text>
             </>
           ) : (
@@ -375,26 +431,45 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     padding: space.md,
     gap: space.sm,
   },
-  rowStacked: { flexDirection: 'column', alignItems: 'stretch' },
+  rowStacked: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    alignItems: 'stretch',
+  },
   mainPress: {
-    flex: 1,
+    minHeight: 44,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 200,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm + 4,
   },
   mainPressStacked: {
-    flex: 0,
+    width: '100%',
+    flexBasis: 'auto',
+    flexGrow: 0,
     flexDirection: 'column',
-    alignItems: 'flex-start',
+    alignItems: 'stretch',
   },
-  chevronStacked: { position: 'absolute', right: 0, top: space.md },
+  emblemStacked: { alignSelf: 'flex-start' },
+  chevronStacked: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 44,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   body: { flex: 1, minWidth: 0 },
-  bodyStacked: { flex: 0, alignSelf: 'stretch' },
+  bodyStacked: { flex: 0, width: '100%' },
   eyebrow: { color: color.volt },
   tierRow: {
     flexDirection: 'column',
@@ -403,29 +478,52 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   tierRowStacked: { flexDirection: 'column', alignItems: 'stretch' },
-  tierLabel: { color: color.onDark, flexShrink: 1 },
+  tierLabel: { color: color.onDark, flexShrink: 1, maxWidth: '100%' },
+  ratingBlock: { alignItems: 'flex-start', maxWidth: '100%' },
+  rating: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+    fontVariant: ['tabular-nums'],
+  },
   ratingScale: { color: color.onDarkSubtle },
+  ratingTechnique: {
+    color: color.onDarkFaint,
+    fontVariant: ['tabular-nums'],
+  },
   detail: { color: color.onDarkSubtle, marginTop: 2 },
   streakBlock: {
+    minHeight: 44,
+    maxWidth: '100%',
     alignItems: 'center',
+    marginLeft: 'auto',
     flexShrink: 0,
     paddingHorizontal: space.sm,
     paddingVertical: 6,
     borderRadius: radius.md,
     backgroundColor: color.onDarkTint,
   },
-  streakBlockStacked: { minHeight: 44, maxWidth: '100%' },
-  streakTop: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  streakBlockStacked: { width: '100%', marginLeft: 0 },
+  streakTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    maxWidth: '100%',
+  },
   streakCount: {
     ...type.h3,
     color: color.onDark,
     fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+    minWidth: 0,
   },
   streakLabel: {
     ...type.micro,
     color: color.onDarkMuted,
     letterSpacing: 0.5,
     marginTop: 1,
+    textAlign: 'center',
+    maxWidth: '100%',
   },
   streakLabelAtRisk: { color: color.flame },
   expanded: {
@@ -455,14 +553,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
   },
   tierListRowActive: { backgroundColor: color.onDarkTint },
+  tierListRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: space.xs,
+  },
   tierListLabel: { color: color.onDarkMuted, flex: 1 },
   tierListLabelActive: { color: color.onDark },
+  tierListLabelStacked: { flex: 0 },
   tierListRange: {
     color: color.onDarkMuted,
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.4,
+    maxWidth: '100%',
   },
   youPill: {
+    maxWidth: '100%',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.pill,
@@ -475,6 +581,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm + 2,
   },
   techniqueChip: {
+    maxWidth: '100%',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,

@@ -51,11 +51,33 @@ import {
 } from '../../src/billing';
 import {
   clearAccessStoreConfiguration,
-  configureAccessStore,
+  configureAccessStore as configureBillingAccessStore,
   useAccessStore,
 } from '../../src/state/accessStore';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
 import { BrandSpinner } from '../../src/design/components';
+import {
+  createPendingFulfilmentStorage,
+  type PendingFulfilmentStorage,
+} from '../../src/billing/pendingFulfilment';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
+
+const OWNER = '11111111-1111-4111-8111-111111111111';
+let pendingStorage: PendingFulfilmentStorage;
+function configureAccessStore(clients: BillingAccessDependencies): void {
+  setActiveDataOwner(OWNER);
+  configureBillingAccessStore(clients, {
+    owner: OWNER,
+    pendingFulfilmentStorage: pendingStorage,
+  });
+}
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
@@ -153,15 +175,22 @@ function dependencies(overrides?: {
     },
     backend: {
       getAccess: jest.fn(overrides?.getAccess ?? (async () => freeAccess)),
-      syncBilling: jest.fn(
-        overrides?.syncBilling ??
-          (async () => ({
-            access: premiumAccess,
-            storeSnapshot: entitled,
-          })),
-      ),
+      syncBilling: jest.fn(async () => {
+        const access = overrides?.syncBilling
+          ? (await overrides.syncBilling()).access
+          : premiumAccess;
+        return {
+          access,
+          billing: {
+            premium: access.premium,
+            productKey: access.premium ? entitled.productId : null,
+            expiresAt: access.premium ? entitled.expirationDate : null,
+            verifiedAt: '2026-09-01T00:00:00.000Z',
+          },
+        };
+      }),
     },
-  } as unknown as BillingAccessDependencies;
+  };
 }
 
 async function flush() {
@@ -247,6 +276,14 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
 
 beforeEach(() => {
   clearAccessStoreConfiguration();
+  const { db } = createSqliteTestDb();
+  pendingStorage = createPendingFulfilmentStorage(() => db);
+});
+
+afterEach(() => {
+  clearAccessStoreConfiguration();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  closeSqliteTestDatabases();
 });
 
 describe('Paywall — exits and legal links (3.1.2)', () => {
@@ -288,10 +325,16 @@ describe('Paywall — exits and legal links (3.1.2)', () => {
     expect(handlers.onOpenPrivacy).toHaveBeenCalledTimes(1);
 
     // Subscription disclosure sits next to the links: price, period,
-    // auto-renewal, and where to cancel.
-    const copy = allText(renderer);
-    expect(copy).toContain('$59.99 per year, automatically renewing');
+    // auto-renewal, and where to cancel — for the pre-selected monthly plan
+    // and again once yearly is chosen.
+    let copy = allText(renderer);
+    expect(copy).toContain('$7.99 per month, automatically renewing');
     expect(copy).toContain('Cancel in your store account settings.');
+    await act(async () =>
+      byTestId(renderer, 'paywall-plan-annual').props.onPress(),
+    );
+    copy = allText(renderer);
+    expect(copy).toContain('$59.99 per year, automatically renewing');
     act(() => renderer.unmount());
   });
 
@@ -331,13 +374,11 @@ describe('Paywall — purchase branches', () => {
 
     const continueButton = byTestId(renderer, 'paywall-continue');
     expect(continueButton.props.disabled).toBe(false);
-    expect(continueButton.props.accessibilityLabel).toBe(
-      'Continue · $59.99/yr',
-    );
+    expect(continueButton.props.accessibilityLabel).toBe('Continue · $7.99/mo');
     await act(async () => continueButton.props.onPress());
     await flush();
 
-    expect(deps.store.purchase).toHaveBeenCalledWith('annual-plan');
+    expect(deps.store.purchase).toHaveBeenCalledWith('monthly-plan');
     expect(deps.backend.syncBilling).toHaveBeenCalledTimes(1);
     expect(handlers.onPurchased).toHaveBeenCalledTimes(1);
     expect(hasLabel(renderer, 'Dismiss membership message')).toBe(0);
@@ -407,14 +448,13 @@ describe('Paywall — purchase branches', () => {
     act(() => renderer.unmount());
   });
 
-  it('store succeeded but backend verification failed: pending copy, Restore stays available', async () => {
-    configureAccessStore(
-      dependencies({
-        syncBilling: async () => {
-          throw new Error('503');
-        },
-      }),
-    );
+  it('store succeeded but backend verification failed: retry verifies the backend without another store operation', async () => {
+    const deps = dependencies({
+      syncBilling: async () => {
+        throw new Error('503');
+      },
+    });
+    configureAccessStore(deps);
     const { renderer, handlers } = await renderPaywall();
     await openPricing(renderer);
 
@@ -425,11 +465,20 @@ describe('Paywall — purchase branches', () => {
 
     expect(handlers.onPurchased).not.toHaveBeenCalled();
     expect(allText(renderer)).toContain(
-      'membership verification is still pending. Try Restore purchases.',
+      'membership verification is still pending. Retry verification; do not purchase again.',
     );
-    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
+    expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
+    expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
     expect(byTestId(renderer, 'paywall-retry')).toBeTruthy();
     expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
+    await act(async () => {
+      byTestId(renderer, 'paywall-retry').props.onPress();
+    });
+    await flush();
+    expect(deps.backend.syncBilling).toHaveBeenCalledTimes(2);
+    expect(deps.store.purchase).toHaveBeenCalledTimes(1);
+    expect(deps.store.restore).not.toHaveBeenCalled();
+    expect(handlers.onPurchased).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 

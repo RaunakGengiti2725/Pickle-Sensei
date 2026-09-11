@@ -20,7 +20,10 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  };
 });
 
 const mockNavigate = jest.fn();
@@ -86,7 +89,12 @@ jest.mock('../../src/progress/rankCelebration', () => {
 import { ProgressScreen } from '../../src/screens/ProgressScreen';
 import type { RootStackParams } from '../../src/navigation/params';
 import { STREAK_MILESTONES } from '../../src/consistency/milestones';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 
+const OWNER = '11111111-1111-4111-8111-111111111111';
 const DAY_MS = 86_400_000;
 
 function daysAgoIso(days: number): string {
@@ -222,6 +230,7 @@ const CONSISTENCY_SNAPSHOT_LABEL =
 
 describe('ProgressScreen button ledger', () => {
   beforeEach(() => {
+    setActiveDataOwner(OWNER);
     jest.spyOn(Dimensions, 'get').mockReturnValue({
       width: 375,
       height: 667,
@@ -247,6 +256,7 @@ describe('ProgressScreen button ledger', () => {
       jest.runOnlyPendingTimers();
     });
     jest.useRealTimers();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     jest.restoreAllMocks();
   });
 
@@ -437,6 +447,7 @@ describe('ProgressScreen button ledger', () => {
     mockGetApiSession.mockReturnValue({
       apiBaseUrl: 'https://example.test',
       bearerToken: 'fake',
+      canonicalAppUserId: OWNER,
     });
     mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
     const renderer = await renderScreen();
@@ -444,6 +455,7 @@ describe('ProgressScreen button ledger', () => {
     expect(text).not.toContain('Progress couldn’t load');
     expect(text).toContain('KEY STATISTICS');
     expect(text).not.toContain('OBSERVED SCORE SIGNALS');
+    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 

@@ -14,6 +14,7 @@ import {
 } from "@pickle/vision-geometry";
 import {
   analyzeCapture,
+  captureQualityLimitingFactors,
   evaluatePreAnalysisGate,
   type CaptureAnalysisRecord,
   type FusionProviders,
@@ -79,7 +80,13 @@ export interface CaseResult {
     meanFrameConfidence: number;
     largestGapMs: number;
   };
-  preGate: { analyzable: boolean; reasons: string[]; notEvaluated: string[] };
+  preGate: {
+    analyzable: boolean;
+    blocking: boolean;
+    reasons: string[];
+    advisories: string[];
+    notEvaluated: string[];
+  };
   fusion: FusionOutcome;
   /** Same seed's untouched reference stream through the same pipeline. */
   reference: {
@@ -142,12 +149,13 @@ async function runFusion(
   scenario: ScenarioCase,
 ): Promise<{ outcome: FusionOutcome; record: CaptureAnalysisRecord | null }> {
   const gate = gateFor(sequence, scenario);
-  if (!gate.analyzable) {
+  if (gate.blocking) {
+    const blocking = gate.reasons.filter((reason) => !gate.advisories.includes(reason));
     return {
       outcome: {
         kind: "failed",
         failureKind: "low_confidence",
-        code: `capture.not_analyzable.${gate.reasons[0]}`,
+        code: `capture.not_analyzable.${blocking[0]}`,
         message: `Pre-analysis gate: ${gate.reasons.join(", ")}`,
       },
       record: null,
@@ -179,6 +187,7 @@ async function runFusion(
       modelBundleVersion: "on-device-fusion-1",
       nowIso: () => "2026-09-04T00:00:00.000Z",
       makeId: () => `run-${++counter}`,
+      captureQualityFactors: captureQualityLimitingFactors(gate),
     },
   );
   if (!result.ok) {
@@ -288,7 +297,9 @@ function summarizeQuality(report: CaptureQualityReport): CaseResult["quality"] {
 function summarizeGate(decision: PreAnalysisGateDecision): CaseResult["preGate"] {
   return {
     analyzable: decision.analyzable,
+    blocking: decision.blocking,
     reasons: [...decision.reasons],
+    advisories: [...decision.advisories],
     notEvaluated: [...decision.notEvaluated],
   };
 }

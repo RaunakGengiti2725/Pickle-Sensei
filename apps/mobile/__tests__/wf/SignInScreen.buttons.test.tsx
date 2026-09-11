@@ -12,19 +12,57 @@
  * double-tap guard are the store's real behavior, not a stubbed action.
  */
 import React from 'react';
-import { NativeModules, Platform, Text } from 'react-native';
+import {
+  BackHandler,
+  Modal,
+  NativeModules,
+  Platform,
+  ScrollView,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
+import { create } from 'zustand';
+import * as Keychain from 'react-native-keychain';
+import {
+  getActiveDataOwner,
+  captureDataOwnerContext,
+} from '../../src/data/accountScope';
+import { stopSessionKeeper } from '../../src/account/sessionKeeper';
+import {
+  SESSION_VAULT_SERVICE,
+  readPersistedSession,
+} from '../../src/account/sessionVault';
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-  initialWindowMetrics: { insets: { top: 0, bottom: 0, left: 0, right: 0 } },
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    SafeAreaProvider: View,
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+    initialWindowMetrics: { insets: { top: 0, bottom: 0, left: 0, right: 0 } },
+  };
+});
 
 // SQLite is absent under jest; the store's kv writes are best-effort.
+const mockKv = new Map<string, string>();
+let mockRestoreWriteGate: Promise<void> | null = null;
 jest.mock('../../src/data/db', () => ({
-  getDb: () => {
-    throw new Error('no native sqlite in jest');
-  },
+  getDb: () => ({
+    async execute(sql: string, params: unknown[] = []) {
+      if (sql.startsWith('SELECT value FROM kv')) {
+        const value = mockKv.get(String(params[0]));
+        return { rows: value === undefined ? [] : [{ value }] };
+      }
+      if (sql.startsWith('INSERT OR REPLACE INTO kv')) {
+        if (params[0] === 'auth.restore-state' && mockRestoreWriteGate)
+          await mockRestoreWriteGate;
+        mockKv.set(String(params[0]), String(params[1]));
+      }
+      return { rows: [] };
+    },
+    close() {},
+  }),
 }));
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -84,13 +122,137 @@ jest.mock('../../src/account/bootstrap', () => {
   };
 });
 
+const mockGateAppHydrate = jest.fn(async () => {
+  const ownerKey = getActiveDataOwner();
+  mockGateAppStore.setState({
+    hydrated: true,
+    ownerKey,
+    profile: ownerKey === SIGNED_OUT_DATA_OWNER ? null : { skillLevel: '3.5' },
+  });
+});
+const mockGateAppStore = create<{
+  hydrated: boolean;
+  ownerKey: string | null;
+  profile: { skillLevel: string } | null;
+  hydrateError: string | null;
+  awaitingApiSession: boolean;
+  hydrate: () => Promise<void>;
+}>(() => ({
+  hydrated: false,
+  ownerKey: null,
+  profile: null,
+  hydrateError: null,
+  awaitingApiSession: false,
+  hydrate: mockGateAppHydrate,
+}));
+jest.mock('../../src/state/appStore', () => ({
+  useAppStore: (
+    selector: (s: ReturnType<typeof mockGateAppStore.getState>) => unknown,
+  ) => mockGateAppStore(selector),
+}));
+jest.mock('../../src/navigation/RootNavigator', () => {
+  const R = jest.requireActual<typeof import('react')>('react');
+  const RN = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    RootNavigator: () => {
+      const [route, setRoute] = R.useState('ROOT_NAVIGATOR');
+      return R.createElement(
+        RN.View,
+        { style: { flex: 1 } },
+        R.createElement(RN.Text, null, route),
+        R.createElement(
+          RN.Pressable,
+          {
+            accessibilityRole: 'button',
+            accessibilityLabel: 'Open another screen',
+            onPress: () => setRoute('ANOTHER_ROUTE'),
+          },
+          R.createElement(RN.Text, null, 'Open another screen'),
+        ),
+      );
+    },
+  };
+});
+jest.mock('../../src/screens/WelcomeScreen', () => {
+  const R = jest.requireActual<typeof import('react')>('react');
+  const RN = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    WelcomeScreen: (props: { onSignIn: () => void }) =>
+      R.createElement(
+        RN.Pressable,
+        {
+          accessibilityRole: 'button',
+          accessibilityLabel: 'I already have an account',
+          onPress: props.onSignIn,
+        },
+        R.createElement(RN.Text, null, 'WELCOME'),
+      ),
+  };
+});
+jest.mock('../../src/screens/OnboardingScreen', () => ({
+  OnboardingScreen: () => null,
+}));
+jest.mock('../../src/screens/SplashScreen', () => {
+  const R = jest.requireActual<typeof import('react')>('react');
+  return {
+    SplashScreen: (props: { ready: boolean; onFinished: () => void }) => {
+      R.useEffect(() => {
+        if (props.ready) props.onFinished();
+      }, [props.ready, props.onFinished]);
+      return null;
+    },
+  };
+});
+jest.mock('../../src/flow/CeremonyHost', () => ({
+  CeremonyHost: ({ children }: { children: React.ReactNode }) => children,
+}));
+jest.mock('../../src/components/RankUpCelebration', () => ({
+  RankUpCelebration: () => null,
+}));
+jest.mock('../../src/consistency/StreakCelebration', () => ({
+  StreakCelebration: () => null,
+}));
+jest.mock('../../src/walkthrough/FirstRunWalkthrough', () => ({
+  FirstRunWalkthrough: () => null,
+}));
+jest.mock('../../src/walkthrough/walkthroughStore', () => {
+  const state = { maybeShowFirstRun: async () => {} };
+  return {
+    useWalkthroughStore: (selector: (s: typeof state) => unknown) =>
+      selector(state),
+  };
+});
+jest.mock('../../src/notifications/useNotificationBootstrap', () => ({
+  useNotificationBootstrap: () => {},
+}));
+jest.mock('../../src/consistency/useConsistencyBootstrap', () => ({
+  useConsistencyBootstrap: () => {},
+}));
+jest.mock('../../src/diagnostics/sentry', () => ({
+  captureBoundaryError: jest.fn(),
+  resetDiagnosticsScope: jest.fn(),
+}));
+
+import App from '../../App';
 import { SignInScreen } from '../../src/screens/SignInScreen';
-import { useAuthStore } from '../../src/auth/authStore';
+import { useAuthStore, type AuthRestoreState } from '../../src/auth/authStore';
 import { AccountBootstrapError } from '../../src/account/bootstrap';
 import { clearApiSession, getApiSession } from '../../src/account/apiSession';
 import { clearSyncRuntime } from '../../src/data/syncRuntime';
+import {
+  SIGNED_OUT_DATA_OWNER,
+  setActiveDataOwner,
+} from '../../src/data/accountScope';
+import { ScreenHeader } from '../../src/design/components';
+import { type } from '../../src/design/tokens';
 
 const CANONICAL_ID = '7fc2c743-028f-4ec6-942c-a84508f3be38';
+const OWNER_B = '11111111-1111-4111-8111-111111111111';
+const keychainStore = (
+  Keychain as unknown as {
+    __keychainStore: Map<string, { username: string; password: string }>;
+  }
+).__keychainStore;
 
 function bootstrapResult(provider: 'apple' | 'google', email: string | null) {
   return {
@@ -146,11 +308,16 @@ const mockAppleSignIn = jest.fn<
 >();
 const nativeModules = NativeModules as { PickleAuth?: unknown };
 
-function renderScreen(onBack: () => void = jest.fn()) {
+const mounted: TestRenderer.ReactTestRenderer[] = [];
+
+function renderScreen(onBack: () => void = jest.fn(), gateActive?: boolean) {
   let renderer!: TestRenderer.ReactTestRenderer;
   act(() => {
-    renderer = TestRenderer.create(<SignInScreen onBack={onBack} />);
+    renderer = TestRenderer.create(
+      <SignInScreen onBack={onBack} gateActive={gateActive} />,
+    );
   });
+  mounted.push(renderer);
   return renderer;
 }
 
@@ -222,25 +389,58 @@ const GOOGLE = 'Continue with Google';
 const BACK = 'Back';
 const DISMISS = 'Dismiss sign-in error';
 
+function requireReturningSignIn(
+  reason: Extract<
+    AuthRestoreState,
+    { status: 'reauth_required' }
+  >['reason'] = 'legacy_credentials_missing',
+  noticePending = true,
+  provider: 'apple' | 'google' | null = 'apple',
+) {
+  useAuthStore.setState({
+    restoreState: {
+      status: 'reauth_required',
+      reason,
+      provider,
+      noticePending,
+    },
+  });
+}
+
 describe('SignInScreen button ledger', () => {
   beforeEach(() => {
+    mockKv.clear();
+    mockRestoreWriteGate = null;
+    keychainStore.clear();
+    stopSessionKeeper();
+    mockGateAppHydrate.mockClear();
+    mockGateAppStore.setState({
+      hydrated: false,
+      ownerKey: null,
+      profile: null,
+    });
     mockAppleSignIn.mockReset();
     mockBootstrapCanonicalAccount.mockReset();
     Object.values(mockGoogleSignin).forEach(fn => fn.mockReset());
     mockGoogleSignin.hasPlayServices.mockResolvedValue(true);
     nativeModules.PickleAuth = { signInWithApple: mockAppleSignIn };
+    clearApiSession();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     useAuthStore.setState({
       hydrated: true,
       session: null,
       busy: false,
       error: null,
+      restoreState: { status: 'signed_out', reason: 'new_install' },
     });
   });
 
   afterEach(() => {
+    for (const renderer of mounted.splice(0)) act(() => renderer.unmount());
     // A successful sign-in arms the outbox sync interval; stop it so the
     // suite exits cleanly.
     clearSyncRuntime();
+    stopSessionKeeper();
     clearApiSession();
     delete nativeModules.PickleAuth;
     jest.restoreAllMocks();
@@ -577,6 +777,518 @@ describe('SignInScreen button ledger', () => {
     });
     expect(pressables(renderer, DISMISS)).toHaveLength(0);
     act(() => renderer.unmount());
+  });
+
+  describe('returning sign-in notice', () => {
+    it.each([
+      [
+        'legacy_credentials_missing',
+        'An earlier version couldn’t keep your sign-in on this device. Please sign in once more.',
+      ],
+      [
+        'credentials_missing',
+        'This device no longer has the credentials needed to restore your sign-in.',
+      ],
+      [
+        'revoked',
+        'Your previous sign-in is no longer valid. Please sign in again to reconnect.',
+      ],
+    ] as const)(
+      '%s explains the reason inline, without claiming a profile or launching a provider',
+      (reason, explanation) => {
+        requireReturningSignIn(reason);
+        const renderer = renderScreen();
+        expect(allText(renderer)).toContain('Sign in again.');
+        expect(allText(renderer)).toContain(explanation);
+        expect(allText(renderer)).toContain(
+          'Use the same Apple account to check for a saved coaching profile and synced progress.',
+        );
+        expect(allText(renderer)).toContain(
+          'Any saved profile stays private until the matching account is verified.',
+        );
+        expect(renderer.root.findAllByType(Modal)).toHaveLength(0);
+        expect(
+          pressableStyle(pressable(renderer, 'Got it')).minHeight,
+        ).toBeGreaterThanOrEqual(44);
+        expect(mockAppleSignIn).not.toHaveBeenCalled();
+        expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+        expect(mockGoogleSignin.signInSilently).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().restoreState).toMatchObject({
+          noticePending: true,
+        });
+      },
+    );
+
+    it.each([
+      ['google', 'Use the same Google account'],
+      [null, 'Use the account you used before'],
+    ] as const)(
+      'uses only the %s provider hint, not an unverified name or profile',
+      (provider, copy) => {
+        requireReturningSignIn('credentials_missing', true, provider);
+        const renderer = renderScreen();
+        expect(allText(renderer)).toContain(copy);
+        expect(allText(renderer)).toContain(
+          'check for a saved coaching profile',
+        );
+        expect(useAuthStore.getState().session).toBeNull();
+      },
+    );
+
+    it('is visible only when pending; mounting, hiding and unmounting never acknowledges it', () => {
+      requireReturningSignIn();
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack, false);
+      expect(pressables(renderer, 'Got it')).toHaveLength(0);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      act(() => renderer.update(<SignInScreen onBack={onBack} gateActive />));
+      expect(pressables(renderer, 'Got it')).toHaveLength(1);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      act(() => renderer.unmount());
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      requireReturningSignIn('legacy_credentials_missing', false);
+      const acknowledged = renderScreen();
+      expect(allText(acknowledged)).toContain('Sign in again.');
+      expect(allText(acknowledged)).not.toContain('An earlier version');
+      expect(pressables(acknowledged, 'Got it')).toHaveLength(0);
+    });
+
+    it('Got it consumes the notice through the store without signing in or navigating', async () => {
+      requireReturningSignIn();
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack);
+      await press(renderer, 'Got it');
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        status: 'reauth_required',
+        noticePending: false,
+      });
+      expect(JSON.parse(mockKv.get('auth.restore-state')!)).toMatchObject({
+        status: 'reauth_required',
+        noticePending: false,
+      });
+      expect(pressables(renderer, 'Got it')).toHaveLength(0);
+      expect(allText(renderer)).toContain('Sign in again.');
+      expect(onBack).not.toHaveBeenCalled();
+      expect(mockAppleSignIn).not.toHaveBeenCalled();
+      expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      'Back consumes a visible notice and remains usable with busy=%s',
+      async busy => {
+        requireReturningSignIn();
+        useAuthStore.setState({ busy });
+        const onBack = jest.fn();
+        const renderer = renderScreen(onBack);
+        await press(renderer, BACK);
+        expect(onBack).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().restoreState).toMatchObject({
+          noticePending: false,
+        });
+        expect(pressable(renderer, BACK).props.disabled).toBeUndefined();
+      },
+    );
+
+    it('a hidden or stale notice action cannot consume a new returning context', async () => {
+      requireReturningSignIn();
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack, true);
+      const acknowledge = pressable(renderer, 'Got it').props.onPress;
+      act(() => requireReturningSignIn('revoked'));
+      await act(async () => acknowledge());
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        reason: 'revoked',
+        noticePending: true,
+      });
+      act(() =>
+        renderer.update(<SignInScreen onBack={onBack} gateActive={false} />),
+      );
+      await press(renderer, BACK);
+      expect(onBack).not.toHaveBeenCalled();
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+    });
+
+    it('provider cancel and failure leave the notice pending; a verified sign-in success consumes it', async () => {
+      requireReturningSignIn();
+      mockAppleSignIn
+        .mockRejectedValueOnce({
+          code: 'auth.canceled',
+          message: 'Sign-in canceled.',
+        })
+        .mockRejectedValueOnce(new Error('Apple could not verify you.'))
+        .mockResolvedValueOnce({
+          user: 'apple-user-1',
+          identityToken: 'test-provider-token',
+        });
+      mockBootstrapCanonicalAccount.mockResolvedValue(
+        bootstrapResult('apple', 'pat@example.test'),
+      );
+      const renderer = renderScreen();
+      await press(renderer, APPLE);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      expect(pressables(renderer, DISMISS)).toHaveLength(0);
+      await press(renderer, APPLE);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      expect(allText(renderer)).toContain('Apple could not verify you.');
+      await press(renderer, DISMISS);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      await press(renderer, APPLE);
+      expect(useAuthStore.getState().restoreState).toEqual({
+        status: 'restored',
+        connectivity: 'online',
+      });
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        CANONICAL_ID,
+      );
+      expect(pressables(renderer, 'Got it')).toHaveLength(0);
+    });
+
+    it('a rejected backend bootstrap cannot claim the profile or consume the notice', async () => {
+      requireReturningSignIn();
+      mockAppleSignIn.mockResolvedValue({
+        user: 'apple-user-1',
+        identityToken: 'test-provider-token',
+      });
+      mockBootstrapCanonicalAccount.mockRejectedValue(
+        new AccountBootstrapError(
+          'account.rejected',
+          'Sign-in could not be verified.',
+          false,
+        ),
+      );
+      const renderer = renderScreen();
+      await press(renderer, APPLE);
+      expect(useAuthStore.getState().session).toBeNull();
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: true,
+      });
+      expect(allText(renderer)).toContain('Sign-in could not be verified.');
+      expect(allText(renderer)).toContain('check for a saved coaching profile');
+    });
+
+    it('keeps notices, provider buttons and long errors inside a scalable scroll area with Back outside it', () => {
+      requireReturningSignIn();
+      useAuthStore.setState({
+        error: {
+          code: 'auth.failed',
+          message: 'A long recoverable sign-in error. '.repeat(30),
+        },
+      });
+      const renderer = renderScreen();
+      const scroll = renderer.root.findByType(ScrollView);
+      expect(scroll.props.scrollEnabled).not.toBe(false);
+      expect(flattenStyle(scroll.props.contentContainerStyle).flexGrow).toBe(1);
+      expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+      expect(scroll.findAllByType(ScreenHeader)).toHaveLength(0);
+      const labels = scroll
+        .findAll(isPressableElement)
+        .map(node => node.props.accessibilityLabel);
+      expect(labels).toEqual(
+        expect.arrayContaining([APPLE, GOOGLE, 'Got it', DISMISS]),
+      );
+      expect(labels).not.toContain(BACK);
+      for (const node of renderer.root.findAllByType(Text)) {
+        expect(node.props.allowFontScaling).not.toBe(false);
+        expect(node.props.maxFontSizeMultiplier).not.toBe(1);
+      }
+      const title = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === 'Sign in again.');
+      expect(flattenStyle(title!.props.style)).toMatchObject(type.hero);
+      const providerLabel = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === GOOGLE);
+      expect(flattenStyle(providerLabel!.props.style)).toMatchObject({
+        ...type.bodyBold,
+        flexShrink: 1,
+      });
+    });
+
+    it('handles hardware Back only while the Gate sign-in is active and removes the handler on exit', async () => {
+      requireReturningSignIn();
+      const remove = jest.fn();
+      const addEventListener = jest
+        .spyOn(BackHandler, 'addEventListener')
+        .mockReturnValue({ remove });
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack, false);
+      expect(addEventListener).not.toHaveBeenCalled();
+      act(() => renderer.update(<SignInScreen onBack={onBack} gateActive />));
+      const handler = addEventListener.mock.calls.find(
+        ([event]) => event === 'hardwareBackPress',
+      )?.[1];
+      expect(handler).toBeDefined();
+      await act(async () => {
+        expect(handler!({ type: 'hardwareBackPress', timeStamp: 0 })).toBe(
+          true,
+        );
+      });
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: false,
+      });
+      act(() =>
+        renderer.update(<SignInScreen onBack={onBack} gateActive={false} />),
+      );
+      expect(remove).toHaveBeenCalled();
+    });
+  });
+
+  describe('Gate with real session persistence retries', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => {
+      stopSessionKeeper();
+      jest.useRealTimers();
+    });
+
+    async function flushGate() {
+      await act(async () => {
+        for (let turn = 0; turn < 100; turn += 1) await Promise.resolve();
+      });
+    }
+
+    function durableBootstrap(owner = CANONICAL_ID) {
+      const base = bootstrapResult('apple', 'pat@example.test');
+      mockAppleSignIn.mockResolvedValue({
+        user: 'test-apple-user',
+        identityToken: 'test-provider-token',
+      });
+      mockBootstrapCanonicalAccount.mockResolvedValue({
+        account: { ...base.account, id: owner },
+        apiSession: {
+          ...base.apiSession,
+          canonicalAppUserId: owner,
+          bearerToken: `test-access-${owner}`,
+          refreshToken: `test-refresh-${owner}`,
+          bearerExpiresAtMs: Date.now() + 3_600_000,
+        },
+      });
+    }
+
+    async function failedVaultSignIn() {
+      durableBootstrap();
+      const fault = jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockRejectedValue(new Error('Vault write unavailable'));
+      let renderer!: TestRenderer.ReactTestRenderer;
+      await act(async () => {
+        renderer = TestRenderer.create(<App />);
+      });
+      mounted.push(renderer);
+      await flushGate();
+      await press(renderer, 'I already have an account');
+      expect(renderer.root.findAllByType(SignInScreen)).toHaveLength(1);
+      await press(renderer, APPLE);
+      await flushGate();
+      expect(useAuthStore.getState().error?.code).toBe(
+        'auth.storage_unavailable',
+      );
+      expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
+      expect(renderer.root.findAllByType(SignInScreen)).toHaveLength(0);
+      return { renderer, fault };
+    }
+
+    it('keeps the real failed-save warning after SignIn unmounts; retry failure retains it and confirmed native success removes it without resetting navigation', async () => {
+      const { renderer, fault } = await failedVaultSignIn();
+      expect(allText(renderer)).toContain('Save sign-in on this device');
+      const session = useAuthStore.getState().session;
+      const api = getApiSession();
+      const owner = captureDataOwnerContext();
+      const generation = JSON.parse(
+        mockKv.get('auth.restore-state')!,
+      ).generation;
+      const hydrates = mockGateAppHydrate.mock.calls.length;
+      await press(renderer, 'Open another screen');
+      await press(renderer, 'Retry saving sign-in');
+      await flushGate();
+      expect(fault).toHaveBeenCalledTimes(2);
+      expect(allText(renderer)).toContain('Save sign-in on this device');
+      expect(allText(renderer)).toContain('ANOTHER_ROUTE');
+      expect(pressable(renderer, 'Retry saving sign-in').props.disabled).toBe(
+        false,
+      );
+      fault.mockRestore();
+      await press(renderer, 'Retry saving sign-in');
+      await flushGate();
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(allText(renderer)).not.toContain('Save sign-in on this device');
+      expect(allText(renderer)).toContain('ANOTHER_ROUTE');
+      expect(useAuthStore.getState().session).toBe(session);
+      expect(getApiSession()).toBe(api);
+      expect(captureDataOwnerContext()).toEqual(owner);
+      expect(mockGateAppHydrate).toHaveBeenCalledTimes(hydrates);
+      expect(mockAppleSignIn).toHaveBeenCalledTimes(1);
+      expect(mockBootstrapCanonicalAccount).toHaveBeenCalledTimes(1);
+      expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+      expect(mockGoogleSignin.signInSilently).not.toHaveBeenCalled();
+      await expect(readPersistedSession()).resolves.toMatchObject({
+        status: 'available',
+        session: { canonicalAppUserId: CANONICAL_ID, generation },
+      });
+    });
+
+    it('an eight-second retry deadline releases only the retry control; the warning waits for actual native confirmation', async () => {
+      const { renderer, fault } = await failedVaultSignIn();
+      fault.mockRestore();
+      const held = deferred<void>();
+      const write = Keychain.setGenericPassword;
+      const writing = jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockImplementation(async (username, password, options) => {
+          await held.promise;
+          return write(username, password, options);
+        });
+      try {
+        await press(renderer, 'Retry saving sign-in');
+        expect(pressable(renderer, 'Retry saving sign-in').props.disabled).toBe(
+          true,
+        );
+        await press(renderer, 'Open another screen');
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(8_000);
+        });
+        await flushGate();
+        expect(pressable(renderer, 'Retry saving sign-in').props.disabled).toBe(
+          false,
+        );
+        expect(allText(renderer)).toContain('Save sign-in on this device');
+        expect(allText(renderer)).toContain('ANOTHER_ROUTE');
+        expect(useAuthStore.getState().error?.code).toBe(
+          'auth.storage_unavailable',
+        );
+        expect(keychainStore.has(SESSION_VAULT_SERVICE)).toBe(false);
+        await press(renderer, 'Retry saving sign-in');
+        expect(writing).toHaveBeenCalledTimes(1);
+        expect(allText(renderer)).toContain('Save sign-in on this device');
+      } finally {
+        held.resolve();
+        await flushGate();
+      }
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(allText(renderer)).not.toContain('Save sign-in on this device');
+      expect(allText(renderer)).toContain('ANOTHER_ROUTE');
+    });
+
+    it('an obsolete native A completion and stale A button cannot clear or retry a newer verified B warning', async () => {
+      const { renderer, fault } = await failedVaultSignIn();
+      fault.mockRestore();
+      const heldA = deferred<void>();
+      const heldB = deferred<void>();
+      const write = Keychain.setGenericPassword;
+      const writing = jest
+        .spyOn(Keychain, 'setGenericPassword')
+        .mockImplementation(async (username, password, options) => {
+          await (JSON.parse(password).canonicalAppUserId === CANONICAL_ID
+            ? heldA.promise
+            : heldB.promise);
+          return write(username, password, options);
+        });
+      const staleRetry = pressable(renderer, 'Retry saving sign-in').props
+        .onPress;
+      try {
+        await press(renderer, 'Retry saving sign-in');
+        durableBootstrap(OWNER_B);
+        let signingIn!: Promise<void>;
+        act(() => {
+          signingIn = useAuthStore.getState().signInWithApple();
+        });
+        await flushGate();
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(8_000);
+          await signingIn;
+        });
+        await flushGate();
+        const sessionB = useAuthStore.getState().session;
+        const apiB = getApiSession();
+        const errorB = useAuthStore.getState().error;
+        expect(sessionB?.canonicalAppUserId).toBe(OWNER_B);
+        expect(errorB?.code).toBe('auth.storage_unavailable');
+        expect(allText(renderer)).toContain('Save sign-in on this device');
+        await act(async () => {
+          staleRetry();
+        });
+        expect(writing).toHaveBeenCalledTimes(1);
+        heldA.resolve();
+        await flushGate();
+        expect(writing).toHaveBeenCalledTimes(2);
+        expect(useAuthStore.getState().error).toBe(errorB);
+        expect(useAuthStore.getState().session).toBe(sessionB);
+        expect(getApiSession()).toBe(apiB);
+        expect(allText(renderer)).toContain('Save sign-in on this device');
+        expect(mockAppleSignIn).toHaveBeenCalledTimes(2);
+      } finally {
+        heldA.resolve();
+        heldB.resolve();
+        await flushGate();
+      }
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(allText(renderer)).not.toContain('Save sign-in on this device');
+      await expect(readPersistedSession()).resolves.toMatchObject({
+        status: 'available',
+        session: { canonicalAppUserId: OWNER_B },
+      });
+    });
+
+    it('Got it does not dismiss a still-pending durable notice when its bounded wait resolves; Back remains intentional', async () => {
+      requireReturningSignIn();
+      const held = deferred<void>();
+      mockRestoreWriteGate = held.promise;
+      const onBack = jest.fn();
+      const renderer = renderScreen(onBack, true);
+      try {
+        await press(renderer, 'Got it');
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(8_000);
+        });
+        expect(useAuthStore.getState().restoreState).toMatchObject({
+          noticePending: true,
+        });
+        expect(pressables(renderer, 'Got it')).toHaveLength(1);
+        await press(renderer, BACK);
+        expect(onBack).toHaveBeenCalledTimes(1);
+        expect(useAuthStore.getState().restoreState).toMatchObject({
+          noticePending: true,
+        });
+      } finally {
+        mockRestoreWriteGate = null;
+        held.resolve();
+        await flushGate();
+      }
+      expect(useAuthStore.getState().restoreState).toMatchObject({
+        noticePending: false,
+      });
+      expect(pressables(renderer, 'Got it')).toHaveLength(0);
+    });
+  });
+
+  it('labels a returning storage error without claiming the provider sign-in failed', () => {
+    requireReturningSignIn();
+    useAuthStore.setState({
+      error: {
+        code: 'auth.storage_unavailable',
+        message: 'This device could not save your sign-in explanation.',
+      },
+    });
+    const renderer = renderScreen();
+    expect(allText(renderer)).toContain('STORAGE UNAVAILABLE');
+    expect(allText(renderer)).not.toContain('SIGN-IN FAILED');
+    expect(pressables(renderer, 'Got it')).toHaveLength(1);
+    expect(mockAppleSignIn).not.toHaveBeenCalled();
+    expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
   });
 
   it('error card never renders raw for a canceled code but does for every other code', () => {

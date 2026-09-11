@@ -45,8 +45,8 @@ final class TemporalStrokeDetectorTests: XCTestCase {
 
   // MARK: - Version & tunables
 
-  func testModelVersionIsHeuristic5() {
-    XCTAssertEqual(TemporalStrokeDetector().modelVersion, "temporal-stroke-heuristic-5")
+  func testModelVersionIsHeuristic6() {
+    XCTAssertEqual(TemporalStrokeDetector().modelVersion, "temporal-stroke-heuristic-6")
   }
 
   func testConfigDefaultsArePinned() {
@@ -62,6 +62,8 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(config.maxOnsetToTriggerMs, 1_200)
     XCTAssertEqual(config.minWristPathBodyHeights, 0.3)
     XCTAssertNil(config.handedness)
+    XCTAssertEqual(config.strongTriggerWristSpeed, 2.5)
+    XCTAssertEqual(TemporalStrokeDetector.strongCrossingMargin, 0.05)
     XCTAssertEqual(TemporalStrokeDetector.Handedness(rawValue: "left"), .left)
     XCTAssertEqual(TemporalStrokeDetector.Handedness(rawValue: "right"), .right)
     XCTAssertNil(TemporalStrokeDetector.Handedness(rawValue: "unknown"))
@@ -84,6 +86,7 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(legacy.maxOnsetToTriggerMs, 1_200)
     XCTAssertEqual(legacy.minWristPathBodyHeights, 0.3)
     XCTAssertNil(legacy.handedness)
+    XCTAssertEqual(legacy.strongTriggerWristSpeed, 2.5)
   }
 
   func testManualStopConfigIsPinned() {
@@ -99,6 +102,138 @@ final class TemporalStrokeDetectorTests: XCTestCase {
     XCTAssertEqual(config.maxOnsetToTriggerMs, 1_500)
     XCTAssertEqual(config.minWristPathBodyHeights, 0.25)
     XCTAssertNil(config.handedness)
+    XCTAssertEqual(config.strongTriggerWristSpeed, 2.5)
+    XCTAssertEqual(TemporalStrokeDetector.fallbackMotionFloor, 0.7)
+    XCTAssertEqual(TemporalStrokeDetector.fallbackPreMs, 1_000)
+    XCTAssertEqual(TemporalStrokeDetector.fallbackPostMs, 800)
+  }
+
+  // MARK: - Heuristic-6: strong motion needs no ready position
+
+  /// Hard drive: 3.0 bh/s peak (over the 2.5 strong threshold) — speeds 2.0,
+  /// 3.0, 2.5, 2.0, 1.5, 1.0, 0.75, 0.4, 0.2, 0.1, 0.1 bh/s; path 0.543 bh.
+  private let hardDriveDeltas: [Double] = [0.08, 0.12, 0.10, 0.08, 0.06, 0.04, 0.03, 0.016, 0.008, 0.004, 0.004]
+
+  func testStrongSwingWithoutQuietOnsetIsDetectedFromTheMotionItself() {
+    // Motion from the very first interval — no quiet run ever existed. The
+    // heuristic-4 drive (2.0 bh/s) is still ignored here; the hard drive
+    // crosses 2.5 on its second interval and opens on its own.
+    XCTAssertTrue(run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: [0] + cumulative(driveDeltas))).isEmpty)
+    let events = run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: [0] + cumulative(hardDriveDeltas)))
+    XCTAssertEqual(events.count, 1)
+    guard let event = events.first?.event else { return }
+    // No quiet sample exists at all, so the window starts at the interval
+    // that crossed the strong threshold (40 → 80): start 40.
+    XCTAssertEqual(event.startMs, 40)
+    XCTAssertEqual(event.peakMotionMs, 80)
+    // Settled (≤ 0.5) from 320 (0.4); the 160 ms tail completes at 440.
+    XCTAssertEqual(event.endMs, 440)
+    XCTAssertGreaterThan(event.confidence, 0.9)
+  }
+
+  func testStrongSwingAfterTooShortAPauseStartsAtItsLastQuietSample() {
+    // 9 still samples (run [0, 320] = 320 ms < 350: not a qualified onset)
+    // then the hard drive. Heuristic-5 refused it; heuristic-6 opens on the
+    // strong interval and starts the window at the last quiet sample, 320.
+    let path = move(stillPath(9), by: hardDriveDeltas)
+    let events = run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: path))
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events.first?.event.startMs, 320)
+    XCTAssertEqual(events.first?.event.peakMotionMs, 400)
+    XCTAssertEqual(events.first?.event.endMs, 760)
+
+    // A quiet sample older than the onset horizon (1.2 s) is not borrowed:
+    // 9 still samples, 1.4 s of walking-in-place arm swing (0.6 bh/s, never
+    // quiet), then the hard drive → the window starts at the trigger interval.
+    var busy = stillPath(9)
+    for step in 1...35 {
+      let phase = step % 20
+      busy.append(0.024 * Double(phase <= 10 ? phase : 20 - phase))
+    }
+    let late = run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: move(busy, by: hardDriveDeltas)))
+    XCTAssertEqual(late.count, 1)
+    guard let event = late.first?.event else { return }
+    // The strong interval is 1760 → 1800 (the second hard-drive delta).
+    XCTAssertEqual(event.startMs, 1_760)
+    XCTAssertEqual(event.peakMotionMs, 1_800)
+  }
+
+  func testStrongSwingThatNeverSettlesCompletesAtTheTimeoutInsteadOfBeingDropped() {
+    // Hard drive, then the athlete keeps moving at 1.0 bh/s (never ≤ 0.5)
+    // for longer than maxStrokeMs: heuristic-5 dropped the whole thing;
+    // heuristic-6 completes at the first frame past the timeout, ending on
+    // that frame, because the 3.0 bh/s peak proved a swing.
+    let detector = TemporalStrokeDetector(config: .init(maxStrokeMs: 800))
+    let restless = ready(then: Array(hardDriveDeltas.prefix(6)) + Array(repeating: 0.04, count: 20))
+    let events = run(detector, poses(bodySpan: 0.4, path: restless))
+    XCTAssertEqual(events.count, 1)
+    guard let (tMs, event) = events.first else { return }
+    // Trigger interval 400 → 440; elapsed passes 800 at 1240.
+    XCTAssertEqual(tMs, 1_240)
+    XCTAssertEqual(event.startMs, 400)
+    XCTAssertEqual(event.endMs, 1_240)
+    XCTAssertEqual(event.peakMotionMs, 480)
+
+    // The same restlessness after the heuristic-4 drive (peak 2.0 < 2.5) is
+    // still sustained motion, dropped not emitted.
+    let weak = TemporalStrokeDetector(config: .init(maxStrokeMs: 800))
+    let weakRestless = ready(then: Array(driveDeltas.prefix(6)) + Array(repeating: 0.04, count: 20))
+    XCTAssertTrue(run(weak, poses(bodySpan: 0.4, path: weakRestless)).isEmpty)
+  }
+
+  func testStrongTriggerDoesNotBypassThePathGate() {
+    // One 3.0 bh/s interval (0.12 bh) then stillness: strong, but the wrist
+    // covered only 0.12 bh — a flick, dropped by the path gate as before.
+    let flick: [Double] = [0.12, 0, 0, 0, 0, 0, 0, 0, 0]
+    XCTAssertTrue(run(TemporalStrokeDetector(), poses(bodySpan: 0.4, path: [0] + cumulative(flick))).isEmpty)
+  }
+
+  // MARK: - Heuristic-6: STOP & ANALYZE fallback window
+
+  func testFallbackMotionWindowCutsAroundTheFastestDeliberateMovement() {
+    // A drive that never settles (0.7 bh/s of motion right after it, then the
+    // history ends): no candidate completes, so strongestEvent is nil — the
+    // fallback still finds the swing.
+    let path = ready(then: Array(driveDeltas.prefix(5)) + Array(repeating: 0.028, count: 10))
+    let frames = poses(bodySpan: 0.4, path: path)
+    XCTAssertNil(TemporalStrokeDetector.strongestEvent(in: frames))
+    let window = TemporalStrokeDetector.fallbackMotionWindow(in: frames)
+    XCTAssertNotNil(window)
+    guard let window else { return }
+    // Fastest interval: 2.0 bh/s over 440 → 480; window = [480 − 1000, 480 + 800]
+    // clamped to the recording [0, 1000].
+    XCTAssertEqual(window.peakMotionMs, 480)
+    XCTAssertEqual(window.startMs, 0)
+    XCTAssertEqual(window.endMs, 1_000)
+    XCTAssertEqual(window.confidence, min(0.95, 0.5 + 2.0 / (0.8 * 4)), accuracy: 1e-9)
+    XCTAssertEqual(window.recognition.status, .unknown)
+    XCTAssertTrue(window.isContainedInRecording(firstFrameMs: 0, lastFrameMs: 1_000))
+  }
+
+  func testFallbackMotionWindowIgnoresWalkingStillnessAndEmptyInput() {
+    // Walking across the frame: relative arm swing 0.5 bh/s < 0.7 floor.
+    var path = stillPath(readyFrames)
+    var body = stillPath(readyFrames)
+    for step in 1...60 {
+      let phase = step % 20
+      path.append(0.02 * Double(phase <= 10 ? phase : 20 - phase))
+      body.append(0.032 * Double(step))
+    }
+    XCTAssertNil(TemporalStrokeDetector.fallbackMotionWindow(in: poses(bodySpan: 0.4, path: path, bodyPath: body)))
+    XCTAssertNil(TemporalStrokeDetector.fallbackMotionWindow(in: poses(bodySpan: 0.4, path: stillPath(30))))
+    XCTAssertNil(TemporalStrokeDetector.fallbackMotionWindow(in: []))
+    XCTAssertNil(TemporalStrokeDetector.fallbackMotionWindow(in: poses(bodySpan: 0.4, path: [0])))
+  }
+
+  func testFallbackMotionWindowHonoursDeclaredHandedness() {
+    // The LEFT wrist swings; a right-handed declaration ignores it, nil
+    // handedness and a left-handed declaration both find it.
+    let frames = syntheticFrames(fps: 25, swingOnLeft: true) { time in
+      (self.syntheticSwingOffset(time - 0.6), 0, 0)
+    }
+    XCTAssertNil(TemporalStrokeDetector.fallbackMotionWindow(in: frames, handedness: .right))
+    XCTAssertNotNil(TemporalStrokeDetector.fallbackMotionWindow(in: frames, handedness: .left))
+    XCTAssertNotNil(TemporalStrokeDetector.fallbackMotionWindow(in: frames))
   }
 
   // MARK: - Distance invariance & window semantics
@@ -650,6 +785,30 @@ final class TemporalStrokeDetectorTests: XCTestCase {
 
   // MARK: - Offline pass (STOP & ANALYZE)
 
+  func testCompletedEventsPreservesEveryWindowInsteadOfChoosingTheLouderSwing() {
+    var path = ready(then: softDinkDeltas)
+    path = move(hold(path, for: 11), by: driveDeltas)
+    let frames = poses(bodySpan: 0.4, path: path)
+    let events = TemporalStrokeDetector.completedEvents(in: frames, config: TemporalStrokeDetector.manualStopConfig)
+    XCTAssertEqual(events.map(\.startMs), [400, 1_360])
+    XCTAssertEqual(events.map(\.peakMotionMs), [440, 1_440])
+    guard events.count == 2 else { return }
+    XCTAssertLessThan(events[0].confidence, events[1].confidence)
+    XCTAssertEqual(TemporalStrokeDetector.strongestEvent(in: frames)?.startMs, events[1].startMs)
+  }
+
+  func testCompletedEventsDefaultsToTheUnchangedLiveConfiguration() {
+    let frames = poses(bodySpan: 0.4, path: ready(then: softDinkDeltas))
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: frames).isEmpty)
+    XCTAssertEqual(TemporalStrokeDetector.completedEvents(in: frames, config: TemporalStrokeDetector.manualStopConfig).count, 1)
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: []).isEmpty)
+  }
+
+  func testCompletedEventsDoesNotInventAnEndForAnUnfinishedTail() {
+    let frames = poses(bodySpan: 0.5, path: ready(then: Array(driveDeltas.prefix(6))))
+    XCTAssertTrue(TemporalStrokeDetector.completedEvents(in: frames).isEmpty)
+  }
+
   func testStrongestEventFindsASoftSwingTheLiveTriggerMissed() {
     let frames = poses(bodySpan: 0.4, path: ready(then: softDinkDeltas))
     // Live config: nothing (0.9 < 1.15).
@@ -994,8 +1153,10 @@ final class TemporalStrokeDetectorTests: XCTestCase {
                 let reach = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (1.3, 0.45), (1.8, 0.45), (2.5, 0)])
                 return (reach, 0, 0.02 * sin(time))
               case .fidgeting:
+                // Continuous 0.7 bh/s fidgeting alone: never quiet long
+                // enough for an onset, never strong enough to be a swing.
                 let fidget = 0.7 * 0.8 / (2 * Double.pi) * sin(2 * Double.pi * time / 0.8)
-                return (fidget + self.syntheticSwingOffset(time - 2), 0, 0)
+                return (fidget, 0, 0)
               case .flick:
                 let flick = self.syntheticOffset(time, knots: [(0, 0), (0.6, 0), (0.65, 0.06), (0.7, 0.12)])
                 return (flick, self.syntheticFidgetOffset(time), 0)
@@ -1008,6 +1169,36 @@ final class TemporalStrokeDetectorTests: XCTestCase {
               "fps=\(fps), span=\(bodySpan), left=\(swingOnLeft), motion=\(motion)"
             )
           }
+        }
+      }
+    }
+  }
+
+  func testSyntheticSwingLaunchedOutOfFidgetingIsDetectedByItsStrongMotion() {
+    // Heuristic-5 refused this: the 0.7 bh/s fidget dips under the quiet
+    // speed for only ~160–200 ms per reversal, so the swing launched straight
+    // out of it had no qualified onset. Its forward phase crosses the strong
+    // threshold, so heuristic-6 opens on the motion itself, and the fidget's
+    // own reversal dips supply the settled tail.
+    for fps in [15, 30, 60] {
+      for bodySpan in [0.35, 0.55] {
+        for swingOnLeft in [false, true] {
+          let frames = syntheticFrames(
+            fps: fps, bodySpan: bodySpan, swingOnLeft: swingOnLeft,
+            jitter: 0.004, durationMs: 3_400
+          ) { time in
+            let fidget = 0.7 * 0.8 / (2 * Double.pi) * sin(2 * Double.pi * time / 0.8)
+            return (fidget + self.syntheticSwingOffset(time - 2), 0, 0)
+          }
+          let context = "fps=\(fps), span=\(bodySpan), left=\(swingOnLeft)"
+          let events = run(TemporalStrokeDetector(), frames)
+          XCTAssertEqual(events.count, 1, context)
+          guard let emitted = events.first else { continue }
+          // The peak is the swing's forward phase (2.3–2.6 s), not the fidget.
+          XCTAssertGreaterThanOrEqual(emitted.event.peakMotionMs ?? 0, 2_200, context)
+          XCTAssertLessThanOrEqual(emitted.event.peakMotionMs ?? 0, 2_700, context)
+          XCTAssertLessThan(emitted.event.startMs, emitted.event.peakMotionMs ?? 0, context)
+          assertObservedMotionEvent(emitted, in: frames)
         }
       }
     }

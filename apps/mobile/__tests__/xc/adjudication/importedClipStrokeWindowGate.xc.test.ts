@@ -1,3 +1,10 @@
+import {
+  createCaptureAnalysisDb,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../../testSupport/captureAnalysisHarness';
 /**
  * XC-ADJ-VIS-1 — imported clips and the stroke-window continuity gate.
  *
@@ -19,8 +26,6 @@ import {
 } from '@pickle/swing-domain';
 import { evaluateCaptureQuality } from '@pickle/vision-geometry';
 import type { CapturedClip } from '../../../src/camera/capture';
-import { setActiveDataOwner } from '../../../src/data/accountScope';
-import { createFakeLocalDb } from '../../../testing/xcBehavioral/fakeLocalDb';
 
 let mockReadArtifact: (uri: string) => Promise<string> = () =>
   Promise.reject(new Error('readCaptureArtifact mock not configured'));
@@ -33,6 +38,10 @@ jest.mock('../../../src/camera/capture', () => {
 });
 
 import { runCaptureAnalysis } from '../../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../../testSupport/releasePolicyFixture';
 
 const OWNER = '33333333-3333-4333-8333-333333333333';
 const API = { baseUrl: 'https://api.test', token: 'bearer-token' };
@@ -46,9 +55,9 @@ function importedClip(
   const clip: CapturedClip = {
     uri: `file:///imports/${id}.mov`,
     durationMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-04T09:00:00.000Z',
     captureMode: 'imported_video',
     recognition: { status: 'unknown', reason: 'analysis_not_run' },
@@ -60,7 +69,7 @@ function importedClip(
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -126,7 +135,7 @@ function installPermitServer(): Server {
       server.reserves += 1;
       return json(200, {
         permit: {
-          id: `permit-${server.reserves}`,
+          id: fixtureUuid(`permit-${server.reserves}`),
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-09-04T20:00:00.000Z',
@@ -145,6 +154,7 @@ function installPermitServer(): Server {
       server.releases.push({ permitId, outcome: body.outcome });
       return json(200, { ok: true });
     }
+    if (isReleasePolicyRequest(url)) return json(200, activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
   return server;
@@ -154,20 +164,21 @@ const originalFetch = globalThis.fetch;
 let server: Server;
 
 beforeEach(() => {
-  setActiveDataOwner(OWNER);
+  signInCaptureOwner(OWNER);
   server = installPermitServer();
 });
 
 afterEach(() => {
+  closeCaptureHarness();
   globalThis.fetch = originalFetch;
 });
 
 async function run(clip: CapturedClip, sidecarJson: string) {
   mockReadArtifact = async () => sidecarJson;
-  const fake = createFakeLocalDb();
+  const fake = createCaptureAnalysisDb();
   const outcome = await runCaptureAnalysis({
     db: fake.db,
-    captureId: `capture-${clip.uri}`,
+    ...seedCaptureRequest(fake.db, clip, clip.uri),
     clip,
     declaredStroke: 'forehand_drive',
     declaredCanonical: 'FOREHAND_DRIVE',
@@ -229,7 +240,7 @@ describe('imported clip — stroke-window tracking gate', () => {
     expect(server.releases).toEqual([]);
   });
 
-  it('torso hidden for 300 ms through contact → refused before inference, permit released as unsupported, no rating written', async () => {
+  it('torso hidden for 300 ms through contact → scored from the frames that were measured, with the stroke-window gap DISCLOSED and the presentation capped (2026-09-10: advisory, not blocking)', async () => {
     const { sequence, window } = generateSwingSequence({ handed: 'right' });
     const occluded = hideTorso(
       sequence,
@@ -237,7 +248,9 @@ describe('imported clip — stroke-window tracking gate', () => {
       window.peakMs + 150,
     );
     // Whole-clip statistics cannot see a short occlusion: only the
-    // stroke-window gate can, which is exactly why the phone path needs it.
+    // stroke-window gate can. It still measures the gap — but a gap is a
+    // degraded read, not an unmeasurable one, so the phone path scores what
+    // it saw and says so instead of refusing the swing.
     expect(evaluateCaptureQuality(occluded).analyzable).toBe(true);
     const { clip, sidecarJson } = importedClip(
       'occluded',
@@ -247,18 +260,37 @@ describe('imported clip — stroke-window tracking gate', () => {
 
     const { outcome, fake } = await run(clip, sidecarJson);
 
-    expect(outcome.kind).toBe('quality_blocked');
-    if (outcome.kind === 'quality_blocked') {
-      expect(outcome.poseQuality?.reasons).toContain(
-        'stroke_window_tracking_gap',
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind === 'scored') {
+      expect(outcome.record.uncertainty.limitingFactors).toContain(
+        'capture_quality:stroke_window_tracking_gap',
       );
-      expect(outcome.reason).toMatch(/during the stroke/);
+      expect(outcome.record.uncertainty.presentation).toBe('lower_confidence');
+      expect(outcome.record.result?.overallScore).not.toBeNull();
     }
-    expect(fake.shots).toHaveLength(0);
-    expect(fake.analysisRecords).toHaveLength(0);
+    expect(fake.shots).toHaveLength(1);
+    expect(fake.analysisRecords).toHaveLength(1);
     expect(server.reserves).toBe(1);
-    expect(server.releases).toEqual([
-      { permitId: 'permit-1', outcome: 'unsupported' },
-    ]);
+    expect(server.releases).toEqual([]);
+  });
+
+  it('torso never visible anywhere in the clip → nothing body-relative can be measured: no rating, permit released', async () => {
+    const { sequence, window } = generateSwingSequence({ handed: 'right' });
+    const first = sequence.frames[0]!.timestampMs;
+    const last = sequence.frames[sequence.frames.length - 1]!.timestampMs;
+    const torsoless = hideTorso(sequence, first, last);
+    const { clip, sidecarJson } = importedClip(
+      'torsoless',
+      torsoless,
+      window.endMs + 500,
+    );
+
+    const { outcome, fake } = await run(clip, sidecarJson);
+
+    expect(outcome.kind).not.toBe('scored');
+    expect(fake.shots).toHaveLength(0);
+    expect(server.reserves).toBe(1);
+    expect(server.releases).toHaveLength(1);
+    expect(server.releases[0]?.permitId).toBe(fixtureUuid('permit-1'));
   });
 });

@@ -1,3 +1,10 @@
+import {
+  createCaptureAnalysisDb,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../testSupport/captureAnalysisHarness';
 /**
  * xc-matrix-behavioral — PERMIT LIFECYCLE over the REAL `runCaptureAnalysis`
  * (real pose sidecar, real fusion pipeline, real repository SQL against an
@@ -10,7 +17,7 @@
  *   - a scored run persists exactly one local_shot + one outbox row whose
  *     payload carries the reserved permit id (no rating without a permit);
  *   - every non-scored run that DID reserve releases exactly once with the
- *     matching outcome, or is a reserve failure that never touched the db;
+ *     matching outcome, or retains a journal intent after a reserve failure;
  *   - concurrent runs never share a permit id (no duplicate shots) and leave
  *     no open transaction behind.
  *
@@ -21,14 +28,12 @@ import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import type { CapturedClip } from '../../src/camera/capture';
-import { setActiveDataOwner } from '../../src/data/accountScope';
 import {
   randomInt,
   recordScenario,
   scenarioSeeds,
   seededRandom,
 } from '../../testing/xcBehavioral/evidence';
-import { createFakeLocalDb } from '../../testing/xcBehavioral/fakeLocalDb';
 import { deferred } from '../../testing/xcBehavioral/deferred';
 
 let mockReadArtifact: (uri: string) => Promise<string> = () =>
@@ -43,8 +48,13 @@ jest.mock('../../src/camera/capture', () => {
 
 import {
   runCaptureAnalysis,
-  type CaptureAnalysisOutcome,
+  type RunCaptureAnalysisOutcome,
 } from '../../src/analysis/runCaptureAnalysis';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../testSupport/releasePolicyFixture';
 
 const SUITE = 'permitLifecycleMatrix';
 const OWNER = '22222222-2222-4222-8222-222222222222';
@@ -58,9 +68,9 @@ function fixture(id: string, handed: 'right' | 'left') {
   const clip: CapturedClip = {
     uri: `file:///captures/${id}.mov`,
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-08-29T18:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -80,13 +90,13 @@ function fixture(id: string, handed: 'right' | 'left') {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -113,7 +123,7 @@ function fixture(id: string, handed: 'right' | 'left') {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -203,7 +213,7 @@ function permitServer(): PermitServer {
         case 'not_reserved_status':
           return json(200, {
             permit: {
-              id: `permit-${seq}`,
+              id: fixtureUuid(`permit-${seq}`),
               accessSource: 'free',
               status: 'released',
               expiresAt: '2026-08-29T20:00:00.000Z',
@@ -212,7 +222,7 @@ function permitServer(): PermitServer {
         default:
           return json(200, {
             permit: {
-              id: `permit-${seq}`,
+              id: fixtureUuid(`permit-${seq}`),
               accessSource: 'free',
               status: 'reserved',
               expiresAt: '2026-08-29T20:00:00.000Z',
@@ -239,8 +249,9 @@ function permitServer(): PermitServer {
       if (server.releaseMode === 'network_throw') {
         throw new TypeError('Network request failed');
       }
-      return json(200, { ok: true });
+      return json(200, finalizeAcknowledgement(url, body));
     }
+    if (isReleasePolicyRequest(url)) return json(200, activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   });
   return server;
@@ -252,16 +263,17 @@ const originalFetch = globalThis.fetch;
 let server: PermitServer;
 
 beforeEach(() => {
-  setActiveDataOwner(OWNER);
+  signInCaptureOwner(OWNER);
   server = permitServer();
   globalThis.fetch = server.fetch as unknown as typeof fetch;
 });
 
 afterEach(() => {
+  closeCaptureHarness();
   globalThis.fetch = originalFetch;
 });
 
-function outboxPermitIds(fake: ReturnType<typeof createFakeLocalDb>) {
+function outboxPermitIds(fake: ReturnType<typeof createCaptureAnalysisDb>) {
   return fake.outbox
     .filter(row => row.kind === 'shot.sync')
     .map(row => {
@@ -271,15 +283,18 @@ function outboxPermitIds(fake: ReturnType<typeof createFakeLocalDb>) {
 }
 
 async function runOnce(
-  fake: ReturnType<typeof createFakeLocalDb>,
+  fake: ReturnType<typeof createCaptureAnalysisDb>,
   clip: CapturedClip,
   declared: 'forehand_drive' | null,
   extra: { captureEnvelope?: EnvelopeVerdict | null } = {},
-): Promise<{ outcome: CaptureAnalysisOutcome | null; error: string | null }> {
+): Promise<{
+  outcome: RunCaptureAnalysisOutcome | null;
+  error: string | null;
+}> {
   try {
     const outcome = await runCaptureAnalysis({
       db: fake.db,
-      captureId: `capture-${clip.uri}`,
+      ...seedCaptureRequest(fake.db, clip, clip.uri),
       clip,
       declaredStroke: declared,
       declaredCanonical: declared ? 'FOREHAND_DRIVE' : null,
@@ -321,7 +336,7 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
           seed,
           { gate, declared },
           async () => {
-            const fake = createFakeLocalDb();
+            const fake = createCaptureAnalysisDb();
             const { clip, sidecarJson } = fixture(`gate-${seed}`, 'right');
             mockReadArtifact = async () => sidecarJson;
             let subject: CapturedClip = clip;
@@ -392,7 +407,7 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
     }
   });
 
-  describe('reserve edge: every reserve failure is a clean unavailable with zero writes', () => {
+  describe('reserve edge: reserve failures retain a journal intent without analysis products', () => {
     for (const seed of scenarioSeeds('permitReserveFailure')) {
       it(`seed ${seed}`, async () => {
         const random = seededRandom(seed);
@@ -411,7 +426,7 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
           seed,
           { reserveMode, declared },
           async () => {
-            const fake = createFakeLocalDb();
+            const fake = createCaptureAnalysisDb();
             const { clip, sidecarJson } = fixture(`reserve-${seed}`, 'right');
             mockReadArtifact = async () => sidecarJson;
             server.reserveMode = reserveMode;
@@ -426,10 +441,23 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
               expect(cause).toBeNull();
             }
             expect(server.reserves).toBe(1);
-            // Nothing was reserved from the client's point of view, so
-            // nothing is released and nothing is written.
+            // A refused or uncertain reservation preserves its recovery evidence.
+            // No analysis product may exist and no unverified permit is finalized.
             expect(server.releases).toHaveLength(0);
-            expect(fake.statements).toHaveLength(0);
+            expect(fake.shots).toHaveLength(0);
+            expect(fake.outbox).toHaveLength(0);
+            expect(fake.analysisRecords).toHaveLength(0);
+            expect(fake.journal).toEqual([
+              expect.objectContaining({
+                state:
+                  reserveMode === 'paywall_402' ||
+                  reserveMode === 'not_reserved_status'
+                    ? 'terminal'
+                    : 'release_pending',
+                release_outcome: 'failed',
+                permit_id: null,
+              }),
+            ]);
             expect(fake.openTransactions()).toBe(0);
             return { kind: outcome!.kind, cause };
           },
@@ -454,7 +482,7 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
           seed,
           { declared, handed, degraded, releaseMode },
           async () => {
-            const fake = createFakeLocalDb();
+            const fake = createCaptureAnalysisDb();
             const { clip, sidecarJson } = fixture(`acct-${seed}`, handed);
             mockReadArtifact = async () => sidecarJson;
             server.releaseMode = releaseMode;
@@ -470,21 +498,49 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
               // Consumed by the sync transaction — never released.
               expect(server.releases).toHaveLength(0);
               expect(fake.shots).toHaveLength(1);
-              expect(permitIds).toEqual(['permit-1']);
+              expect(permitIds).toEqual([fixtureUuid('permit-1')]);
               expect(fake.analysisRecords).toHaveLength(1);
               expect(outcome!.freeLimitReached).toBe(false);
-            } else if (outcome!.kind === 'low_confidence') {
+              expect(fake.journal).toEqual([
+                expect.objectContaining({
+                  state: 'committed',
+                  permit_id: fixtureUuid('permit-1'),
+                  analysis_id: fake.shots[0]!.id,
+                }),
+              ]);
+            } else if (
+              outcome!.kind === 'low_confidence' ||
+              outcome!.kind === 'needs_technique_confirmation'
+            ) {
               expect(server.releases).toEqual([
-                { permitId: 'permit-1', outcome: 'low_confidence' },
+                {
+                  permitId: fixtureUuid('permit-1'),
+                  outcome: 'low_confidence',
+                },
               ]);
               expect(fake.outbox).toHaveLength(0);
               expect(fake.analysisRecords).toHaveLength(1);
+              expect(fake.journal).toEqual([
+                expect.objectContaining({
+                  state: releaseMode === 'ok' ? 'released' : 'release_pending',
+                  release_outcome: 'low_confidence',
+                  permit_id: fixtureUuid('permit-1'),
+                }),
+              ]);
             } else if (outcome!.kind === 'unavailable') {
               // Pipeline failure after reserve: released as failed, no record.
               expect(server.releases).toEqual([
-                { permitId: 'permit-1', outcome: 'failed' },
+                { permitId: fixtureUuid('permit-1'), outcome: 'failed' },
               ]);
-              expect(fake.statements).toHaveLength(0);
+              expect(fake.analysisRecords).toHaveLength(0);
+              expect(fake.shots).toHaveLength(0);
+              expect(fake.outbox).toHaveLength(0);
+              expect(fake.journal).toEqual([
+                expect.objectContaining({
+                  state: releaseMode === 'ok' ? 'released' : 'release_pending',
+                  release_outcome: 'failed',
+                }),
+              ]);
             } else {
               throw new Error(`unexpected kind ${outcome!.kind}`);
             }
@@ -519,18 +575,18 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
           seed,
           { fault, declared: 'forehand_drive' },
           async () => {
-            const fake = createFakeLocalDb();
+            const fake = createCaptureAnalysisDb();
             const { clip, sidecarJson } = fixture(`persist-${seed}`, 'right');
             mockReadArtifact = async () => sidecarJson;
             // Establish that this fixture scores without the fault, so the
             // fault is the only variable.
-            const dry = createFakeLocalDb();
+            const dry = createCaptureAnalysisDb();
             const dryRun = await runOnce(dry, clip, 'forehand_drive');
-            if (dryRun.outcome?.kind !== 'scored') {
-              return {
-                skipped: `fixture did not score: ${dryRun.outcome?.kind}`,
-              };
-            }
+            expect(dryRun.error).toBeNull();
+            expect(dryRun.outcome?.kind).toBe('scored');
+            expect(dry.journal).toEqual([
+              expect.objectContaining({ state: 'committed' }),
+            ]);
             server.reserves = 0;
             server.releases.length = 0;
             fake.failNext(fault, new Error(`SQLITE_FULL: ${fault}`));
@@ -543,21 +599,27 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
             expect(error).toContain('SQLITE_FULL');
             expect(server.reserves).toBe(1);
             // No rating ever leaves the device without its permit.
-            expect(outboxPermitIds(fake).every(id => id === 'permit-1')).toBe(
-              true,
-            );
+            expect(
+              outboxPermitIds(fake).every(id => id === fixtureUuid('permit-1')),
+            ).toBe(true);
             // The saveAnalysis transaction rolled back: no half-written shot.
             expect(fake.openTransactions()).toBe(0);
             const shotWithoutOutbox =
               fake.shots.length === 1 && fake.outbox.length === 0;
             expect(shotWithoutOutbox).toBe(false);
-            // OBSERVED (not asserted): the reserved permit is never released
-            // on this path — runCaptureAnalysis.ts:360-365 throw past the
-            // release calls, so the server holds it as `reserved` until the
-            // 24h sweep, and reserve_analysis_permit counts it against the
-            // free allowance meanwhile.
-            const permitReleasedAfterPersistFailure =
-              server.releases.length > 0;
+            expect(fake.shots).toHaveLength(0);
+            expect(fake.outbox).toHaveLength(0);
+            expect(fake.analysisRecords).toHaveLength(0);
+            expect(fake.journal).toEqual([
+              expect.objectContaining({
+                state: 'released',
+                release_outcome: 'failed',
+              }),
+            ]);
+            expect(server.releases).toEqual([
+              { permitId: fixtureUuid('permit-1'), outcome: 'failed' },
+            ]);
+            const permitReleasedAfterPersistFailure = true;
             return {
               error,
               permitReleasedAfterPersistFailure,
@@ -584,7 +646,7 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
           seed,
           { runs, holdReserves, declared },
           async () => {
-            const fake = createFakeLocalDb();
+            const fake = createCaptureAnalysisDb();
             const fixtures = Array.from({ length: runs }, (_, i) =>
               fixture(`conc-${seed}-${i}`, i % 2 === 0 ? 'right' : 'left'),
             );
@@ -597,11 +659,17 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
               return json;
             };
             const gate = deferred<void>();
-            if (holdReserves) server.holdReserve = () => gate.promise;
+            const allReserved = deferred<void>();
+            if (holdReserves)
+              server.holdReserve = () => {
+                if (server.inFlightReserves === runs)
+                  allReserved.resolve(undefined);
+                return gate.promise;
+              };
             const pending = fixtures.map(f => runOnce(fake, f.clip, declared));
             if (holdReserves) {
               // Let every run reach the permit edge before any answer lands.
-              for (let i = 0; i < 20; i += 1) await Promise.resolve();
+              await allReserved.promise;
               expect(server.inFlightReserves).toBe(runs);
               gate.resolve(undefined);
             }
@@ -615,6 +683,12 @@ describe('xc-matrix-behavioral: permit lifecycle over real runCaptureAnalysis', 
             expect(new Set(permitIds).size).toBe(scored);
             expect(permitIds.every(id => id !== null)).toBe(true);
             expect(fake.shots).toHaveLength(scored);
+            expect(
+              fake.journal.filter(row => row.state === 'committed'),
+            ).toHaveLength(scored);
+            expect(
+              fake.journal.filter(row => row.state === 'released'),
+            ).toHaveLength(runs - scored);
             expect(new Set(fake.shots.map(s => s.id)).size).toBe(scored);
             // Released permits are exactly the non-scored, post-reserve runs.
             expect(server.releases).toHaveLength(runs - scored);

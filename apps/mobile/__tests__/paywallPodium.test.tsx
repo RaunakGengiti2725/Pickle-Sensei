@@ -1,10 +1,12 @@
 /**
- * Two-page paywall flow. Page 1 (value): benefits and the free-allowance
- * statement, with NO prices. Page 2 (pricing): the podium layout — three
- * store-priced columns (Monthly / Yearly / Lifetime), yearly pre-selected
- * with BEST VALUE + savings badges, lifetime marked PAY ONCE, a plain-words
- * restatement of the selected plan, and an honest fallback (never an
- * invented price) when store pricing is missing.
+ * Two-page paywall flow on the app's chalk surface. Page 1 (value): benefits
+ * and the free-allowance statement, with NO prices. Page 2 (pricing): three
+ * full-width store-priced rows ordered Monthly / Yearly / Lifetime — the
+ * recommended MONTHLY plan first, pre-selected and cast as the one ink card
+ * (volt RECOMMENDED badge, volt amount while selected) while its siblings are
+ * white cards (yearly carries the honest savings chip from store prices), a
+ * plain-words restatement of the selected plan, and an honest fallback (never
+ * an invented price) when store pricing is missing.
  */
 jest.mock('react-native-linear-gradient', () => {
   const React = require('react');
@@ -61,7 +63,7 @@ import {
 import { PaywallScreen } from '../src/screens/PaywallScreen';
 import { BrandMark, PressableScale } from '../src/design/components';
 import { Icon } from '../src/design/icons';
-import { color, radius, type } from '../src/design/tokens';
+import { color, membership, radius, type } from '../src/design/tokens';
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
@@ -166,13 +168,17 @@ async function openPricing(renderer: TestRenderer.ReactTestRenderer) {
   });
 }
 
-function allText(renderer: TestRenderer.ReactTestRenderer): string {
-  return renderer.root
+function allTextOf(node: TestRenderer.ReactTestInstance): string {
+  return node
     .findAllByType(Text)
-    .map(node => node.props.children)
+    .map(text => text.props.children)
     .flat()
     .filter((c): c is string => typeof c === 'string')
     .join(' ');
+}
+
+function allText(renderer: TestRenderer.ReactTestRenderer): string {
+  return allTextOf(renderer.root);
 }
 
 function pressable(renderer: TestRenderer.ReactTestRenderer, testID: string) {
@@ -181,6 +187,16 @@ function pressable(renderer: TestRenderer.ReactTestRenderer, testID: string) {
   );
   if (!node) throw new Error(`No pressable with testID ${testID}`);
   return node;
+}
+
+/** The host view carrying this testID (its flattened style is what renders). */
+function hostByTestId(
+  renderer: TestRenderer.ReactTestRenderer,
+  testID: string,
+) {
+  return renderer.root.find(
+    node => typeof node.type === 'string' && node.props.testID === testID,
+  );
 }
 
 beforeEach(() => {
@@ -195,12 +211,13 @@ afterEach(() => {
 });
 
 describe('PaywallScreen podium', () => {
-  it('uses a flat value page, the approved BrandMark and neutral benefit icons', async () => {
+  it('uses a flat chalk value page, the approved BrandMark and ink glyphs on soft tiles', async () => {
     configureAccessStore(dependencies());
     const renderer = await renderPaywall();
     expect(renderer.root.findAllByType(LinearGradient)).toHaveLength(0);
     const mark = renderer.root.findByType(BrandMark);
-    expect(mark.props).toMatchObject({ compact: true, light: true, size: 24 });
+    expect(mark.props).toMatchObject({ compact: true, size: 24 });
+    expect(mark.props.light).toBeFalsy();
     expect(mark.findByType(Image).props.source).toBe(
       require('../assets/brand/pickle-mark.png'),
     );
@@ -208,29 +225,38 @@ describe('PaywallScreen podium', () => {
       .findAllByType(Icon)
       .find(icon => icon.props.name === 'crown')!;
     expect(StyleSheet.flatten(crown.parent!.props.style).backgroundColor).toBe(
-      color.inkElevated,
+      color.surfaceAlt,
     );
-    expect(crown.props.color).toBe(color.onDarkMuted);
+    expect(crown.props.color).toBe(color.ink);
+    // One bespoke glyph per benefit, none of them the generic stroke/court set.
+    const benefitIcons = renderer.root
+      .findAllByType(Icon)
+      .map(icon => icon.props.name)
+      .filter(name => ['replay', 'verdict', 'ladder', 'cones'].includes(name));
+    expect(benefitIcons).toEqual(['replay', 'verdict', 'ladder', 'cones']);
     const analysis = renderer.root
       .findAllByType(Icon)
-      .find(icon => icon.props.name === 'stroke')!;
-    expect(analysis.props.color).toBe(color.onDarkMuted);
+      .find(icon => icon.props.name === 'replay')!;
+    expect(analysis.props.color).toBe(color.ink);
+    expect(
+      StyleSheet.flatten(analysis.parent!.props.style).backgroundColor,
+    ).toBe(color.surfaceAlt);
     expect(
       renderer.root
         .findAllByType(View)
         .some(
           view =>
             StyleSheet.flatten(view.props.style)?.backgroundColor ===
-            color.surfaceDark,
+            color.surface,
         ),
     ).toBe(true);
     expect(
       StyleSheet.flatten(pressable(renderer, 'paywall-see-plans').props.style),
-    ).toMatchObject({ backgroundColor: color.volt, borderRadius: radius.md });
+    ).toMatchObject({ backgroundColor: color.ink, borderRadius: radius.pill });
     act(() => renderer.unmount());
   });
 
-  it('keeps the default podium and only the selected plan has a solid volt border, never a glow', async () => {
+  it('casts the recommended monthly plan as the one ink row, siblings white, never a glow or gradient', async () => {
     configureAccessStore(dependencies());
     const renderer = await renderPaywall({
       onOpenTerms: jest.fn(),
@@ -238,18 +264,57 @@ describe('PaywallScreen podium', () => {
     });
     await openPricing(renderer);
     expect(renderer.root.findAllByType(LinearGradient)).toHaveLength(0);
+    const options = hostByTestId(renderer, 'paywall-plan-options');
+    // Full-width rows, the recommended plan first.
+    expect(StyleSheet.flatten(options.props.style)).toMatchObject({
+      flexDirection: 'column',
+      alignItems: 'stretch',
+    });
+    expect(
+      options.findAllByType(PressableScale).map(node => node.props.testID),
+    ).toEqual([
+      'paywall-plan-monthly',
+      'paywall-plan-annual',
+      'paywall-plan-lifetime',
+    ]);
     for (const period of ['monthly', 'annual', 'lifetime'] as const) {
       const card = pressable(renderer, `paywall-plan-${period}`);
       const style = StyleSheet.flatten(card.props.style);
-      expect(style.borderRadius).toBe(radius.md);
+      const hero = period === 'monthly';
+      expect(style.borderRadius).toBe(radius.lg);
       expect(style.borderWidth).toBe(2);
       expect(style.shadowOpacity ?? 0).toBe(0);
       expect(style.elevation ?? 0).toBe(0);
-      expect(style.borderColor === color.volt).toBe(period === 'annual');
-      expect(StyleSheet.flatten(card.parent!.props.style).flex).toBe(
-        period === 'annual' ? 1.18 : 1,
+      expect(style.backgroundColor).toBe(
+        hero ? membership.hero : membership.plan,
+      );
+      expect(style.borderColor === color.volt).toBe(hero);
+      const price = card
+        .findAllByType(Text)
+        .find(text => text.props.testID === `paywall-plan-${period}-price`)!;
+      expect(StyleSheet.flatten(price.props.style)).toMatchObject(
+        hero
+          ? { fontSize: type.score.fontSize, color: color.volt }
+          : { fontSize: type.h2.fontSize, color: color.ink },
       );
     }
+    const monthly = pressable(renderer, 'paywall-plan-monthly');
+    expect(StyleSheet.flatten(monthly.props.style).minHeight).toBeGreaterThan(
+      StyleSheet.flatten(pressable(renderer, 'paywall-plan-annual').props.style)
+        .minHeight,
+    );
+    const badge = monthly
+      .findAllByType(View)
+      .find(view => view.props.pointerEvents === 'none')!;
+    expect(StyleSheet.flatten(badge.props.style)).toMatchObject({
+      position: 'absolute',
+      top: -12,
+      backgroundColor: color.volt,
+    });
+    expect(badge.findAllByType(Icon).map(icon => icon.props.name)).toEqual([
+      'spark',
+    ]);
+    expect(allTextOf(badge)).toBe('RECOMMENDED');
     for (const control of renderer.root.findAllByType(PressableScale)) {
       const style = StyleSheet.flatten(control.props.style);
       expect(style.minHeight ?? style.height ?? 0).toBeGreaterThanOrEqual(44);
@@ -259,25 +324,37 @@ describe('PaywallScreen podium', () => {
         StyleSheet.flatten(text.props.style).fontSize,
       ).toBeGreaterThanOrEqual(type.micro.fontSize);
     }
+    // Choosing a sibling: an ink edge on the white card, volt leaves the
+    // hero, and the hero stays ink (the dark treatment is the plan's, not
+    // the selection's).
     await act(async () =>
-      pressable(renderer, 'paywall-plan-monthly').props.onPress(),
+      pressable(renderer, 'paywall-plan-annual').props.onPress(),
     );
     expect(
       StyleSheet.flatten(
-        pressable(renderer, 'paywall-plan-monthly').props.style,
+        pressable(renderer, 'paywall-plan-annual').props.style,
       ),
     ).toMatchObject({
-      borderColor: color.volt,
-      backgroundColor: color.voltTint,
+      borderColor: membership.planSelectedLine,
+      backgroundColor: membership.plan,
     });
+    const heroStyle = StyleSheet.flatten(
+      pressable(renderer, 'paywall-plan-monthly').props.style,
+    );
+    expect(heroStyle.borderColor).toBe(membership.hero);
+    expect(heroStyle.backgroundColor).toBe(membership.hero);
     expect(
-      StyleSheet.flatten(pressable(renderer, 'paywall-plan-annual').props.style)
-        .borderColor,
-    ).not.toBe(color.volt);
+      StyleSheet.flatten(
+        pressable(renderer, 'paywall-plan-monthly')
+          .findAllByType(Text)
+          .find(text => text.props.testID === 'paywall-plan-monthly-price')!
+          .props.style,
+      ).color,
+    ).toBe(color.onDark);
     act(() => renderer.unmount());
   });
 
-  it('switches all plan cards to full width when a native price layout wraps', async () => {
+  it('stacks each row and gives amounts the full card when a native price layout wraps', async () => {
     const localizedPlans: StorePlans = {
       ...plans,
       lifetime: { ...plans.lifetime!, priceString: 'CA$ 1,299.99' },
@@ -297,9 +374,9 @@ describe('PaywallScreen podium', () => {
     });
     expect(
       StyleSheet.flatten(
-        pressable(renderer, 'paywall-plan-lifetime').parent!.props.style,
-      ).flex,
-    ).toBe(1);
+        pressable(renderer, 'paywall-plan-lifetime').props.style,
+      ).paddingHorizontal,
+    ).toBeGreaterThan(8);
     await act(async () => {
       price.props.onTextLayout({
         nativeEvent: {
@@ -309,9 +386,7 @@ describe('PaywallScreen podium', () => {
     });
     for (const period of ['monthly', 'annual', 'lifetime'] as const) {
       const card = pressable(renderer, `paywall-plan-${period}`);
-      expect(StyleSheet.flatten(card.parent!.props.style)).toMatchObject({
-        flex: 0,
-      });
+      expect(StyleSheet.flatten(card.props.style).paddingHorizontal).toBe(8);
       expect(
         card
           .findAllByType(Text)
@@ -319,16 +394,27 @@ describe('PaywallScreen podium', () => {
           .props.adjustsFontSizeToFit,
       ).toBe(false);
     }
-    const options = renderer.root.find(
-      node =>
-        typeof node.type === 'string' &&
-        node.props.testID === 'paywall-plan-options',
-    );
+    // The badge drops into the flow above the stacked hero content.
+    const badge = pressable(renderer, 'paywall-plan-monthly')
+      .findAllByType(View)
+      .find(view => view.props.pointerEvents === 'none')!;
+    expect(StyleSheet.flatten(badge.props.style)).toMatchObject({
+      position: 'relative',
+      top: 0,
+    });
+    const options = hostByTestId(renderer, 'paywall-plan-options');
     expect(StyleSheet.flatten(options.props.style)).toMatchObject({
       flexDirection: 'column',
       alignItems: 'stretch',
     });
-    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
+    expect(
+      options.findAllByType(PressableScale).map(node => node.props.testID),
+    ).toEqual([
+      'paywall-plan-monthly',
+      'paywall-plan-annual',
+      'paywall-plan-lifetime',
+    ]);
+    expect(useAccessStore.getState().selectedPeriod).toBe('monthly');
     expect(useAccessStore.getState().plans).toEqual(localizedPlans);
     await act(async () => {
       price.props.onTextLayout({
@@ -343,11 +429,6 @@ describe('PaywallScreen podium', () => {
     expect(
       pressable(renderer, 'paywall-continue').props.accessibilityLabel,
     ).toBe('Continue · CA$ 1,299.99 once');
-    expect(
-      StyleSheet.flatten(
-        pressable(renderer, 'paywall-plan-lifetime').parent!.props.style,
-      ).flex,
-    ).toBe(0);
     expect(deps.store.purchase).not.toHaveBeenCalled();
     expect(deps.store.restore).not.toHaveBeenCalled();
     expect(deps.backend.syncBilling).not.toHaveBeenCalled();
@@ -385,7 +466,6 @@ describe('PaywallScreen podium', () => {
       ...type.h2,
       fontSize: 21,
       fontVariant: ['tabular-nums'],
-      alignSelf: 'stretch',
     });
     expect(price.props.numberOfLines).toBeUndefined();
     expect(price.props.adjustsFontSizeToFit).toBe(false);
@@ -395,7 +475,7 @@ describe('PaywallScreen podium', () => {
   });
 
   it.each([1, 1.3])(
-    'never clips or shrinks localized prices or billing qualifiers at %sx',
+    'never clips or shrinks localized prices or billing details at %sx',
     async fontScale => {
       jest
         .spyOn(Dimensions, 'get')
@@ -424,16 +504,18 @@ describe('PaywallScreen podium', () => {
         expect(price.props.numberOfLines).toBeUndefined();
         expect(price.props.adjustsFontSizeToFit).toBe(false);
         expect(price.props.minimumFontScale).toBeUndefined();
+        // The recommended plan's amount is set in the score size; the
+        // siblings keep h2. Neither ever shrinks.
         expect(StyleSheet.flatten(price.props.style).fontSize).toBe(
-          type.h2.fontSize,
+          period === 'monthly' ? type.score.fontSize : type.h2.fontSize,
         );
-        const qualifier = card
+        const detail = card
           .findAllByType(Text)
           .find(
             text => text.props.testID === `paywall-plan-${period}-qualifier`,
           )!;
-        expect(qualifier.props.numberOfLines).toBeUndefined();
-        expect(StyleSheet.flatten(qualifier.props.style).fontSize).toBe(
+        expect(detail.props.numberOfLines).toBeUndefined();
+        expect(StyleSheet.flatten(detail.props.style).fontSize).toBe(
           type.caption.fontSize,
         );
       }
@@ -465,7 +547,7 @@ describe('PaywallScreen podium', () => {
       .findAllByType(Icon)
       .find(icon => icon.props.name === 'crown')!;
     expect(StyleSheet.flatten(crown.parent!.props.style).backgroundColor).toBe(
-      color.inkElevated,
+      color.surfaceAlt,
     );
     expect(deps.store.purchase).not.toHaveBeenCalled();
     expect(deps.store.restore).not.toHaveBeenCalled();
@@ -479,7 +561,9 @@ describe('PaywallScreen podium', () => {
     // Page 1 is the value pitch: benefits present, prices absent.
     const copy = allText(renderer);
     expect(copy).toContain('A coach for every stroke.');
-    expect(copy).toContain('Unlimited validated ratings');
+    expect(copy).toContain('Unlimited technique analyses');
+    expect(copy).not.toContain('validated ratings');
+    expect(copy).not.toContain('rights-cleared coaching videos');
     expect(copy).toContain('Rank and progress from real scores');
     expect(copy).not.toContain('$');
     expect(pressable(renderer, 'paywall-see-plans')).toBeTruthy();
@@ -507,7 +591,7 @@ describe('PaywallScreen podium', () => {
     act(() => renderer.unmount());
   });
 
-  it('renders all three podium columns with store prices and badges', async () => {
+  it('renders all three plan rows with store prices, the badge and the savings chip', async () => {
     configureAccessStore(dependencies());
     const renderer = await renderPaywall();
     await openPricing(renderer);
@@ -523,19 +607,30 @@ describe('PaywallScreen podium', () => {
     expect(copy).toContain('$4.99');
     expect(copy).toContain('$39.99');
     expect(copy).toContain('$159.99');
-    // Podium badges and qualifiers.
-    expect(copy).toContain('BEST VALUE');
-    expect(copy).toContain('PAY ONCE');
+    // The recommended plan carries the one badge; the yearly row states its
+    // saving from the store's own prices; everything else is a plain fact.
+    expect(copy).toContain('RECOMMENDED');
     expect(copy).toContain('SAVE 33%');
-    expect(copy).toContain('/month · billed monthly');
+    expect(copy).toContain('Billed monthly · cancel anytime');
     expect(copy).toContain('$3.33/mo · billed yearly');
-    expect(copy).toContain('one-time · yours forever');
+    expect(copy).toContain('One-time purchase · no renewal');
+    expect(copy).not.toContain('yours forever');
+    expect(copy).not.toMatch(/\bBEST\b/);
+    const monthly = pressable(renderer, 'paywall-plan-monthly');
+    expect(allTextOf(monthly)).toContain('RECOMMENDED');
+    expect(allTextOf(monthly)).not.toContain('SAVE');
+    expect(allTextOf(pressable(renderer, 'paywall-plan-annual'))).toContain(
+      'SAVE 33%',
+    );
+    expect(
+      allTextOf(pressable(renderer, 'paywall-plan-lifetime')),
+    ).not.toContain('RECOMMENDED');
 
     act(() => renderer.unmount());
   });
 
   it.each([1, 3.571])(
-    'keeps the complete store trial label and badges in flow at %sx',
+    'keeps the complete store trial label and the badge in flow at %sx',
     async fontScale => {
       jest
         .spyOn(Dimensions, 'get')
@@ -565,37 +660,75 @@ describe('PaywallScreen podium', () => {
         expect(text.props.maxFontSizeMultiplier).toBeUndefined();
         expect(text.props.allowFontScaling).not.toBe(false);
       }
-      if (fontScale > 1.3) {
-        const badge = annual
-          .findAllByType(View)
-          .find(view => view.props.pointerEvents === 'none')!;
-        expect(StyleSheet.flatten(badge.props.style)).toMatchObject({
-          position: 'relative',
-          top: 0,
-        });
-        expect(StyleSheet.flatten(annual.parent!.props.style).flex).toBe(0);
-      }
+      // The RECOMMENDED badge sits on the monthly card's shoulder and drops
+      // into the flow once the row stacks for large text.
+      const badge = pressable(renderer, 'paywall-plan-monthly')
+        .findAllByType(View)
+        .find(view => view.props.pointerEvents === 'none')!;
+      expect(allTextOf(badge)).toBe('RECOMMENDED');
+      expect(StyleSheet.flatten(badge.props.style)).toMatchObject(
+        fontScale > 1.3
+          ? { position: 'relative', top: 0 }
+          : { position: 'absolute', top: -12 },
+      );
       expect(deps.store.purchase).not.toHaveBeenCalled();
       expect(deps.store.restore).not.toHaveBeenCalled();
       act(() => renderer.unmount());
     },
   );
 
-  it('pre-selects yearly and restates it in words with trial-first CTA', async () => {
+  it('pre-selects the recommended monthly plan and restates it in words; yearly still offers its trial', async () => {
     configureAccessStore(dependencies());
     const renderer = await renderPaywall();
     await openPricing(renderer);
 
     expect(
-      pressable(renderer, 'paywall-plan-annual').props.accessibilityState
+      pressable(renderer, 'paywall-plan-monthly').props.accessibilityState
         ?.selected,
     ).toBe(true);
-    const copy = allText(renderer);
+    expect(
+      pressable(renderer, 'paywall-plan-monthly').props.accessibilityLabel,
+    ).toBe('Monthly membership, $4.99 per month, selected');
+    let copy = allText(renderer);
+    expect(copy).toContain(
+      'Monthly · $4.99 per month, auto-renews. Cancel anytime.',
+    );
+    expect(copy).toContain('Continue · $4.99/mo');
+    expect(copy).toContain(
+      '$4.99 per month, automatically renewing until canceled.',
+    );
+    expect(copy).not.toContain('Start free trial');
+
+    await act(async () =>
+      pressable(renderer, 'paywall-plan-annual').props.onPress(),
+    );
+    copy = allText(renderer);
     expect(copy).toContain(
       'Yearly · $39.99 per year, auto-renews. Cancel anytime.',
     );
     expect(copy).toContain('Start free trial');
     expect(copy).toContain('After the 7-day free trial,');
+
+    act(() => renderer.unmount());
+  });
+
+  it('shows RECOMMENDED only when there is a choice, and keeps the ink card for a lone monthly plan', async () => {
+    configureAccessStore(
+      dependencies({
+        loadPlans: async () => ({ ...plans, annual: null, lifetime: null }),
+      }),
+    );
+    const renderer = await renderPaywall();
+    await openPricing(renderer);
+
+    expect(allText(renderer)).not.toContain('RECOMMENDED');
+    const monthly = pressable(renderer, 'paywall-plan-monthly');
+    expect(monthly.props.accessibilityState?.selected).toBe(true);
+    expect(StyleSheet.flatten(monthly.props.style)).toMatchObject({
+      backgroundColor: membership.hero,
+      borderColor: color.volt,
+    });
+    expect(allTextOf(monthly)).toContain('Billed monthly · cancel anytime');
 
     act(() => renderer.unmount());
   });

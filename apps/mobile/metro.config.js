@@ -1,5 +1,7 @@
 const path = require('path');
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const { withSentryConfig } = require('@sentry/react-native/metro');
+require('./scripts/metro-asset-transformer.cjs');
 
 const monorepoRoot = path.resolve(__dirname, '../..');
 
@@ -51,6 +53,7 @@ const pickleAliases = {
 };
 
 const config = {
+  transformerPath: require.resolve('./scripts/metro-asset-transformer.cjs'),
   watchFolders: [path.join(monorepoRoot, 'packages')],
   resolver: {
     // Bare imports from shared packages (e.g. @babel/runtime helpers injected
@@ -83,4 +86,14 @@ const config = {
   },
 };
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = withSentryConfig(
+  mergeConfig(getDefaultConfig(__dirname), config),
+  {
+    annotateReactComponents: false,
+    includeWebReplay: false,
+    includeWebFeedback: false,
+    enableSourceContextInDevelopment: false,
+    optionsFile: false,
+    autoWrapExpoRouterErrorBoundary: false,
+  },
+);

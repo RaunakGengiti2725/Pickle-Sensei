@@ -1,0 +1,531 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W08-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "658ce2d1cf084732449b333d0ad59e8359bc054a10bf387998632eb676921853",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W08-01-r1",
+      "phase": "review",
+      "prompt_sha256": "b628b07dc12f12c67deb73d38cb70834581c6247f6f9d932398e2198e948273b",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W08-01-r1",
+      "phase": "adversary",
+      "prompt_sha256": "85716445aeb51226410aa041119a3fb0c13973a4f08d88eae1411f361fa93f98",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W08-01-r2",
+      "phase": "implement",
+      "prompt_sha256": "f6ba571d43d0e1696e2183d5ea8e864e5c0136acbbfd2571ef80ad6acb43f00e",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W08-01-r2",
+      "phase": "review",
+      "prompt_sha256": "67ed6f129ee6cb295b68d49723e3faa413a3ec53b96cf666c380b1f58ce57d63",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W08-01-r2",
+      "phase": "adversary",
+      "prompt_sha256": "baa867b01a4aa101712fdc3286e072fb8fcb1d96a763c1924d0301ec7ed97c76",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.3",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W08-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d23e5f58-f66f-4b46-8466-0917e218204b/attack-final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a13d522e-fc43-4f5d-a957-15c7265d9be6/baseline-ac1.log"
+        ],
+        "attack_branch": "devin/pp/w08-01/attack-aa491505",
+        "attack_branch_sha": "b89c85d20a9576445c749cad300de64e7cb0c231",
+        "attacked_sha": "aa491505c6ad180b5e835b677230cdf72e5f7c6d",
+        "attacks_tried": 13,
+        "breaks": [
+          {
+            "expected": "A 'securing' entry proves the confirm was never sent; the screen must not claim the request may have completed and must offer a retry that repairs the capability or a fresh request (nothing_deleted path).",
+            "observed": "VERIFIED: after one Keychain setGenericPassword rejection the journal row stays phase='securing' (operation id set, no capability). Re-opening the dialog renders 'Deletion status unknown … The request may have completed' with only [Close, Retry deletion]; 'Retry deletion' re-renders the identical state (no delete-status call, no survey, no 'Continue to delete'). INFERRED root cause: deletion.ts resume() line 747 only treats phase 'ready' as re-requestable; a held open() for a 'securing' entry is mapped to confirmUnresolved, and resumable() keeps selecting that entry until statusExpiresAt (24h in fixture), so a fresh request is never offered.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A1 crash boundary'  (exit 1; 1 failed / 0 passed of the selected test)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A1 crash between journal `securing` write and Keychain capability write strands the owner for 24h in 'Deletion status unknown / may have completed' although no confirmation was ever sent"
+          },
+          {
+            "expected": "Second press is a no-op; the screen stays 'Deleting…' until the single confirmation settles; the account did not change so that copy must not appear.",
+            "observed": "VERIFIED: two onPress calls in one frame → 1 delete-confirm on the wire, but the UI shows claimsAccountChanged=true, rendersStatusUnknown=true, claimsMayHaveCompleted=true, buttons [Close, Retry deletion] instead of [Keep my account, Deleting…]. INFERRED: ManageAccountScreen.runStep has no in-flight guard; the second confirm() hits the foundation's active-job 'stale_handler' hold, which deletion.ts maps to the account-changed copy and confirm_unknown.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A3 reentrancy'  (exit 1)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A3 double-tap of 'Permanently delete' overwrites the in-flight 'Deleting…' state with 'The signed-in account changed.' + 'Deletion status unknown' while exactly one confirmation is pending"
+          },
+          {
+            "expected": "Expired/terminal/superseded entries are pruned (or capacity is per-owner and reclaimable) so a fresh request always remains possible; copy must not promise that retrying will help when it cannot.",
+            "observed": "VERIFIED: after 32 abandoned/expired requests (status window elapsed) the 33rd 'Continue to delete' renders 'Account deletion could not be recorded on this phone. Nothing was deleted — please try again.' with no 'Permanently delete'. INFERRED: deletionOperationJournal.create throws journal_capacity at 32 rows and nothing ever deletes expired/terminal rows (no prune path in journal/operation); retrying never recovers. Reachable faster via A2 (each double-tap mints 2 rows) and shared across owners on the device.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A4 journal capacity'  (exit 1)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A4 journal capacity (32 rows, never pruned) permanently disables account deletion on the device with copy that says 'please try again'"
+          },
+          {
+            "expected": "One request, one journal entry per press burst.",
+            "observed": "VERIFIED: calls('delete-request') has length 2 (expected 1). INFERRED: runStep has no reentrancy guard; both requests journal separately, the first is orphaned (consumes a capacity slot until expiry, see A4) and is superseded server-side; if the first lands last, confirm targets a superseded operation (see A13).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A2 double submission'  (exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A2 double-tap of 'Continue to delete' mints two server delete-requests and two journal entries for one owner"
+          },
+          {
+            "expected": "Clock regression is bounded to the 5s arm delay (or the owner is told the device clock is the reason); a device clock correction must not lock deletion for an hour.",
+            "observed": "VERIFIED: after Date.now moves back 1h the screen shows label 'Permanently delete (3598)', explainsClock=false, no confirm sent. INFERRED: reviewAfterMs is persisted as absolute wall-clock ms and the screen paces on Math.max(reviewAfterMs - now, arm delay); reopening/restarting resumes the same entry so the lockout survives.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A10 clock rollback'  (exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A10 clock rollback while armed silently re-arms the confirm button for the rollback duration ('Permanently delete (3598)') with no explanation"
+          },
+          {
+            "expected": "User-facing copy in the shipping iOS deletion flow must not mention Google Play/Android.",
+            "observed": "VERIFIED: onDeleted → brand notice detail = 'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.' Pre-existing on BASE 42291369 (ManageAccountScreen.tsx:992) and carried to candidate line 1198, inside the package's write path; storeName 'Google Play' at line 82 is the same pattern.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A11 copy'  (exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A11 iOS 'Account deleted' notice mentions 'Google Play' (APP_STORE_SUBMISSION.md rule 4)"
+          },
+          {
+            "expected": "Superseded is a terminal server state for this operation; the sheet should offer 'Continue to delete' (fresh request) like the expired/blocked path does, or the copy should not instruct an action it does not offer.",
+            "observed": "VERIFIED: confirm network error → Retry deletion → status 'superseded' → text contains 'Start again to continue', buttons=[Close], canStartAgain=false.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx -t 'A13 copy vs. affordance'  (exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx",
+            "title": "A13 'superseded' status renders 'Start again to continue' but offers only [Close]"
+          }
+        ],
+        "package_id": "W08-01",
+        "summary": "Candidate aa491505 attacked with 13 reproducible Jest attacks in apps/mobile/__tests__/w08ManageAccountDeletionAttack.test.tsx (branch devin/pp/w08-01/attack-aa491505 @ b89c85d2; only that file added, no candidate production code or tests touched, no PR). Baseline AC1 on the unchanged candidate: `cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts` exit 0, 5 suites / 137 passed / 0 failed / 0 skipped (attachment baseline-ac1.log). AC2 `npx tsc --noEmit` exit 0 with the attack file present (/home/ubuntu/attack-logs/attack-tsc.log). AC3 on the changed file: `npx eslint` exit 0, `npx prettier --check` exit 0. Attack run: `cd apps/mobile && npx jest --ci __tests__/w08ManageAccountDeletionAttack.test.tsx` exit 1, 13 total / 6 passed / 7 failed / 0 skipped (attachment attack-final.log). HELD (no break, VERIFIED): A5 account switch mid-confirm applies completion to the original owner only and leaves owner B signed in; A6 429+Retry-After on confirm is honoured (no early resend) and recovers via status under the same operation id; A7 confirm timeout (15s) never trusts the late reply, recovers via status; A8 'completed' status from a redirected URL never renders as deleted; A9 503/502/500 on status poll stays 'in progress' (never 'deleted' nor 'nothing was deleted'), later receipt completes; A12 tampered journal row (fabricated receipt_verified document) is never rendered as deleted and the owner can still delete. BROKEN: P1 A1 (securing-phase strand → false 'may have completed' + 24h lockout), P1 A3 (double confirm → false 'account changed'/unknown while the single confirm is in flight), P1 A4 (32-row journal with no pruning permanently disables deletion on the device), P2 A2 (double request → 2 server requests/2 journal rows), P2 A10 (1h clock rollback silently re-arms for ~1h), P2 A11 (iOS 'Account deleted' copy says 'Google Play' — pre-existing on base but in the write path), P3 A13 (superseded → 'Start again' with no affordance). Core invariant 'unknown never renders as deleted' held in every attack; the breaks are honesty/recoverability/reentrancy defects on supported paths. No production Supabase/App Store/secrets touched; nothing pushed except the attack branch."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c8c0fc5-6d11-4f5c-8d05-c5db50875ccb/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts",
+            "executed": 137,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC1",
+            "note": "VERIFIED. 5 suites / 137 tests on HEAD aa491505 (also at artifacts/w08-01/ac1-candidate.log in the checkout; artifacts/ is gitignored). Regression proof (kind=regress): the committed w08ManageAccountDeletion.test.tsx run against a clean worktree of BASE_SHA 42291369 with the same command on that one file → exit 1, Test Suites 1 failed, Tests 13 failed / 1 passed / 14 total (the legacy screen never initialises the journal: 'no such table: device_account_deletion_journal', no delete-status calls, no redirect rejection) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/85170a4a-24e7-4dae-ad62-20644ef80f5b/ac1-base-regression.log; on HEAD the same file passes 14/14. PROOF exit_code 0. Additionally VERIFIED the full mobile suite `cd apps/mobile && npx jest --ci --silent` on HEAD: exit 0, 308 suites passed / 1 skipped (pre-existing skip), 5903 passed / 1 skipped / 5904 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f3165e7-3310-4152-a805-420605cc8d2c/full-mobile-jest.log",
+            "passed": 137,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9798d10b-b122-4e71-810e-d59c1b856d5c/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC2",
+            "note": "VERIFIED on HEAD aa491505 (empty output, exit 0).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/466b66ec-e617-4ef2-9075-23f6720a471e/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/account/deletion.ts apps/mobile/src/account/sessionVault.ts apps/mobile/src/account/deletionOperation.ts apps/mobile/src/account/deletionOperationTransport.ts apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx apps/mobile/__tests__/deletionOperationIsolation.test.ts && npx prettier --check <same 7 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC3",
+            "note": "VERIFIED from the repo root on all 7 changed files ('All matched files use Prettier code style!'). Mandatory checks also VERIFIED on HEAD: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/c79c8426-7098-4bf5-b662-10b72f3c2a25/format-check.log) and `git diff --check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef7b79d5-ec22-45e2-9de4-e144e85e410c/diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression-first: wrote __tests__/w08ManageAccountDeletion.test.tsx against the real ManageAccountScreen with a real SQLite test db (testSupport/sqlite), the repo's in-memory react-native-keychain auto-mock and a routed globalThis.fetch; proved 13/14 fail on a clean BASE_SHA worktree; committed separately. Then wired the existing deletionOperation foundation into the shipping screen through deletion.ts adapters, keeping the screen's existing copy, survey, countdown and completion notice, and adding honest unknown/in-progress pages. Kept accountDeletion.test.ts importable (deletion.ts takes the db opener from the screen instead of importing data/db, which pulls op-sqlite) and kept the Keychain-import security pin intact by routing through sessionVault.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/85170a4a-24e7-4dae-ad62-20644ef80f5b/ac1-base-regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6c8c0fc5-6d11-4f5c-8d05-c5db50875ccb/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9798d10b-b122-4e71-810e-d59c1b856d5c/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/466b66ec-e617-4ef2-9075-23f6720a471e/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c79c8426-7098-4bf5-b662-10b72f3c2a25/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ef7b79d5-ec22-45e2-9de4-e144e85e410c/diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f3165e7-3310-4152-a805-420605cc8d2c/full-mobile-jest.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w08-01/impl-r1",
+        "files_changed": [
+          "apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx",
+          "apps/mobile/src/account/deletion.ts",
+          "apps/mobile/src/screens/ManageAccountScreen.tsx",
+          "apps/mobile/src/account/deletionOperation.ts",
+          "apps/mobile/src/account/deletionOperationTransport.ts",
+          "apps/mobile/src/account/sessionVault.ts",
+          "apps/mobile/__tests__/deletionOperationIsolation.test.ts"
+        ],
+        "head_sha": "aa491505c6ad180b5e835b677230cdf72e5f7c6d",
+        "out_of_scope_files": [
+          "apps/mobile/src/account/deletionOperation.ts — additive: request()/retryRequest() accept an optional JSON body (default {}) so the exit survey reaches delete-request through the durable path; no behavioural change to existing callers.",
+          "apps/mobile/src/account/deletionOperationTransport.ts — additive: request() accepts the optional body and post()'s body type widens to Readonly<Record<string, unknown>>; wire options/validation unchanged.",
+          "apps/mobile/src/account/sessionVault.ts — additive new export deviceKeychainForVault() (ACCESSIBLE/get/setGenericPassword view of the lazily loaded Keychain) so deletion.ts can hand the foundation a Keychain without importing react-native-keychain (the security pin __tests__/wf/be-mobile-security-secrets.test.ts allows exactly sessionVault.ts and deletionCapabilityVault.ts to import it).",
+          "apps/mobile/__tests__/deletionOperationIsolation.test.ts — the first test pinned the pre-W08 state 'no bundled source imports the foundation', which the package objective (wire it into the shipping path) necessarily ends; it now designates src/account/deletion.ts as the single integration point (asserting it imports exactly ./deletionOperation and ./deletionOperationContracts) and still asserts no other bundled source reaches the foundation. This file is inside the AC1 glob __tests__/deletionOperation*.test.ts. No other assertion in the file changed."
+        ],
+        "package_id": "W08-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx (14 cases: redirect-rejecting request/confirm/status wire options and bodies; survey passthrough; journaling before I/O; redirected step-1 reply retried under the same job; lost confirmation shown as unknown and completed only from the status-capability receipt; redirected confirmation never rendered as deleted; 202 in-progress shown honestly and polled to a receipt; resume of the same operation after screen teardown (no second delete-request); expired operation stays honest then permits a fresh request; original-owner isolation from a replacement account; no confirm with a replacement account after owner change during countdown; 4 direct fetchNoRedirect cases)"
+        ],
+        "residual_risks": [
+          "deletionOperationIsolation.test.ts's first assertion was rewritten to allow src/account/deletion.ts as the single integration point; the reviewer should confirm this is accepted as required wiring (the pre-W08 assertion is incompatible with the objective).",
+          "The durable path is chosen only when getDb() yields a transactional, non-owner-scoped LocalDb and the Keychain module loads; otherwise the legacy two-call client (no journal, no resume) is used silently. All production code paths meet the condition (getDb() returns the transactional db), but this fallback is INFERRED from code, not exercised on a device.",
+          "On-device behaviour (iOS Simulator/Mac runner) was not verified — out of scope for this package; evidence is Jest + tsc + lint only.",
+          "Retry pacing shown in the UI ('Retry deletion (N)') mirrors the foundation's nextAttemptAtMs (3s·2^retryCount, capped 60s; Retry-After for 429/202). The test advances fake timers to the re-arm moment; real-world clock skew is handled by Date.now() comparisons only."
+        ],
+        "summary": "Defect on BASE_SHA 42291369: apps/mobile/src/screens/ManageAccountScreen.tsx imported only the legacy two-call client (lines 52-53) and called requestAccountDeletion at line 458 and confirmAccountDeletion at line 492; apps/mobile/src/account/deletion.ts (266 lines) posted through a plain fetchFn (lines 135-136) with no redirect:'error'/credentials:'omit', no operation id, no status capability, no journal — so a lost confirmation could only be shown as an unrecoverable 'unknown' message, closing the dialog or restarting the app lost the attempt, and deletionOperation.ts/deletionOperationTransport.ts were unreferenced by any shipping source (pinned by deletionOperationIsolation.test.ts). Fix: deletion.ts gains fetchNoRedirect (forces redirect:'error', credentials:'omit', cache:'no-store', referrerPolicy:'no-referrer' and marks any reply whose url differs from the request or is missing as redirected), a production DeletionRuntimePort (origin snapshot from runtimeConfig, owner snapshot from accountScope, bearer resolved per request from the api session only when origin+owner match), a per-db cached foundation over the app's transactional SQLite db and the device Keychain (via new sessionVault.deviceKeychainForVault), durableAccountDeletionFlow(getDb)/legacyAccountDeletionFlow(client) behind one AccountDeletionFlow interface, and an AccountDeletionState union (ready | request_unknown | confirm_unknown | in_progress | failed{nothing_deleted|unknown} | completed). ManageAccountScreen now journals request → armed (5s countdown, never before the foundation's reviewAfterMs) → confirm → completed; a lost step-1 reply stays request_unknown and is retried under the same job ('Retry request'); a lost or 202 in-progress confirmation renders 'Deletion status unknown' / 'Deletion in progress' and is recovered/polled through the stored status capability, with 'Account deleted' + local cleanup reached only from a verified completion receipt (foundation seal) — the completed path still hands the frozen original-owner context to onDeleted even if the signed-in owner changed mid-flight; opening the dialog calls flow.resume so an unfinished owner-scoped operation is reused instead of minting a second delete-request; a server 'expired'/'blocked' status returns to review as 'Nothing was deleted' and re-enables a fresh request; owner/origin changes make the attempt stale (foundation fencing + the screen's owner re-check). The legacy client remains the fallback only when the db cannot host the journal (mocked db that throws / non-transactional). Survey bodies now pass through deletionOperation.request/retryRequest → transport.request → delete-request. Commits: e1d46d94 (regression test, fails 13/14 on base) and aa491505 (implementation). Pushed only devin/pp/w08-01/impl-r1; no PR, no main/ci/mac-* pushes, no production Supabase/App Store Connect actions."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/201bf57c-7c2e-4602-845f-87e050770143/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts",
+            "executed": 137,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC1",
+            "note": "VERIFIED by reviewer on HEAD aa491505: Test Suites 5 passed / 5 total, Tests 137 passed / 137 total, exit 0. Regression proof (reviewer's own run): detached worktree of BASE_SHA 42291369 with ONLY the two candidate test files copied over (__tests__/w08ManageAccountDeletion.test.tsx, __tests__/deletionOperationIsolation.test.ts), same jest invocation on those two files → exit 1, Test Suites 2 failed / 2 total, Tests 14 failed / 7 passed / 21 total (13 of 14 w08 cases fail — 'no such table: device_account_deletion_journal', no redirect rejection, no status-capability recovery — plus the isolation test's new 'deletion.ts is the single integration point' assertion fails because base deletion.ts does not import the foundation). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/45ff38ed-b0a2-488e-91d3-9073ea1676fc/regression-base.log. On the candidate the same files pass (part of the 137/137 above). PROOF exit_code 0.",
+            "passed": 137,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/27a60296-023e-4a14-8f92-7451ac38520a/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC2",
+            "note": "VERIFIED by reviewer on HEAD aa491505: empty output, exit 0. Required a fresh `cd apps/mobile && npm ci` first (the pre-provisioned node_modules lacked @sentry/react-native, producing unrelated module-not-found errors on the first attempt; after npm ci the check is clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/47c6d610-4008-4580-9eea-2b63d68cc99f/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/src/screens/ManageAccountScreen.tsx apps/mobile/src/account/deletion.ts apps/mobile/src/account/sessionVault.ts apps/mobile/src/account/deletionOperation.ts apps/mobile/src/account/deletionOperationTransport.ts apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx apps/mobile/__tests__/deletionOperationIsolation.test.ts && npx prettier --check <same 7 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC3",
+            "note": "VERIFIED by reviewer from the repo root on all 7 files in `git diff --stat BASE..HEAD`: ESLint exit 0 (no output), Prettier exit 0 ('All matched files use Prettier code style!').",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/201bf57c-7c2e-4602-845f-87e050770143/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/27a60296-023e-4a14-8f92-7451ac38520a/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/47c6d610-4008-4580-9eea-2b63d68cc99f/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/45ff38ed-b0a2-488e-91d3-9073ea1676fc/regression-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e96d048-24fd-4318-a846-70ed19cb8652/full-mobile-jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (not runnable on Linux): fetchNoRedirect relies on RN's fetch honouring redirect:'error' OR on response.url differing from the request URL when the iOS networking stack follows a redirect. RN's whatwg-fetch polyfill sets Response.url from XHR responseURL, so a followed redirect is detected via the URL mismatch; a redirect back to the identical URL (pathological) would not be. Behaviour on-device is untested here — Mac runner verification remains authoritative for iOS runtime claims.",
+          "INFERRED: durableAccountDeletionFlow falls back silently to legacyAccountDeletionFlow when getDb() is non-transactional/owner-scoped or the Keychain module fails to load. Production getDb() returns the transactional db so the durable path is taken, but no diagnostic is emitted when the fallback is chosen (diagnostics transport is disabled by policy, so this is acceptable).",
+          "Full mobile suite (`cd apps/mobile && npx jest --ci --silent`) on the candidate: exit 0, 308 suites passed / 1 skipped (pre-existing describe.skip in __tests__/importedRealFootageAnalysis.test.ts, untouched by this candidate), 5903 passed / 1 skipped / 5904 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e96d048-24fd-4318-a846-70ed19cb8652/full-mobile-jest.log"
+        ],
+        "package_id": "W08-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "aa491505c6ad180b5e835b677230cdf72e5f7c6d",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope (VERIFIED via `git diff --stat 42291369..aa491505`): 7 files — the 3 write_paths plus 4 out-of-scope files, all listed with justification, none under any serial_group_paths prefix. deletionOperation.ts / deletionOperationTransport.ts: purely additive optional request body (default {}) so the exit survey reaches delete-request; no existing caller changes behaviour. sessionVault.ts: additive deviceKeychainForVault() exposing only ACCESSIBLE/getGenericPassword/setGenericPassword of the lazily loaded Keychain, so deletion.ts does not import react-native-keychain (the security pin in __tests__/wf/be-mobile-security-secrets.test.ts still passes in the full suite). deletionOperationIsolation.test.ts: only its first assertion changed — from 'no bundled source imports the foundation' to 'src/account/deletion.ts is the single integration point (imports exactly ./deletionOperation and ./deletionOperationContracts) and no other bundled source reaches it'. The pre-W08 assertion is logically incompatible with the package objective (wiring the foundation into the shipping path), the replacement is strictly stronger than deleting the test, and the second assertion is untouched — judged as required wiring, not test weakening. Objective met as shipped behaviour (VERIFIED by reading the diff + the w08 suite exercising the real ManageAccountScreen): ManageAccountScreen.accountDeletionFlow() = durableAccountDeletionFlow(getDb) ?? legacyAccountDeletionFlow(...); the durable flow journals request→armed→confirm→completed in the transactional SQLite db, stores the status capability in Keychain, sends every call through fetchNoRedirect (redirect:'error', credentials:'omit', cache:'no-store', referrerPolicy:'no-referrer', any reply whose url differs from/lacks the request url is treated as redirected), retries a lost step-1 reply under the same job, renders lost/202 confirmations as 'Deletion status unknown'/'Deletion in progress' and recovers/polls via the capability, calls onDeleted ONLY from a 'completed' state carrying a foundation-sealed completion receipt, reuses an unfinished owner-scoped operation on dialog open (flow.resume) instead of minting a second delete-request, and maps server expired/blocked → 'failed/nothing_deleted', superseded → 'failed/unknown'. No access/provider token is persisted (bearer resolved per request via the api session only when origin+owner match). Owner isolation: original-owner context frozen for onDeleted, replacement account cannot confirm or see the original owner's operation (tested). No code comments modified (only two import lines removed in deletion.ts; ManageAccountScreen removals are the replaced legacy handler bodies). No migrations, RLS, grants, edge code, billing, or diagnostics touched. New user-facing copy checked against APP_STORE_SUBMISSION.md prohibitions — none present; every non-completed state says 'Nothing was deleted' / 'could not confirm', never 'deleted'. Acceptance re-verified by reviewer: AC1 137/137 (5 suites) exit 0; AC2 tsc exit 0; AC3 eslint+prettier exit 0 on all 7 files. Regression proof VERIFIED: candidate tests on BASE_SHA → exit 1, 14 failed / 7 passed / 21; on candidate → pass. Additionally the full mobile jest suite passes on the candidate (5903 passed / 1 pre-existing skip). No PR opened, nothing pushed, no production/App Store/Mac-runner actions.",
+        "verdict": "approve"
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bec1b09c-e0f2-4b1b-8ae2-5de6bed87816/attack-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fcdcd163-d467-412a-bda9-78cce0305062/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ecff3c9d-ce96-486d-902e-0d1e17edad8e/ac2-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29b7394b-d3e9-4124-a328-b3c7e6acfd39/ac3-attack-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31bbf1a2-9f08-4041-8784-3e1c84329482/ac3-attack-prettier.log"
+        ],
+        "attack_branch": "devin/pp/w08-01/attack-d2bb4905",
+        "attack_branch_sha": "10e647f7e8644a6c3d0f8753d74bb44dc5391ec6",
+        "attacked_sha": "d2bb4905d33618c16708e52c4957eb3e284e11bd",
+        "attacks_tried": 11,
+        "breaks": [
+          {
+            "expected": "Unknown outcome must render as 'Deletion status unknown' (confirm_unknown) with no re-armed challenge and no 'Keep my account' — the same as the candidate's own lost-confirmation case — regardless of an owner change during the round trip. VERIFIED by test + code read (INFERRED cause).",
+            "observed": "Journal row for owner A is phase=confirm_pending (the /delete-confirm was sent, reply lost). The dialog renders title 'Delete your account?', error 'The signed-in account changed. Close this dialog and start again for the account you want to delete.', an enabled 'Permanently delete' button and 'Keep my account'; 'Deletion status unknown' is never shown. Cause: ManageAccountScreen.runStep catch branch — apiSessionForDeletion(context) throws AccountDeletionError('deletion.account_changed') AFTER foundation.confirm() already returned confirm_unknown, and the fallback for confirmDeletion is the ARMED step ({phase:'armed', secondsLeft:0}), so completionUnknown stays false. Re-entry (close/reopen) shows the honest state, but the live dialog does not.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx -t 'A1' (exit 1)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx",
+            "title": "Owner switch while a confirmation is in flight + lost reply re-arms 'Permanently delete' / 'Keep my account' over a confirm_pending (unknown-outcome) journal row"
+          },
+          {
+            "expected": "Either the legacy fallback is removed from the shipping screen (fail closed: deletion unavailable with honest copy) or it uses fetchNoRedirect and refuses redirected/unbound replies. A redirected reply must never render as deleted.",
+            "observed": "With getDb() throwing (SQLITE_CORRUPT), accountDeletionFlow() returns legacyAccountDeletionFlow: /delete-request and /delete-confirm are sent via plain globalThis.fetch without redirect:'error'/credentials:'omit' and without operationId binding (A3a). A confirm reply whose response.url is https://attacker.example/... with deleted:true is accepted: completeAccountDeletion(contextA) is called once and the 'Account deleted' notice is shown (A3b). Objective requires the shipping path to use deletionOperation/deletionOperationTransport with fetchNoRedirect end to end; the fallback path violates 'a redirected reply is never trusted' and 'unknown/corrupt state never becomes successful deletion'. Reachability requires the local DB open/migration to fail (corrupt/full disk) — the app otherwise still allows the signed-in user to reach Manage account; this precondition is INFERRED, the behaviour under it is VERIFIED.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx -t 'A3' (exit 1; A3a and A3b both fail)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx",
+            "title": "When the local SQLite database cannot be opened, ManageAccountScreen silently falls back to the legacy redirect-following client and renders a REDIRECTED 200 {deleted:true} reply as 'Account deleted' (local purge runs)"
+          },
+          {
+            "expected": "Send the confirmation and let the server decide (server 403 account.deletion_challenge_expired already maps honestly), or at minimum do not assert the request expired — say the device clock disagrees with the server.",
+            "observed": "delete-request reply with expiresAt = now-60s (device >=15 min ahead of server) is journaled as phase=ready and armed ('Permanently delete (5)'). Pressing it sends 0 /delete-confirm calls; the dialog shows 'The deletion request expired before it was confirmed. Nothing was deleted — start again when you are ready.' and 'Continue to delete'. Every retry mints a new request and repeats. The server is the authority on the challenge lifetime and would have accepted the confirmation. This is the candidate's intentional 'bonus' (deletionOperation.confirm local expiry check -> settle() -> terminalMessage('expired')); flagged because the copy states server state ('expired') that the device cannot know, and the supported path (delete account) becomes unreachable under clock skew.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx -t 'A2' (exit 1)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx",
+            "title": "Device clock ahead of server: a freshly minted challenge whose expiresAt is already past locally is never sent to the server; the UI asserts 'The deletion request expired before it was confirmed. Nothing was deleted' on the device clock alone, making in-app deletion impossible while skewed"
+          },
+          {
+            "expected": "User-facing copy never mentions Android/Google Play (APP_STORE_SUBMISSION.md, project knowledge hard rule).",
+            "observed": "showBrandNotice detail after a completed deletion: 'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store or Google Play subscription.' (ManageAccountScreen.tsx line ~1223; also SUBSCRIPTION_MANAGEMENT 'Google Play' branch at lines ~82-83, unreachable on iOS). Present identically on 42291369 (git show confirms) — not introduced by the candidate.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx -t 'A4' (exit 1)",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx",
+            "title": "Deletion-confirmed notice copy mentions 'Google Play' (App Store copy hard rule); pre-existing on BASE_SHA, in a write_paths file the candidate edited"
+          }
+        ],
+        "package_id": "W08-01",
+        "summary": "Attacked d2bb4905 with 11 real Jest attacks in apps/mobile/__tests__/w08AttackManageAccountDeletion.test.tsx (branch devin/pp/w08-01/attack-d2bb4905 @ 10e647f7; only the new test file added, no production/candidate-test edits, no PR). Run: `cd apps/mobile && npx jest --ci __tests__/w08AttackManageAccountDeletion.test.tsx` -> 5 failed / 6 passed / 0 skipped, exit 1 (attack-run2.log). Confirmed breaks: A1 (P1) owner switch during in-flight confirm with lost reply re-arms 'Permanently delete'/'Keep my account' over a confirm_pending row instead of 'Deletion status unknown'; A3a/A3b (P1) with the local DB unavailable the screen falls back to the legacy redirect-following client and renders a redirected 200 deleted:true as 'Account deleted' + local purge; A2 (P2) device-clock-ahead challenge is declared 'expired, nothing was deleted' without asking the server, making deletion impossible under skew; A4 (P3) 'Google Play' in the deletion-confirmed notice (pre-existing on base). Held: A5 15s confirm timeout -> unknown, aborted, completes once from status receipt; A6 redirected status 'completed' never trusted; A7 429+Retry-After at request honest, impatient retry sends nothing, same job on retry; A8 Keychain seal lost after receipt journal write never claims 'nothing deleted', re-entry completes exactly once; A9 tampered Keychain capability -> unknown, no fresh request, no status call; A10 5xx on status poll while in_progress stays honest and completes on next poll. One attack (A8) initially failed due to a faulty test (jest.requireActual bypassed the Keychain mock) — fixed, not a candidate defect. Baseline on candidate: AC1 `npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts` 5 suites / 143 passed / 0 failed, exit 0 (ac1-candidate.log); AC2 `npx tsc --noEmit` exit 0 after `npm ci` (ac2-candidate.log; also exit 0 on attack branch); AC3 on the attack file: root eslint exit 0, prettier --check exit 0. All VERIFIED except the reachability precondition of A3 (INFERRED)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "review: unknown acceptance id 'W08-01-REGRESS'",
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c635ddfa-23e2-416b-82e1-e4ab7ce219d3/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts",
+            "executed": 143,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC1",
+            "note": "VERIFIED on HEAD d2bb4905: 5 suites / 143 tests pass. Regression proof: the new suite __tests__/w08ManageAccountDeletion.test.tsx run against BASE_SHA behaviour exits 1 with 19 failed / 1 passed of 20 (fetchNoRedirect export absent; A1/A3/A4 cases fail) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ca8a092-6d8c-4dea-97e2-d2bd1265e031/base-w08-regression.log ; against the r1 candidate wiring (aa491505) it exits 1 with 6 failed / 14 passed (A1, A2, A3, A4 x2, clock-expired challenge) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d3499ff-5e7c-4a3a-8c0e-9c18232c6f79/r1impl-w08-regression.log ; on HEAD 20/20 pass (inside the 143). Full mobile suite also run: `cd apps/mobile && npx jest --ci --silent` exit 0, 5909 passed / 1 skipped (pre-existing skip, unrelated) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/90f09dee-1d30-4d7a-897b-4960780844f5/mobile-jest-full.log",
+            "passed": 143,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4643443d-2a4b-429d-a53f-56c187c38ecd/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC2",
+            "note": "VERIFIED on HEAD after `cd apps/mobile && npm ci` (the snapshot's node_modules lacked @sentry/react-native, which made the first tsc run fail on pre-existing diagnostics files only; after npm ci tsc is clean).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2aac4766-12c5-42af-a44c-6b69610a5cd4/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/deletionOperationIsolation.test.ts apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx apps/mobile/src/account/deletion.ts apps/mobile/src/account/deletionOperation.ts apps/mobile/src/account/deletionOperationJournal.ts apps/mobile/src/account/deletionOperationTransport.ts apps/mobile/src/account/sessionVault.ts apps/mobile/src/screens/ManageAccountScreen.tsx && npx prettier --check <same 8 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC3",
+            "note": "VERIFIED from repo root on every changed file: eslint exit 0, prettier exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/805408fd-db03-40ec-9a62-a4eef944b1bb/ac3-prettier.log). Supplemental: `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f39a7ed-3c5f-4a69-ba90-d852b16da5ef/format-check.log); `git diff --check` exit 0 (no output).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA on devin/pp/w08-01/impl-r2; restored the r1 regression suite and added A1/A2/A3/A4 + clock-expiry cases (3 separate test commits 31dae80b, 078e4e14, 350ec211), proving 19/20 fail on base and 6/20 fail on the r1 wiring; then cherry-picked the sound r1 wiring (no commit) and fixed on top: deletion.ts — `securing` maps to failed/nothing_deleted (never 'ready' or unknown), resume() iterates candidates and skips securing/operation-less rows, resumable() bounds never-confirmed rows by the challenge expiresAt, request() calls foundation.reclaim() once on journal_capacity, a locally-expired challenge on confirm returns the 'expired … Nothing was deleted' terminal state, and journal_capacity gets its own honest copy; ManageAccountScreen.tsx — inFlightRef makes runStep a no-op while a step is in flight and resumeUnfinished waits for it; deletionOperation.ts — `inert()` policy + `reclaim()`; deletionOperationJournal.ts — `remove()` refusing receipts and checking revision+document.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c635ddfa-23e2-416b-82e1-e4ab7ce219d3/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4643443d-2a4b-429d-a53f-56c187c38ecd/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2aac4766-12c5-42af-a44c-6b69610a5cd4/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/805408fd-db03-40ec-9a62-a4eef944b1bb/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ca8a092-6d8c-4dea-97e2-d2bd1265e031/base-w08-regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6d3499ff-5e7c-4a3a-8c0e-9c18232c6f79/r1impl-w08-regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8f39a7ed-3c5f-4a69-ba90-d852b16da5ef/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/90f09dee-1d30-4d7a-897b-4960780844f5/mobile-jest-full.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx tsc --noEmit — on the snapshot as provisioned (before `npm ci`) fails with TS2307 'Cannot find module @sentry/react-native' in src/diagnostics/{privacy,sentry}.ts and their tests; environment (missing installed dependency), not code — resolved by `cd apps/mobile && npm ci`, then exit 0.",
+          "cd apps/mobile && npx jest --ci --silent — 1 pre-existing skipped suite (unrelated to deletion) in the full mobile run: 308 passed / 1 skipped of 309 suites."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w08-01/impl-r2",
+        "files_changed": [
+          "apps/mobile/__tests__/deletionOperationIsolation.test.ts",
+          "apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx",
+          "apps/mobile/src/account/deletion.ts",
+          "apps/mobile/src/account/deletionOperation.ts",
+          "apps/mobile/src/account/deletionOperationJournal.ts",
+          "apps/mobile/src/account/deletionOperationTransport.ts",
+          "apps/mobile/src/account/sessionVault.ts",
+          "apps/mobile/src/screens/ManageAccountScreen.tsx"
+        ],
+        "head_sha": "d2bb4905d33618c16708e52c4957eb3e284e11bd",
+        "out_of_scope_files": [
+          "apps/mobile/src/account/deletionOperation.ts — wiring: the foundation must expose `reclaim()` (A4) so deletion.ts can free inert journal rows; also the r1 wiring's Readonly<Record<string,unknown>> request body so the survey rides on step 1 (no serial group covers apps/mobile/src/account/).",
+          "apps/mobile/src/account/deletionOperationJournal.ts — wiring: the journal had no delete path at all; `remove(entry)` (revision+document-checked, receipts refused) is the minimum needed for reclaimability (A4).",
+          "apps/mobile/src/account/deletionOperationTransport.ts — wiring (from r1): request body type widened to Readonly<Record<string, unknown>> so the exit survey object can be forwarded on /delete-request; no transport behaviour change.",
+          "apps/mobile/src/account/sessionVault.ts — wiring (from r1): additive `deviceKeychainForVault()` export so the deletion capability vault reuses the guarded Keychain loader instead of duplicating it.",
+          "apps/mobile/__tests__/deletionOperationIsolation.test.ts — the existing isolation pin listed which modules may import the standalone foundation; deletion.ts is now the single shipping integration point and the allow-list is updated to name it (no assertion weakened; suite still asserts nothing else imports the foundation)."
+        ],
+        "package_id": "W08-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx (20 tests): r1 suite (redirect rejection on every call, survey on durable body, lost/redirected/in-progress confirmation never rendered deleted, resume same operation, expiry honesty, owner isolation) + r2: A1 `securing`-without-capability re-entry offers a fresh request with no unknown-outcome claim; A2 two same-frame 'Continue to delete' presses → one request/one row; A3 two same-frame 'Permanently delete' presses → one confirm, UI stays 'Deleting…', no account-changed/unknown copy; A4 32 expired abandoned rows are reclaimed and the 33rd request succeeds; live rows of other owners are NOT reclaimed and copy does not promise retry will help; a device-clock-expired challenge refuses to confirm and offers a fresh request; fetchNoRedirect unit cases."
+        ],
+        "residual_risks": [
+          "Linux-only evidence: Keychain and SQLite are exercised through the Jest mocks/in-memory DB; real iOS Keychain write-failure timing (A1) and same-frame double taps on device were not run on the M4 (not permitted for this package). Native behaviour remains INFERRED.",
+          "Journal reclamation is driven by the device clock (challenge expiresAt); a clock moved forward reclaims a never-confirmed row early (owner simply gets a fresh request), a clock moved backward delays reclamation until the server reports the operation expired/superseded via status. Receipts, unresolved confirmations and unknown requests are never reclaimed, so worst case is 'journal full' copy that is honest about it.",
+          "Capacity remains device-global (32 rows across owners). Live requests of other accounts are intentionally not reclaimed, so a device shared by >32 accounts each with a live (unexpired, unconfirmed) request cannot start a 33rd until one expires (15-minute challenge window); the copy states this instead of promising a retry.",
+          "The `while (inFlightRef.current) await …` in resumeUnfinished awaits an already-running step from a previous presentation before resuming; a step that never settles (hung fetch beyond the transport timeout) would delay resume until the transport timeout fires."
+        ],
+        "summary": "Defects on BASE_SHA (42291369): ManageAccountScreen.tsx still called the legacy requestAccountDeletion/confirmAccountDeletion client (plain fetch following redirects; no journal, no idempotent re-entry), and deletion.ts exported no fetchNoRedirect (base suite: 19/20 fail). Round-1 breaks reproduced on the r1 wiring and fixed: A1 — deletion.ts durableState mapped phase 'securing' with 'ready' (line ~604 on r1) and resume() treated only 'ready' as re-requestable, so a Keychain-write failure after the securing journal write showed 'Deletion status unknown … may have completed' for 24h; now securing is never confirmable, resume skips it and offers a fresh request, and capability-less securing rows are reclaimable. A3 — ManageAccountScreen.runStep had no synchronous in-flight guard, so a second same-frame press re-entered confirm() and the foundation's job lock ('stale_handler') was rendered as account-changed/unknown; now a second press is a no-op and the UI stays 'Deleting…' with exactly one /delete-confirm. A4 — deletionOperationJournal.create refused a 33rd row with journal_capacity and no code path ever removed rows; now journal.remove()/foundation.reclaim() free inert rows (server-closed, lapsed never-confirmed challenges, capability-less securing) and request() reclaims once before failing, with copy that no longer promises retrying will help when nothing could be freed. Bonus: a challenge the device clock says expired is not resumed/armed; confirming it fails honestly as nothing_deleted with a fresh request. Verified: AC1 143/143 pass (new suite 20/20; fails 19/20 on base, 6/20 on r1), AC2 tsc clean, AC3 eslint+prettier clean on all 8 changed files, pnpm format:check and git diff --check clean, full mobile Jest 5909 passed / 1 pre-existing skip. Pushed devin/pp/w08-01/impl-r2 at d2bb4905d33618c16708e52c4957eb3e284e11bd; no PR opened."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fecd0def-9005-46bb-8756-57d9a984e647/ac1-candidate.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/accountDeletion.test.ts __tests__/deletionOperation*.test.ts",
+            "executed": 143,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC1",
+            "note": "VERIFIED by reviewer on d2bb4905 after `cd apps/mobile && npm ci` (exit 0): 5 suites / 143 tests pass (deletionOperationIsolation, deletionOperationTransport, deletionOperationRecovery, accountDeletion, w08ManageAccountDeletion 20/20). Supplemental full mobile suite `cd apps/mobile && npx jest --ci --silent` exit 0: 308 suites passed / 1 pre-existing skipped suite (importedRealFootageAnalysis.test.ts, untouched by candidate), 5909 passed / 1 skipped tests — https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d5d826f-09f3-4b64-9762-fdceb34ba14a/mobile-jest-full.log",
+            "passed": 143,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee3cd33f-559b-4336-b7a8-15ffb00f3ef2/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC2",
+            "note": "VERIFIED by reviewer on d2bb4905 after `cd apps/mobile && npm ci`; no diagnostics emitted.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a749c584-109a-4f73-a6bf-9a13785a1d02/ac3-eslint.log",
+            "command": "npx eslint apps/mobile/__tests__/deletionOperationIsolation.test.ts apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx apps/mobile/src/account/deletion.ts apps/mobile/src/account/deletionOperation.ts apps/mobile/src/account/deletionOperationJournal.ts apps/mobile/src/account/deletionOperationTransport.ts apps/mobile/src/account/sessionVault.ts apps/mobile/src/screens/ManageAccountScreen.tsx && npx prettier --check <same 8 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-AC3",
+            "note": "VERIFIED by reviewer from repo root after `pnpm install --frozen-lockfile` (exit 0) on all 8 changed files: eslint exit 0; prettier --check exit 0 ('All matched files use Prettier code style!') — https://la-hacks-rttothemoon.devinenterprise.com/attachments/c6c69742-2287-4e11-a703-bdd60ba596fe/ac3-prettier.log. `git diff --check 42291369..HEAD` exit 0 (no output).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3402140-8a41-47aa-9690-10880530268c/regress-candidate.log",
+            "command": "git checkout 42291369fc4387571ac8821410353e0f99404484 && git checkout d2bb4905d33618c16708e52c4957eb3e284e11bd -- apps/mobile/__tests__/w08ManageAccountDeletion.test.tsx apps/mobile/__tests__/deletionOperationIsolation.test.ts && cd apps/mobile && npx jest --ci --silent __tests__/w08ManageAccountDeletion.test.tsx __tests__/deletionOperationIsolation.test.ts  # then same two files on d2bb4905",
+            "executed": 27,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W08-01-REGRESS",
+            "note": "PROOF holds. BASE_SHA 42291369 with only the two candidate test files copied over: exit 1, 2 suites failed, 20 failed / 7 passed / 0 skipped of 27 (19 of 20 w08 cases fail on behaviour — e.g. 'no such table: device_account_deletion_journal', fetchNoRedirect absent — plus the isolation pin's integration-point assertion) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae4a7da6-d0f3-408b-a734-bdc8c53769ab/regress-base.log. Candidate d2bb4905: exit 0, 27/27 pass. Working tree restored to d2bb4905 clean afterwards (git status empty).",
+            "passed": 27,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fecd0def-9005-46bb-8756-57d9a984e647/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee3cd33f-559b-4336-b7a8-15ffb00f3ef2/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a749c584-109a-4f73-a6bf-9a13785a1d02/ac3-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c6c69742-2287-4e11-a703-bdd60ba596fe/ac3-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae4a7da6-d0f3-408b-a734-bdc8c53769ab/regress-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b3402140-8a41-47aa-9690-10880530268c/regress-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2d5d826f-09f3-4b64-9762-fdceb34ba14a/mobile-jest-full.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (Linux-only evidence): Keychain and SQLite are exercised through Jest mocks / in-memory sqlite; real iOS Keychain write-failure timing (securing-row path) and on-device same-frame double taps were not run on the M4 (not permitted for this package).",
+          "Journal capacity remains device-global (32 rows). reclaim() frees only inert rows (server-closed, lapsed never-confirmed challenge, capability-less securing); live requests of other owners are intentionally kept, so a device with >32 live requests across accounts cannot start a 33rd until one expires. Copy is honest about this (apps/mobile/src/account/deletion.ts journal_capacity message) — acceptable, noting for the coordinator.",
+          "Reclamation of never-confirmed rows is driven by the device clock (challenge expiresAt); a clock moved forward reclaims early (owner gets a fresh request, nothing deleted), a clock moved backward defers reclamation until the server reports expired/superseded. Never reclaims receipts, unresolved confirmations or unknown requests, so honesty is preserved.",
+          "ManageAccountScreen.resumeUnfinished awaits an in-flight step from a previous presentation via `while (inFlightRef.current) await …`; a hung fetch delays resume until the transport timeout fires (bounded, not a correctness issue).",
+          "apps/mobile/__tests__/deletionOperationIsolation.test.ts: the isolation pin's test name and allow-list were changed to name deletion.ts as the single integration point and to assert its exact foundation imports (['./deletionOperation','./deletionOperationContracts']). This is a strengthened/updated pin required by the objective, not a weakening; the 'no other bundled source imports the foundation' loop is unchanged."
+        ],
+        "package_id": "W08-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "d2bb4905d33618c16708e52c4957eb3e284e11bd",
+        "scope_violation": false,
+        "summary": "APPROVE W08-01 at d2bb4905d33618c16708e52c4957eb3e284e11bd (branch devin/pp/w08-01/impl-r2, base 42291369). SCOPE (VERIFIED, `git diff --stat 42291369..d2bb4905`, 8 files, +2117/-224): the 3 write_paths files plus 5 out_of_scope files, all under apps/mobile/src/account/ or apps/mobile/__tests__/ — none under any serial_group_paths prefix. Each out-of-scope edit is minimal and required for the objective as shipped behaviour: deletionOperation.ts (`inert()`/`reclaim()` + Readonly<Record<string,unknown>> body so the survey rides on /delete-request), deletionOperationJournal.ts (`remove()` — receipts refused, revision+document checked, transactional DELETE), deletionOperationTransport.ts (body type widened only), sessionVault.ts (additive frozen `deviceKeychainForVault()` exposing only ACCESSIBLE/getGenericPassword/setGenericPassword), deletionOperationIsolation.test.ts (pin updated to name deletion.ts as the single integration point and assert its exact foundation imports; the no-other-importer loop is unchanged). scope_violation=false. SHIPPED WIRING (VERIFIED): ManageAccountScreen.accountDeletionFlow() → durableAccountDeletionFlow(getDb) (createDeletionOperationFoundation with http:{fetchNoRedirect}, Keychain adapter, per-request bearer via getApiSession() validated against apiBaseUrl + canonical owner) with legacy fallback only when the DB cannot transact or Keychain is unavailable — the module is not dead code. ACCEPTANCE (all re-run by reviewer): AC1 exit 0, 143/143 (w08 suite 20/20); AC2 tsc exit 0; AC3 eslint exit 0 + prettier exit 0 on all 8 changed files; git diff --check exit 0; supplemental full mobile jest exit 0, 5909 passed / 1 pre-existing skip (importedRealFootageAnalysis, untouched). REGRESSION PROOF: the two candidate test files on BASE_SHA exit 1 with 20 failed / 7 passed (behavioural failures: no journal table, no fetchNoRedirect export, isolation pin), on candidate exit 0 with 27/27 — regression_fails_on_base=true. INVARIANTS (VERIFIED by diff inspection + tests): no test skipped/weakened/reordered/deleted (only the isolation pin's allow-list updated to admit the wiring it now requires); no `|| true`, --passWithNoTests, @ts-ignore, `any`, eslint-disable, inflated timeouts or forceExit in added lines; no existing code comment modified (all 88 removed src lines are code); no migrations, RLS, grants, edge, billing, native or diagnostics files touched; no bearer/provider/refresh token written to the journal (bearerFor resolves per request; the Keychain holds only the deletion status capability via the restricted adapter); owner isolation and original-owner recovery pinned by the w08 suite (replacement account cannot see/confirm the original owner's operation; live rows of other owners are never reclaimed); unknown/corrupt state never becomes success — `completed` is returned only for receipt_verified/cleanup_* WITH a non-null receipt, confirm_pending/receipt_pending/observing render as confirm_unknown or in_progress and never call onDeleted/completeAccountDeletion, `securing` (capability never reached Keychain, confirm() throws confirmation_unknown for any non-ready phase) maps to failed/nothing_deleted with a fresh request, and a device-clock-expired challenge refuses confirmation honestly; same-frame duplicate presses are a no-op via inFlightRef (one /delete-request + one journal row; one /delete-confirm with 'Deleting…' retained); all deletion HTTP goes through fetchNoRedirect (redirect:'error', credentials:'omit', cache:'no-store', referrerPolicy:'no-referrer'; response wrapped so redirected=true when url is empty/differs/platform-flagged). User-facing copy added contains no Android/Google Play/guest/Live Court/DUPR/competitor/accuracy-%/superlative terms. Non-blocking notes: Linux-only evidence for Keychain/SQLite (native behaviour INFERRED, Mac run not permitted for this package); device-global 32-row journal reclaims only inert rows, clock-driven for never-confirmed rows; resumeUnfinished awaits a hung in-flight step until the transport timeout. No PR opened, nothing pushed by the reviewer; working tree left at d2bb4905 clean.",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "REQUEUE",
+  "wave_id": "wave-1"
+}

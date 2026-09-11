@@ -21,8 +21,9 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * guide's collapsed disclosure used to unfold inline (`ResultBreakdownSheet`:
  * the canonical `StrokeResult`, the form-review card, WHAT TO FIX in full,
  * the stroke map, the provenance trace, the personalized training plan and
- * the feedback prompt), unchanged, on its light surface — so the guide's
- * "Next" page can stay a single card.
+ * the feedback prompt), unchanged, on the same dark surface as the guide —
+ * so the guide's "Next" page can stay a single card and a result never
+ * switches to a light sheet.
  *
  * A separate route means separate loading: the same evidence hook the guide
  * uses (`useStrokeResultEvidence`) reads the three stores, hash-verifies the
@@ -46,12 +47,13 @@ export function ResultDetailsScreen() {
   if (evidence === undefined) {
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <ScreenHeader
           title="Full breakdown"
+          dark
           onBack={() => navigation.goBack()}
         />
-        <StrokeResultAnalyzing caption="Opening your result…" />
+        <StrokeResultAnalyzing caption="Opening your result…" dark />
       </SafeAreaView>
     );
   }
@@ -63,6 +65,7 @@ export function ResultDetailsScreen() {
         detail="This analysis is no longer on this device."
         onRetry={() => navigation.goBack()}
         retryLabel="Go back"
+        dark
       />
     );
   }
@@ -73,8 +76,12 @@ export function ResultDetailsScreen() {
       style={styles.screen}
       testID="result-details"
     >
-      <StatusBar barStyle="dark-content" />
-      <ScreenHeader title="Full breakdown" onBack={() => navigation.goBack()} />
+      <StatusBar barStyle="light-content" />
+      <ScreenHeader
+        title="Full breakdown"
+        dark
+        onBack={() => navigation.goBack()}
+      />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -119,9 +126,7 @@ export function ResultDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.surface },
-  // The sheet bleeds to the page edges by design (see ResultScreen's
-  // `sheet` style); this padding is what it bleeds against.
+  screen: { flex: 1, backgroundColor: color.surfaceDark },
   content: {
     paddingHorizontal: space.lg,
     paddingBottom: space.xl,

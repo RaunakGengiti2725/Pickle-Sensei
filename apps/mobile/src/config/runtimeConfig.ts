@@ -15,6 +15,7 @@ export interface RuntimePublicConfig {
   googleIosClientId: string | null;
   googleWebClientId: string | null;
   appVersion: string;
+  diagnostics: RuntimeDiagnosticsConfig;
   /** Public legal pages served by the API function (supabase/functions/api/
    * legal.ts). The paywall (App Review 3.1.2) and the App Store listing point
    * here. Null only when the API origin itself is unconfigured. */
@@ -27,6 +28,21 @@ export interface RuntimePublicConfig {
    * Pickle Sensei" row prefers it over the OS-throttled in-app sheet; null
    * whenever appStoreId is unset. */
   appStoreWriteReviewUrl: string | null;
+}
+
+export interface RuntimeDiagnosticsConfig {
+  transportEnabled: boolean;
+  providerApproved: boolean;
+  disclosuresApproved: boolean;
+  nativePrivacyApproved: boolean;
+  dsn: string | null;
+  bundleIdentifier: 'com.picklesensei';
+  marketingVersion: string;
+  nativeBuildNumber: string | null;
+  sourceRevision: string | null;
+  environment: 'development' | 'test' | 'production' | null;
+  modelVersion: string | null;
+  policyVersion: string | null;
 }
 
 // Supabase Edge Function implementing /v1/account/bootstrap (supabase/README.md).
@@ -76,6 +92,20 @@ export function getRuntimePublicConfig(): RuntimePublicConfig {
     googleIosClientId: GOOGLE_IOS_CLIENT_ID,
     googleWebClientId: GOOGLE_WEB_CLIENT_ID,
     appVersion: APP_VERSION,
+    diagnostics: {
+      transportEnabled: false,
+      providerApproved: false,
+      disclosuresApproved: false,
+      nativePrivacyApproved: false,
+      dsn: null,
+      bundleIdentifier: 'com.picklesensei',
+      marketingVersion: APP_VERSION,
+      nativeBuildNumber: null,
+      sourceRevision: null,
+      environment: null,
+      modelVersion: null,
+      policyVersion: null,
+    },
     legalPrivacyUrl: API_BASE_URL ? `${API_BASE_URL}/privacy` : null,
     legalTermsUrl: API_BASE_URL ? `${API_BASE_URL}/terms` : null,
     appStoreId: APP_STORE_ID,

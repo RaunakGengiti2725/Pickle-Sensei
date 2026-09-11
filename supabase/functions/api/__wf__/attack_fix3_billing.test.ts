@@ -22,8 +22,9 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
-  EVENTS_URL,
+  VERDICT_URL,
+  EVENT_COMPLETE_URL,
+  EVENT_RELEASE_URL,
   expiredSubscriber,
   simulate,
   sleep,
@@ -104,7 +105,7 @@ Deno.test(
       assertEquals(sim.rcCalls(), 1);
       assertEquals(sim.entitlementUpserts(), 1);
       assertEquals(sim.auditRows.size, 1);
-      assertEquals(sim.auditPatches(), 1, "one completion PATCH: losers never write the audit row");
+      assertEquals(sim.auditPatches(), 1, "one completion RPC: losers never write the audit row");
       const replay = await sim.h.handler(webhookRequest(event));
       assertEquals(await replay.json(), { received: true, duplicate: true });
       assertEquals(sim.rcCalls(), 1);
@@ -136,7 +137,12 @@ Deno.test(
       );
       assertEquals(sim.rcCalls(), 1, "only the owner reached RevenueCat");
       assertEquals(sim.entitlementUpserts(), 0);
-      assertEquals(sim.auditRows.has("atk-conc-rc-down"), false, "reservation released");
+      assertEquals(
+        sim.auditRows.get("atk-conc-rc-down")?.processed_at,
+        null,
+        "no completion marker",
+      );
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null, "lease released");
 
       sim.h.subscriber = activeSubscriber();
       const redelivery = await sim.h.handler(webhookRequest(event));
@@ -151,7 +157,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ATK-3: owner fails AND its release DELETE fails → nobody acks 200; the row stays reserved so the in-lease redelivery is refused (never re-verified twice, never a false duplicate)",
+  "ATK-3: owner fails AND its release RPC fails → nobody acks 200; the row stays reserved so the in-lease redelivery is refused (never re-verified twice, never a false duplicate)",
   async () => {
     const sim = await simulate();
     try {
@@ -161,7 +167,7 @@ Deno.test(
         times: 1,
       });
       sim.faults.push({
-        match: (m, u) => m === "DELETE" && u.startsWith(EVENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(EVENT_RELEASE_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -238,9 +244,13 @@ Deno.test(
       const row = sim.entitlementRows.get(TEST_USER_ID);
       assertEquals(row?.premium, lastPremium, "newest verified_at wins regardless of arrival");
       const verifiedAts = sim.h
-        .callsTo(ENTITLEMENTS_URL)
+        .callsTo(VERDICT_URL)
         .filter((c) => c.method === "POST")
-        .map((c) => Date.parse(String((c.body as Record<string, unknown>).verified_at)));
+        .map((c) =>
+          Date.parse(
+            String((c.body as { p_verdict: Record<string, unknown> }).p_verdict.verifiedAt),
+          ),
+        );
       assertEquals(Date.parse(String(row?.verified_at)), Math.max(...verifiedAts));
       assertEquals(sim.auditRows.size, n);
       assert([...sim.auditRows.values()].every((r) => typeof r.processed_at === "string"));
@@ -370,7 +380,7 @@ Deno.test(
       let entitlementPosts = 0;
       sim.faults.push({
         match: (m, u) => {
-          if (m !== "POST" || !u.startsWith(ENTITLEMENTS_URL)) return false;
+          if (m !== "POST" || !u.startsWith(VERDICT_URL)) return false;
           entitlementPosts += 1;
           return entitlementPosts === 2; // B's write
         },
@@ -387,7 +397,12 @@ Deno.test(
       assertEquals(first.status, 503);
       await first.text();
       assertEquals(sim.rcCalls(), 2);
-      assertEquals(sim.auditRows.has("atk-transfer-partial"), false, "released");
+      assertEquals(
+        sim.auditRows.get("atk-transfer-partial")?.processed_at,
+        null,
+        "no completion marker",
+      );
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null, "lease released");
       assertEquals(sim.entitlementRows.get(TEST_USER_ID)?.premium, false, "A's revoke landed");
       assertEquals(sim.entitlementRows.has(OTHER_USER_ID), false, "B untouched");
 
@@ -556,7 +571,10 @@ Deno.test(
         provider: "revenuecat",
         event_type: "RENEWAL",
         app_user_id: TEST_USER_ID,
-        payload: {},
+        payload: {
+          api_version: "1.0",
+          event: { id: "atk-orphan-race", type: "RENEWAL", app_user_id: TEST_USER_ID },
+        },
         received_at: stale,
         claimed_at: stale,
         processed_at: null,
@@ -592,7 +610,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ATK-14: completion PATCH fails → 503; the in-lease redelivery waits out the bound and is refused without RC traffic; once the lease lapses the reclaim re-verifies and marks the row processed",
+  "ATK-14: completion RPC fails → 503; the in-lease redelivery waits out the bound and is refused without RC traffic; once the lease lapses the reclaim re-verifies and marks the row processed",
   async () => {
     const sim = await simulate();
     Deno.env.set("WEBHOOK_DUPLICATE_WAIT_MS", "120");
@@ -600,7 +618,7 @@ Deno.test(
     try {
       sim.h.subscriber = activeSubscriber();
       sim.faults.push({
-        match: (m, u) => m === "PATCH" && u.startsWith(EVENTS_URL),
+        match: (m, u) => m === "POST" && u.startsWith(EVENT_COMPLETE_URL),
         ...dbUnavailable,
         times: 1,
       });
@@ -622,7 +640,7 @@ Deno.test(
       assertEquals(sim.rcCalls(), 1);
 
       // lease lapses (the isolate is assumed dead by now)
-      row.claimed_at = new Date(Date.now() - 6 * 60_000).toISOString();
+      sim.expireLease(String(row.id));
       const reclaim = await sim.h.handler(webhookRequest(event));
       assertEquals(await reclaim.json(), { received: true, verified: true });
       assertEquals(sim.rcCalls(), 2);
@@ -693,7 +711,7 @@ Deno.test(
         ((audit?.payload as Record<string, unknown>).event as Record<string, unknown>).product_id,
         "pickle_sensei_pro_lifetime",
       );
-      const post = sim.h.callsTo(ENTITLEMENTS_URL)[0];
+      const post = sim.h.callsTo(VERDICT_URL)[0];
       assertEquals(post.headers["authorization"], "Bearer service-role-test-key");
     } finally {
       sim.restore();

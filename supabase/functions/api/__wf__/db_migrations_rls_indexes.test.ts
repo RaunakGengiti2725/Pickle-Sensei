@@ -24,6 +24,13 @@ const LATE_PERMIT_SYNC = "20260906130000_late_permit_sync_durability.sql";
 const PERMIT_LIFECYCLE = "20260906140000_permit_lifecycle_null_safe.sql";
 const PERMIT_TERMINAL = "20260907000000_permit_terminal_client_role.sql";
 const PERMIT_SETTLED_NO_DELETE = "20260907100000_permit_settled_no_delete.sql";
+const ANALYSIS_RELEASE_AUTHORITY = "20260908020000_analysis_release_authority.sql";
+const PERMIT_PARTIAL_OUTCOME = "20260908100000_permit_partial_terminal_outcome.sql";
+const OFFLINE_DEVICE_GRANTS = "20260908160000_offline_device_grants.sql";
+/** W04-06: the 1.0 app registers with p_attested=false, so a real phone is
+ * 'unattested' and must still be issued a grant; the grant row records the
+ * state it was issued under, and a revoked device stays refused. */
+const OFFLINE_UNATTESTED_GRANTS = "20260910140000_offline_grants_unattested_installations.sql";
 
 /** The three places the two-lifetime-free-ratings rule is decided. Every
  * definition of these from the ledger migration onward must count through
@@ -1256,6 +1263,1222 @@ Deno.test(
   },
 );
 
+// ─── W01-01: an honest PARTIAL terminal outcome — released, never charged ────
+
+/** Every `create or replace function api_private.<name>(` … `$$;` body. */
+function privateFunctionBodies(raw: string, name: string): string[] {
+  const bodies: string[] = [];
+  const re = new RegExp(
+    `create(?: or replace)? function api_private\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
+    "gi",
+  );
+  for (const match of raw.matchAll(re)) bodies.push(match[0].toLowerCase());
+  return bodies;
+}
+
+const PERMIT_OUTCOMES_BEFORE_PARTIAL = [
+  "scored",
+  "low_confidence",
+  "cancelled",
+  "failed",
+  "unsupported",
+  "incorrect_recognition",
+  "expired",
+  "free_limit_exceeded",
+] as const;
+
+/** The free-rating accounting path. A partial outcome is admitted beside it,
+ * never by rewriting it: none of these may be redefined by the partial
+ * migration, and the latest definition of each keeps its scored-only rule. */
+const COUNTING_PATH_FUNCTIONS = [
+  "lifetime_scored_count",
+  "identity_scored_count",
+  "record_scored_shot_in_ledger",
+  "permit_backs_sync",
+  "apply_synced_shot",
+  "enforce_scored_shot_permit",
+  "reserve_analysis_permit",
+  "access_state",
+] as const;
+
+Deno.test(
+  "W01-01: partial is an explicit released terminal outcome for permits and shots, admitted beside the counting path without touching it",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === PERMIT_PARTIAL_OUTCOME);
+    ok(migration, `${PERMIT_PARTIAL_OUTCOME} must exist in the migration chain`);
+    ok(
+      migration.file > ANALYSIS_RELEASE_AUTHORITY,
+      "the partial outcome is a forward migration after the release-authority migration",
+    );
+    const raw = stripSqlComments(migration.raw);
+
+    // The lifecycle guard learns exactly one new word and one new shape rule.
+    const [guard] = functionBodies(raw, "guard_analysis_permit_lifecycle");
+    ok(guard, `${PERMIT_PARTIAL_OUTCOME} must redefine public.guard_analysis_permit_lifecycle`);
+    for (const outcome of PERMIT_OUTCOMES_BEFORE_PARTIAL) {
+      ok(guard.includes(`'${outcome}'`), `the guard must keep the ${outcome} outcome`);
+    }
+    ok(
+      /new\.outcome not in \(\s*'scored', 'low_confidence', 'partial',/.test(guard),
+      "the guard vocabulary must admit 'partial' as its own outcome (never relabelled as low_confidence)",
+    );
+    ok(
+      guard.includes("(new.status = 'reserved') <> (new.outcome is null)") &&
+        guard.includes("errcode = 'check_violation'") &&
+        guard.includes("hint = 'access.permit_transition_rejected'"),
+      "the guard must keep released ⇒ outcome IS NOT NULL and answer 23514 + the contract hint",
+    );
+    ok(
+      guard.includes("(new.outcome = 'partial' and new.status <> 'released')"),
+      "a partial outcome must only ever be released — finalized/partial is not a permit state",
+    );
+    ok(
+      guard.includes("if old.status = 'reserved' then") &&
+        guard.includes("if old.status = 'released' and old.outcome = 'expired'") &&
+        guard.includes("('finalized', 'scored')") &&
+        guard.includes("('released', 'low_confidence')") &&
+        guard.includes("('released', 'free_limit_exceeded')") &&
+        guard.includes("('released', 'partial')"),
+      "the guard must allow reserved → settled and released/expired → the late-sync outcomes including released/partial",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke execute on function public.guard_analysis_permit_lifecycle() from public, anon, authenticated",
+      ),
+      "the redefined guard must stay non-executable by clients",
+    );
+    ok(
+      !dropsTriggerWithoutRecreating(migration, "analysis_permits_guard_lifecycle"),
+      "the lifecycle trigger must survive the redefinition",
+    );
+
+    // The API-plane transition guard admits the same late transition.
+    const [transition] = privateFunctionBodies(raw, "enforce_permit_transition");
+    ok(transition, `${PERMIT_PARTIAL_OUTCOME} must redefine api_private.enforce_permit_transition`);
+    for (const column of ["id", "user_id", "idempotency_key", "created_at"]) {
+      ok(
+        transition.includes(`new.${column} is distinct from old.${column}`),
+        `permit ${column} must stay immutable`,
+      );
+    }
+    ok(
+      transition.includes(
+        "(old.status = 'reserved' and new.status in ('finalized', 'released'))",
+      ) &&
+        transition.includes("('finalized', 'scored')") &&
+        transition.includes("('released', 'low_confidence')") &&
+        transition.includes("('released', 'free_limit_exceeded')") &&
+        transition.includes("('released', 'partial')"),
+      "enforce_permit_transition must keep every prior transition and add released/expired → released/partial",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke all on function api_private.enforce_permit_transition() from public, anon, authenticated, service_role",
+      ),
+      "the redefined transition guard must stay non-executable",
+    );
+
+    // shots.result_kind admits 'partial'; the unscored invariant is untouched.
+    ok(
+      migration.statements.includes(
+        "alter table public.shots drop constraint shots_result_kind_check",
+      ) &&
+        migration.statements.includes(
+          "alter table public.shots add constraint shots_result_kind_check check (result_kind in ('scored', 'low_confidence', 'partial')) not valid",
+        ) &&
+        migration.statements.includes(
+          "alter table public.shots validate constraint shots_result_kind_check",
+        ),
+      "shots.result_kind must be widened to exactly scored | low_confidence | partial (NOT VALID + VALIDATE — no exclusive-lock rescan)",
+    );
+    ok(
+      !migration.statements.some(
+        (s) =>
+          s.startsWith("alter table public.shots") && s.includes("shots_low_confidence_unscored"),
+      ),
+      "shots_low_confidence_unscored (non-scored ⇒ overall_score IS NULL) is what keeps a partial unscored — it must not be touched",
+    );
+
+    // The counting path is not rewritten, and its latest definitions still
+    // count scored rows only.
+    for (const name of COUNTING_PATH_FUNCTIONS) {
+      ok(
+        functionBodies(raw, name).length === 0,
+        `${PERMIT_PARTIAL_OUTCOME} must not redefine public.${name}`,
+      );
+    }
+    const backing = chain.flatMap((m) => functionBodies(m.raw, "permit_backs_sync")).at(-1);
+    ok(backing && NULL_SAFE_BACKING_RULE.test(backing), "released/partial is never permit backing");
+    const ledger = chain
+      .flatMap((m) => functionBodies(stripSqlComments(m.raw), "record_scored_shot_in_ledger"))
+      .at(-1);
+    ok(
+      ledger && ledger.includes("if new.result_kind <> 'scored'"),
+      "the identity ledger must record scored shots only",
+    );
+    const lifetime = chain
+      .flatMap((m) => functionBodies(stripSqlComments(m.raw), "lifetime_scored_count"))
+      .at(-1);
+    ok(
+      lifetime && lifetime.includes("s.result_kind = 'scored'"),
+      "lifetime_scored_count must count scored shots only",
+    );
+
+    // No grant or policy surface changes ride along.
+    for (const statement of migration.statements) {
+      ok(
+        !statement.startsWith("grant ") &&
+          !/^(create|alter|drop) policy\b/.test(statement) &&
+          !statement.includes("disable row level security"),
+        `${PERMIT_PARTIAL_OUTCOME} must not change grants or policies: ${statement}`,
+      );
+    }
+  },
+);
+
+// ─── W04-01: device registry, offline grants, append-only allocation ledger ──
+
+const OFFLINE_TABLES = ["offline_devices", "offline_grants", "offline_allocation_ledger"] as const;
+
+/** The late-link record: which sign-in identities a ticket became reachable
+ * through AFTER it was allocated (an identity linked to the holder's account
+ * later). Append-only, no client or service grant at all — only the definers
+ * read it. Without it a late-linked identity escapes the hold after account
+ * deletion + re-creation (adversary round 4, A02). */
+const OFFLINE_LINK_TABLE = "offline_allocation_identity_links";
+
+/** Every `public.<name>` user RPC the offline routes call: session-bound
+ * definers that never read or write outside the caller's own rows. */
+const OFFLINE_MUTATING_RPCS = [
+  "register_offline_device",
+  "issue_offline_grant",
+  "consume_offline_ticket",
+  "release_offline_ticket",
+] as const;
+
+/** The one ownership test every ticket path shares: the allocation's account
+ * OR any current sign-in identity of the caller that the allocation was made
+ * under OR that was linked to the holder afterwards — so the original
+ * installation of a deleted-and-recreated account can still recover, consume
+ * and release its ticket, and nobody else can. */
+const OFFLINE_OWNER_PREDICATE = "api_private.offline_ticket_owned_by(";
+
+/** `functionBodies` for `api_private.<name>` definers. */
+function apiPrivateFunctionBodies(raw: string, name: string): string[] {
+  const bodies: string[] = [];
+  const re = new RegExp(
+    `create(?: or replace)? function api_private\\.${name}\\s*\\([\\s\\S]*?\\$\\$;`,
+    "gi",
+  );
+  for (const match of raw.matchAll(re)) bodies.push(match[0].toLowerCase());
+  return bodies;
+}
+
+Deno.test(
+  "W04-01: device registry, per-device offline grants with bounded expiry, and an append-only allocation ledger where allocation ≠ consumption, all API-only and never auto-reclaimed",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === OFFLINE_DEVICE_GRANTS);
+    ok(migration, `${OFFLINE_DEVICE_GRANTS} must exist in the migration chain`);
+    ok(
+      migration.file > PERMIT_PARTIAL_OUTCOME,
+      "the offline grants migration follows the partial-outcome migration",
+    );
+    const raw = stripSqlComments(migration.raw);
+    const statements = migration.statements;
+
+    // Three new tables, every one RLS-enabled, owner-scoped, API-gated, and
+    // readable only — the client role never writes them directly.
+    for (const table of OFFLINE_TABLES) {
+      ok(
+        statements.some((s) => s.startsWith(`create table if not exists public.${table} (`)),
+        `${OFFLINE_DEVICE_GRANTS} must create public.${table}`,
+      );
+      ok(
+        statements.includes(`alter table public.${table} enable row level security`),
+        `public.${table} must enable RLS`,
+      );
+      ok(
+        statements.includes(
+          `revoke all on public.${table} from public, anon, authenticated, service_role`,
+        ),
+        `public.${table} must drop every default client AND service grant (TRUNCATE fires no row trigger)`,
+      );
+      ok(
+        statements.includes(`grant select on public.${table} to authenticated`),
+        `public.${table} is readable by its owner through the API`,
+      );
+      ok(
+        statements.some(
+          (s) =>
+            s.startsWith(
+              `create policy ${table}_select_own on public.${table} for select to authenticated using (`,
+            ) && s.includes("user_id = (select auth.uid())"),
+        ),
+        `public.${table} reads are owner-scoped`,
+      );
+      ok(
+        statements.includes(
+          `create policy api_requests_only on public.${table} as restrictive for all to authenticated using ((select api_private.is_api_request())) with check ((select api_private.is_api_request()))`,
+        ),
+        `public.${table} must carry the restrictive API-only policy`,
+      );
+      for (const statement of statements) {
+        ok(
+          !(
+            statement.startsWith("grant ") &&
+            new RegExp(`\\bpublic\\.${table}\\b`).test(statement) &&
+            /\b(insert|update|delete|truncate|references|trigger|all)\b/.test(
+              statement.split(" on ")[0],
+            ) &&
+            /\b(anon|authenticated|public|service_role)\b/.test(statement.split(" to ").pop() ?? "")
+          ),
+          `public.${table} must never be writable or truncatable outside the RPCs: ${statement}`,
+        );
+        ok(
+          !(
+            /^create policy\b/.test(statement) &&
+            statement.includes(`on public.${table}`) &&
+            /\bfor (insert|update|delete)\b/.test(statement)
+          ),
+          `public.${table} must carry no client write policy: ${statement}`,
+        );
+      }
+    }
+
+    // The late-link record: RLS on, NOT readable or writable by any client or
+    // service role (no grant, no policy), append-only, and every link passes
+    // an ownership guard. Written only by the auth.identities trigger.
+    ok(
+      statements.some((s) =>
+        s.startsWith(`create table if not exists public.${OFFLINE_LINK_TABLE} (`),
+      ),
+      `${OFFLINE_DEVICE_GRANTS} must create public.${OFFLINE_LINK_TABLE}`,
+    );
+    ok(
+      raw.includes("unique (ticket_id, identity_hash)"),
+      "a (ticket, identity) link is recorded once",
+    );
+    ok(
+      statements.includes(`alter table public.${OFFLINE_LINK_TABLE} enable row level security`),
+      `public.${OFFLINE_LINK_TABLE} must enable RLS`,
+    );
+    ok(
+      statements.includes(
+        `revoke all on public.${OFFLINE_LINK_TABLE} from public, anon, authenticated, service_role`,
+      ) &&
+        statements.includes(
+          `revoke all on sequence public.${OFFLINE_LINK_TABLE}_id_seq from public, anon, authenticated, service_role`,
+        ),
+      `public.${OFFLINE_LINK_TABLE} drops every default client AND service grant`,
+    );
+    for (const statement of statements) {
+      ok(
+        !(
+          statement.startsWith("grant ") &&
+          new RegExp(`\\bpublic\\.${OFFLINE_LINK_TABLE}\\b`).test(statement)
+        ),
+        `public.${OFFLINE_LINK_TABLE} is never granted to any role: ${statement}`,
+      );
+      ok(
+        !(
+          /^create policy\b/.test(statement) &&
+          statement.includes(`on public.${OFFLINE_LINK_TABLE}`)
+        ),
+        `public.${OFFLINE_LINK_TABLE} carries no client policy: ${statement}`,
+      );
+    }
+    const linkTable = raw.slice(
+      raw.search(new RegExp(`create table if not exists public\\.${OFFLINE_LINK_TABLE} \\(`)),
+    );
+    ok(
+      !/\breferences\b/.test(linkTable.slice(0, linkTable.search(/\n\);/))),
+      "the link record carries no foreign key — it outlives the account exactly like the ledger",
+    );
+    ok(
+      statements.includes(
+        `create trigger ${OFFLINE_LINK_TABLE}_append_only before update or delete on public.${OFFLINE_LINK_TABLE} for each row execute function public.guard_offline_ledger_append_only()`,
+      ),
+      "the link record is append-only for every role",
+    );
+    const [linkGuard] = functionBodies(raw, "guard_offline_identity_link");
+    ok(linkGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_identity_link`);
+    ok(
+      linkGuard.includes("security definer") &&
+        linkGuard.includes("set search_path = ''") &&
+        linkGuard.includes("a.event = 'allocated'") &&
+        linkGuard.includes(
+          `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id)`,
+        ) &&
+        linkGuard.includes("errcode = 'check_violation'"),
+      "a link needs an allocated ticket that the linking account owns",
+    );
+    ok(
+      statements.includes(
+        `create trigger ${OFFLINE_LINK_TABLE}_guard before insert on public.${OFFLINE_LINK_TABLE} for each row execute function public.guard_offline_identity_link()`,
+      ),
+      "every link write passes the guard",
+    );
+    // The late-link event itself: AFTER INSERT on auth.identities (definer,
+    // like inherit_free_rating_ledger) records every outstanding ticket the
+    // account owns for every identity the account now holds.
+    const [inheritHolds] = functionBodies(raw, "inherit_offline_allocation_holds");
+    ok(
+      inheritHolds,
+      `${OFFLINE_DEVICE_GRANTS} must define public.inherit_offline_allocation_holds`,
+    );
+    ok(
+      inheritHolds.includes("security definer") &&
+        inheritHolds.includes("set search_path = ''") &&
+        inheritHolds.includes(`insert into public.${OFFLINE_LINK_TABLE}`) &&
+        inheritHolds.includes("api_private.offline_owned_allocations(new.user_id)") &&
+        inheritHolds.includes("api_private.offline_identity_hashes(new.user_id)") &&
+        inheritHolds.includes("on conflict (ticket_id, identity_hash) do nothing"),
+      "linking an identity extends every outstanding ticket the account owns to every identity it holds",
+    );
+    ok(
+      statements.includes(
+        "create trigger offline_holds_on_identity_link after insert on auth.identities for each row execute function public.inherit_offline_allocation_holds()",
+      ),
+      "the late-link trigger is wired on auth.identities",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.inherit_offline_allocation_holds() from public, anon, authenticated",
+      ) &&
+        statements.includes(
+          "revoke execute on function public.guard_offline_identity_link() from public, anon, authenticated",
+        ),
+      "the link trigger functions are not executable by clients",
+    );
+
+    // Device registry: one row per (owner, installation key); attestation is
+    // an explicit state, never inferred from a nullable timestamp alone.
+    ok(
+      raw.includes("unique (user_id, installation_key_id)"),
+      "a device is keyed by owner + installation key",
+    );
+    ok(
+      raw.includes("attestation_environment in ('production', 'development')") &&
+        raw.includes("attestation_state in ('attested', 'unattested')") &&
+        raw.includes("(attestation_state = 'attested') = (attested_at is not null)"),
+      "device attestation is an explicit environment + state pair",
+    );
+
+    // Grants: the lease is bounded at the table — never longer than 7 days,
+    // never past the verified entitlement expiry, never mutated after issue.
+    ok(
+      raw.includes("entitlement_source in ('identity_lifetime_free', 'verified_store')"),
+      "a grant names its entitlement source",
+    );
+    ok(
+      /constraint offline_grants_bounded_lease\s+check \(expires_at > issued_at and expires_at <= issued_at \+ interval '7 days'\)/.test(
+        raw,
+      ),
+      "a grant never outlives issued_at + 7 days",
+    );
+    ok(
+      /constraint offline_grants_within_entitlement\s+check \(entitlement_expires_at is null or expires_at <= entitlement_expires_at\)/.test(
+        raw,
+      ),
+      "a grant never outlives the verified entitlement",
+    );
+    ok(raw.includes("unique (device_id, generation)"), "grant generations are unique per device");
+    const [grantGuard] = functionBodies(raw, "guard_offline_grant");
+    ok(grantGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_grant`);
+    ok(
+      grantGuard.includes("security definer") && grantGuard.includes("set search_path = ''"),
+      "the grant guard is a pinned definer (it reads billing_entitlements and the device)",
+    );
+    ok(
+      grantGuard.includes("tg_op = 'update'") &&
+        grantGuard.includes("b.premium and (b.expires_at is null or b.expires_at > now())") &&
+        grantGuard.includes("new.entitlement_expires_at is distinct from") &&
+        grantGuard.includes("d.attestation_state = 'attested'") &&
+        grantGuard.includes("errcode = 'check_violation'"),
+      "the grant guard refuses mutation, unverified/stale Pro leases, a mis-recorded entitlement expiry and unattested devices",
+    );
+    ok(
+      statements.includes(
+        "create trigger offline_grants_guard before insert or update on public.offline_grants for each row execute function public.guard_offline_grant()",
+      ),
+      "every grant write passes the guard",
+    );
+
+    // Ledger: append-only for every role, one event per (ticket, kind),
+    // consumption names exactly one delivered scored shot, release names a
+    // reason; no FK to the account so deletion never erases accounting.
+    ok(
+      raw.includes("event in ('allocated', 'consumed', 'released')") &&
+        raw.includes("(event = 'consumed') = (shot_id is not null)") &&
+        raw.includes("(event = 'released') = (reason is not null)") &&
+        raw.includes("unique (ticket_id, event)"),
+      "the ledger vocabulary is allocated | consumed | released with shape rules",
+    );
+    // ATK-05 (round 6): consumed and released are different words under
+    // (ticket_id, event), so a consume racing a release on one ticket could
+    // append both. One terminal event per ticket is a TABLE invariant.
+    ok(
+      statements.includes(
+        "create unique index if not exists offline_allocation_ledger_one_terminal_idx on public.offline_allocation_ledger (ticket_id) where event in ('consumed', 'released')",
+      ),
+      "the ledger holds at most one terminal event per ticket (unique partial index over consumed | released)",
+    );
+    ok(
+      /create table if not exists public\.offline_allocation_ledger \([\s\S]*?installation_key_id text not null[\s\S]*?\n\);/.test(
+        raw,
+      ) &&
+        /constraint offline_allocation_ledger_installation_key_bounds\s+check \(installation_key_id ~ '\^\[A-Za-z0-9\]\[A-Za-z0-9\._:-\]\{0,127\}\$'\)/.test(
+          raw,
+        ),
+      "every ledger row names the installation that holds the ticket, so recovery does not depend on the (cascading) device row",
+    );
+    ok(
+      statements.some((s) =>
+        /^create unique index if not exists offline_allocation_ledger_shot_idx on public\.offline_allocation_ledger \(shot_id\) where shot_id is not null$/.test(
+          s,
+        ),
+      ),
+      "a delivered shot consumes at most one ticket",
+    );
+    ok(
+      statements.some((s) =>
+        s.startsWith(
+          "create index if not exists offline_allocation_ledger_user_event_idx on public.offline_allocation_ledger (user_id, event",
+        ),
+      ) &&
+        statements.some((s) =>
+          s.startsWith(
+            "create index if not exists offline_allocation_ledger_ticket_idx on public.offline_allocation_ledger (ticket_id",
+          ),
+        ) &&
+        statements.some((s) =>
+          s.startsWith(
+            "create index if not exists offline_allocation_ledger_identity_idx on public.offline_allocation_ledger using gin (identity_hashes)",
+          ),
+        ),
+      "the ledger is indexed for owner, ticket and identity lookups",
+    );
+    const ledgerTable = raw.slice(
+      raw.search(/create table if not exists public\.offline_allocation_ledger \(/),
+    );
+    const ledgerBody = ledgerTable.slice(0, ledgerTable.search(/\n\);/));
+    ok(
+      !/\breferences\b/.test(ledgerBody),
+      "the ledger carries no foreign key — account deletion, device deletion and grant expiry never erase it",
+    );
+    const [appendOnly] = functionBodies(raw, "guard_offline_ledger_append_only");
+    ok(appendOnly, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_ledger_append_only`);
+    ok(
+      appendOnly.includes("raise exception") && appendOnly.includes("errcode = 'check_violation'"),
+      "the ledger refuses UPDATE and DELETE for every role",
+    );
+    ok(
+      statements.includes(
+        "create trigger offline_allocation_ledger_append_only before update or delete on public.offline_allocation_ledger for each row execute function public.guard_offline_ledger_append_only()",
+      ),
+      "the append-only guard is wired",
+    );
+    const [eventGuard] = functionBodies(raw, "guard_offline_ledger_event");
+    ok(eventGuard, `${OFFLINE_DEVICE_GRANTS} must define public.guard_offline_ledger_event`);
+    ok(
+      eventGuard.includes("security definer") && eventGuard.includes("set search_path = ''"),
+      "the event guard is a pinned definer",
+    );
+    // The guard's terminal check is read-committed; it reads under the ticket
+    // lock so a concurrent writer's terminal row is seen once it commits.
+    ok(
+      eventGuard.includes(
+        "pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(new.ticket_id))",
+      ) &&
+        eventGuard.indexOf("offline_ticket_lock_key(new.ticket_id)") <
+          eventGuard.indexOf("t.event in ('consumed', 'released')"),
+      "the event guard serializes a terminal event per ticket before checking for an existing one",
+    );
+    ok(
+      eventGuard.includes("new.event = 'allocated'") &&
+        eventGuard.includes("t.event in ('consumed', 'released')") &&
+        eventGuard.includes("s.result_kind = 'scored'") &&
+        eventGuard.includes("s.analysis_permit_id is null") &&
+        eventGuard.includes("s.offline_ticket_id = new.ticket_id") &&
+        eventGuard.includes("s.user_id = new.user_id") &&
+        eventGuard.includes("reason in ('unused_ticket_returned', 'support_review')"),
+      "consumption and release require a prior allocation with no terminal event; consumption names a scored, permit-free shot of the same owner that RECORDS this ticket; release names an explicit reason",
+    );
+    // A02/A03 (round 6): chargeability is the server-written ticket ↔ shot
+    // binding (shots.offline_ticket_id, set only under the settlement RPC's
+    // vouch) — never a comparison against the client-writable created_at,
+    // never the absence of a permit link on a row an online permit admitted.
+    ok(
+      !eventGuard.includes("created_at >=") && !eventGuard.includes("created_at <"),
+      "the table never infers chargeability from shots.created_at (a client-writable column)",
+    );
+    ok(
+      statements.includes(
+        "alter table public.shots add column if not exists offline_ticket_id uuid",
+      ) &&
+        statements.includes(
+          "create unique index if not exists shots_offline_ticket_unique on public.shots (offline_ticket_id) where offline_ticket_id is not null",
+        ) &&
+        /alter table public\.shots add constraint shots_one_settlement check \(\s*analysis_permit_id is null or offline_ticket_id is null\s*\) not valid/.test(
+          raw.toLowerCase(),
+        ),
+      "shots.offline_ticket_id exists, is unique when set (one ticket pays for at most one shot for every role) and is never set beside analysis_permit_id",
+    );
+
+    // The shots gate (recreated here): both settlement links are the RPC
+    // vouches' to write, a direct client INSERT leaves both NULL, and every
+    // client-session scored row is budgeted against lifetime scored + online
+    // reservations + outstanding offline holds under the identity lock.
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(gate, `${OFFLINE_DEVICE_GRANTS} must recreate public.enforce_scored_shot_permit`);
+    ok(
+      gate.includes("pg_catalog.current_setting('pickle.sync_permit_id', true)") &&
+        gate.includes("pg_catalog.current_setting('pickle.offline_ticket_id', true)") &&
+        gate.includes("new.analysis_permit_id := v_vouched") &&
+        gate.includes("new.offline_ticket_id := v_ticket") &&
+        gate.includes("(v_vouched is null or new.analysis_permit_id <> v_vouched)") &&
+        gate.includes("(v_ticket is null or new.offline_ticket_id <> v_ticket)") &&
+        gate.includes("if v_vouched is not null and v_ticket is not null then"),
+      "the gate writes analysis_permit_id / offline_ticket_id only from the transaction-local vouches, refuses a client-named link, and never records both",
+    );
+    ok(
+      gate.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))") &&
+        gate.includes("public.lifetime_scored_count()") &&
+        gate.includes("public.online_reservation_count()") &&
+        gate.includes("public.offline_hold_count()") &&
+        /p\.status = 'reserved'/.test(gate) &&
+        gate.includes("interval '24 hours'") &&
+        !gate.includes("created_at >="),
+      "a direct client INSERT still needs a live (< 24h) reserved permit AND lifetime scored + online reservations + offline holds < 2 under the identity lock; the gate never reads a client timestamp for chargeability",
+    );
+    ok(
+      gate.includes("a.ticket_id = v_ticket") &&
+        gate.includes("a.event = 'allocated'") &&
+        gate.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) &&
+        gate.includes("t.event in ('consumed', 'released')") &&
+        gate.includes("public.permit_backs_sync(p.status, p.outcome)") &&
+        gate.includes("errcode = 'pkp01'") &&
+        gate.includes("errcode = 'pkp02'"),
+      "under the ticket vouch the row must settle an outstanding allocation the caller owns; under the permit vouch exactly that permit must back it (PKP01) within the allowance (PKP02)",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+      ),
+      "the recreated gate stays non-executable by clients",
+    );
+    const [sync] = functionBodies(raw, "apply_synced_shot");
+    ok(sync, `${OFFLINE_DEVICE_GRANTS} must recreate public.apply_synced_shot`);
+    ok(
+      sync.includes("public.lifetime_scored_count() + public.offline_hold_count() >= 2") &&
+        sync.includes("public.permit_backs_sync(") &&
+        sync.includes("set_config('pickle.sync_permit_id', v_permit_id::text, true)") &&
+        !sync.includes("interval '24 hours'") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(sync),
+      "apply_synced_shot's backstop counts lifetime scored + outstanding offline holds, honours permit_backs_sync at any age, and vouches for the one permit it consumes",
+    );
+    ok(
+      eventGuard.includes(
+        `${OFFLINE_OWNER_PREDICATE}v_allocation.user_id, v_allocation.identity_hashes, v_allocation.ticket_id, new.user_id)`,
+      ) &&
+        !eventGuard.includes("new.user_id is distinct from v_allocation.user_id") &&
+        eventGuard.includes(
+          "new.installation_key_id is distinct from v_allocation.installation_key_id",
+        ),
+      "a terminal event may be written by the allocation's account OR the same sign-in identity (original-owner recovery after account re-creation), never by another owner, and always on the allocation's installation key",
+    );
+    ok(
+      eventGuard.includes("new.installation_key_id := ") &&
+        eventGuard.includes("from public.offline_devices d") &&
+        eventGuard.includes("d.id = new.device_id"),
+      "an allocation inherits its installation key from the registered device it was issued to",
+    );
+
+    // The ownership predicate and the identity reader live in api_private,
+    // pinned definers no client role can call.
+    for (const helper of [
+      "offline_identity_hashes(uuid)",
+      "offline_ticket_owned_by(uuid, text[], uuid, uuid)",
+      "offline_owned_allocations(uuid)",
+    ]) {
+      const [body] = apiPrivateFunctionBodies(raw, helper.split("(")[0]);
+      ok(body, `${OFFLINE_DEVICE_GRANTS} must define api_private.${helper}`);
+      ok(
+        body.includes("security definer") && body.includes("set search_path = ''"),
+        `api_private.${helper} is a pinned definer`,
+      );
+      ok(
+        statements.includes(
+          `revoke all on function api_private.${helper} from public, anon, authenticated, service_role`,
+        ),
+        `api_private.${helper} is not executable by any client or service role`,
+      );
+    }
+    // The per-ticket lock key: a per-CALLER key cannot serialize two recovered
+    // accounts that own the same ticket. Not callable by any client role.
+    const [ticketLockKey] = apiPrivateFunctionBodies(raw, "offline_ticket_lock_key");
+    ok(ticketLockKey, `${OFFLINE_DEVICE_GRANTS} must define api_private.offline_ticket_lock_key`);
+    ok(
+      ticketLockKey.includes("immutable") &&
+        ticketLockKey.includes("set search_path = ''") &&
+        ticketLockKey.includes(
+          "pg_catalog.hashtextextended('pickle.offline_ticket:' || p_ticket_id::text, 0)",
+        ) &&
+        statements.includes(
+          "revoke all on function api_private.offline_ticket_lock_key(uuid) from public, anon, authenticated, service_role",
+        ),
+      "api_private.offline_ticket_lock_key(uuid) is an immutable ticket-scoped key distinct from access_lock_key(uid), executable by no client or service role",
+    );
+    const [identityHashes] = apiPrivateFunctionBodies(raw, "offline_identity_hashes");
+    ok(
+      identityHashes.includes("public.free_rating_identity_hash(i.provider, i.provider_id)") &&
+        identityHashes.includes("from auth.identities i"),
+      "identities are hashed exactly like the free-rating ledger (sha256 of provider:provider_id)",
+    );
+    const [ownedBy] = apiPrivateFunctionBodies(raw, "offline_ticket_owned_by");
+    ok(
+      ownedBy.includes("p_allocation_user_id = p_uid") &&
+        ownedBy.includes("p_identity_hashes && api_private.offline_identity_hashes(p_uid)") &&
+        ownedBy.includes(`from public.${OFFLINE_LINK_TABLE} l`) &&
+        ownedBy.includes("l.ticket_id = p_ticket_id") &&
+        ownedBy.includes("l.identity_hash = any(api_private.offline_identity_hashes(p_uid))"),
+      "ownership = same account OR overlapping sign-in identity at allocation OR an identity linked to the holder afterwards",
+    );
+    const [ownedAllocations] = apiPrivateFunctionBodies(raw, "offline_owned_allocations");
+    ok(
+      ownedAllocations.includes("a.event = 'allocated'") &&
+        ownedAllocations.includes("a.user_id = p_uid") &&
+        ownedAllocations.includes("a.identity_hashes &&") &&
+        ownedAllocations.includes(`from public.${OFFLINE_LINK_TABLE} l`) &&
+        /\bunion\b/.test(ownedAllocations),
+      "the caller's allocations are the union of account, allocation-time identity and late-linked identity matches",
+    );
+    ok(
+      statements.includes(
+        "create trigger offline_allocation_ledger_guard_event before insert on public.offline_allocation_ledger for each row execute function public.guard_offline_ledger_event()",
+      ),
+      "every ledger append passes the event guard",
+    );
+    for (const guard of [
+      "guard_offline_grant()",
+      "guard_offline_ledger_append_only()",
+      "guard_offline_ledger_event()",
+    ]) {
+      ok(
+        statements.includes(
+          `revoke execute on function public.${guard} from public, anon, authenticated`,
+        ),
+        `public.${guard} must not be executable by clients`,
+      );
+    }
+
+    // No automatic reclaim: nothing in the migration schedules or performs a
+    // release/delete on the ledger by time, and the grant expiry is the only
+    // clock the migration reads for a grant.
+    for (const statement of statements) {
+      ok(
+        !statement.includes("cron.schedule"),
+        `${OFFLINE_DEVICE_GRANTS} must not schedule a sweep: ${statement}`,
+      );
+      ok(
+        !/^(update|delete from) public\.offline_allocation_ledger\b/.test(statement),
+        `${OFFLINE_DEVICE_GRANTS} must never rewrite the ledger: ${statement}`,
+      );
+    }
+    ok(
+      !/expires_at\s*<\s*now\(\)[\s\S]{0,200}(released|delete)/.test(raw) &&
+        !/(released|delete)[\s\S]{0,200}expires_at\s*<\s*now\(\)/.test(raw),
+      "an expired grant never releases or deletes an allocation",
+    );
+
+    // The hold reader: a pinned definer, API-gated, caller-scoped by account
+    // AND identity, counting allocated-but-not-consumed tickets (a released
+    // ticket stays part of the entitlement).
+    const [hold] = functionBodies(raw, "offline_hold_count");
+    ok(hold, `${OFFLINE_DEVICE_GRANTS} must define public.offline_hold_count`);
+    ok(
+      hold.includes("security definer") &&
+        hold.includes("set search_path = ''") &&
+        hold.includes("api_private.is_api_request()") &&
+        hold.includes("(select auth.uid())") &&
+        hold.includes("api_private.offline_owned_allocations((select auth.uid()))") &&
+        hold.includes("c.event = 'consumed'") &&
+        !hold.includes("'released'"),
+      "offline_hold_count() counts outstanding + released tickets across the caller's account, allocation-time and late-linked identities behind the API gate",
+    );
+    ok(
+      statements.includes(
+        "revoke all on function public.offline_hold_count() from public, anon, service_role",
+      ) &&
+        statements.includes(
+          "grant execute on function public.offline_hold_count() to authenticated",
+        ),
+      "offline_hold_count() is granted to authenticated only — the service connection never reads as a user",
+    );
+
+    // The ONE reservation reader (c2 A01/A09): the live permits — still
+    // 'reserved' and younger than 24 h, the set access_state() and
+    // reserve_analysis_permit() have always counted — not yet settled by a
+    // shot. Every budget decision reads THIS function, so no permit can be a
+    // reservation to the allocator and not to the online path (or vice versa);
+    // a stale/swept permit's late sync answers to apply_synced_shot()'s
+    // backstop instead.
+    const [reservations] = functionBodies(raw, "online_reservation_count");
+    ok(reservations, `${OFFLINE_DEVICE_GRANTS} must define public.online_reservation_count`);
+    ok(
+      reservations.includes("security invoker") &&
+        reservations.includes("set search_path = ''") &&
+        /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(
+          reservations,
+        ) &&
+        reservations.includes("select 1 from public.shots s where s.analysis_permit_id = p.id") &&
+        !reservations.includes("permit_backs_sync"),
+      "online_reservation_count() counts the caller's live (reserved, < 24 h) permits not yet settled by a shot — the pre-existing reservation rule, never the late-backing rule",
+    );
+    ok(
+      statements.includes(
+        "revoke all on function public.online_reservation_count() from public, anon, service_role",
+      ) &&
+        statements.includes(
+          "grant execute on function public.online_reservation_count() to authenticated",
+        ),
+      "online_reservation_count() is granted to authenticated only",
+    );
+
+    // Conservation: both online decision points count the online reservations
+    // AND the offline holds under the same identity-scoped advisory lock,
+    // still through lifetime_scored_count().
+    for (const name of ["access_state", "reserve_analysis_permit"] as const) {
+      const [body] = functionBodies(raw, name);
+      ok(body, `${OFFLINE_DEVICE_GRANTS} must redefine public.${name} to count offline holds`);
+      ok(
+        body.includes("public.lifetime_scored_count()") &&
+          body.includes("public.online_reservation_count()") &&
+          body.includes("public.offline_hold_count()") &&
+          !body.includes("interval '24 hours'") &&
+          !/p\.status\s*=\s*'reserved'/.test(body) &&
+          !body.includes("permit_backs_sync"),
+        `public.${name} must count lifetime scored + online_reservation_count() + offline holds — never its own permit predicate`,
+      );
+      ok(
+        !/security\s+definer/.test(body.slice(0, body.indexOf("$$"))),
+        `public.${name} stays invoker`,
+      );
+    }
+    const [reserve] = functionBodies(raw, "reserve_analysis_permit");
+    ok(
+      reserve.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
+      "reserve_analysis_permit keeps the identity-scoped lock",
+    );
+    ok(
+      reserve.includes("if not v_premium and v_remaining <= v_reserved + v_held then"),
+      "reserve_analysis_permit refuses when scored + reserved + held exhaust the entitlement",
+    );
+
+    // The mutating RPCs: pinned definers bound to a live API session, granted
+    // to authenticated, caller-scoped, and every allocation decision runs
+    // under the same advisory lock the online path holds.
+    for (const name of OFFLINE_MUTATING_RPCS) {
+      const [body] = functionBodies(raw, name);
+      ok(body, `${OFFLINE_DEVICE_GRANTS} must define public.${name}`);
+      ok(
+        body.includes("security definer") && body.includes("set search_path = ''"),
+        `public.${name} is a pinned definer`,
+      );
+      ok(
+        body.includes("api_private.is_active_session()") &&
+          body.includes("errcode = 'insufficient_privilege'"),
+        `public.${name} binds to a live API session and fails closed`,
+      );
+      ok(body.includes("(select auth.uid())"), `public.${name} scopes to the caller`);
+      // R7b: the hosted default leaves service_role EXECUTE on every new
+      // function; a definer that trusts the session claims would then let
+      // the service connection act as any user. Revoke it explicitly.
+      ok(
+        statements.some(
+          (s) =>
+            s.startsWith(`revoke all on function public.${name}(`) &&
+            s.endsWith(" from public, anon, service_role"),
+        ) &&
+          statements.some(
+            (s) =>
+              s.startsWith(`grant execute on function public.${name}(`) &&
+              s.endsWith(" to authenticated"),
+          ),
+        `public.${name} is executable by authenticated only (never service_role)`,
+      );
+      ok(
+        !statements.some(
+          (s) =>
+            s.startsWith(`grant execute on function public.${name}(`) &&
+            /\b(service_role|anon|public)\b/.test(s.split(" to ").pop() ?? ""),
+        ),
+        `public.${name} is never granted back to a non-user role`,
+      );
+    }
+    // ATK-01 (round 6): FOR UPDATE on a row that does not exist yet locks
+    // nothing, so a double submit of a first registration raised 23505. The
+    // check-then-insert runs under the caller lock, and a unique violation
+    // from a writer outside the lock is adopted, never surfaced.
+    const [registerDevice] = functionBodies(raw, "register_offline_device");
+    ok(registerDevice, `${OFFLINE_DEVICE_GRANTS} must define public.register_offline_device`);
+    ok(
+      registerDevice.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))") &&
+        registerDevice.indexOf("pg_advisory_xact_lock(public.access_lock_key(v_uid))") <
+          registerDevice.indexOf("insert into public.offline_devices") &&
+        registerDevice.includes("when unique_violation then"),
+      "register_offline_device serializes its check-then-insert under the caller lock and never surfaces a unique violation for a double submit",
+    );
+    const [issue] = functionBodies(raw, "issue_offline_grant");
+    ok(
+      issue.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
+      "issue_offline_grant allocates under the identity-scoped lock",
+    );
+    ok(
+      issue.includes("public.lifetime_scored_count()") &&
+        issue.includes("public.offline_hold_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(issue),
+      "issue_offline_grant budgets through lifetime_scored_count() + offline holds + live reservations",
+    );
+    // c2 A01/A09: the allocator and the online path must never disagree about
+    // a permit, so the allocator reads the shared reservation reader rather
+    // than carrying a permit predicate of its own.
+    ok(
+      issue.includes("public.online_reservation_count()") &&
+        !issue.includes("permit_backs_sync") &&
+        !issue.includes("interval '24 hours'") &&
+        !/p\.status\s*=\s*'reserved'/.test(issue),
+      "issue_offline_grant counts reservations through online_reservation_count() — the same reader as access_state()/reserve_analysis_permit()",
+    );
+    ok(
+      issue.includes("interval '7 days'") &&
+        issue.includes("least(") &&
+        issue.includes("b.premium and (b.expires_at is null or b.expires_at > now())"),
+      "a Pro lease is min(issued + 7 days, verified entitlement expiry) and only for an effective entitlement",
+    );
+    ok(
+      issue.includes("'identity_lifetime_free'") && issue.includes("'verified_store'"),
+      "issue_offline_grant names both entitlement sources",
+    );
+    ok(
+      issue.includes("'access.paywall_required'"),
+      "an exhausted free identity gets the paywall result, never a new ticket",
+    );
+    // Original-installation recovery: the outstanding tickets a refresh
+    // re-issues are looked up by installation key + ownership (account OR
+    // identity), not by the device row that account deletion cascades away.
+    ok(
+      issue.includes("a.installation_key_id = v_device.installation_key_id") &&
+        issue.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) &&
+        !issue.includes("a.device_id = v_device.id"),
+      "issue_offline_grant recovers the same installation's outstanding tickets across account re-creation",
+    );
+    const [consume] = functionBodies(raw, "consume_offline_ticket");
+    ok(
+      consume.includes("'offline.ticket_consumed'") &&
+        consume.includes("'offline.ticket_released'") &&
+        consume.includes("'offline.shot_not_chargeable'") &&
+        consume.includes("'offline.ticket_not_found'"),
+      "consume_offline_ticket answers every terminal state distinctly",
+    );
+    // A02/A03 (round 6): the settlement RPC WRITES the rating it charges, under
+    // its own ticket vouch, in the same transaction as the consumed event. A
+    // shot the server already holds — online-synced, direct, or counted before
+    // the ticket existed — is never chargeable, whatever its created_at says.
+    ok(
+      consume.includes("set_config('pickle.offline_ticket_id', p_ticket_id::text, true)") &&
+        consume.includes("set_config('pickle.offline_ticket_id', '', true)") &&
+        /insert into public\.shots \([\s\S]*?offline_ticket_id/.test(consume) &&
+        consume.includes("if exists (select 1 from public.shots s where s.id = v_id) then") &&
+        consume.includes("p_ticket_id, 'consumed', v_id") &&
+        !consume.includes("created_at >=") &&
+        !consume.includes("created_at <"),
+      "consume_offline_ticket writes the shot with offline_ticket_id under its vouch and appends the consumed event atomically; a pre-existing shot is never chargeable and no client timestamp decides chargeability",
+    );
+    ok(
+      consume.includes("if v_result_kind is distinct from 'scored' then") &&
+        consume.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
+      "consume_offline_ticket charges scored ratings only and settles under the identity lock",
+    );
+    // ATK-06 (round 6): a loser whose shot id exists nowhere must be told the
+    // TICKET's verdict, never shot.id_conflict — the unique-violation fallback
+    // re-reads the ticket's terminal row before judging the shot id.
+    ok(
+      consume.lastIndexOf("t.event in ('consumed', 'released')") >
+        consume.indexOf("when unique_violation then") &&
+        consume.lastIndexOf("'offline.ticket_consumed'") >
+          consume.indexOf("when unique_violation then") &&
+        consume.lastIndexOf("'offline.ticket_released'") >
+          consume.indexOf("when unique_violation then") &&
+        consume.lastIndexOf("t.event in ('consumed', 'released')") <
+          consume.lastIndexOf("return 'shot.id_conflict'"),
+      "consume_offline_ticket's unique-violation fallback answers the ticket's terminal state before it ever calls a shot id conflict",
+    );
+    ok(
+      statements.includes(
+        "grant execute on function public.consume_offline_ticket(uuid, jsonb) to authenticated",
+      ),
+      "consume_offline_ticket takes the rating payload (uuid, jsonb), not a reference to a row the client wrote first",
+    );
+    const [release] = functionBodies(raw, "release_offline_ticket");
+    ok(
+      release.includes("'offline.ticket_consumed'") &&
+        release.includes("'offline.ticket_not_found'"),
+      "release_offline_ticket never releases a consumed ticket",
+    );
+    for (const [name, body] of [
+      ["consume_offline_ticket", consume],
+      ["release_offline_ticket", release],
+    ] as const) {
+      ok(
+        body.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) && !body.includes("a.user_id = v_uid"),
+        `public.${name} addresses the caller's tickets by account OR identity (allocation-time or late-linked)`,
+      );
+      // ATK-05 (round 6): identity recovery makes one ticket owned by two
+      // uids, so the per-caller lock alone let a consume and a release both
+      // append. Both terminal RPCs take the per-TICKET lock, in one order
+      // (caller lock first, ticket lock second — no deadlock between the two
+      // keys), BEFORE reading the ticket's allocation or terminal state.
+      const callerLock = body.indexOf("pg_advisory_xact_lock(public.access_lock_key(v_uid))");
+      const ticketLock = body.indexOf(
+        "pg_catalog.pg_advisory_xact_lock(api_private.offline_ticket_lock_key(p_ticket_id))",
+      );
+      ok(
+        callerLock >= 0 &&
+          ticketLock > callerLock &&
+          ticketLock < body.indexOf("a.ticket_id = p_ticket_id") &&
+          ticketLock < body.indexOf("t.event in ('consumed', 'released')"),
+        `public.${name} takes the per-ticket lock after the caller lock and before reading the ticket`,
+      );
+    }
+    ok(
+      release.includes("p_reason <> 'unused_ticket_returned'") &&
+        !release.includes("'support_review'"),
+      "a client can only return an unused ticket — support_review is an audit reason it never self-asserts",
+    );
+
+    // Nothing later reopens any of this.
+    for (const later of after(chain, OFFLINE_DEVICE_GRANTS)) {
+      for (const trigger of [
+        "offline_grants_guard",
+        "offline_allocation_ledger_append_only",
+        "offline_allocation_ledger_guard_event",
+        `${OFFLINE_LINK_TABLE}_append_only`,
+        `${OFFLINE_LINK_TABLE}_guard`,
+        "offline_holds_on_identity_link",
+      ]) {
+        ok(!dropsTriggerWithoutRecreating(later, trigger), `${later.file} removes ${trigger}`);
+      }
+      for (const statement of later.statements) {
+        for (const table of [...OFFLINE_TABLES, OFFLINE_LINK_TABLE]) {
+          ok(
+            !(
+              statement.startsWith("drop table") &&
+              new RegExp(`\\bpublic\\.${table}\\b`).test(statement)
+            ),
+            `${later.file} drops public.${table}`,
+          );
+          ok(
+            !(
+              statement.startsWith("grant ") &&
+              new RegExp(`\\bpublic\\.${table}\\b`).test(statement) &&
+              /\b(insert|update|delete|all)\b/.test(statement.split(" on ")[0]) &&
+              /\b(anon|authenticated|public)\b/.test(statement.split(" to ").pop() ?? "")
+            ),
+            `${later.file} grants client writes on public.${table}: ${statement}`,
+          );
+        }
+      }
+    }
+  },
+);
+
+Deno.test(
+  "offline grants (W04-06): a registered 'unattested' or 'attested' installation is issued a grant that records its attestation state; a revoked device stays refused; nothing security-relevant is loosened",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === OFFLINE_UNATTESTED_GRANTS);
+    ok(migration, `${OFFLINE_UNATTESTED_GRANTS} must exist (forward migration, never an edit)`);
+    const { raw, statements } = migration;
+    ok(
+      chain.indexOf(migration) === chain.length - 1 ||
+        chain.indexOf(migration) > chain.findIndex((m) => m.file === OFFLINE_DEVICE_GRANTS),
+      "the forward migration sorts after the offline grants migration",
+    );
+    const original = chain.find((m) => m.file === OFFLINE_DEVICE_GRANTS);
+    ok(original, `${OFFLINE_DEVICE_GRANTS} must exist`);
+    ok(
+      original.raw.includes("'offline.device_not_attested'") &&
+        !raw.includes("'offline.device_not_attested'"),
+      "the forward migration no longer refuses an unattested installation",
+    );
+
+    // The grant row records the state it was issued under; both device states
+    // are valid, nothing else is.
+    ok(
+      statements.includes(
+        "alter table public.offline_grants add column if not exists attestation_state text not null default 'attested'",
+      ) &&
+        statements.includes(
+          "alter table public.offline_grants alter column attestation_state drop default",
+        ),
+      "existing grants (issued only to attested devices) are backfilled truthfully and new rows must state their attestation explicitly",
+    );
+    ok(
+      statements.includes(
+        "alter table public.offline_grants add constraint offline_grants_attestation_state check (attestation_state in ('attested', 'unattested'))",
+      ),
+      "a grant's attestation state is one of the two device states",
+    );
+    ok(
+      statements.includes(
+        "alter table public.offline_devices add column if not exists revoked_at timestamptz",
+      ),
+      "a device carries an explicit revocation timestamp",
+    );
+
+    // Guard: owner + device bound, revoked refused, state stamped from the
+    // device (never a caller's word), Pro lease bounds and immutability kept.
+    const [guard] = functionBodies(raw, "guard_offline_grant");
+    ok(guard, `${OFFLINE_UNATTESTED_GRANTS} must redefine public.guard_offline_grant`);
+    ok(
+      guard.includes("security definer") && guard.includes("set search_path = ''"),
+      "the grant guard stays a pinned definer",
+    );
+    ok(
+      guard.includes("where d.id = new.device_id and d.user_id = new.user_id") &&
+        guard.includes("v_device.revoked_at is not null") &&
+        guard.includes("v_device.attestation_state not in ('attested', 'unattested')") &&
+        guard.includes("new.attestation_state := v_device.attestation_state") &&
+        guard.includes("new.attestation_state is distinct from v_device.attestation_state") &&
+        guard.includes("tg_op = 'update'") &&
+        guard.includes("b.premium and (b.expires_at is null or b.expires_at > now())") &&
+        guard.includes("new.entitlement_expires_at is distinct from") &&
+        guard.includes("errcode = 'check_violation'") &&
+        !guard.includes("d.attestation_state = 'attested'"),
+      "the grant guard binds owner + device, refuses a revoked device, records the device's actual state and keeps every Pro/immutability check",
+    );
+    ok(
+      !dropsTriggerWithoutRecreating(migration, "offline_grants_guard") &&
+        !statements.some((s) => s.startsWith("drop trigger")),
+      "the offline_grants_guard trigger (before insert or update) keeps firing the redefined guard",
+    );
+    ok(
+      statements.includes(
+        "revoke execute on function public.guard_offline_grant() from public, anon, authenticated",
+      ),
+      "the guard is not executable by clients",
+    );
+
+    // RPC: same session binding, lock, budget and lease bounds as before; a
+    // revoked device gets its own refusal; the row reports the recorded state.
+    const [issue] = functionBodies(raw, "issue_offline_grant");
+    ok(issue, `${OFFLINE_UNATTESTED_GRANTS} must redefine public.issue_offline_grant`);
+    ok(
+      statements.includes("drop function if exists public.issue_offline_grant(text, integer)"),
+      "the return table changes, so the function is dropped and recreated (not replaced in place)",
+    );
+    ok(
+      /returns table \([\s\S]*?attestation_state text[\s\S]*?\)/.test(issue),
+      "issue_offline_grant reports the attestation state the grant records",
+    );
+    ok(
+      issue.includes("security definer") &&
+        issue.includes("set search_path = ''") &&
+        issue.includes("api_private.is_active_session()") &&
+        issue.includes("errcode = 'insufficient_privilege'") &&
+        issue.includes("(select auth.uid())") &&
+        issue.includes("pg_catalog.pg_advisory_xact_lock(public.access_lock_key(v_uid))"),
+      "issue_offline_grant stays a session-bound, caller-scoped definer under the identity lock",
+    );
+    ok(
+      issue.includes("'offline.device_not_registered'") &&
+        issue.includes("v_device.revoked_at is not null") &&
+        issue.includes("'offline.device_revoked'") &&
+        issue.indexOf("'offline.device_revoked'") < issue.indexOf("pg_advisory_xact_lock"),
+      "a missing device is not registered and a revoked device is refused before any allocation work",
+    );
+    ok(
+      issue.includes("public.lifetime_scored_count()") &&
+        issue.includes("public.online_reservation_count()") &&
+        issue.includes("public.offline_hold_count()") &&
+        !/count\(\*\)[^;]*from public\.shots/.test(issue) &&
+        issue.includes("'access.paywall_required'"),
+      "free tickets are still budgeted through lifetime_scored_count() + online reservations + offline holds",
+    );
+    ok(
+      issue.includes("interval '7 days'") &&
+        issue.includes("least(") &&
+        issue.includes("b.premium and (b.expires_at is null or b.expires_at > now())"),
+      "a Pro lease is still min(issued + 7 days, verified entitlement expiry) for an effective entitlement only",
+    );
+    ok(
+      (issue.match(/v_device\.attestation_state/g) ?? []).length >= 2 &&
+        !issue.includes("'attested'::text") &&
+        !/attestation_state\s*:=\s*'attested'/.test(issue),
+      "every inserted grant records the device's actual attestation state — never a literal 'attested'",
+    );
+    ok(
+      issue.includes("a.installation_key_id = v_device.installation_key_id") &&
+        issue.includes(
+          `${OFFLINE_OWNER_PREDICATE}a.user_id, a.identity_hashes, a.ticket_id, v_uid)`,
+        ) &&
+        !issue.includes("a.device_id = v_device.id"),
+      "original-installation recovery is unchanged",
+    );
+    ok(
+      statements.some(
+        (s) =>
+          s.startsWith("revoke all on function public.issue_offline_grant(") &&
+          s.endsWith(" from public, anon, service_role"),
+      ) &&
+        statements.some(
+          (s) =>
+            s.startsWith("grant execute on function public.issue_offline_grant(") &&
+            s.endsWith(" to authenticated"),
+        ),
+      "issue_offline_grant is executable by authenticated only (never service_role)",
+    );
+
+    // Nothing is loosened: no new client write grant, no policy, no widened
+    // register path, and nobody can self-clear a revocation.
+    ok(
+      !statements.some((s) => s.startsWith("create policy")) &&
+        !statements.some((s) => s.startsWith("drop policy")) &&
+        !statements.some(
+          (s) => s.startsWith("alter table") && s.includes("disable row level security"),
+        ),
+      "the forward migration touches no RLS policy",
+    );
+    ok(
+      !statements.some(
+        (s) =>
+          s.startsWith("grant ") &&
+          /\b(insert|update|delete|all)\b/.test(s.split(" on ")[0]) &&
+          /\b(anon|authenticated|public)\b/.test(s.split(" to ").pop() ?? ""),
+      ),
+      "the forward migration grants no client table write",
+    );
+    ok(
+      functionBodies(raw, "register_offline_device").length === 0,
+      "registration is unchanged — re-registering never clears a revocation",
+    );
+    ok(
+      !raw.toLowerCase().includes("revoked_at = null") &&
+        !raw.toLowerCase().includes("revoked_at := null"),
+      "nothing in the forward migration clears a revocation",
+    );
+  },
+);
+
 Deno.test(
   "combined audit: webhook lifecycle grants never permit completed audit mutation",
   async () => {
@@ -1288,5 +2511,143 @@ Deno.test(
         `${later.file} removes audit immutability`,
       );
     }
+  },
+);
+
+// ─── The lifetime free-rating allowance is ONE, defined once ─────────────────
+
+/** Product decision 2026-09-10: one lifetime free rating per sign-in identity
+ * (two before). The allowance is public.free_rating_limit(), read by every
+ * decision point; the Edge Function mirrors it as FREE_RATING_LIMIT. */
+const FREE_RATING_LIMIT_ONE = "20260910170000_free_rating_limit_one.sql";
+const ALLOWANCE_READERS = [
+  "reserve_analysis_permit",
+  "apply_synced_shot",
+  "enforce_scored_shot_permit",
+  "issue_offline_grant",
+] as const;
+/** The literal the allowance used to be, in every shape the bodies spelled it. */
+const OLD_LITERAL_ALLOWANCE = /(>=\s*2\b|least\(v_scored,\s*2\)|\b2\s*-\s*least\()/;
+
+Deno.test(
+  "free-rating allowance: ONE lifetime rating, defined by public.free_rating_limit() and read by every decision point; the Edge constant matches; no later migration reintroduces the literal",
+  async () => {
+    const chain = await loadChain();
+    const migration = chain.find((m) => m.file === FREE_RATING_LIMIT_ONE);
+    ok(migration, `${FREE_RATING_LIMIT_ONE} must exist in the migration chain`);
+    const raw = stripSqlComments(migration.raw);
+
+    const [constant] = functionBodies(raw, "free_rating_limit");
+    ok(constant, `${FREE_RATING_LIMIT_ONE} must define public.free_rating_limit()`);
+    const value = /as \$\$\s*select\s+(\d+)\s*\$\$;/.exec(constant)?.[1];
+    ok(value === "1", `free_rating_limit() must be the constant 1 (got ${value ?? "no constant"})`);
+    ok(
+      constant.includes("immutable") &&
+        !/security\s+definer/.test(constant) &&
+        constant.includes("set search_path = ''"),
+      "free_rating_limit() is an immutable SECURITY INVOKER constant with a pinned search_path",
+    );
+    ok(
+      migration.statements.includes(
+        "revoke all on function public.free_rating_limit() from public, anon, service_role",
+      ) &&
+        migration.statements.includes(
+          "grant execute on function public.free_rating_limit() to authenticated",
+        ),
+      "free_rating_limit() is executable by authenticated only (the invoker RPCs and the shots gate read it as the caller)",
+    );
+
+    for (const name of ALLOWANCE_READERS) {
+      const [body] = functionBodies(raw, name);
+      ok(body, `${FREE_RATING_LIMIT_ONE} must recreate public.${name}`);
+      ok(
+        body.includes("public.free_rating_limit()"),
+        `public.${name} must read the allowance through free_rating_limit()`,
+      );
+      ok(
+        !OLD_LITERAL_ALLOWANCE.test(body),
+        `public.${name} must not embed the old literal allowance`,
+      );
+      ok(
+        body.includes("public.lifetime_scored_count()"),
+        `public.${name} still counts through the identity-aware lifetime_scored_count()`,
+      );
+    }
+    // The bodies are the previous definitions with only the constant swapped:
+    // the invariants the earlier pins establish must still read verbatim.
+    const [reserve] = functionBodies(raw, "reserve_analysis_permit");
+    ok(
+      reserve.includes("public.online_reservation_count()") &&
+        reserve.includes("public.offline_hold_count()") &&
+        reserve.includes("pg_advisory_xact_lock(public.access_lock_key(v_uid))") &&
+        !/security\s+definer/.test(reserve.slice(0, reserve.indexOf("$$"))),
+      "reserve_analysis_permit keeps its counters, its lock and stays invoker",
+    );
+    const [sync] = functionBodies(raw, "apply_synced_shot");
+    ok(
+      sync.includes(
+        "public.lifetime_scored_count() + public.offline_hold_count() >= public.free_rating_limit()",
+      ) &&
+        sync.includes("public.permit_backs_sync(") &&
+        sync.includes("set_config('pickle.sync_permit_id', v_permit_id::text, true)") &&
+        sync.includes("outcome = 'free_limit_exceeded'") &&
+        !/security\s+definer/.test(sync.slice(0, sync.indexOf("$$"))),
+      "apply_synced_shot's backstop counts lifetime scored + offline holds against the allowance, honours permit_backs_sync and vouches for its permit",
+    );
+    const [gate] = functionBodies(raw, "enforce_scored_shot_permit");
+    ok(
+      gate.includes(
+        "public.lifetime_scored_count() + public.offline_hold_count() >= public.free_rating_limit()",
+      ) &&
+        gate.includes("+ (public.online_reservation_count() - 1)") &&
+        /p\.status = 'reserved'\s+and p\.created_at > now\(\) - interval '24 hours'/.test(gate) &&
+        migration.statements.includes(
+          "revoke execute on function public.enforce_scored_shot_permit() from public, anon, authenticated",
+        ),
+      "the shots gate keeps both budgets (permit vouch, direct INSERT) against the allowance and stays non-executable by clients",
+    );
+    const [issue] = functionBodies(raw, "issue_offline_grant");
+    ok(
+      issue.includes("p_requested_tickets > 2") &&
+        issue.includes("v_capacity := greatest(v_remaining - v_reserved - v_held, 0)") &&
+        /security\s+definer/.test(issue.slice(0, issue.indexOf("$$"))) &&
+        migration.statements.includes(
+          "grant execute on function public.issue_offline_grant(text, integer) to authenticated",
+        ),
+      "issue_offline_grant keeps its 0..2 request-shape cap (apps in the field ask for two; the allowance clamps) and its definer grant",
+    );
+
+    // Forward sweep: no later migration may recreate a reader on a literal.
+    for (const later of after(chain, FREE_RATING_LIMIT_ONE)) {
+      const laterRaw = stripSqlComments(later.raw);
+      for (const name of ALLOWANCE_READERS) {
+        for (const body of functionBodies(laterRaw, name)) {
+          ok(
+            body.includes("public.free_rating_limit()") && !OLD_LITERAL_ALLOWANCE.test(body),
+            `${later.file}: public.${name} must keep reading free_rating_limit()`,
+          );
+        }
+      }
+      for (const body of functionBodies(laterRaw, "free_rating_limit")) {
+        ok(
+          /as \$\$\s*select\s+\d+\s*\$\$;/.test(body),
+          `${later.file}: free_rating_limit() must stay a plain integer constant`,
+        );
+      }
+    }
+
+    // The Edge Function derives used/remaining/limit from the same number.
+    const edge = await Deno.readTextFile(new URL("index.ts", FUNCTION_DIR));
+    const edgeLimit = /const FREE_RATING_LIMIT = (\d+);/.exec(edge)?.[1];
+    ok(
+      edgeLimit === value,
+      `index.ts FREE_RATING_LIMIT (${edgeLimit ?? "missing"}) must equal free_rating_limit() (${value})`,
+    );
+    ok(
+      edge.includes("limit: FREE_RATING_LIMIT,") &&
+        edge.includes("Math.min(FREE_RATING_LIMIT, state.scored_count ?? 0)") &&
+        !/limit: 2,/.test(edge),
+      "accessPayload must derive limit/used/remaining from FREE_RATING_LIMIT, never a literal",
+    );
   },
 );

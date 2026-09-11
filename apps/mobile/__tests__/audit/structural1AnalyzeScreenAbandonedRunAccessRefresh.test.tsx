@@ -45,8 +45,13 @@ jest.mock('../../src/analysis/runCaptureAnalysis', () => ({
 }));
 
 import React from 'react';
+import { createPendingFulfilmentStorage } from '../../src/billing/pendingFulfilment';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalDb } from '../../src/data/db';
+import {
+  createSqliteTestDb,
+  closeSqliteTestDatabases,
+} from '../../testSupport/sqlite';
 import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
@@ -67,14 +72,9 @@ import type { CanonicalAccessState } from '../../src/billing/types';
 
 const owner = '22222222-2222-4222-8222-222222222222';
 
-const recordingDb: LocalDb = {
-  async execute() {
-    return { rows: [] };
-  },
-  close() {},
-};
+let sqlite: ReturnType<typeof createSqliteTestDb>;
 function mockCurrentDb(): LocalDb {
-  return recordingDb;
+  return sqlite.db;
 }
 
 function freeAccess(used: number, reserved = 0): CanonicalAccessState {
@@ -121,12 +121,19 @@ function guidedClip(): CapturedClip {
       analysisInputFrameCount: 40,
       poseFrameCount: 40,
       poseMissingFrameCount: 0,
-      trackedDurationMs: 2700,
+      trackedDurationMs: 700,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
       fullBodyVisibleFrameCount: 40,
-      jointMotion: [],
+      jointMotion: [
+        {
+          joint: 'right_wrist',
+          sampleCount: 4,
+          meanNormalizedPerSecond: 0.6,
+          peakNormalizedPerSecond: 1.4,
+        },
+      ],
     },
     ballSpeed: {
       status: 'unavailable',
@@ -154,6 +161,7 @@ function pressByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
 }
 
 beforeEach(() => {
+  sqlite = createSqliteTestDb();
   setActiveDataOwner(owner);
   establishApiSession({
     apiBaseUrl: 'https://api.test',
@@ -166,6 +174,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeSqliteTestDatabases();
   clearApiSession();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
@@ -182,18 +191,26 @@ describe('structural audit #1 — leaving AnalyzeScreen while the scoring run is
       ),
       syncBilling: jest.fn(),
     };
-    configureAccessStore({
-      store: {
-        configure: jest.fn(async () => undefined),
-        loadPlans: jest.fn(async () => {
-          throw new Error('plans are not part of this test');
-        }),
-        purchase: jest.fn(),
-        restore: jest.fn(),
-        readEntitlement: jest.fn(),
+    configureAccessStore(
+      {
+        store: {
+          configure: jest.fn(async () => undefined),
+          loadPlans: jest.fn(async () => {
+            throw new Error('plans are not part of this test');
+          }),
+          purchase: jest.fn(),
+          restore: jest.fn(),
+          readEntitlement: jest.fn(),
+        },
+        backend,
       },
-      backend,
-    });
+      {
+        owner,
+        pendingFulfilmentStorage: createPendingFulfilmentStorage(
+          () => sqlite.db,
+        ),
+      },
+    );
     useAccessStore.setState({
       status: 'ready',
       canonicalAccess: freeAccess(1),

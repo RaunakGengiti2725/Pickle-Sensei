@@ -33,16 +33,30 @@ import type { MascotPose, MascotTone } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
 import { showBrandNotice } from '../design/BrandNotice';
-import { useAuthStore, type AuthProvider } from '../auth/authStore';
-import { getApiSession } from '../account/apiSession';
+import {
+  captureAccountDeletionContext,
+  useAuthStore,
+  type AuthProvider,
+} from '../auth/authStore';
+import { isDataOwnerContextCurrent } from '../data/accountScope';
+import { getDb } from '../data/db';
+import { getApiSession, type ApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
+  ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
+  ACCOUNT_DELETION_UNKNOWN_MESSAGE,
   AccountDeletionError,
+  type AccountDeletionAttempt,
+  type AccountDeletionContext,
+  type AccountDeletionFlow,
   type AccountDeletionResult,
   type AccountDeletionReason,
+  type AccountDeletionState,
   type AccountDeletionSurvey,
   type AccountDeletionWanted,
   confirmAccountDeletion,
+  durableAccountDeletionFlow,
+  legacyAccountDeletionFlow,
   requestAccountDeletion,
 } from '../account/deletion';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
@@ -51,12 +65,16 @@ import type { RootStackParams } from '../navigation/params';
 const PROVIDER_LABELS: Record<AuthProvider, string> = {
   apple: 'Apple',
   google: 'Google',
-  guest: 'Guest',
+  guest: 'Local',
 };
 
 /** Final-confirm hold-off (ms). Must exceed the server's 3s minimum age
  * between delete-request and delete-confirm; also honest UX friction. */
 const DELETE_ARM_DELAY_MS = 5_000;
+
+/** Shown for a step that failed before anything destructive was sent. */
+const REQUEST_FAILED_MESSAGE =
+  'The deletion request could not be completed. Nothing was deleted.';
 
 const SUBSCRIPTION_MANAGEMENT =
   Platform.OS === 'ios'
@@ -65,13 +83,7 @@ const SUBSCRIPTION_MANAGEMENT =
         accessibilityLabel: 'Manage subscription in the App Store',
         url: 'https://apps.apple.com/account/subscriptions',
       }
-    : Platform.OS === 'android'
-      ? {
-          storeName: 'Google Play',
-          accessibilityLabel: 'Manage subscription in Google Play',
-          url: 'https://play.google.com/store/account/subscriptions',
-        }
-      : null;
+    : null;
 
 /** Exit survey, question 1 — display order; values are the wire vocabulary
  * (deletion.ts ACCOUNT_DELETION_REASONS). "Something else" stays last. */
@@ -141,10 +153,103 @@ type DeleteAccountStep =
   | { phase: 'kept' }
   | { phase: 'review' }
   | { phase: 'requesting' }
-  | { phase: 'armed'; challenge: string; secondsLeft: number }
-  | { phase: 'deleting'; challenge: string };
+  | {
+      phase: 'armed';
+      attempt: AccountDeletionAttempt;
+      secondsLeft: number;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+    }
+  | {
+      phase: 'deleting';
+      attempt: AccountDeletionAttempt;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+    }
+  /** Step 1 was sent but no valid reply came back: nothing is deleted and
+   * the same job is retried, never a second one. */
+  | {
+      phase: 'request_unknown';
+      attempt: AccountDeletionAttempt;
+      secondsLeft: number;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+    }
+  /** Step 2 was sent but its reply was lost: the account MAY be gone, so
+   * the outcome is learned from the server before anything else happens. */
+  | {
+      phase: 'confirm_unknown';
+      attempt: AccountDeletionAttempt;
+      secondsLeft: number;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+    }
+  /** The server accepted the confirmation and is still carrying it out. */
+  | {
+      phase: 'observing';
+      attempt: AccountDeletionAttempt;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+    }
+  /** A confirmed deletion this dialog did not start is being carried out;
+   * nothing new was requested and there is no capability to observe it. */
+  | { phase: 'already_in_progress' }
+  /** A status check is in flight, from `observing` or from `confirm_unknown`. */
+  | {
+      phase: 'checking';
+      attempt: AccountDeletionAttempt;
+      context: AccountDeletionContext;
+      flow: AccountDeletionFlow;
+      observing: boolean;
+    };
 
 type PageDirection = 'forward' | 'back' | 'none';
+
+/** Journaled whenever the local database can host the journal; the two-call
+ * client (no journal, no status capability — but the same redirect-rejecting
+ * fetch and operation-bound confirmation) otherwise. */
+function accountDeletionFlow(): AccountDeletionFlow {
+  return (
+    durableAccountDeletionFlow(getDb) ??
+    legacyAccountDeletionFlow({
+      requestAccountDeletion,
+      confirmAccountDeletion,
+    })
+  );
+}
+
+function secondsUntil(atMs: number): number {
+  return Math.max(0, Math.ceil((atMs - Date.now()) / 1000));
+}
+
+function apiSessionForDeletion(context: AccountDeletionContext | null) {
+  if (!context || !isDataOwnerContextCurrent(context)) {
+    throw new AccountDeletionError(
+      'deletion.rejected',
+      'The signed-in account changed. Close this dialog and start again for the account you want to delete.',
+      false,
+    );
+  }
+  const session = getApiSession();
+  if (!session) {
+    throw new AccountDeletionError(
+      'deletion.unavailable',
+      'Your account is still reconnecting. Check your connection and try again before deleting it.',
+      true,
+    );
+  }
+  if (
+    session.canonicalAppUserId.toLowerCase() !== context.ownerKey ||
+    session.provider !== context.provider
+  ) {
+    throw new AccountDeletionError(
+      'deletion.rejected',
+      'The signed-in account changed. Close this dialog and start again for the account you want to delete.',
+      false,
+    );
+  }
+  return session;
+}
 
 /** One page of the dialog: slides in from the side it came from (forward =
  * from the right, back = from the left) with a fade, 220ms ease-out, so a
@@ -296,8 +401,12 @@ function ChoiceRow(props: {
  */
 function DeleteAccountDialog(props: {
   visible: boolean;
+  context: AccountDeletionContext | null;
   onCancel: () => void;
-  onDeleted: (result: AccountDeletionResult) => void;
+  onDeleted: (
+    result: AccountDeletionResult,
+    context: AccountDeletionContext,
+  ) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -307,11 +416,23 @@ function DeleteAccountDialog(props: {
   const [details, setDetails] = useState('');
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [completionUnknown, setCompletionUnknown] = useState(false);
+  // The journal is being read for an unfinished operation: until it has
+  // answered, the review page must not mint a request beside one it may
+  // be about to resume.
+  const [resuming, setResuming] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Bumped every time the dialog closes: an async step that started in an
   // earlier presentation must not mutate the state of a later (or closed)
   // one, so every continuation checks it before touching state.
   const presentationRef = useRef(0);
+  // The one deletion step in flight. A press repeated before React has
+  // re-rendered the disabled button must not start a second request or
+  // confirmation, and a re-opened dialog resumes the journal only after the
+  // step still running has settled — otherwise it would read the step's own
+  // job lock as "the account changed".
+  const inFlightRef = useRef<Promise<void> | null>(null);
   const directionRef = useRef<PageDirection>('none');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const entrance = useRef(new Animated.Value(0)).current;
@@ -322,17 +443,29 @@ function DeleteAccountDialog(props: {
       timerRef.current = null;
     }
   };
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearTimeout(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+  const stopTimers = () => {
+    stopCountdown();
+    stopPolling();
+  };
 
   useEffect(() => {
     if (!props.visible) {
       presentationRef.current += 1;
-      stopCountdown();
+      stopTimers();
       setStep({ phase: 'why' });
       setReason(null);
       setWanted(null);
       setDetails('');
       setSurvey(null);
       setError(null);
+      setCompletionUnknown(false);
+      setResuming(false);
       directionRef.current = 'none';
       entrance.setValue(0);
     } else if (reduced) {
@@ -346,7 +479,8 @@ function DeleteAccountDialog(props: {
         useNativeDriver: true,
       }).start();
     }
-    return stopCountdown;
+    if (props.visible) void resumeUnfinished();
+    return stopTimers;
   }, [entrance, props.visible, reduced]);
 
   /** Page change with motion: the card re-lays out smoothly (LayoutAnimation)
@@ -400,64 +534,315 @@ function DeleteAccountDialog(props: {
     goTo({ phase: 'review' }, 'forward');
   };
 
-  const beginRequest = async () => {
-    const presentation = presentationRef.current;
-    setError(null);
-    setStep({ phase: 'requesting' });
-    try {
-      const { challenge } = await requestAccountDeletion(
-        getApiSession(),
-        survey,
-      );
-      if (presentation !== presentationRef.current) return;
-      const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
-      setStep({ phase: 'armed', challenge, secondsLeft });
-      timerRef.current = setInterval(() => {
-        setStep(current => {
-          if (current.phase !== 'armed') return current;
-          if (current.secondsLeft <= 1) {
-            stopCountdown();
-            return { ...current, secondsLeft: 0 };
-          }
-          return { ...current, secondsLeft: current.secondsLeft - 1 };
+  /** Ticks `secondsLeft` on the current step down to zero. */
+  const startCountdown = () => {
+    stopCountdown();
+    timerRef.current = setInterval(() => {
+      setStep(current => {
+        if (
+          current.phase !== 'armed' &&
+          current.phase !== 'request_unknown' &&
+          current.phase !== 'confirm_unknown'
+        )
+          return current;
+        if (current.secondsLeft <= 1) {
+          stopCountdown();
+          return { ...current, secondsLeft: 0 };
+        }
+        return { ...current, secondsLeft: current.secondsLeft - 1 };
+      });
+    }, 1_000);
+  };
+
+  /**
+   * Shows what the flow reported. Only a `completed` state — a receipt the
+   * server verified — hands off to `onDeleted`; every other state keeps the
+   * account as "not known to be deleted".
+   */
+  const applyState = (
+    state: AccountDeletionState,
+    context: AccountDeletionContext,
+    flow: AccountDeletionFlow,
+    presentation: number,
+    minimumArmMs: number,
+  ) => {
+    if (presentation !== presentationRef.current) return;
+    stopTimers();
+    switch (state.status) {
+      case 'completed':
+        props.onDeleted(state.result, context);
+        return;
+      case 'ready': {
+        const secondsLeft = secondsUntil(
+          Math.max(state.reviewAfterMs, Date.now() + minimumArmMs),
+        );
+        setCompletionUnknown(false);
+        setError(state.message);
+        setStep({
+          phase: 'armed',
+          attempt: state.attempt,
+          secondsLeft,
+          context,
+          flow,
         });
-      }, 1_000);
-    } catch (e) {
-      if (presentation !== presentationRef.current) return;
-      setStep({ phase: 'review' });
-      setError(
-        e instanceof AccountDeletionError
-          ? e.message
-          : 'The deletion request could not be completed. Nothing was deleted.',
-      );
+        if (secondsLeft > 0) startCountdown();
+        return;
+      }
+      case 'request_unknown': {
+        const secondsLeft = secondsUntil(state.nextAttemptAtMs);
+        setCompletionUnknown(false);
+        setError(state.message);
+        setStep({
+          phase: 'request_unknown',
+          attempt: state.attempt,
+          secondsLeft,
+          context,
+          flow,
+        });
+        if (secondsLeft > 0) startCountdown();
+        return;
+      }
+      case 'confirm_unknown': {
+        const secondsLeft = secondsUntil(state.nextAttemptAtMs);
+        setCompletionUnknown(true);
+        setError(state.message);
+        setStep({
+          phase: 'confirm_unknown',
+          attempt: state.attempt,
+          secondsLeft,
+          context,
+          flow,
+        });
+        if (secondsLeft > 0) startCountdown();
+        return;
+      }
+      case 'in_progress':
+        setCompletionUnknown(true);
+        setError(null);
+        setStep({ phase: 'observing', attempt: state.attempt, context, flow });
+        pollRef.current = setTimeout(
+          () => void checkStatus(state.attempt, context, flow, 'poll'),
+          Math.max(0, state.nextAttemptAtMs - Date.now()),
+        );
+        return;
+      case 'already_in_progress':
+        setCompletionUnknown(true);
+        setError(state.message);
+        setStep({ phase: 'already_in_progress' });
+        return;
+      case 'failed':
+        setCompletionUnknown(state.outcome === 'unknown');
+        setError(state.message);
+        setStep({ phase: 'review' });
+        return;
     }
   };
 
-  const confirmDeletion = async (challenge: string) => {
+  /** The owner's unfinished operation, if the journal holds one, takes the
+   * place of the survey: a second request is never minted beside it. */
+  const resumeUnfinished = async () => {
     const presentation = presentationRef.current;
-    setError(null);
-    setStep({ phase: 'deleting', challenge });
+    const context = props.context;
+    if (!context) return;
+    const flow = accountDeletionFlow();
+    if (!flow.durable) return;
+    setResuming(true);
     try {
-      const result = await confirmAccountDeletion(getApiSession(), challenge);
-      props.onDeleted(result);
-    } catch (e) {
+      while (inFlightRef.current) await inFlightRef.current;
       if (presentation !== presentationRef.current) return;
-      const canRetrySameChallenge =
-        e instanceof AccountDeletionError ? e.retryable : true;
-      setStep(
-        canRetrySameChallenge
-          ? { phase: 'armed', challenge, secondsLeft: 0 }
-          : { phase: 'review' },
-      );
-      setError(
-        e instanceof AccountDeletionError
-          ? e.message
-          : 'The deletion could not be completed. Nothing was deleted.',
-      );
+      const resume = (async () => {
+        const state = await flow
+          .resume(context)
+          .catch((): AccountDeletionState => ({
+            status: 'failed',
+            outcome: 'unknown',
+            message: ACCOUNT_DELETION_RECORD_UNREADABLE_MESSAGE,
+          }));
+        if (!state || presentation !== presentationRef.current) return;
+        applyState(state, context, flow, presentation, DELETE_ARM_DELAY_MS);
+      })();
+      inFlightRef.current = resume;
+      try {
+        await resume;
+      } finally {
+        if (inFlightRef.current === resume) inFlightRef.current = null;
+      }
+    } finally {
+      if (presentation === presentationRef.current) setResuming(false);
     }
   };
 
-  const busy = step.phase === 'requesting' || step.phase === 'deleting';
+  /**
+   * Runs one flow operation for the captured owner. The owner/session check
+   * happens ONCE, before anything is sent; whatever the flow reports
+   * afterwards is shown as is, because the journal — not the account that
+   * is signed in by then — says what happened to the original owner's
+   * operation. A failure is shown through `fallback`, which is told whether
+   * the operation had already been handed to the flow (`sent`): a
+   * confirmation that was sent and then failed is an UNKNOWN outcome, never
+   * a re-armed challenge.
+   */
+  const runStep = async (
+    context: AccountDeletionContext | null,
+    flow: AccountDeletionFlow,
+    pending: DeleteAccountStep,
+    fallback: (sent: boolean) => {
+      step: DeleteAccountStep;
+      message: string;
+    },
+    operation: (session: ApiSession) => Promise<AccountDeletionState>,
+    minimumArmMs: number,
+  ) => {
+    if (inFlightRef.current) return;
+    const presentation = presentationRef.current;
+    const run = (async () => {
+      setError(null);
+      setStep(pending);
+      let sent = false;
+      try {
+        const session = apiSessionForDeletion(context);
+        if (!context) return;
+        sent = true;
+        const state = await operation(session);
+        if (state.status === 'completed') {
+          props.onDeleted(state.result, context);
+          return;
+        }
+        applyState(state, context, flow, presentation, minimumArmMs);
+      } catch (e) {
+        if (presentation !== presentationRef.current) return;
+        const failure = fallback(sent);
+        const message =
+          e instanceof AccountDeletionError ? e.message : failure.message;
+        stopTimers();
+        setCompletionUnknown(
+          failure.step.phase === 'confirm_unknown' ||
+            failure.step.phase === 'observing',
+        );
+        setStep(failure.step);
+        setError(message);
+      }
+    })();
+    inFlightRef.current = run;
+    try {
+      await run;
+    } finally {
+      if (inFlightRef.current === run) inFlightRef.current = null;
+    }
+  };
+
+  /** A new attempt: the flow is chosen here and stays with the attempt. */
+  const beginRequest = () => {
+    const flow = accountDeletionFlow();
+    return runStep(
+      props.context,
+      flow,
+      { phase: 'requesting' },
+      () => ({ step: { phase: 'review' }, message: REQUEST_FAILED_MESSAGE }),
+      session => flow.request(session, survey),
+      DELETE_ARM_DELAY_MS,
+    );
+  };
+
+  /** Step 1 again under the SAME job after its reply went missing. */
+  const retryRequest = (
+    attempt: AccountDeletionAttempt,
+    context: AccountDeletionContext,
+    flow: AccountDeletionFlow,
+  ) =>
+    runStep(
+      context,
+      flow,
+      { phase: 'requesting' },
+      () => ({
+        step: {
+          phase: 'request_unknown',
+          attempt,
+          secondsLeft: 0,
+          context,
+          flow,
+        },
+        message: REQUEST_FAILED_MESSAGE,
+      }),
+      session => flow.retryRequest(attempt, session, survey),
+      DELETE_ARM_DELAY_MS,
+    );
+
+  /** Before anything is sent, a failure keeps the challenge armed (nothing
+   * happened). Once the confirmation has been handed to the flow, a failure
+   * is an unknown outcome: the server may have received it. */
+  const confirmDeletion = (
+    attempt: AccountDeletionAttempt,
+    context: AccountDeletionContext,
+    flow: AccountDeletionFlow,
+  ) =>
+    runStep(
+      context,
+      flow,
+      { phase: 'deleting', attempt, context, flow },
+      sent =>
+        sent
+          ? {
+              step: {
+                phase: 'confirm_unknown',
+                attempt,
+                secondsLeft: 0,
+                context,
+                flow,
+              },
+              message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
+            }
+          : {
+              step: { phase: 'armed', attempt, secondsLeft: 0, context, flow },
+              message: REQUEST_FAILED_MESSAGE,
+            },
+      session => flow.confirm(attempt, session),
+      0,
+    );
+
+  /** Learns the outcome of a confirmation the server has (`poll`) or may
+   * have (`recover`) received. Nothing is re-sent until the server says the
+   * confirmation never arrived. */
+  const checkStatus = (
+    attempt: AccountDeletionAttempt,
+    context: AccountDeletionContext,
+    flow: AccountDeletionFlow,
+    mode: 'recover' | 'poll',
+  ) =>
+    runStep(
+      context,
+      flow,
+      {
+        phase: 'checking',
+        attempt,
+        context,
+        flow,
+        observing: mode === 'poll',
+      },
+      () => ({
+        step: {
+          phase: 'confirm_unknown',
+          attempt,
+          secondsLeft: 0,
+          context,
+          flow,
+        },
+        message: ACCOUNT_DELETION_UNKNOWN_MESSAGE,
+      }),
+      session =>
+        mode === 'poll'
+          ? flow.poll(attempt, session)
+          : flow.recover(attempt, session),
+      0,
+    );
+
+  const busy =
+    step.phase === 'requesting' ||
+    step.phase === 'deleting' ||
+    step.phase === 'checking';
+  const observing =
+    step.phase === 'observing' || (step.phase === 'checking' && step.observing);
+  const inProgress = observing || step.phase === 'already_in_progress';
   const scrollDetailsIntoView = () => {
     // The comment field is the last thing on the page; bring it above the
     // keyboard once the avoiding view has made room.
@@ -617,7 +1002,11 @@ function DeleteAccountDialog(props: {
       <DialogHeader
         question={null}
         onClose={props.onCancel}
-        closeLabel="Close account deletion confirmation"
+        closeLabel={
+          completionUnknown
+            ? 'Close deletion status'
+            : 'Close account deletion confirmation'
+        }
         disabled={busy}
       />
     );
@@ -639,7 +1028,11 @@ function DeleteAccountDialog(props: {
               { color: color.ink, textAlign: 'center', marginTop: space.lg },
             ]}
           >
-            Delete your account?
+            {inProgress
+              ? 'Deletion in progress'
+              : completionUnknown
+                ? 'Deletion status unknown'
+                : 'Delete your account?'}
           </Text>
           <Text
             style={[
@@ -653,10 +1046,10 @@ function DeleteAccountDialog(props: {
           >
             This permanently deletes your account and all synced data — your
             profile, analysis history, progress, and membership records. This
-            cannot be undone. Free ratings you've already used stay used — a new
-            account with the same Apple or Google sign-in won't get them again.
-            Clips saved on this phone stay on this phone until you delete the
-            app.
+            cannot be undone. A free rating you've already used stays used — a
+            new account with the same Apple or Google sign-in won't get it
+            again. Clips saved on this phone stay on this phone until you delete
+            the app.
           </Text>
           {SUBSCRIPTION_MANAGEMENT ? (
             <>
@@ -695,12 +1088,13 @@ function DeleteAccountDialog(props: {
         </ScrollView>
         <View style={[styles.footer, { gap: 10 }]}>
           <Button
-            label="Keep my account"
+            label={completionUnknown ? 'Close' : 'Keep my account'}
             variant="dark"
             disabled={busy}
             onPress={props.onCancel}
           />
-          {step.phase === 'review' || step.phase === 'requesting' ? (
+          {(step.phase === 'review' || step.phase === 'requesting') &&
+          !completionUnknown ? (
             <Button
               label={
                 step.phase === 'requesting'
@@ -708,31 +1102,64 @@ function DeleteAccountDialog(props: {
                   : 'Continue to delete'
               }
               variant="danger"
-              disabled={busy}
+              disabled={busy || resuming}
               onPress={() => void beginRequest()}
             />
-          ) : (
+          ) : step.phase === 'request_unknown' ? (
+            <Button
+              label={
+                step.secondsLeft > 0
+                  ? `Retry request (${step.secondsLeft})`
+                  : 'Retry request'
+              }
+              variant="danger"
+              disabled={step.secondsLeft > 0}
+              onPress={() =>
+                void retryRequest(step.attempt, step.context, step.flow)
+              }
+            />
+          ) : step.phase === 'armed' || step.phase === 'deleting' ? (
             <Button
               label={
                 step.phase === 'deleting'
                   ? 'Deleting…'
-                  : step.phase === 'armed' && step.secondsLeft > 0
+                  : step.secondsLeft > 0
                     ? `Permanently delete (${step.secondsLeft})`
                     : 'Permanently delete'
               }
               variant="danger"
-              disabled={
-                step.phase === 'deleting' ||
-                (step.phase === 'armed' && step.secondsLeft > 0)
-              }
+              disabled={step.phase === 'deleting' || step.secondsLeft > 0}
               onPress={() => {
                 if (step.phase === 'armed') {
-                  void confirmDeletion(step.challenge);
+                  void confirmDeletion(step.attempt, step.context, step.flow);
                 }
               }}
             />
-          )}
-          {busy ? (
+          ) : step.phase === 'confirm_unknown' ||
+            (step.phase === 'checking' && !step.observing) ? (
+            <Button
+              label={
+                step.phase === 'checking'
+                  ? 'Checking…'
+                  : step.secondsLeft > 0
+                    ? `Retry deletion (${step.secondsLeft})`
+                    : 'Retry deletion'
+              }
+              variant="danger"
+              disabled={step.phase === 'checking' || step.secondsLeft > 0}
+              onPress={() => {
+                if (step.phase === 'confirm_unknown') {
+                  void checkStatus(
+                    step.attempt,
+                    step.context,
+                    step.flow,
+                    'recover',
+                  );
+                }
+              }}
+            />
+          ) : null}
+          {busy || observing ? (
             <BrandSpinner
               color={color.bad}
               trackColor={color.line}
@@ -823,6 +1250,8 @@ export function ManageAccountScreen() {
   const session = useAuthStore(s => s.session);
   const completeAccountDeletion = useAuthStore(s => s.completeAccountDeletion);
   const [confirmingDeletion, setConfirmingDeletion] = useState(false);
+  const [deletionContext, setDeletionContext] =
+    useState<AccountDeletionContext | null>(null);
 
   const providerLabel = session ? PROVIDER_LABELS[session.provider] : '—';
 
@@ -864,7 +1293,19 @@ export function ManageAccountScreen() {
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Delete account"
-            onPress={() => setConfirmingDeletion(true)}
+            onPress={() => {
+              try {
+                setDeletionContext(captureAccountDeletionContext(session));
+                setConfirmingDeletion(true);
+              } catch {
+                showBrandNotice({
+                  title: 'Account changed',
+                  detail:
+                    'Open Manage account again for the account you want to delete.',
+                  tone: 'neutral',
+                });
+              }
+            }}
             style={styles.deleteLink}
           >
             <Text style={[type.caption, { color: color.bad }]}>
@@ -876,19 +1317,20 @@ export function ManageAccountScreen() {
 
       <DeleteAccountDialog
         visible={confirmingDeletion}
+        context={deletionContext}
         onCancel={() => setConfirmingDeletion(false)}
-        onDeleted={result => {
+        onDeleted={(result, context) => {
           setConfirmingDeletion(false);
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion().then(() => {
-            const cleanup = useAuthStore.getState().deletionCleanup;
+          void completeAccountDeletion(context).then(outcome => {
+            const cleanup = outcome ?? useAuthStore.getState().deletionCleanup;
             if (cleanup?.localPurge === 'failed') {
               showBrandNotice({
                 title: 'Account deleted',
                 detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+                  'The account you requested to delete and its synced data were deleted. Some of its data on this phone could not be removed. Contact support for help; clearing app storage would also remove other accounts’ local data.',
                 tone: 'danger',
                 eyebrow: 'LOCAL CLEANUP NEEDED',
               });
@@ -901,6 +1343,14 @@ export function ManageAccountScreen() {
                   'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
                 tone: 'neutral',
                 eyebrow: 'ONE APPLE STEP',
+              });
+            } else {
+              showBrandNotice({
+                title: 'Account deleted',
+                detail:
+                  'The account you requested to delete and its synced data were deleted. Deleting an account does not cancel an App Store subscription.',
+                tone: 'success',
+                eyebrow: 'DELETION CONFIRMED',
               });
             }
           });

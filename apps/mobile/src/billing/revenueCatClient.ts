@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import {
   BillingError,
+  parseBillingTransaction,
   type BillingPeriod,
   type BillingStoreClient,
   type FreeTrialDisplay,
@@ -74,6 +75,11 @@ export interface RevenueCatSdk {
   }>;
   purchasePackage(aPackage: RevenueCatPackageLike): Promise<{
     customerInfo: RevenueCatCustomerInfoLike;
+    transaction?: {
+      transactionIdentifier: string;
+      productIdentifier: string;
+      purchaseDate: string;
+    };
   }>;
   restorePurchases(): Promise<RevenueCatCustomerInfoLike>;
   getCustomerInfo(): Promise<RevenueCatCustomerInfoLike>;
@@ -113,7 +119,7 @@ function configuredValues(config: RevenueCatBillingConfig): {
     );
   }
 
-  const canonicalAppUserId = config.canonicalAppUserId?.trim();
+  const canonicalAppUserId = config.canonicalAppUserId?.trim().toLowerCase();
   if (!canonicalAppUserId) {
     throw new BillingError(
       'billing.unconfigured',
@@ -144,9 +150,9 @@ function currentPlatform(): BillingPlatform {
 }
 
 function entitlementFrom(
-  customerInfo: RevenueCatCustomerInfoLike,
+  customerInfo: RevenueCatCustomerInfoLike | null | undefined,
 ): StoreEntitlementState {
-  const active = customerInfo.entitlements.active;
+  const active = customerInfo?.entitlements?.active ?? {};
   const entitlement =
     active[PREMIUM_ENTITLEMENT] ?? active[LEGACY_PREMIUM_ENTITLEMENT];
   return {
@@ -213,13 +219,31 @@ function purchaseError(error: unknown): BillingError {
   );
 }
 
+const sdkOperations = new WeakMap<RevenueCatSdk, Promise<void>>();
+
+function withSdkSession<T>(
+  sdk: RevenueCatSdk,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const result = (sdkOperations.get(sdk) ?? Promise.resolve()).then(operation);
+  const settled = result.then(
+    () => {},
+    () => {},
+  );
+  sdkOperations.set(sdk, settled);
+  void settled.then(() => {
+    if (sdkOperations.get(sdk) === settled) sdkOperations.delete(sdk);
+  });
+  return result;
+}
+
 export function createRevenueCatBillingClient(
   config: RevenueCatBillingConfig,
   injectedSdk?: RevenueCatSdk,
   injectedPlatform?: BillingPlatform,
 ): BillingStoreClient {
   let sdkPromise: Promise<RevenueCatSdk> | null = null;
-  let configurationPromise: Promise<void> | null = null;
+  let generation = 0;
   const packageByPlanId = new Map<string, RevenueCatPackageLike>();
 
   const sdk = () => {
@@ -227,20 +251,41 @@ export function createRevenueCatBillingClient(
     return sdkPromise;
   };
 
-  const configure = async () => {
-    if (configurationPromise) return configurationPromise;
-    configurationPromise = (async () => {
-      const values = configuredValues(config);
-      const native = await sdk();
-      if (!(await native.isConfigured())) {
+  const inSession = async <T>(
+    operation: (native: RevenueCatSdk, assertActive: () => void) => Promise<T>,
+  ): Promise<T> => {
+    const version = generation;
+    const values = configuredValues(config);
+    const assertActive = () => {
+      if (generation !== version) {
+        throw new BillingError(
+          'billing.unconfigured',
+          'The account changed before the store request could start.',
+          true,
+        );
+      }
+    };
+    const native = await sdk();
+    assertActive();
+    return withSdkSession(native, async () => {
+      assertActive();
+      const configured = await native.isConfigured();
+      assertActive();
+      if (!configured) {
         await native.configure({
           apiKey: values.publicSdkKey,
           appUserID: values.canonicalAppUserId,
         });
-      } else if ((await native.getAppUserID()) !== values.canonicalAppUserId) {
-        await native.logIn(values.canonicalAppUserId);
+      } else {
+        const owner = await native.getAppUserID();
+        assertActive();
+        if (owner !== values.canonicalAppUserId)
+          await native.logIn(values.canonicalAppUserId);
       }
-      if ((await native.getAppUserID()) !== values.canonicalAppUserId) {
+      assertActive();
+      const owner = await native.getAppUserID();
+      assertActive();
+      if (owner !== values.canonicalAppUserId) {
         throw new BillingError(
           'billing.unconfigured',
           'RevenueCat could not bind to the canonical account ID.',
@@ -248,14 +293,11 @@ export function createRevenueCatBillingClient(
           'invalid_canonical_app_user_id',
         );
       }
-    })();
-    try {
-      await configurationPromise;
-    } catch (error) {
-      configurationPromise = null;
-      throw error;
-    }
+      return operation(native, assertActive);
+    });
   };
+
+  const configure = () => inSession(async () => undefined);
 
   const detectTrial = async (
     aPackage: RevenueCatPackageLike,
@@ -327,67 +369,85 @@ export function createRevenueCatBillingClient(
 
   return {
     configure,
-
-    loadPlans: async () => {
-      await configure();
-      const offering = (await (await sdk()).getOfferings()).current;
-      if (!offering) {
-        throw new BillingError(
-          'billing.offerings_unavailable',
-          'Membership pricing is unavailable from the app store right now.',
-          true,
-        );
-      }
+    invalidatePendingOperations: () => {
+      generation += 1;
       packageByPlanId.clear();
-      const [annual, monthly, lifetime] = await Promise.all([
-        normalizePlan(offering.identifier, 'annual', offering.annual),
-        normalizePlan(offering.identifier, 'monthly', offering.monthly),
-        normalizePlan(offering.identifier, 'lifetime', offering.lifetime),
-      ]);
-      if (!annual && !monthly && !lifetime) {
-        throw new BillingError(
-          'billing.offerings_unavailable',
-          'Annual, monthly, and lifetime membership plans are unavailable from the app store.',
-          true,
-        );
-      }
-      return { offeringId: offering.identifier, annual, monthly, lifetime };
     },
 
-    purchase: async planId => {
-      await configure();
-      const aPackage = packageByPlanId.get(planId);
-      if (!aPackage) {
-        throw new BillingError(
-          'billing.offerings_unavailable',
-          'That store plan is no longer available. Refresh pricing and try again.',
-          true,
-        );
-      }
-      try {
-        const result = await (await sdk()).purchasePackage(aPackage);
-        return entitlementFrom(result.customerInfo);
-      } catch (error) {
-        throw purchaseError(error);
-      }
-    },
+    loadPlans: () =>
+      inSession(async (native, assertActive) => {
+        const offering = (await native.getOfferings()).current;
+        assertActive();
+        if (!offering) {
+          throw new BillingError(
+            'billing.offerings_unavailable',
+            'Membership pricing is unavailable from the app store right now.',
+            true,
+          );
+        }
+        packageByPlanId.clear();
+        const [annual, monthly, lifetime] = await Promise.all([
+          normalizePlan(offering.identifier, 'annual', offering.annual),
+          normalizePlan(offering.identifier, 'monthly', offering.monthly),
+          normalizePlan(offering.identifier, 'lifetime', offering.lifetime),
+        ]);
+        assertActive();
+        if (!annual && !monthly && !lifetime) {
+          throw new BillingError(
+            'billing.offerings_unavailable',
+            'Annual, monthly, and lifetime membership plans are unavailable from the app store.',
+            true,
+          );
+        }
+        return { offeringId: offering.identifier, annual, monthly, lifetime };
+      }),
 
-    restore: async () => {
-      await configure();
-      try {
-        return entitlementFrom(await (await sdk()).restorePurchases());
-      } catch {
-        throw new BillingError(
-          'billing.restore_failed',
-          'The app store could not restore purchases. Please try again.',
-          true,
-        );
-      }
-    },
+    purchase: planId =>
+      inSession(async native => {
+        const aPackage = packageByPlanId.get(planId);
+        if (!aPackage) {
+          throw new BillingError(
+            'billing.offerings_unavailable',
+            'That store plan is no longer available. Refresh pricing and try again.',
+            true,
+          );
+        }
+        try {
+          const result = await native.purchasePackage(aPackage);
+          const transaction = parseBillingTransaction({
+            productId: result.transaction?.productIdentifier,
+            transactionId: result.transaction?.transactionIdentifier,
+            purchasedAt: result.transaction?.purchaseDate,
+          });
+          return {
+            ...entitlementFrom(result?.customerInfo),
+            ...(transaction?.productId === aPackage.product.identifier
+              ? { transaction }
+              : {}),
+          };
+        } catch (error) {
+          throw purchaseError(error);
+        }
+      }),
 
-    readEntitlement: async () => {
-      await configure();
-      return entitlementFrom(await (await sdk()).getCustomerInfo());
-    },
+    restore: () =>
+      inSession(async native => {
+        try {
+          return entitlementFrom(await native.restorePurchases());
+        } catch {
+          throw new BillingError(
+            'billing.restore_failed',
+            'The app store could not restore purchases. Please try again.',
+            true,
+          );
+        }
+      }),
+
+    readEntitlement: () =>
+      inSession(async (native, assertActive) => {
+        const info = await native.getCustomerInfo();
+        assertActive();
+        return entitlementFrom(info);
+      }),
   };
 }

@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   Image,
   Modal,
@@ -33,6 +40,7 @@ import {
   importStrokeVideo,
   subscribeToCameraEvents,
   type CameraEvent,
+  type CameraOperationOptions,
   type CameraReadinessState,
   type CapturedClip,
 } from '../camera/capture';
@@ -47,6 +55,14 @@ import {
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
+import {
+  captureDataOwnerContext,
+  getDataOwnerSnapshot,
+  subscribeToDataOwner,
+  isDataOwnerContextCurrent,
+  type DataOwnerContext,
+} from '../data/accountScope';
+import { forDataOwner } from '../data/transactions';
 import { triggerOutboxSync } from '../data/syncRuntime';
 import {
   savePendingCapture,
@@ -54,23 +70,38 @@ import {
   setCaptureTargetSeed,
   setDeclaredStroke,
 } from '../data/repository';
-import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import {
-  commitPracticeSet,
-  planPracticeSet,
-  type PracticeSetPlan,
-} from '../analysis/practiceSet';
-import { getApiSession } from '../account/apiSession';
+  prepareOriginalCaptureAnalysis,
+  reconcileOriginalCaptureAnalysis,
+  runCaptureAnalysis,
+  runOriginalCaptureAnalysis,
+  type RunCaptureAnalysisOutcome,
+  type RunCaptureAnalysisRequest,
+} from '../analysis/runCaptureAnalysis';
+import {
+  OriginalAnalysisExecution,
+  originalAnalysisOperations,
+  type OriginalAnalysisOperation,
+  type SavedOriginalAnalysisEntry,
+} from '../analysis/originalAnalysisOperations';
+import { planPracticeSet, type PracticeSetPlan } from '../analysis/practiceSet';
+import { getApiSession, subscribeToApiSession } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { useAppStore } from '../state/appStore';
 import { useAccessStore } from '../state/accessStore';
+import { FREE_RATING_LIMIT } from '../billing/freeRatings';
 import { makeUuid } from '../util/uuid';
 import {
   SHOT_TYPES,
   type ShotTypeSlug,
   type TechniqueIntent,
 } from '@pickle/shared-types';
-import type { CaptureAnalysisRecord } from '@pickle/analysis-pipeline';
+import {
+  isDeclaredTechniqueIntent,
+  isAnalysisInputSelectionSnapshot,
+  type CaptureAnalysisRecord,
+  type NeedsTechniqueConfirmationRecord,
+} from '@pickle/analysis-pipeline';
 import { TechniqueIntentPicker } from '../flow/TechniqueIntentPicker';
 import type { RootStackParams } from '../navigation/params';
 import { StrokeResultAnalyzing } from '../components/StrokeResult';
@@ -82,6 +113,10 @@ import {
   type ExtractionEtaState,
 } from '../components/AnalysisProgress';
 import {
+  OfflineAllocationCard,
+  useOfflineJourneyOnFocus,
+} from '../components/OfflineAllocationCard';
+import {
   clearTryAgainHandoff,
   consumeTryAgainHandoff,
   techniqueIntentFromHandoff,
@@ -90,14 +125,83 @@ import { usabilityFunnel } from '../analysis/usabilityTelemetry';
 import { stabilitySlo } from '../analysis/stabilityTelemetry';
 import { reportScoredAnalysisForReview } from '../review/appStoreReview';
 
+import {
+  isSavedCaptureId,
+  type SavedTechniqueConfirmation,
+} from '../analysis/savedTechniqueConfirmation';
+import { runJournal } from '../analysis/runJournal';
+
+export type { SavedTechniqueConfirmation } from '../analysis/savedTechniqueConfirmation';
+
+/** A token-free address, not authorization to create another attempt. */
+interface SavedOriginalAnalysis {
+  readonly operationId: string;
+  readonly captureId: string;
+  readonly ownerContext: DataOwnerContext;
+  readonly apiOrigin: string;
+}
+
+function createOriginalAnalysisExecution(
+  owner: DataOwnerContext,
+  apiOrigin: string,
+  signal: AbortSignal,
+): OriginalAnalysisExecution {
+  return new OriginalAnalysisExecution(owner, apiOrigin, signal);
+}
+
+function currentAnalysisService(): string | null {
+  const session = getApiSession();
+  if (!session) return null;
+  try {
+    return JSON.stringify(
+      runJournal.scope({
+        ownerKey: session.canonicalAppUserId,
+        apiOrigin: session.apiBaseUrl,
+      }),
+    );
+  } catch {
+    return 'unavailable';
+  }
+}
+
+function executionIsCurrent(
+  execution: OriginalAnalysisExecution | null,
+): boolean {
+  try {
+    execution?.assertCurrent();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type Phase =
   | { kind: 'ready' }
   | { kind: 'working'; message: string }
-  | { kind: 'saved'; clip: CapturedClip; captureId: string }
+  | {
+      kind: 'saved';
+      clip: CapturedClip;
+      captureId: string;
+      ownerContext: DataOwnerContext;
+    }
   | {
       kind: 'analyzed';
       analysisId: string;
       presentation: StrokeIntentPresentation;
+    }
+  | {
+      kind: 'needs_technique_confirmation';
+      analysisId: string;
+      record: NeedsTechniqueConfirmationRecord;
+      clip: CapturedClip;
+      captureId: string;
+      ownerContext: DataOwnerContext;
+      targetSeed: TargetSelection | null;
+      apiOrigin: string;
+      confirmationStatus: 'ready' | 'release_pending' | 'recovery_blocked';
+      errorMessage?: string;
+      paywallRequired?: boolean;
+      uncertainContinuation?: boolean;
     }
   | {
       /** Scored run that consumed the LAST free rating: upgrade prompt. */
@@ -108,7 +212,21 @@ type Phase =
       kind: 'error';
       message: string;
       stage: 'capture' | 'analysis';
-      recovery: 'retry' | 'upgrade';
+      recovery:
+        | 'retry'
+        | 'upgrade'
+        | 'review_saved'
+        | 'retry_saved'
+        | 'reconcile_saved';
+      original?: SavedOriginalAnalysis;
+      /** Exact durable attempt displayed by this error, never a new key. */
+      predecessorAttemptId?: string;
+      canStartAnotherClip?: boolean;
+      savedCapture?: {
+        captureId: string;
+        clip: CapturedClip;
+        ownerContext: DataOwnerContext;
+      };
     };
 
 /** The four poses left after onboarding and deletion each own one analysis
@@ -443,6 +561,22 @@ export function strokeIntentPresentation(
 ): StrokeIntentPresentation | null {
   const intent = record.strokeIntent;
   const hasResult = record.result !== null;
+  if (record.kind === 'needs_technique_confirmation') {
+    const side = intent.predictedStroke?.label;
+    return {
+      eyebrow: 'RATING NOT CONSUMED',
+      tone: 'warn',
+      title:
+        record.confirmationReason === 'family_only'
+          ? `Auto-detected: ${side} (family)`
+          : 'Confirm the technique for this capture.',
+      body:
+        record.confirmationReason === 'family_only'
+          ? 'A swing family cannot choose between a dink, drive, or volley. Choose the exact technique for this same saved capture. No score was created and this did not use a rating.'
+          : 'An exact technique could not be established for scoring. Choose the technique you intended for this same saved capture. The original prediction stays recorded separately; this did not use a rating.',
+      showResult: false,
+    };
+  }
   switch (intent.resolutionBasis) {
     case 'abstained':
       return {
@@ -467,7 +601,7 @@ export function strokeIntentPresentation(
           'not to an exact stroke — but this attempt couldn’t be measured ' +
           'cleanly enough to score, so no score was invented and this did ' +
           'not use a rating. Re-record with your full body in frame, or ' +
-          'declare the technique for the most precise read.',
+          'declare the technique for a stroke-specific read.',
         showResult: hasResult,
       };
     }
@@ -581,32 +715,182 @@ function clipExplanation(clip: CapturedClip) {
 }
 
 /**
- * "both" reads naturally only while the free allowance really is 2; any
- * other server-declared limit falls back to "all N" so the copy never lies
- * about how many free analyses the account actually had.
+ * The object of "You've used …" in the free-limit dialog, worded from the
+ * SERVER-declared allowance so the copy never lies about how many free
+ * analyses the account actually had: "your free analysis" for one (the
+ * shipping allowance), "both free analyses" for two, "all N free analyses"
+ * otherwise.
  */
 export function freeAnalysesPhrase(limit: number): string {
-  return limit === 2 ? 'both' : `all ${limit}`;
+  if (limit === 1) return 'your free analysis';
+  return `${limit === 2 ? 'both' : `all ${limit}`} free analyses`;
 }
 
-export function AnalyzeScreen() {
+export function AnalyzeScreen({
+  savedTechniqueConfirmation,
+  savedOriginalAnalysis,
+  savedConfirmationStatus = 'ready',
+  isSavedConfirmationCurrent,
+  savedConfirmationSignal,
+}: {
+  savedTechniqueConfirmation?: SavedTechniqueConfirmation;
+  savedOriginalAnalysis?: SavedOriginalAnalysisEntry;
+  savedConfirmationStatus?: 'ready' | 'release_pending' | 'recovery_blocked';
+  isSavedConfirmationCurrent?: () => boolean;
+  savedConfirmationSignal?: AbortSignal;
+} = {}) {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Analyze'>>();
-  const source = route.params?.source ?? 'camera';
   const accessibleLayout = useWindowDimensions().fontScale > 1.3;
+  const source = savedOriginalAnalysis
+    ? savedOriginalAnalysis.clip.captureMode === 'imported_video'
+      ? 'library'
+      : 'camera'
+    : (route.params?.source ?? 'camera');
+  const savedRoute =
+    route.params != null &&
+    Object.prototype.hasOwnProperty.call(route.params, 'captureId');
+  const ownerEpoch = useSyncExternalStore(
+    subscribeToDataOwner,
+    getDataOwnerSnapshot,
+    getDataOwnerSnapshot,
+  );
+  const mountOwner = useRef(ownerEpoch);
+  const offlineJourney = useOfflineJourneyOnFocus(navigation);
+  const [mountService] = useState(currentAnalysisService);
+  const [routeController] = useState(() => new AbortController());
+  const routeExecution = useRef<OriginalAnalysisExecution | null>(null);
+  const activeOriginalExecution = useRef<OriginalAnalysisExecution | null>(
+    null,
+  );
+  const retainedOriginal = useRef<SavedOriginalAnalysis | null>(null);
+  const [executionInvalidated, setExecutionInvalidated] = useState(false);
+  const bindingInvalidated = useRef(false);
+  const routeIdentity = JSON.stringify([
+    route.key,
+    source,
+    savedRoute,
+    route.params?.captureId,
+    route.params?.mode,
+    savedOriginalAnalysis?.reference.captureId,
+    savedOriginalAnalysis?.reference.operationId,
+    savedOriginalAnalysis?.reference.ownerContext.ownerKey,
+    savedOriginalAnalysis?.reference.ownerContext.generation,
+    savedOriginalAnalysis?.reference.apiOrigin,
+    savedTechniqueConfirmation?.captureId,
+    savedTechniqueConfirmation?.record.id,
+    savedTechniqueConfirmation?.ownerContext.ownerKey,
+    savedTechniqueConfirmation?.ownerContext.generation,
+    savedTechniqueConfirmation?.apiOrigin,
+  ]);
+  const mountedRoute = useRef(routeIdentity);
+  const routeChanged = useRef(false);
+  if (routeIdentity !== mountedRoute.current) routeChanged.current = true;
   // TRY AGAIN loop (MOBBIN brief §2): a Result screen hands the ORIGINAL
   // run's technique intent back here; it is consumed exactly once (lazy
   // initializer) and seeds the picker/zero-touch gate so the player skips
   // re-picking and goes straight back to their spot.
   const [rearm] = useState(() => {
+    if (savedTechniqueConfirmation || savedOriginalAnalysis || savedRoute) {
+      clearTryAgainHandoff();
+      return null;
+    }
     if (source === 'camera') return consumeTryAgainHandoff();
     // An import run is not a re-arm: drop any armed handoff so it cannot
     // seed a later capture with the abandoned run's declaration.
     clearTryAgainHandoff();
     return null;
   });
-  const [phase, setPhase] = useState<Phase>({ kind: 'ready' });
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (savedOriginalAnalysis) {
+      const reference = savedOriginalAnalysis.reference;
+      if (
+        savedTechniqueConfirmation ||
+        !savedRoute ||
+        route.params?.mode !== 'original' ||
+        !isSavedCaptureId(reference.operationId) ||
+        !isSavedCaptureId(reference.captureId) ||
+        route.params?.captureId?.toLowerCase() !==
+          reference.captureId.toLowerCase() ||
+        !isDataOwnerContextCurrent(reference.ownerContext) ||
+        !isSavedConfirmationCurrent?.() ||
+        !savedConfirmationSignal ||
+        savedConfirmationSignal.aborted
+      ) {
+        return {
+          kind: 'error',
+          stage: 'analysis',
+          recovery: 'review_saved',
+          message:
+            'Open this saved analysis from the current account’s Library.',
+        };
+      }
+      const original = Object.freeze({
+        ...reference,
+        ownerContext: Object.freeze({ ...reference.ownerContext }),
+      });
+      retainedOriginal.current = original;
+      return {
+        kind: 'error',
+        stage: 'analysis',
+        recovery: 'reconcile_saved',
+        original,
+        canStartAnotherClip: false,
+        message:
+          'Your original clip and analysis settings are saved. Check the saved analysis before choosing whether to retry. Opening this screen does not start a rating.',
+      };
+    }
+    if (!savedTechniqueConfirmation)
+      return savedRoute
+        ? {
+            kind: 'error',
+            stage: 'analysis',
+            recovery: 'review_saved',
+            message:
+              'Open this saved capture through its verified library loader.',
+          }
+        : { kind: 'ready' };
+    const saved = savedTechniqueConfirmation;
+    if (
+      !isDataOwnerContextCurrent(saved.ownerContext) ||
+      saved.record.captureId !== saved.captureId ||
+      saved.record.kind !== 'needs_technique_confirmation' ||
+      saved.record.result !== null
+    ) {
+      return {
+        kind: 'error',
+        stage: 'analysis',
+        recovery: 'review_saved',
+        message:
+          'This saved confirmation is not available in the current account.',
+      };
+    }
+    return {
+      ...saved,
+      ownerContext: Object.freeze({ ...saved.ownerContext }),
+      kind: 'needs_technique_confirmation',
+      analysisId: saved.record.id,
+      confirmationStatus: savedConfirmationStatus,
+    };
+  });
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  // A confirmation owns this screen from the moment it appears, including
+  // its transient working/error phases. Retained new-capture handlers must
+  // never re-arm the camera while the same saved capture is continuing.
+  const confirmationBound = useRef(false);
+  const confirmationBinding = useRef<{
+    ownerContext: DataOwnerContext;
+    apiOrigin: string;
+  } | null>(null);
+  if (phase.kind === 'needs_technique_confirmation') {
+    confirmationBound.current = true;
+    confirmationBinding.current ??= {
+      ownerContext: phase.ownerContext,
+      apiOrigin: phase.apiOrigin,
+    };
+  }
   const [declaredStroke, setDeclared] = useState<ShotTypeSlug | null>(
     rearm?.declaredStroke ?? null,
   );
@@ -614,6 +898,8 @@ export function AnalyzeScreen() {
     useState<TechniqueIntent | null>(
       rearm ? techniqueIntentFromHandoff(rearm) : null,
     );
+  const selectionRef = useRef({ techniqueIntent, declaredStroke });
+  selectionRef.current = { techniqueIntent, declaredStroke };
   const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
   const [captureEnvelope, setCaptureEnvelope] =
     useState<EnvelopeVerdict | null>(null);
@@ -625,9 +911,10 @@ export function AnalyzeScreen() {
   const attemptEvidence = useRef(createAttemptEvidenceBuffer());
   const profile = useAppStore(s => s.profile);
   // Server-declared free-analysis allowance; the free-limit dialog derives
-  // its wording from this instead of hardcoding "both".
+  // its wording from this instead of hardcoding a count. Without a server
+  // snapshot the product's own allowance is the honest fallback.
   const freeRatingsLimit: number = useAccessStore(
-    s => s.canonicalAccess?.freeRatings.limit ?? 2,
+    s => s.canonicalAccess?.freeRatings.limit ?? FREE_RATING_LIMIT,
   );
   const operationActive = useRef(false);
   const cameraRun = useRef<{
@@ -636,7 +923,121 @@ export function AnalyzeScreen() {
   } | null>(null);
   const scoringActive = useRef(false);
   const abandoned = useRef(false);
+  const activeAnalysisOperation = useRef<AbortController | null>(null);
+  const savedGuard = useRef(isSavedConfirmationCurrent);
+  savedGuard.current = isSavedConfirmationCurrent;
+  const screenCurrent = useCallback(() => {
+    if (
+      abandoned.current ||
+      routeChanged.current ||
+      routeController.signal.aborted ||
+      !isDataOwnerContextCurrent(mountOwner.current) ||
+      currentAnalysisService() !== mountService ||
+      mountService === 'unavailable' ||
+      !executionIsCurrent(routeExecution.current) ||
+      navigation.isFocused?.() === false ||
+      !(savedGuard.current?.() ?? true)
+    )
+      return false;
+    const binding = confirmationBinding.current;
+    const session = getApiSession();
+    if (!binding || !session) return true;
+    try {
+      const scope = runJournal.scope({
+        ownerKey: session.canonicalAppUserId,
+        apiOrigin: session.apiBaseUrl,
+      });
+      return (
+        isDataOwnerContextCurrent(binding.ownerContext) &&
+        scope.ownerKey === binding.ownerContext.ownerKey &&
+        scope.apiOrigin === binding.apiOrigin
+      );
+    } catch {
+      return false;
+    }
+  }, [mountService, navigation, routeController]);
+  const phaseCurrent = () => screenCurrent() && phaseRef.current === phase;
+  const confirmationCurrent = useCallback(
+    (pending: Extract<Phase, { kind: 'needs_technique_confirmation' }>) => {
+      if (!screenCurrent() || !isDataOwnerContextCurrent(pending.ownerContext))
+        return false;
+      const session = getApiSession();
+      if (!session) return true;
+      try {
+        const scope = runJournal.scope({
+          ownerKey: session.canonicalAppUserId,
+          apiOrigin: session.apiBaseUrl,
+        });
+        return (
+          scope.ownerKey === pending.ownerContext.ownerKey &&
+          scope.apiOrigin === pending.apiOrigin
+        );
+      } catch {
+        return false;
+      }
+    },
+    [screenCurrent],
+  );
+  const cancelActiveAnalysisOperation = useCallback(() => {
+    activeAnalysisOperation.current?.abort();
+    activeOriginalExecution.current?.dispose();
+  }, []);
   const autoLaunchStarted = useRef(false);
+  const activeCameraOperation = useRef<{
+    id: string;
+    controller: AbortController;
+  } | null>(null);
+  const withCameraOperation = useCallback(
+    async <T,>(
+      operation: (options: CameraOperationOptions) => Promise<T>,
+    ): Promise<T> => {
+      if (
+        !screenCurrent() ||
+        (mountService !== null && !routeExecution.current)
+      )
+        throw new Error('Camera operation was canceled.');
+      routeExecution.current?.assertCurrent();
+      const active = { id: makeUuid(), controller: new AbortController() };
+      const abort = () => active.controller.abort();
+      routeController.signal.addEventListener('abort', abort, { once: true });
+      activeCameraOperation.current = active;
+      try {
+        return await operation({
+          operationId: active.id,
+          signal: active.controller.signal,
+        });
+      } finally {
+        routeController.signal.removeEventListener('abort', abort);
+        if (activeCameraOperation.current === active)
+          activeCameraOperation.current = null;
+      }
+    },
+    [mountService, routeController, screenCurrent],
+  );
+  const cancelActiveCameraOperation = useCallback(() => {
+    const active = activeCameraOperation.current;
+    if (!active) return;
+    activeCameraOperation.current = null;
+    active.controller.abort();
+    cancelCameraOperation(active.id);
+  }, []);
+  const leaveScreen = useCallback(
+    (leave: () => void) => {
+      if (!screenCurrent()) return;
+      abandoned.current = true;
+      routeController.abort();
+      cancelActiveCameraOperation();
+      cancelActiveAnalysisOperation();
+      routeExecution.current?.dispose();
+      leave();
+    },
+    [
+      cancelActiveAnalysisOperation,
+      cancelActiveCameraOperation,
+      routeController,
+      screenCurrent,
+    ],
+  );
   // Every scoring run reserves a permit that is then consumed or released,
   // so the access snapshot the rest of the app reads (Settings membership
   // row, tab-bar rating gate, Paywall allowance) is stale the moment a run
@@ -649,17 +1050,40 @@ export function AnalyzeScreen() {
   // intermediate state nothing else refreshes.
   const ratingLedgerTouched = useRef(false);
   const ledgerRunSettled = useRef<Promise<void>>(Promise.resolve());
-  useEffect(
-    () => () => {
-      if (!ratingLedgerTouched.current) return;
+  const trackLedgerRun = useCallback(<T,>(run: Promise<T>) => {
+    ratingLedgerTouched.current = true;
+    ledgerRunSettled.current = Promise.allSettled([
+      ledgerRunSettled.current,
+      run,
+    ]).then(() => undefined);
+    return run;
+  }, []);
+  // This cleanup runs before the route's subscription cleanup below. Service
+  // ABA remains observable even after Close disposed the action lease; only
+  // the original binding may request its deferred access refresh.
+  useLayoutEffect(() => {
+    let serviceChanged = false;
+    const stopObserving = subscribeToApiSession(() => {
+      if (currentAnalysisService() !== mountService) serviceChanged = true;
+    });
+    const bindingCurrent = () =>
+      !serviceChanged &&
+      !bindingInvalidated.current &&
+      currentAnalysisService() === mountService &&
+      isDataOwnerContextCurrent(mountOwner.current);
+    return () => {
+      if (!ratingLedgerTouched.current || !bindingCurrent()) {
+        stopObserving();
+        return;
+      }
       void ledgerRunSettled.current.then(() => {
+        stopObserving();
         const access = useAccessStore.getState();
-        if (access.status === 'idle') return;
+        if (access.status === 'idle' || !bindingCurrent()) return;
         void access.refreshAccess();
       });
-    },
-    [],
-  );
+    };
+  }, [mountService]);
   // Honest progress surface for the scoring flow (parallel to `phase`, so
   // every existing message/transition stays byte-identical). Non-null only
   // while scoreCapture is in flight.
@@ -677,7 +1101,14 @@ export function AnalyzeScreen() {
   useEffect(
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
-        if (abandoned.current) return;
+        const active = activeCameraOperation.current;
+        if (
+          !screenCurrent() ||
+          !active ||
+          active.controller.signal.aborted ||
+          (event.operationId !== undefined && event.operationId !== active.id)
+        )
+          return;
         const capture = cameraRun.current;
         if (event.type === 'session') {
           if (
@@ -789,7 +1220,7 @@ export function AnalyzeScreen() {
           }
         }
       }),
-    [],
+    [screenCurrent],
   );
 
   // Zero-handholding funnel (docs/USABILITY_ZERO_HANDHOLDING.md): observe
@@ -799,12 +1230,454 @@ export function AnalyzeScreen() {
     if (rearm) usabilityFunnel.log('try_again_rearm');
   }, []);
 
+  const publishOutcome = useCallback(
+    (
+      outcome: RunCaptureAnalysisOutcome,
+      context: {
+        captureId: string;
+        clip: CapturedClip;
+        targetSeed: TargetSelection | null;
+        ownerContext: DataOwnerContext;
+        apiOrigin: string;
+        current: () => boolean;
+        pendingConfirmation?: Extract<
+          Phase,
+          { kind: 'needs_technique_confirmation' }
+        >;
+      },
+    ) => {
+      if (!context.current()) return;
+      const {
+        captureId,
+        clip,
+        targetSeed: selection,
+        ownerContext,
+        pendingConfirmation,
+      } = context;
+      setAnalysisProgress(analysisStageProgress('saving'));
+      if (outcome.kind === 'unavailable') {
+        usabilityFunnel.log('error_shown', outcome.reason);
+        const paywallRequired = outcome.cause === 'paywall_required';
+        if (pendingConfirmation) {
+          setPhase({
+            ...pendingConfirmation,
+            errorMessage: outcome.reason,
+            paywallRequired,
+            uncertainContinuation: outcome.cause === 'recovery_pending',
+          });
+        } else {
+          setPhase({
+            kind: 'error',
+            message: outcome.reason,
+            stage: 'analysis',
+            recovery: paywallRequired
+              ? 'upgrade'
+              : outcome.cause === 'recovery_pending'
+                ? 'review_saved'
+                : 'retry',
+            savedCapture: { captureId, clip, ownerContext },
+          });
+        }
+        return;
+      }
+      if (outcome.kind === 'quality_blocked') {
+        const message = qualityBlockedMessage(outcome.reason, outcome.envelope);
+        if (pendingConfirmation)
+          setPhase({ ...pendingConfirmation, errorMessage: message });
+        else
+          setPhase({
+            kind: 'error',
+            message,
+            stage: 'analysis',
+            recovery: 'retry',
+            savedCapture: { captureId, clip, ownerContext },
+          });
+        return;
+      }
+      if (outcome.kind === 'scored') {
+        // Publication, sync nudges and review requests belong to the same live
+        // lease. A late A cannot publish UI or start B's outbox/review work.
+        if (!context.current()) return;
+        triggerOutboxSync();
+        if (!context.current()) return;
+        if (outcome.freeLimitReached && !outcome.replayed) {
+          usabilityFunnel.log('free_limit_prompt_shown');
+          setPhase({ kind: 'free_limit', analysisId: outcome.analysisId });
+          return;
+        }
+        usabilityFunnel.log('result_opened');
+        if (!outcome.replayed) void reportScoredAnalysisForReview();
+        leaveScreen(() =>
+          navigation.replace('Result', { analysisId: outcome.analysisId }),
+        );
+        return;
+      }
+      if (outcome.kind === 'needs_technique_confirmation') {
+        confirmationBound.current = true;
+        confirmationBinding.current = {
+          ownerContext,
+          apiOrigin: context.apiOrigin,
+        };
+        selectionRef.current = { techniqueIntent: null, declaredStroke: null };
+        setDeclared(null);
+        setTechniqueIntent(null);
+        setPhase({
+          kind: 'needs_technique_confirmation',
+          analysisId: outcome.analysisId,
+          record: outcome.record,
+          captureId,
+          clip,
+          targetSeed: selection,
+          ownerContext,
+          apiOrigin:
+            outcome.record.inputSelection?.apiOrigin ?? context.apiOrigin,
+          confirmationStatus: 'release_pending',
+        });
+        return;
+      }
+      if (outcome.kind === 'partial') {
+        usabilityFunnel.log('result_opened');
+        leaveScreen(() =>
+          navigation.replace('Result', { analysisId: outcome.analysisId }),
+        );
+        return;
+      }
+      const presentation = strokeIntentPresentation(outcome.record);
+      if (presentation) {
+        usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);
+        setPhase({
+          kind: 'analyzed',
+          analysisId: outcome.analysisId,
+          presentation,
+        });
+        return;
+      }
+      usabilityFunnel.log('result_opened');
+      leaveScreen(() =>
+        navigation.replace('Result', { analysisId: outcome.analysisId }),
+      );
+    },
+    [leaveScreen, navigation],
+  );
+
+  const showOriginalRecovery = useCallback(
+    async (
+      original: SavedOriginalAnalysis,
+      execution: OriginalAnalysisExecution,
+      current: () => boolean,
+      paywallRequired = false,
+      reason: string | null = null,
+    ) => {
+      let recovery: Extract<Phase, { kind: 'error' }>['recovery'] =
+        'reconcile_saved';
+      let predecessorAttemptId: string | undefined;
+      let canStartAnotherClip = false;
+      // The attempt ran to a verdict of "this clip cannot be measured" (no
+      // technical failure, no result, permit released as failed). Checking
+      // the saved analysis again cannot change that verdict; the way forward
+      // is another clip, so the held screen must never trap the player on
+      // "Check saved analysis" for it.
+      let unmeasurable = false;
+      try {
+        const operation = await originalAnalysisOperations.read(
+          getDb(),
+          execution,
+          original.operationId,
+        );
+        if (!current()) return;
+        if (
+          operation?.snapshot.captureId === original.captureId &&
+          operation.finalRecordId === null &&
+          !runJournal
+            .activeOperationIds(execution.scope)
+            .includes(operation.operationId)
+        ) {
+          if (operation.currentAttemptId === null) {
+            // Preparation/extraction did not admit a permit. Retrying still
+            // goes through the core's fresh byte/model/observation checks.
+            recovery =
+              operation.snapshot.clip.nativeMediaIdentity &&
+              operation.modelPolicyHash
+                ? 'retry_saved'
+                : 'review_saved';
+            canStartAnotherClip = true;
+          } else {
+            const attempt = await originalAnalysisOperations.readAttempt(
+              getDb(),
+              operation,
+              operation.currentAttemptId,
+            );
+            const run = attempt.run;
+            if (!current()) return;
+            const settledWithoutResult =
+              run.state === 'released' &&
+              run.releaseOutcome === 'failed' &&
+              run.resultId === null &&
+              !runJournal
+                .activeOperationIds(execution.scope)
+                .includes(run.operationId);
+            if (
+              settledWithoutResult &&
+              run.permitId !== null &&
+              run.terminalReason === null &&
+              run.lastHttpStatus === null &&
+              run.attemptCount >= 1 &&
+              attempt.technicalFailure !== null
+            ) {
+              recovery = 'retry_saved';
+              predecessorAttemptId = run.operationId;
+              canStartAnotherClip = true;
+            } else if (
+              settledWithoutResult &&
+              run.permitId !== null &&
+              attempt.technicalFailure === null
+            ) {
+              // A permit was reserved, so inference ran and returned its
+              // verdict; the release-authority and reservation refusals
+              // (no permit) keep the reconcile path.
+              unmeasurable = true;
+            }
+          }
+        }
+      } catch {
+        // Unknown storage is not empty storage or proof of release.
+      }
+      if (!current()) return;
+      // Only the run that just returned the analyzer's own verdict (`reason`)
+      // is unmeasurable for certain; a reconcile pass without a verdict, or
+      // an unclassified throw, keeps the saved analysis held.
+      const verdict = reason?.trim() || null;
+      if (unmeasurable && verdict && !paywallRequired) {
+        setPhase({
+          kind: 'error',
+          stage: 'analysis',
+          recovery: 'retry',
+          message: `${verdict} This clip could not be measured, so nothing was rated and no rating was used. Record another clip with your whole body in frame and swing once.`,
+        });
+        return;
+      }
+      const recoveryCopy = paywallRequired
+        ? 'The rating service requires an upgrade before another rating can start. This saved analysis has not been replaced.'
+        : recovery === 'retry_saved'
+          ? 'The clip and original analysis settings are saved. Retry this saved analysis without recording or importing again.'
+          : recovery === 'review_saved'
+            ? 'This saved analysis has no complete original file or model proof. Keep the clip in Library; its missing proof will not be recreated from current settings.'
+            : 'The saved analysis or its rating hold is still uncertain. Check only reconciles this original analysis; it does not start another rating.';
+      const cause = paywallRequired ? null : reason?.trim() || null;
+      setPhase({
+        kind: 'error',
+        stage: 'analysis',
+        original,
+        predecessorAttemptId,
+        canStartAnotherClip,
+        recovery: paywallRequired ? 'upgrade' : recovery,
+        message: cause ? `${cause} ${recoveryCopy}` : recoveryCopy,
+      });
+    },
+    [],
+  );
+
+  const finishOriginalOutcome = useCallback(
+    async (
+      outcome: RunCaptureAnalysisOutcome,
+      original: SavedOriginalAnalysis,
+      execution: OriginalAnalysisExecution,
+      current: () => boolean,
+    ) => {
+      if (!current()) return;
+      if (outcome.kind === 'unavailable') {
+        await showOriginalRecovery(
+          original,
+          execution,
+          current,
+          outcome.cause === 'paywall_required',
+          outcome.cause === 'recovery_pending' ? null : outcome.reason,
+        );
+        return;
+      }
+      if (outcome.kind === 'quality_blocked') {
+        setPhase({
+          kind: 'error',
+          stage: 'analysis',
+          recovery: 'review_saved',
+          original,
+          canStartAnotherClip: true,
+          message: qualityBlockedMessage(outcome.reason, outcome.envelope),
+        });
+        return;
+      }
+      const operation = await originalAnalysisOperations.read(
+        getDb(),
+        execution,
+        original.operationId,
+      );
+      if (!current()) return;
+      if (!operation || operation.snapshot.captureId !== original.captureId) {
+        await showOriginalRecovery(original, execution, current);
+        return;
+      }
+      publishOutcome(outcome, {
+        captureId: original.captureId,
+        clip: operation.observation?.clip ?? operation.snapshot.clip,
+        targetSeed: operation.snapshot.targetSeed,
+        ownerContext: original.ownerContext,
+        apiOrigin: original.apiOrigin,
+        current,
+      });
+    },
+    [publishOutcome, showOriginalRecovery],
+  );
+
+  const retrySavedAnalysis = useCallback(
+    async (failure: Extract<Phase, { kind: 'error' }>) => {
+      const original = failure.original;
+      if (
+        !original ||
+        phaseRef.current !== failure ||
+        !screenCurrent() ||
+        scoringActive.current ||
+        operationActive.current ||
+        !['retry_saved', 'reconcile_saved'].includes(failure.recovery)
+      )
+        return;
+      scoringActive.current = true;
+      const controller = new AbortController();
+      activeAnalysisOperation.current = controller;
+      let execution: OriginalAnalysisExecution | null = null;
+      const current = () =>
+        activeAnalysisOperation.current === controller &&
+        !controller.signal.aborted &&
+        screenCurrent() &&
+        executionIsCurrent(execution);
+      try {
+        execution = createOriginalAnalysisExecution(
+          original.ownerContext,
+          original.apiOrigin,
+          routeController.signal,
+        );
+        activeOriginalExecution.current = execution;
+        const request = {
+          db: getDb(),
+          execution,
+          operationId: original.operationId,
+        };
+        setPhase({
+          kind: 'working',
+          message:
+            failure.recovery === 'retry_saved'
+              ? 'Measuring your saved swing…'
+              : 'Checking your saved analysis…',
+        });
+        setAnalysisProgress(analysisStageProgress('verifying'));
+        if (failure.recovery === 'reconcile_saved') {
+          await trackLedgerRun(reconcileOriginalCaptureAnalysis(request));
+          if (!current()) return;
+          const operation = await originalAnalysisOperations.read(
+            request.db,
+            execution,
+            original.operationId,
+          );
+          if (!current()) return;
+          const settledRefusal =
+            operation !== null &&
+            (await originalAnalysisOperations.hasSettledRefusal(
+              request.db,
+              execution,
+              operation,
+            ));
+          if (!current()) return;
+          if (!operation?.finalRecordId && !settledRefusal) {
+            // A released hold may enable a NEW explicit retry button, never
+            // an automatic successor while the user only asked to reconcile.
+            await showOriginalRecovery(original, execution, current);
+            return;
+          }
+        }
+        const outcome = await trackLedgerRun(
+          runOriginalCaptureAnalysis({
+            ...request,
+            ...(failure.recovery === 'retry_saved' &&
+            failure.predecessorAttemptId
+              ? { predecessorAttemptId: failure.predecessorAttemptId }
+              : {}),
+          }),
+        );
+        if (!current()) return;
+        await finishOriginalOutcome(outcome, original, execution, current);
+      } catch {
+        if (current())
+          setPhase({
+            ...failure,
+            recovery: 'reconcile_saved',
+            canStartAnotherClip: false,
+            message:
+              'This saved analysis could not be verified. Check the original again when its storage and rating service are available.',
+          });
+      } finally {
+        const wasCurrent = current();
+        execution?.dispose();
+        if (activeOriginalExecution.current === execution)
+          activeOriginalExecution.current = null;
+        if (activeAnalysisOperation.current === controller) {
+          activeAnalysisOperation.current = null;
+          scoringActive.current = false;
+        }
+        if (wasCurrent) setAnalysisProgress(null);
+      }
+    },
+    [
+      finishOriginalOutcome,
+      routeController,
+      screenCurrent,
+      showOriginalRecovery,
+      trackLedgerRun,
+    ],
+  );
+
   const scoreCapture = useCallback(
     async (
       captureId: string,
       clip: CapturedClip,
       targetSeed: TargetSelection | null,
+      ownerContext: DataOwnerContext,
+      pendingConfirmation?: Extract<
+        Phase,
+        { kind: 'needs_technique_confirmation' }
+      >,
     ) => {
+      if (
+        selectionRef.current.techniqueIntent !== techniqueIntent ||
+        selectionRef.current.declaredStroke !== declaredStroke ||
+        (!pendingConfirmation &&
+          retainedOriginal.current?.captureId === captureId)
+      )
+        return;
+      if (
+        pendingConfirmation &&
+        (!isDeclaredTechniqueIntent(techniqueIntent) ||
+          !confirmationCurrent(pendingConfirmation) ||
+          pendingConfirmation.confirmationStatus === 'recovery_blocked')
+      )
+        return;
+      if (
+        !screenCurrent() ||
+        !isDataOwnerContextCurrent(ownerContext) ||
+        savedConfirmationSignal?.aborted
+      )
+        return;
+      const originalSettings = pendingConfirmation?.record.inputSelection;
+      if (
+        pendingConfirmation &&
+        !isAnalysisInputSelectionSnapshot(originalSettings)
+      ) {
+        setPhase({
+          ...pendingConfirmation,
+          errorMessage:
+            'This older confirmation has no complete original settings. The clip stays saved and read-only.',
+          confirmationStatus: 'recovery_blocked',
+        });
+        return;
+      }
       // Declared runs proceed as always. Declared-null runs proceed ONLY on
       // the guided-capture path with Auto Detect explicitly armed; imported
       // videos still require a concrete declared technique.
@@ -816,8 +1689,28 @@ export function AnalyzeScreen() {
       }
       // One capture, one analysis: a second tap while a run is in flight is
       // ignored rather than reserving a second permit for the same clip.
-      if (scoringActive.current) return;
+      if (scoringActive.current || abandoned.current) return;
       scoringActive.current = true;
+      const controller = new AbortController();
+      const abortSavedOperation = () => controller.abort();
+      savedConfirmationSignal?.addEventListener('abort', abortSavedOperation, {
+        once: true,
+      });
+      routeController.signal.addEventListener('abort', abortSavedOperation, {
+        once: true,
+      });
+      if (savedConfirmationSignal?.aborted || routeController.signal.aborted)
+        controller.abort();
+      activeAnalysisOperation.current = controller;
+      let execution: OriginalAnalysisExecution | null = null;
+      let original: SavedOriginalAnalysis | null = null;
+      const executionCurrent = () =>
+        activeAnalysisOperation.current === controller &&
+        !controller.signal.aborted &&
+        screenCurrent() &&
+        executionIsCurrent(execution) &&
+        isDataOwnerContextCurrent(ownerContext) &&
+        (!pendingConfirmation || confirmationCurrent(pendingConfirmation));
       const session = getApiSession();
       // Imported clips carry no recorded pose sequence until the explicit
       // native extraction pass runs. When the bridge method exists, this run
@@ -825,6 +1718,7 @@ export function AnalyzeScreen() {
       // one); when it doesn't, the clip proceeds unchanged and
       // runCaptureAnalysis keeps its honest unavailable message.
       const needsPoseExtraction =
+        !pendingConfirmation &&
         clip.captureMode === 'imported_video' &&
         clip.poseSequence === undefined &&
         importedPoseExtractionAvailable();
@@ -843,17 +1737,175 @@ export function AnalyzeScreen() {
       // shows a percentage — the one place a real fraction is measured.
       setAnalysisProgress(analysisStageProgress('verifying'));
       try {
+        if (session) {
+          execution = createOriginalAnalysisExecution(
+            ownerContext,
+            pendingConfirmation?.apiOrigin ?? session.apiBaseUrl,
+            controller.signal,
+          );
+          activeOriginalExecution.current = execution;
+        }
+        if (!executionCurrent()) return;
+        const rawDb = getDb();
+        const db = forDataOwner(rawDb, ownerContext);
         // The declaration column records USER statements only — an AUTO run
         // writes nothing there; the prediction lives in the analysis record.
-        if (declaredStroke) {
-          await setDeclaredStroke(getDb(), captureId, declaredStroke);
+        if (declaredStroke && !pendingConfirmation) {
+          await setDeclaredStroke(db, captureId, declaredStroke);
+          if (!executionCurrent()) return;
         }
         // The tap is user input tied to the capture: persist it with the
         // row so it survives restarts and stays available to any later
         // analysis pass, whether or not this run can analyze the clip.
-        if (targetSeed) {
-          await setCaptureTargetSeed(getDb(), captureId, targetSeed);
+        if (targetSeed && !pendingConfirmation) {
+          await setCaptureTargetSeed(db, captureId, targetSeed);
+          if (!executionCurrent()) return;
         }
+        // A completed AUTO confirmation keeps its dedicated continuation.
+        // If it came from a new original operation, reuse that saved practice
+        // plan even after Library reopening. Legacy records are never backfilled.
+        let confirmationOriginal: OriginalAnalysisOperation | null = null;
+        if (pendingConfirmation && execution) {
+          const { rows } = await rawDb.execute(
+            'SELECT operation_id FROM analysis_logical_operations WHERE owner_key = ? AND capture_id = ?',
+            [ownerContext.ownerKey, captureId],
+          );
+          if (!executionCurrent()) return;
+          if (rows[0]) {
+            confirmationOriginal = await originalAnalysisOperations.read(
+              rawDb,
+              execution,
+              String(rows[0].operation_id),
+            );
+            if (!executionCurrent()) return;
+            if (
+              !confirmationOriginal ||
+              confirmationOriginal.finalRecordId !==
+                pendingConfirmation.analysisId ||
+              confirmationOriginal.completionKind !==
+                'needs_technique_confirmation'
+            )
+              throw new Error(
+                'The original saved confirmation could not be verified.',
+              );
+          }
+        }
+        let practiceSet: PracticeSetPlan | null =
+          confirmationOriginal?.snapshot.practiceSet ?? null;
+        if (!confirmationOriginal) {
+          try {
+            practiceSet = await planPracticeSet(db, {
+              shotType: declaredStroke,
+              preferredSessionId: rearm?.sessionId ?? null,
+            });
+          } catch {
+            practiceSet = null;
+          }
+        }
+        if (!executionCurrent()) return;
+        const request: RunCaptureAnalysisRequest = {
+          db: rawDb,
+          ownerContext,
+          signal: execution?.signal ?? controller.signal,
+          captureId,
+          clip,
+          declaredStroke,
+          declaredCanonical: techniqueIntent?.canonical ?? null,
+          ...(pendingConfirmation && isDeclaredTechniqueIntent(techniqueIntent)
+            ? {
+                techniqueConfirmation: {
+                  analysisId: pendingConfirmation.analysisId,
+                  intent: { ...techniqueIntent },
+                  confirmedAtIso: new Date().toISOString(),
+                },
+              }
+            : {}),
+          handedness:
+            originalSettings?.handedness ?? profile?.handedness ?? 'right',
+          cameraView: originalSettings?.cameraView ?? 'side',
+          apiConfig: {
+            baseUrl:
+              execution?.scope.apiOrigin ??
+              pendingConfirmation?.apiOrigin ??
+              session?.apiBaseUrl ??
+              '',
+            get token() {
+              const current = getApiSession();
+              return current?.canonicalAppUserId === ownerContext.ownerKey &&
+                executionCurrent()
+                ? current.bearerToken
+                : null;
+            },
+          },
+          appVersion:
+            confirmationOriginal?.snapshot.appVersion ??
+            getRuntimePublicConfig().appVersion,
+          sessionId:
+            confirmationOriginal?.snapshot.sessionId ??
+            practiceSet?.sessionId ??
+            null,
+          practiceSet,
+          focusCheckpoint: originalSettings
+            ? (originalSettings.focusCheckpoint ?? undefined)
+            : profile?.focusCheckpoint,
+          targetSeed,
+          captureEnvelope: pendingConfirmation
+            ? (pendingConfirmation.record.captureEnvelope ?? null)
+            : clip.captureMode === 'automatic_pose_trigger'
+              ? attemptCaptureEnvelope(
+                  clip,
+                  attemptEvidence.current.quality,
+                  attemptEvidence.current.readiness,
+                )
+              : null,
+        };
+        if (
+          execution &&
+          !pendingConfirmation &&
+          clipSupportsScoring(clip) &&
+          (clip.poseSequence !== undefined || needsPoseExtraction)
+        ) {
+          original = Object.freeze({
+            operationId: makeUuid(),
+            captureId,
+            ownerContext: execution.ownerContext,
+            apiOrigin: execution.scope.apiOrigin,
+          });
+          // Retain the chosen lookup ID BEFORE awaiting preparation: a lost
+          // commit acknowledgement must not mint another definition on retry.
+          retainedOriginal.current = original;
+          const operation = await prepareOriginalCaptureAnalysis(
+            request,
+            execution,
+            original.operationId,
+          );
+          if (!executionCurrent()) return;
+          original = Object.freeze({
+            ...original,
+            operationId: operation.operationId,
+          });
+          retainedOriginal.current = original;
+          // The core owns saved-file extraction and the one-time observation
+          // seal. It exposes no native progress ID, so this bar stays honest
+          // and indeterminate instead of accepting a stale extraction event.
+          const outcome = await trackLedgerRun(
+            runOriginalCaptureAnalysis({
+              db: rawDb,
+              execution,
+              operationId: original.operationId,
+            }),
+          );
+          if (!executionCurrent()) return;
+          await finishOriginalOutcome(
+            outcome,
+            original,
+            execution,
+            executionCurrent,
+          );
+          return;
+        }
+        // Unavailable/session-less and pose-less legacy entry points retain
+        // their existing honest outcomes. They do not gain saved-retry proof.
         let analysisClip = clip;
         if (needsPoseExtraction && clip.captureMode === 'imported_video') {
           // Arm the extraction progress surface BEFORE the native pass
@@ -862,10 +1914,18 @@ export function AnalyzeScreen() {
           extractionRun.current = { nativeCaptureId: null, eta: null };
           setAnalysisProgress(extractionProgress(null));
           try {
-            const extraction = await extractImportedPoseSequence(
-              clip,
-              targetSeed?.point ?? null,
-            );
+            const extraction = await withCameraOperation(options => {
+              if (extractionRun.current) {
+                extractionRun.current.nativeCaptureId =
+                  options.operationId ?? null;
+              }
+              return extractImportedPoseSequence(
+                clip,
+                targetSeed?.point ?? null,
+                options,
+              );
+            });
+            if (!executionCurrent()) return;
             analysisClip = {
               ...clip,
               poseSequence: extraction.poseSequence,
@@ -879,12 +1939,13 @@ export function AnalyzeScreen() {
             // instead of finding a payload that predates the extraction.
             // A persistence hiccup never fails the analysis in hand.
             try {
-              await updateCaptureClipPayload(getDb(), captureId, analysisClip);
+              await updateCaptureClipPayload(db, captureId, analysisClip);
+              if (!executionCurrent()) return;
             } catch {
               // The run continues on the in-memory clip.
             }
           } catch (error) {
-            if (abandoned.current) return;
+            if (!executionCurrent()) return;
             const message = importedPoseExtractionFailureMessage(error);
             usabilityFunnel.log('error_shown', message);
             setPhase({
@@ -892,6 +1953,7 @@ export function AnalyzeScreen() {
               message,
               stage: 'analysis',
               recovery: 'retry',
+              savedCapture: { captureId, clip, ownerContext },
             });
             return;
           } finally {
@@ -899,156 +1961,114 @@ export function AnalyzeScreen() {
           }
           setPhase({ kind: 'working', message: 'Measuring your swing…' });
         }
-        if (abandoned.current) return;
+        if (!executionCurrent()) return;
         setAnalysisProgress(analysisStageProgress('measuring'));
-        // PRACTICE SET: every scored analysis in one sitting shares a
-        // sessionId so the Result and Progress surfaces can show whether the
-        // re-record after the advice moved the score. A TRY AGAIN re-arm
-        // joins the set it came from; otherwise the live set is resumed or a
-        // new one starts. The plan is only READ here — it is committed
-        // (session row + outbox + kv) after a score exists, so an abstained
-        // or failed run bookkeeps nothing. Set errors never fail an analysis.
-        let practiceSet: PracticeSetPlan | null = null;
-        try {
-          practiceSet = await planPracticeSet(getDb(), {
-            shotType: declaredStroke,
-            preferredSessionId: rearm?.sessionId ?? null,
-          });
-        } catch {
-          practiceSet = null;
-        }
-        // The player may have left while the planner read was pending; a run
-        // started now would spend a rating nobody is waiting on.
-        if (abandoned.current) return;
-        const sessionId = practiceSet?.sessionId ?? null;
-        ratingLedgerTouched.current = true;
-        const analysisRun = runCaptureAnalysis({
-          db: getDb(),
+        const outcome = await trackLedgerRun(
+          runCaptureAnalysis({
+            ...request,
+            clip: analysisClip,
+          }),
+        );
+        publishOutcome(outcome, {
           captureId,
           clip: analysisClip,
-          declaredStroke,
-          declaredCanonical: techniqueIntent?.canonical ?? null,
-          handedness: profile?.handedness ?? 'right',
-          cameraView: 'side',
-          apiConfig: {
-            baseUrl: session?.apiBaseUrl ?? '',
-            token: session?.bearerToken ?? null,
-          },
-          appVersion: getRuntimePublicConfig().appVersion,
-          sessionId,
-          focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
-          captureEnvelope:
-            clip.captureMode === 'automatic_pose_trigger'
-              ? attemptCaptureEnvelope(
-                  clip,
-                  attemptEvidence.current.quality,
-                  attemptEvidence.current.readiness,
-                )
-              : null,
+          ownerContext,
+          apiOrigin: request.apiConfig.baseUrl,
+          pendingConfirmation,
+          current: executionCurrent,
         });
-        ledgerRunSettled.current = analysisRun.then(
-          () => undefined,
-          () => undefined,
-        );
-        const outcome = await analysisRun;
-        // The measured/saved boundary lives inside runCaptureAnalysis (no
-        // incremental signal is exposed); once it returns, the remaining
-        // work is routing the already-persisted outcome.
-        const paywallRequired =
-          outcome.kind === 'unavailable' &&
-          outcome.cause === 'paywall_required';
-        // A new rating leaves for the server right away; the access snapshot
-        // is deliberately NOT re-read here — see ratingLedgerTouched.
-        if (outcome.kind === 'scored') triggerOutboxSync();
-        if (abandoned.current) return;
-        setAnalysisProgress(analysisStageProgress('saving'));
-        if (outcome.kind === 'unavailable') {
-          usabilityFunnel.log('error_shown', outcome.reason);
-          setPhase({
-            kind: 'error',
-            message: outcome.reason,
-            stage: 'analysis',
-            recovery: paywallRequired ? 'upgrade' : 'retry',
-          });
-          return;
-        }
-        if (outcome.kind === 'quality_blocked') {
-          // Honest abstention: nothing was analyzed or rated. The message
-          // carries the actionable guidance for every failing dimension.
-          usabilityFunnel.log('error_shown', outcome.reason);
-          setPhase({
-            kind: 'error',
-            message: qualityBlockedMessage(outcome.reason, outcome.envelope),
-            stage: 'analysis',
-            recovery: 'retry',
-          });
-          return;
-        }
-        if (outcome.kind === 'scored') {
-          // The scored analysis is saved with the plan's sessionId: commit
-          // the set now (new sets write their session row + sync entry; the
-          // kv activity stamp keeps the set alive). Best-effort — the score
-          // is already durable.
-          if (practiceSet) {
-            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
-          }
-          // Score first: every scored run goes straight to the Result
-          // screen. When this run consumed the account's FINAL free
-          // rating, the upgrade prompt is surfaced once, on top of it.
-          if (outcome.freeLimitReached) {
-            usabilityFunnel.log('free_limit_prompt_shown');
-            setPhase({ kind: 'free_limit', analysisId: outcome.analysisId });
-            return;
-          }
-          usabilityFunnel.log('result_opened');
-          navigation.replace('Result', { analysisId: outcome.analysisId });
-          // Rating ask on the settled Result screen — every scored analysis
-          // reports; appStoreReview stops for good once the user has
-          // reviewed and iOS throttles everything in between. Never blocks
-          // or fails the analysis routing. Deliberately skipped on the
-          // free-limit path above: no OS sheet on top of the upgrade prompt.
-          void reportScoredAnalysisForReview();
-          return;
-        }
-        // Non-scored outcomes (family-level low reads, honest abstentions,
-        // disagreement-only records) are surfaced with actionable guidance.
-        const presentation = strokeIntentPresentation(outcome.record);
-        if (presentation) {
-          usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);
-          setPhase({
-            kind: 'analyzed',
-            analysisId: outcome.analysisId,
-            presentation,
-          });
-          return;
-        }
-        usabilityFunnel.log('result_opened');
-        navigation.replace('Result', { analysisId: outcome.analysisId });
       } catch (error) {
-        if (abandoned.current) return;
+        if (!executionCurrent()) return;
+        if (original) {
+          setPhase({
+            kind: 'error',
+            stage: 'analysis',
+            recovery: 'reconcile_saved',
+            original,
+            message:
+              'This saved analysis could not be verified. Check the original again when its storage and rating service are available.',
+          });
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         usabilityFunnel.log('error_shown', message);
+        if (pendingConfirmation && isDataOwnerContextCurrent(ownerContext)) {
+          setPhase({
+            ...pendingConfirmation,
+            errorMessage: message,
+            uncertainContinuation: true,
+          });
+          return;
+        }
         setPhase({
           kind: 'error',
           message,
           stage: 'analysis',
           recovery: 'retry',
+          savedCapture: { captureId, clip, ownerContext },
         });
       } finally {
-        scoringActive.current = false;
+        savedConfirmationSignal?.removeEventListener(
+          'abort',
+          abortSavedOperation,
+        );
+        routeController.signal.removeEventListener(
+          'abort',
+          abortSavedOperation,
+        );
+        const current = executionCurrent();
+        execution?.dispose();
+        if (activeOriginalExecution.current === execution)
+          activeOriginalExecution.current = null;
+        if (activeAnalysisOperation.current === controller) {
+          activeAnalysisOperation.current = null;
+          scoringActive.current = false;
+        }
         // The progress surface describes ONE scoring run; it never outlives
         // it (error surfaces and the next run start clean).
-        extractionRun.current = null;
-        setAnalysisProgress(null);
+        if (current) {
+          extractionRun.current = null;
+          setAnalysisProgress(null);
+        }
       }
     },
-    [declaredStroke, navigation, profile, rearm, techniqueIntent],
+    [
+      confirmationCurrent,
+      screenCurrent,
+      declaredStroke,
+      finishOriginalOutcome,
+      publishOutcome,
+      profile,
+      rearm,
+      routeController,
+      savedConfirmationSignal,
+      techniqueIntent,
+      trackLedgerRun,
+      withCameraOperation,
+    ],
   );
 
   const run = useCallback(async () => {
-    if (operationActive.current) return;
+    const currentPhase = phaseRef.current;
+    if (
+      operationActive.current ||
+      scoringActive.current ||
+      !screenCurrent() ||
+      savedRoute ||
+      savedTechniqueConfirmation ||
+      savedOriginalAnalysis ||
+      confirmationBound.current ||
+      currentPhase.kind === 'working' ||
+      (currentPhase.kind === 'error' &&
+        (currentPhase.recovery === 'reconcile_saved' ||
+          (currentPhase.original && !currentPhase.canStartAnotherClip))) ||
+      selectionRef.current.techniqueIntent !== techniqueIntent ||
+      selectionRef.current.declaredStroke !== declaredStroke
+    )
+      return;
     operationActive.current = true;
+    retainedOriginal.current = null;
     cameraRun.current =
       source === 'camera' ? { captureId: null, stage: 'watching' } : null;
     // Each capture attempt starts with a clean envelope verdict, live
@@ -1064,19 +2084,24 @@ export function AnalyzeScreen() {
         source === 'library' ? 'Opening video library…' : 'Opening camera…',
     });
     try {
+      const ownerContext = captureDataOwnerContext();
       let clip: CapturedClip;
       try {
-        clip =
+        clip = await withCameraOperation(options =>
           source === 'library'
-            ? await importStrokeVideo()
-            : await captureStrokeVideo({
+            ? importStrokeVideo(options)
+            : captureStrokeVideo({
+                ...options,
                 handedness: profile?.handedness ?? 'right',
-              });
+              }),
+        );
       } catch (error) {
+        if (!screenCurrent() || !isDataOwnerContextCurrent(ownerContext))
+          return;
         if (isUserCancelledCapture(error)) {
           // User cancel is not a startup failure.
           usabilityFunnel.log('attempt_abandoned');
-          if (source === 'library') navigation.goBack();
+          if (source === 'library') leaveScreen(() => navigation.goBack());
           else setPhase({ kind: 'ready' });
           return;
         }
@@ -1100,41 +2125,35 @@ export function AnalyzeScreen() {
       if (source === 'camera') {
         stabilitySlo.record({ kind: 'camera_startup_succeeded' });
       }
+      if (!screenCurrent() || !isDataOwnerContextCurrent(ownerContext)) return;
       const captureId = makeUuid();
       const shotType =
         clip.recognition.status === 'recognized'
           ? clip.recognition.shotType
           : 'unrecognized';
-      await savePendingCapture(
-        getDb(),
-        captureId,
-        shotType,
-        clip,
-        declaredStroke,
-      );
+      const db = forDataOwner(getDb(), ownerContext);
+      await savePendingCapture(db, captureId, shotType, clip, declaredStroke);
+      if (!screenCurrent() || !isDataOwnerContextCurrent(ownerContext)) return;
       if (
         clip.captureMode === 'automatic_pose_trigger' &&
         (declaredStroke !== null ||
           canAutoScoreWithoutDeclaration(clip, techniqueIntent))
       ) {
         // ZERO-TOUCH PATH: technique declared — or Auto Detect explicitly
-        // armed — before recording, target tapped live in the camera, motion
-        // auto-captured and auto-finalized, so analysis starts without any
+        // armed — before recording, with the camera's acquired person anchor
+        // kept distinct from any user tap, so analysis starts without any
         // further interaction. Auto runs route declared=null through the
         // classifier ladder; they never invent a declaration.
-        const liveSeed = clip.targetSeed
-          ? {
-              point: { x: clip.targetSeed.x, y: clip.targetSeed.y },
-              selectedAtIso: new Date().toISOString(),
-            }
-          : null;
+        const liveSeed = null;
         usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
-        void scoreCapture(captureId, clip, liveSeed);
+        setPhase({ kind: 'saved', clip, captureId, ownerContext });
+        void scoreCapture(captureId, clip, liveSeed, ownerContext);
         return;
       }
       usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
-      setPhase({ kind: 'saved', clip, captureId });
+      setPhase({ kind: 'saved', clip, captureId, ownerContext });
     } catch (error) {
+      if (!screenCurrent()) return;
       // The clip exists: this is a local persistence failure after a
       // successful capture, never a camera startup failure.
       const message = error instanceof Error ? error.message : String(error);
@@ -1151,21 +2170,33 @@ export function AnalyzeScreen() {
     }
   }, [
     declaredStroke,
+    leaveScreen,
     navigation,
     profile?.handedness,
+    savedRoute,
+    savedTechniqueConfirmation,
+    savedOriginalAnalysis,
+    screenCurrent,
     scoreCapture,
     source,
     techniqueIntent,
+    withCameraOperation,
   ]);
 
   // Library imports auto-launch (no declaration is useful for them yet);
   // guided capture waits for the user to declare a stroke and start.
   useEffect(() => {
-    if (source !== 'library' || autoLaunchStarted.current) return;
+    if (
+      source !== 'library' ||
+      autoLaunchStarted.current ||
+      savedRoute ||
+      savedTechniqueConfirmation
+    )
+      return;
     autoLaunchStarted.current = true;
     const timer = setTimeout(() => void run(), 160);
     return () => clearTimeout(timer);
-  }, [run, source]);
+  }, [run, source, savedRoute, savedTechniqueConfirmation]);
 
   // TRY AGAIN re-arms the camera directly: same intent, same capture mode,
   // same camera config — the state above was seeded before `run` was first
@@ -1178,13 +2209,95 @@ export function AnalyzeScreen() {
     return () => clearTimeout(timer);
   }, [rearm, run]);
 
-  useEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    let mounted = true;
+    let execution: OriginalAnalysisExecution | null = null;
+    const abandon = () => {
+      if (
+        !isDataOwnerContextCurrent(mountOwner.current) ||
+        currentAnalysisService() !== mountService
+      )
+        bindingInvalidated.current = true;
+      const wasAbandoned = abandoned.current;
       abandoned.current = true;
-      if (operationActive.current) cancelCameraOperation();
-    },
-    [],
-  );
+      routeController.abort();
+      cancelActiveCameraOperation();
+      cancelActiveAnalysisOperation();
+      execution?.dispose();
+      if (mounted && !wasAbandoned) setExecutionInvalidated(true);
+    };
+    const session = getApiSession();
+    try {
+      if (session) {
+        execution = createOriginalAnalysisExecution(
+          mountOwner.current,
+          session.apiBaseUrl,
+          routeController.signal,
+        );
+        routeExecution.current = execution;
+        execution.signal.addEventListener('abort', abandon, { once: true });
+      }
+      if (routeChanged.current || currentAnalysisService() !== mountService)
+        abandon();
+    } catch {
+      abandon();
+    }
+    const blur = navigation.addListener?.('blur', abandon);
+    const ownerChanged = subscribeToDataOwner(() => {
+      if (!isDataOwnerContextCurrent(mountOwner.current)) abandon();
+    });
+    // Also fence a session-less legacy surface. A -> B -> A is observed
+    // synchronously, not merely compared when an old callback settles.
+    const serviceChanged = subscribeToApiSession(() => {
+      if (currentAnalysisService() !== mountService) abandon();
+    });
+    return () => {
+      mounted = false;
+      blur?.();
+      ownerChanged();
+      serviceChanged();
+      execution?.signal.removeEventListener('abort', abandon);
+      abandon();
+      execution?.dispose();
+      if (routeExecution.current === execution) routeExecution.current = null;
+    };
+  }, [
+    navigation,
+    mountService,
+    routeController,
+    routeIdentity,
+    cancelActiveCameraOperation,
+    cancelActiveAnalysisOperation,
+  ]);
+
+  if (
+    executionInvalidated ||
+    routeChanged.current ||
+    !isDataOwnerContextCurrent(mountOwner.current) ||
+    (confirmationBinding.current && !screenCurrent()) ||
+    (savedTechniqueConfirmation &&
+      (!isDataOwnerContextCurrent(savedTechniqueConfirmation.ownerContext) ||
+        !(isSavedConfirmationCurrent?.() ?? true))) ||
+    (phase.kind === 'needs_technique_confirmation' &&
+      !confirmationCurrent(phase))
+  ) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+        <ScreenHeader
+          title="Saved capture"
+          onClose={() => {
+            if (phaseCurrent()) leaveScreen(() => navigation.goBack());
+          }}
+        />
+        <View style={styles.stateBody}>
+          <Text accessibilityRole="alert" style={[type.body, styles.stateCopy]}>
+            This capture is no longer open in its bound account and service.
+            Reopen it from Library. The saved clip has not been changed.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (phase.kind === 'working') {
     return (
@@ -1192,11 +2305,15 @@ export function AnalyzeScreen() {
         <StatusBar barStyle="light-content" />
         <ScreenHeader
           dark
-          title={source === 'library' ? 'Import video' : 'Auto Analyze'}
+          title={
+            savedTechniqueConfirmation || savedRoute
+              ? 'Saved capture'
+              : source === 'library'
+                ? 'Import video'
+                : 'Auto Analyze'
+          }
           onClose={() => {
-            abandoned.current = true;
-            cancelCameraOperation();
-            navigation.goBack();
+            if (phaseCurrent()) leaveScreen(() => navigation.goBack());
           }}
         />
         {phase.message.startsWith('Measuring') ||
@@ -1248,40 +2365,230 @@ export function AnalyzeScreen() {
               ? 'Capture interrupted'
               : 'Analysis stopped'
           }
-          onClose={() => navigation.goBack()}
+          onClose={() => {
+            if (phaseCurrent()) leaveScreen(() => navigation.goBack());
+          }}
         />
-        <View style={styles.stateBody} accessibilityRole="alert">
+        <ScrollView
+          contentContainerStyle={styles.stateScrollBody}
+          accessibilityRole="alert"
+        >
           <MascotStage
             compact
             pose={ANALYSIS_MASCOT_POSES.recovery}
             tone="danger"
             testID="analysis-mascot-error"
           />
-          <Text style={[type.h1, styles.stateTitle]}>Nothing was rated.</Text>
+          <Text style={[type.h1, styles.stateTitle]}>
+            {phase.original
+              ? 'Your saved analysis is held.'
+              : phase.recovery === 'review_saved'
+                ? 'Your analysis needs recovery.'
+                : 'Nothing was rated.'}
+          </Text>
           <Text style={[type.body, styles.stateCopy]}>{phase.message}</Text>
           <View style={styles.stateActions}>
-            {phase.recovery === 'upgrade' ? (
+            {phase.recovery === 'retry_saved' ||
+            phase.recovery === 'reconcile_saved' ? (
+              <Button
+                label={
+                  phase.recovery === 'retry_saved'
+                    ? 'Retry saved analysis'
+                    : 'Check saved analysis'
+                }
+                variant="dark"
+                onPress={() => {
+                  if (phaseCurrent()) void retrySavedAnalysis(phase);
+                }}
+              />
+            ) : phase.recovery === 'upgrade' ? (
               <Button
                 label="Upgrade to Pro"
                 variant="volt"
-                onPress={() =>
-                  navigation.navigate('Paywall', { source: 'rating' })
-                }
+                onPress={() => {
+                  if (phaseCurrent())
+                    leaveScreen(() =>
+                      navigation.navigate('Paywall', { source: 'rating' }),
+                    );
+                }}
+              />
+            ) : phase.recovery === 'review_saved' ? (
+              <Button
+                label="Open Library"
+                variant="dark"
+                onPress={() => {
+                  if (phaseCurrent())
+                    leaveScreen(() =>
+                      navigation.navigate('Tabs', { screen: 'Library' }),
+                    );
+                }}
               />
             ) : (
               <Button
-                label="Try again"
+                label={
+                  phase.stage === 'capture'
+                    ? 'Try again'
+                    : source === 'library'
+                      ? 'Import another video'
+                      : 'Record another clip'
+                }
                 variant="dark"
-                onPress={() => void run()}
+                onPress={() => {
+                  if (phaseCurrent()) void run();
+                }}
               />
             )}
+            {phase.original && phase.canStartAnotherClip ? (
+              <Button
+                label={
+                  source === 'library'
+                    ? 'Import another video'
+                    : 'Record another clip'
+                }
+                variant="secondary"
+                onPress={() => {
+                  if (!phaseCurrent()) return;
+                  if (savedOriginalAnalysis) {
+                    leaveScreen(() =>
+                      navigation.replace('Analyze', { source }),
+                    );
+                  } else {
+                    void run();
+                  }
+                }}
+              />
+            ) : null}
             <Button
               label="Close"
               variant="ghost"
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (phaseCurrent()) leaveScreen(() => navigation.goBack());
+              }}
             />
           </View>
-        </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (phase.kind === 'needs_technique_confirmation') {
+    const presentation = strokeIntentPresentation(phase.record)!;
+    const readOnly =
+      phase.confirmationStatus === 'recovery_blocked' ||
+      !isAnalysisInputSelectionSnapshot(phase.record.inputSelection) ||
+      phase.record.inputSelection.target.guidedStartTap?.selectedAtIso === null;
+    const held =
+      readOnly ||
+      phase.confirmationStatus !== 'ready' ||
+      phase.uncertainContinuation;
+    const current = () =>
+      phaseRef.current === phase &&
+      confirmationCurrent(phase) &&
+      selectionRef.current.techniqueIntent === techniqueIntent &&
+      selectionRef.current.declaredStroke === declaredStroke;
+    const closeConfirmation = () => {
+      if (!current()) return;
+      leaveScreen(() => navigation.goBack());
+    };
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScreenHeader title="Confirm technique" onClose={closeConfirmation} />
+        <ScrollView
+          contentContainerStyle={styles.savedContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text
+            style={[type.micro, styles.intentEyebrow, { color: color.warn }]}
+          >
+            {held ? 'SAVED ANALYSIS HELD' : presentation.eyebrow}
+          </Text>
+          <Text style={[type.h1, styles.intentTitle]}>
+            {presentation.title}
+          </Text>
+          <Text style={[type.body, styles.stateCopy]}>
+            {held
+              ? 'The existing operation and original selection for this same saved capture must be verified before continuing. Your clip is retained; no replacement operation will be started while its outcome or rating hold is uncertain.'
+              : presentation.body}
+          </Text>
+          <Text style={[type.caption, styles.scoreCopy]}>
+            {readOnly
+              ? 'This saved proof is read-only. Its release or original selection could not be established safely.'
+              : 'The original rating hold must be confirmed released before the selected technique can start its own rating.'}
+          </Text>
+          <CaptureEvidenceCard clip={phase.clip} />
+          <View style={styles.scoreSection}>
+            <Text style={[type.h3, { color: color.ink }]}>
+              Which technique was this?
+            </Text>
+            <TechniqueIntentPicker
+              value={techniqueIntent}
+              onChange={intent => {
+                if (!current() || readOnly) return;
+                selectionRef.current = {
+                  techniqueIntent: intent,
+                  declaredStroke: isDeclaredTechniqueIntent(intent)
+                    ? intent.legacySlug
+                    : null,
+                };
+                setTechniqueIntent(intent);
+                setDeclared(
+                  isDeclaredTechniqueIntent(intent) ? intent.legacySlug : null,
+                );
+              }}
+            />
+            {phase.errorMessage ? (
+              <Text
+                accessibilityRole="alert"
+                style={[type.body, styles.scoreCopy]}
+              >
+                {phase.errorMessage}
+              </Text>
+            ) : null}
+            <Button
+              label="Confirm technique"
+              variant="volt"
+              disabled={readOnly || !isDeclaredTechniqueIntent(techniqueIntent)}
+              onPress={() => {
+                if (!current() || readOnly) return;
+                void scoreCapture(
+                  phase.captureId,
+                  phase.clip,
+                  phase.targetSeed,
+                  phase.ownerContext,
+                  phase,
+                );
+              }}
+            />
+            {phase.paywallRequired ? (
+              <Button
+                label="Upgrade to Pro"
+                variant="dark"
+                onPress={() => {
+                  if (current())
+                    leaveScreen(() =>
+                      navigation.navigate('Paywall', { source: 'rating' }),
+                    );
+                }}
+              />
+            ) : null}
+            {held ? (
+              <Button
+                label="Reload saved capture"
+                variant="secondary"
+                onPress={() => {
+                  if (!current()) return;
+                  leaveScreen(() =>
+                    navigation.replace('Analyze', {
+                      captureId: phase.captureId,
+                    }),
+                  );
+                }}
+              />
+            ) : null}
+            <Button label="Close" variant="ghost" onPress={closeConfirmation} />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -1297,7 +2604,9 @@ export function AnalyzeScreen() {
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
           title="Stroke analysis"
-          onClose={() => navigation.popToTop()}
+          onClose={() => {
+            if (phaseCurrent()) leaveScreen(() => navigation.popToTop());
+          }}
         />
         <View style={styles.stateBody} accessibilityLiveRegion="polite">
           <MascotStage
@@ -1321,21 +2630,45 @@ export function AnalyzeScreen() {
               <Button
                 label="See the full read"
                 variant="volt"
-                onPress={() => navigation.replace('Result', { analysisId })}
+                onPress={() => {
+                  if (phaseCurrent())
+                    leaveScreen(() =>
+                      navigation.replace('Result', { analysisId }),
+                    );
+                }}
               />
             ) : null}
-            <Button
-              label={
-                source === 'library' ? 'Import another' : 'Capture another'
-              }
-              variant="dark"
-              icon={source === 'library' ? 'upload' : 'camera'}
-              onPress={() => void run()}
-            />
+            {confirmationBound.current ? (
+              <Button
+                label="Open Library"
+                variant="dark"
+                onPress={() => {
+                  if (phaseCurrent())
+                    leaveScreen(() =>
+                      navigation.navigate('Tabs', { screen: 'Library' }),
+                    );
+                }}
+              />
+            ) : (
+              <Button
+                label={
+                  source === 'library'
+                    ? 'Import another video'
+                    : 'Record another clip'
+                }
+                variant="dark"
+                icon={source === 'library' ? 'upload' : 'camera'}
+                onPress={() => {
+                  if (phaseCurrent()) void run();
+                }}
+              />
+            )}
             <Button
               label="Close"
               variant="ghost"
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (phaseCurrent()) leaveScreen(() => navigation.goBack());
+              }}
             />
           </View>
         </View>
@@ -1345,11 +2678,12 @@ export function AnalyzeScreen() {
 
   if (phase.kind === 'free_limit') {
     // The scored result is saved and one tap away — this popup only tells
-    // the player their two free analyses are used up and Pro unlocks more.
+    // the player their free allowance is used up and Pro unlocks more.
     const { analysisId } = phase;
     const seeScore = () => {
+      if (!screenCurrent() || phaseRef.current !== phase) return;
       usabilityFunnel.log('result_opened');
-      navigation.replace('Result', { analysisId });
+      leaveScreen(() => navigation.replace('Result', { analysisId }));
     };
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
@@ -1366,7 +2700,7 @@ export function AnalyzeScreen() {
               accessibilityViewIsModal
               accessibilityLabel={`You've used ${freeAnalysesPhrase(
                 freeRatingsLimit,
-              )} free analyses`}
+              )}`}
               style={styles.freeLimitDialog}
             >
               <MascotStage
@@ -1381,16 +2715,25 @@ export function AnalyzeScreen() {
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
                 Your score is saved. You’ve used{' '}
-                {freeAnalysesPhrase(freeRatingsLimit)} free analyses — upgrade
-                to Pickle Sensei Pro to keep rating every swing.
+                {freeAnalysesPhrase(freeRatingsLimit)} — upgrade to Pickle
+                Sensei Pro to keep rating every swing.
               </Text>
               <View style={styles.freeLimitActions}>
                 <Button
                   label="Upgrade to Pro"
                   variant="volt"
                   onPress={() => {
+                    if (!screenCurrent() || phaseRef.current !== phase) return;
                     navigation.replace('Result', { analysisId });
+                    if (
+                      routeController.signal.aborted ||
+                      !isDataOwnerContextCurrent(mountOwner.current) ||
+                      currentAnalysisService() !== mountService ||
+                      !executionIsCurrent(routeExecution.current)
+                    )
+                      return;
                     navigation.navigate('Paywall', { source: 'rating' });
+                    leaveScreen(() => {});
                   }}
                 />
                 <Button
@@ -1408,12 +2751,20 @@ export function AnalyzeScreen() {
 
   if (phase.kind === 'saved') {
     const { clip } = phase;
+    const selectionCurrent = () =>
+      phaseCurrent() &&
+      !scoringActive.current &&
+      !operationActive.current &&
+      selectionRef.current.techniqueIntent === techniqueIntent &&
+      selectionRef.current.declaredStroke === declaredStroke;
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
           title="Capture complete"
-          onClose={() => navigation.popToTop()}
+          onClose={() => {
+            if (phaseCurrent()) leaveScreen(() => navigation.popToTop());
+          }}
         />
         <ScrollView
           contentContainerStyle={styles.savedContent}
@@ -1484,7 +2835,15 @@ export function AnalyzeScreen() {
               </Text>
               <StrokeDeclaration
                 value={declaredStroke}
-                onChange={setDeclared}
+                onChange={stroke => {
+                  if (!selectionCurrent()) return;
+                  selectionRef.current = {
+                    techniqueIntent: null,
+                    declaredStroke: stroke,
+                  };
+                  setTechniqueIntent(null);
+                  setDeclared(stroke);
+                }}
               />
               {declaredStroke === null &&
               canAutoScoreWithoutDeclaration(clip, techniqueIntent) ? (
@@ -1497,15 +2856,30 @@ export function AnalyzeScreen() {
               ) : null}
               {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (
                 <TargetSelector
+                  automaticOnly
                   frameUri={clip.uri}
                   posterUri={clip.posterUri}
                   sourceWidth={clip.width}
                   sourceHeight={clip.height}
                   onConfirm={selection => {
+                    if (!selectionCurrent()) return;
                     setTargetSeed(selection);
-                    void scoreCapture(phase.captureId, clip, selection);
+                    void scoreCapture(
+                      phase.captureId,
+                      clip,
+                      selection,
+                      phase.ownerContext,
+                    );
                   }}
-                  onSkip={() => void scoreCapture(phase.captureId, clip, null)}
+                  onSkip={() => {
+                    if (!selectionCurrent()) return;
+                    void scoreCapture(
+                      phase.captureId,
+                      clip,
+                      null,
+                      phase.ownerContext,
+                    );
+                  }}
                 />
               ) : (
                 <Button
@@ -1520,9 +2894,15 @@ export function AnalyzeScreen() {
                     declaredStroke === null &&
                     !canAutoScoreWithoutDeclaration(clip, techniqueIntent)
                   }
-                  onPress={() =>
-                    void scoreCapture(phase.captureId, clip, targetSeed)
-                  }
+                  onPress={() => {
+                    if (!selectionCurrent()) return;
+                    void scoreCapture(
+                      phase.captureId,
+                      clip,
+                      targetSeed,
+                      phase.ownerContext,
+                    );
+                  }}
                 />
               )}
             </View>
@@ -1538,18 +2918,40 @@ export function AnalyzeScreen() {
           )}
 
           <View style={styles.savedActions}>
-            <Button
-              label={
-                source === 'library' ? 'Import another' : 'Capture another'
-              }
-              variant="dark"
-              icon={source === 'library' ? 'upload' : 'camera'}
-              onPress={() => void run()}
-            />
+            {confirmationBound.current ? (
+              <Button
+                label="Open Library"
+                variant="dark"
+                onPress={() => {
+                  if (phaseCurrent())
+                    leaveScreen(() =>
+                      navigation.navigate('Tabs', { screen: 'Library' }),
+                    );
+                }}
+              />
+            ) : (
+              <Button
+                label={
+                  source === 'library'
+                    ? 'Import another video'
+                    : 'Record another clip'
+                }
+                variant="dark"
+                icon={source === 'library' ? 'upload' : 'camera'}
+                onPress={() => {
+                  if (phaseCurrent()) void run();
+                }}
+              />
+            )}
             <Button
               label="Open Library"
               variant="ghost"
-              onPress={() => navigation.navigate('Tabs', { screen: 'Library' })}
+              onPress={() => {
+                if (phaseCurrent())
+                  leaveScreen(() =>
+                    navigation.navigate('Tabs', { screen: 'Library' }),
+                  );
+              }}
             />
           </View>
         </ScrollView>
@@ -1563,7 +2965,9 @@ export function AnalyzeScreen() {
       <ScreenHeader
         dark
         title="Auto Analyze"
-        onClose={() => navigation.goBack()}
+        onClose={() => {
+          if (phaseCurrent()) leaveScreen(() => navigation.goBack());
+        }}
       />
       <ScrollView
         contentContainerStyle={styles.content}
@@ -1600,6 +3004,18 @@ export function AnalyzeScreen() {
           dark
           value={techniqueIntent}
           onChange={intent => {
+            if (
+              !phaseCurrent() ||
+              scoringActive.current ||
+              operationActive.current ||
+              selectionRef.current.techniqueIntent !== techniqueIntent ||
+              selectionRef.current.declaredStroke !== declaredStroke
+            )
+              return;
+            selectionRef.current = {
+              techniqueIntent: intent,
+              declaredStroke: intent?.legacySlug ?? null,
+            };
             usabilityFunnel.log(
               'intent_selected',
               intent === null
@@ -1645,6 +3061,13 @@ export function AnalyzeScreen() {
             </Text>
           </View>
         </View>
+        {offlineJourney ? (
+          <OfflineAllocationCard
+            dark
+            state={offlineJourney}
+            style={styles.offlineCard}
+          />
+        ) : null}
         {accessibleLayout ? (
           <Text style={[type.caption, styles.footerHint]}>
             Camera opens first. You control record.
@@ -1662,7 +3085,9 @@ export function AnalyzeScreen() {
           largeTextLabel="Open camera"
           variant="volt"
           icon="camera"
-          onPress={() => void run()}
+          onPress={() => {
+            if (phaseCurrent()) void run();
+          }}
         />
       </View>
     </SafeAreaView>
@@ -1833,6 +3258,7 @@ const styles = StyleSheet.create({
   notes: { paddingVertical: space.lg, gap: space.md },
   noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   noteCopy: { color: color.onDarkSubtle, flex: 1 },
+  offlineCard: { marginBottom: space.lg },
   footer: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,
@@ -1865,6 +3291,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.xl,
+  },
+  stateScrollBody: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
   },
   stateTitle: { color: color.ink, textAlign: 'center', marginTop: space.lg },
   intentEyebrow: { textAlign: 'center', marginTop: space.lg },

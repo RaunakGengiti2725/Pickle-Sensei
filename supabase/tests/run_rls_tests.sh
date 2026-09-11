@@ -7,14 +7,15 @@
 # via initdb/pg_ctl when Docker is unavailable (macOS dev boxes). Either way:
 # install the minimal Supabase shim (auth schema + roles + hosted-like default
 # privileges), apply fresh and historical upgrade migration orders, then run
-# security_regression.sql for each. Exits non-zero on ANY boundary regression.
+# security_regression.sql and account_deletion_operations.sql. Exits non-zero
+# on ANY boundary regression.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 run_matrices() {
   local migration_root="$1" test_root="$2" history database phase file name version applied
-  for history in fresh production_20260906 upstream_20260906; do
+  for history in fresh production_20260906 upstream_20260906 ordered_20260907; do
     database="pickle_rls_$history"
     printf '\nSecurity migration history: %s\n' "$history"
     run_psql -d postgres -v ON_ERROR_STOP=1 -q -c "create database $database;"
@@ -31,7 +32,12 @@ run_matrices() {
             fi
             ;;
           upstream_20260906)
-            if [[ ( "$version" < "20260907100000" || "$version" == "20260907100000" ) && "$version" != "20260905190106" ]]; then
+            if [[ ( "$version" < "20260907100000" || "$version" == "20260907100000" ) && "$version" != "20260905190106" && "$version" != "20260906233000" && "$version" != "20260907001500" ]]; then
+              applied=1
+            fi
+            ;;
+          ordered_20260907)
+            if [[ "$version" < "20260902150000" || "$version" == "20260902150000" || "$version" == "20260905190106" || "$version" == "20260906233000" || "$version" == "20260907001500" ]]; then
               applied=1
             fi
             ;;
@@ -43,6 +49,8 @@ run_matrices() {
       done
     done
     run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/security_regression.sql"
+    run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/account_deletion_operations.sql"
+    run_psql -d "$database" -v ON_ERROR_STOP=1 -f "$test_root/analysis_release_policy.sql"
   done
 }
 

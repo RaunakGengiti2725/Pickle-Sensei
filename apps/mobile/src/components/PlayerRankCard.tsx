@@ -6,16 +6,18 @@ import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
 import type { RealAnalysisFact } from '../data/repository';
 import {
-  DUPR_ESTIMATE_NOTE,
-  duprEstimate,
-  formatDuprEstimate,
-} from '../progress/duprEstimate';
-import {
   fetchPlayerRank,
   resolvePlayerRank,
   type ServerPlayerRank,
 } from '../progress/playerRank';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
+import {
+  DUPR_ESTIMATE_NOTE,
+  DUPR_LABEL,
+  formatDupr,
+  formatDuprDistance,
+  formatTechniqueScore,
+} from '../progress/duprEstimate';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
 /**
@@ -27,6 +29,10 @@ import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
  * Self-contained on purpose: it takes the already-loaded local analysis
  * facts and fetches the account-saved rank itself, so the host screen only
  * renders `<PlayerRankCard facts={facts} />`.
+ *
+ * Every figure prints as an estimated DUPR (D-046) — the headline rating
+ * with its "/10" reading beneath, the distance to the next tier and the
+ * technique chips — while the tier math stays on the 0–10 rating.
  */
 
 const TOP_OF_SCALE = 10;
@@ -107,11 +113,15 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
     <Card tone="dark" style={styles.card} testID="player-rank-card">
       <View style={styles.headerRow}>
         <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
-        <View style={styles.ratingWrap}>
-          <Text style={styles.rating}>{summary.rating.toFixed(2)}</Text>
-          <Text style={[type.caption, styles.ratingScale]}>/ 10</Text>
-          <Text style={[type.micro, styles.duprEstimate]}>
-            {formatDuprEstimate(summary.rating)}
+        <View style={styles.ratingWrap} testID="player-rank-card-rating">
+          <Text style={styles.rating}>
+            {formatDupr(summary.rating)}
+            <Text style={[type.caption, styles.ratingScale]}>
+              {` ${DUPR_LABEL}`}
+            </Text>
+          </Text>
+          <Text style={[type.micro, styles.ratingTechnique]}>
+            {formatTechniqueScore(summary.rating, 2)}
           </Text>
         </View>
       </View>
@@ -119,16 +129,16 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       <View
         accessibilityLabel={`Player rank ${summary.tierLabel} ${
           summary.divisionLabel
-        }. Rating ${summary.rating.toFixed(
+        }. Estimated DUPR ${formatDupr(
+          summary.rating,
+        )}, technique rating ${summary.rating.toFixed(
           2,
-        )} out of 10, estimated DUPR ${duprEstimate(summary.rating).toFixed(
-          1,
-        )}, from your current form across ${
+        )} out of 10, from your current form across ${
           summary.techniqueCount
         } ${techniqueNoun}.`}
         style={styles.tierRow}
       >
-        <RankIcon tier={summary.tier} size={52} />
+        <RankIcon tier={summary.tier} division={summary.division} size={52} />
         <View style={styles.flex}>
           <Text style={[type.h2, { color: color.onDark }]}>
             {summary.tierLabel}{' '}
@@ -138,9 +148,10 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           </Text>
           <Text style={[type.caption, styles.tierDetail]}>
             {summary.nextTier
-              ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                  summary.nextTier.label
-                }`
+              ? `${formatDuprDistance(
+                  summary.rating,
+                  summary.nextTier.minRating,
+                )} to ${summary.nextTier.label}`
               : 'Top tier — every new analysis defends it.'}
           </Text>
         </View>
@@ -176,7 +187,7 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           <View key={technique.shotType} style={styles.techniqueChip}>
             <Text style={[type.micro, styles.techniqueChipLabel]}>
               {technique.shotType.replace(/_/g, ' ')}{' '}
-              {technique.score.toFixed(1)}
+              {formatDupr(technique.score)}
             </Text>
           </View>
         ))}
@@ -184,7 +195,12 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
 
       <Text style={[type.caption, styles.formulaNote]}>
         Current form across {summary.techniqueCount} {techniqueNoun} — your
-        newest swings count most, and proven strokes weigh more. {sourceNote}{' '}
+        newest swings count most, and proven strokes weigh more. {sourceNote}
+      </Text>
+      <Text
+        style={[type.caption, styles.duprNote]}
+        testID="player-rank-card-dupr-note"
+      >
         {DUPR_ESTIMATE_NOTE}
       </Text>
     </Card>
@@ -205,13 +221,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   eyebrow: { color: color.volt },
-  ratingWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  ratingWrap: { alignItems: 'flex-end' },
   rating: {
     ...type.score,
     color: color.onDark,
   },
   ratingScale: { color: color.onDarkSubtle },
-  duprEstimate: { color: color.onDarkFaint },
+  ratingTechnique: {
+    color: color.onDarkFaint,
+    fontVariant: ['tabular-nums'],
+  },
   tierRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -252,6 +271,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
   },
   formulaNote: { color: color.onDarkSubtle, marginTop: space.md },
+  duprNote: { color: color.onDarkFaint, marginTop: space.sm },
   unrankedRow: {
     flexDirection: 'row',
     alignItems: 'center',

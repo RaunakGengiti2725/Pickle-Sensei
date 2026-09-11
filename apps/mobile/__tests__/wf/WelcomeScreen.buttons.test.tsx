@@ -38,7 +38,13 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import {
+  Dimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+} from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { ReactTestInstance } from 'react-test-renderer';
 import { WelcomeScreen } from '../../src/screens/WelcomeScreen';
@@ -100,6 +106,58 @@ function resolvedStyle(node: ReactTestInstance): Record<string, unknown> {
 }
 
 describe('WelcomeScreen button ledger', () => {
+  test.each([
+    { width: 320, height: 568, fontScale: 1 },
+    { width: 375, height: 667, fontScale: 2 },
+    { width: 320, height: 568, fontScale: 3 },
+  ])(
+    'keeps uncapped actions in the safe footer beside the scrollable body at $width×$height / text scale $fontScale',
+    metrics => {
+      const previous = {
+        window: Dimensions.get('window'),
+        screen: Dimensions.get('screen'),
+      };
+      Dimensions.set({
+        window: { ...metrics, scale: 2 },
+        screen: { ...metrics, scale: 2 },
+      });
+      const renderer = render({ onGetStarted: jest.fn(), onSignIn: jest.fn() });
+      try {
+        // Test-renderer does not measure native glyphs or Yoga layout. This pins
+        // the escape from overflow; the SE / Dynamic Type visual gate is separate.
+        const scroll = renderer.root.findByType(ScrollView);
+        expect(scroll.props.scrollEnabled).not.toBe(false);
+        expect(
+          StyleSheet.flatten(scroll.props.contentContainerStyle),
+        ).toMatchObject({ flexGrow: 1 });
+        const footer = renderer.root.findByProps({ testID: 'welcome-actions' });
+        expect(StyleSheet.flatten(footer.props.style).flexShrink).toBe(0);
+        for (const label of [START_LABEL, SIGN_IN_LABEL]) {
+          const action = pressableByLabel(renderer, label);
+          expect(footer.findAll(node => node === action)).toHaveLength(1);
+          expect(resolvedStyle(action).minHeight).toBeGreaterThanOrEqual(44);
+          for (const text of action.findAllByType(Text)) {
+            expect(text.props.allowFontScaling).not.toBe(false);
+            expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+            expect(text.props.numberOfLines).toBeUndefined();
+          }
+          let ancestor = action.parent;
+          while (ancestor && ancestor !== footer) {
+            const style = StyleSheet.flatten(ancestor.props.style) ?? {};
+            expect(style.position).not.toBe('absolute');
+            expect(style.height).toBeUndefined();
+            ancestor = ancestor.parent;
+          }
+        }
+        expect(allText(renderer)).toContain('Automatic');
+        expect(allText(renderer)).toContain('ON-DEVICE');
+      } finally {
+        act(() => renderer.unmount());
+        Dimensions.set(previous);
+      }
+    },
+  );
+
   test('renders exactly the two pressables, both in the ledger', () => {
     const renderer = render({
       onGetStarted: jest.fn(),

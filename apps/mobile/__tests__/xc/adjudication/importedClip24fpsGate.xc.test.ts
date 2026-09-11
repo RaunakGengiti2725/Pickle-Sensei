@@ -1,3 +1,10 @@
+import {
+  createCaptureAnalysisDb,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../../testSupport/captureAnalysisHarness';
 /**
  * XC-ADJ-VIS-1 — 24 fps imports and the `insufficient_fps` gate.
  *
@@ -17,8 +24,6 @@ import {
 } from '@pickle/swing-domain';
 import { evaluateCaptureQuality } from '@pickle/vision-geometry';
 import type { CapturedClip } from '../../../src/camera/capture';
-import { setActiveDataOwner } from '../../../src/data/accountScope';
-import { createFakeLocalDb } from '../../../testing/xcBehavioral/fakeLocalDb';
 
 let mockReadArtifact: (uri: string) => Promise<string> = () =>
   Promise.reject(new Error('readCaptureArtifact mock not configured'));
@@ -31,6 +36,10 @@ jest.mock('../../../src/camera/capture', () => {
 });
 
 import { runCaptureAnalysis } from '../../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../../testSupport/releasePolicyFixture';
 
 const OWNER = '44444444-4444-4444-8444-444444444444';
 const API = { baseUrl: 'https://api.test', token: 'bearer-token' };
@@ -46,8 +55,8 @@ function importedClip(
     uri: `file:///imports/${id}.mov`,
     durationMs: last.timestampMs,
     fps,
-    width: 1080,
-    height: 1080,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-04T09:00:00.000Z',
     captureMode: 'imported_video',
     recognition: { status: 'unknown', reason: 'analysis_not_run' },
@@ -59,7 +68,7 @@ function importedClip(
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -105,7 +114,7 @@ function installPermitServer(): Server {
       server.reserves += 1;
       return json(200, {
         permit: {
-          id: `permit-${server.reserves}`,
+          id: fixtureUuid(`permit-${server.reserves}`),
           accessSource: 'free',
           status: 'reserved',
           expiresAt: '2026-09-04T20:00:00.000Z',
@@ -124,6 +133,7 @@ function installPermitServer(): Server {
       server.releases.push({ permitId, outcome: body.outcome });
       return json(200, { ok: true });
     }
+    if (isReleasePolicyRequest(url)) return json(200, activeReleaseAuthority());
     throw new Error(`Unexpected fetch: ${url}`);
   }) as unknown as typeof fetch;
   return server;
@@ -133,20 +143,21 @@ const originalFetch = globalThis.fetch;
 let server: Server;
 
 beforeEach(() => {
-  setActiveDataOwner(OWNER);
+  signInCaptureOwner(OWNER);
   server = installPermitServer();
 });
 
 afterEach(() => {
+  closeCaptureHarness();
   globalThis.fetch = originalFetch;
 });
 
 async function run(clip: CapturedClip, sidecarJson: string) {
   mockReadArtifact = async () => sidecarJson;
-  const fake = createFakeLocalDb();
+  const fake = createCaptureAnalysisDb();
   const outcome = await runCaptureAnalysis({
     db: fake.db,
-    captureId: `capture-${clip.uri}`,
+    ...seedCaptureRequest(fake.db, clip, clip.uri),
     clip,
     declaredStroke: 'forehand_drive',
     declaredCanonical: 'FOREHAND_DRIVE',
@@ -227,7 +238,7 @@ describe('imported clip — 24 fps and the insufficient_fps gate', () => {
     expect(fake.shots).toHaveLength(0);
     expect(server.reserves).toBe(1);
     expect(server.releases).toEqual([
-      { permitId: 'permit-1', outcome: 'unsupported' },
+      { permitId: fixtureUuid('permit-1'), outcome: 'unsupported' },
     ]);
   });
 });

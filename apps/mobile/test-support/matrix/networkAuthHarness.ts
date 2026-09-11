@@ -54,6 +54,7 @@ import {
   SIGNED_OUT_DATA_OWNER,
   setActiveDataOwner,
 } from '../../src/data/accountScope';
+import { drainRows, executeSyncSql } from '../outboxScheduleFake';
 
 // ─── Cells ───────────────────────────────────────────────────────────────────
 
@@ -208,6 +209,13 @@ export interface OutboxRow {
   payload: string;
   attempts: number;
   last_error: string | null;
+  /** Set once the row needs user repair; such rows leave every future drain. */
+  repair_reason?: string | null;
+}
+
+/** A row is terminal once it spent its budget or was parked for repair. */
+export function isTerminalRow(row: OutboxRow): boolean {
+  return row.attempts > 0 || (row.repair_reason ?? null) !== null;
 }
 
 export function fakeDb() {
@@ -234,18 +242,10 @@ export function fakeDb() {
         });
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, statement, params);
+      if (handled) return handled;
       if (statement.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .sort((a, b) => a.id - b.id)
-            .slice(0, 50)
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (statement.startsWith('DELETE FROM outbox')) {
         const idx = outbox.findIndex(
@@ -281,6 +281,7 @@ export function fakeDb() {
       payload,
       attempts: 0,
       last_error: null,
+      repair_reason: null,
     });
   };
   return { db, push, outbox, receipts };
@@ -1027,7 +1028,7 @@ export async function runCombination(
       foreground.handler?.('active');
     }
     transport.setNetwork('normal');
-    const retryableLeft = () => outbox.filter(r => r.attempts === 0).length;
+    const retryableLeft = () => outbox.filter(r => !isTerminalRow(r)).length;
     // Recovery drains follow syncRuntime's cadence: 30 s × 2^failures,
     // capped at 5 min, ±20 % jitter — the phase-1 drain counts as failure 1
     // when it left rows behind.
@@ -1060,7 +1061,7 @@ export async function runCombination(
         'I2.converges-after-recovery',
         `${retryableLeft()} retryable row(s) still queued after ${RECOVERY_DRAINS} recovery drains: ${JSON.stringify(
           outbox
-            .filter(r => r.attempts === 0)
+            .filter(r => !isTerminalRow(r))
             .map(r => ({
               kind: r.kind,
               last_error: r.last_error,
@@ -1116,10 +1117,13 @@ export async function runCombination(
       }
       if (seeded.permanentReject) {
         const visits = transport.server.visits.get(seeded.entityId) ?? 0;
-        if (visits > 0 && row.attempts === 0) {
+        // A finalize whose session the server never saw and the device
+        // cannot recover is parked for repair instead of spending attempts;
+        // either way the row must have left the retry path.
+        if (visits > 0 && !isTerminalRow(row)) {
           fail(
             'I3.permanent-consumes-budget',
-            `${seeded.kind} ${seeded.entityId} rejected by server ${visits}x but attempts=0`,
+            `${seeded.kind} ${seeded.entityId} rejected by server ${visits}x but attempts=0 and no repair_reason`,
           );
         }
         if (row.attempts > Math.min(visits, OUTBOX_MAX_ATTEMPTS)) {

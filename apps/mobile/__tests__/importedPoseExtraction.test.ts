@@ -43,9 +43,14 @@ const { __simulatedBridge: mockBridge } = jest.requireMock('react-native') as {
 import {
   assertCapturedClip,
   assertImportedPoseExtraction,
+  cancelCameraOperation,
+  captureStrokeVideo,
   extractImportedPoseSequence,
   importedPoseExtractionAvailable,
+  importStrokeVideo,
+  MAX_IMPORTED_POSE_FRAMES,
   type CapturedClip,
+  type NativeImportOptions,
 } from '../src/camera/capture';
 
 const importedClipPayload = {
@@ -86,6 +91,9 @@ function validExtractionPayload(): Record<string, unknown> {
 
 beforeEach(() => {
   mockBridge.extractImportedPoseSequence = jest.fn();
+  mockBridge.capture = jest.fn();
+  mockBridge.importVideo = jest.fn();
+  mockBridge.cancel = jest.fn();
 });
 
 describe('importedPoseExtractionAvailable', () => {
@@ -106,6 +114,7 @@ describe('extractImportedPoseSequence', () => {
       y: 0.63,
     });
     expect(mockBridge.extractImportedPoseSequence).toHaveBeenCalledWith({
+      operationId: expect.any(String),
       uri: importedClip.uri,
       seedX: 0.42,
       seedY: 0.63,
@@ -124,6 +133,7 @@ describe('extractImportedPoseSequence', () => {
     );
     await extractImportedPoseSequence(importedClip, null);
     expect(mockBridge.extractImportedPoseSequence).toHaveBeenCalledWith({
+      operationId: expect.any(String),
       uri: importedClip.uri,
     });
   });
@@ -133,6 +143,37 @@ describe('extractImportedPoseSequence', () => {
       extractImportedPoseSequence(importedClip, { x: 1.4, y: 0.5 }),
     ).rejects.toThrow(/normalized point/i);
     expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { durationMs: 0 },
+    { uri: 'https://example.test/video.mov' },
+    { fps: Number.NaN },
+    { width: -1 },
+    { captureMode: 'automatic_pose_trigger' },
+  ])('rejects an invalid clip before any native work: %s', async override => {
+    await expect(
+      extractImportedPoseSequence({
+        ...importedClip,
+        ...override,
+      } as typeof importedClip),
+    ).rejects.toThrow(/invalid or incomplete/i);
+    expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+  });
+
+  it('preserves a relocated container URI for the native managed-file resolver', async () => {
+    const uri =
+      'file:///old-container/Library/Application%20Support/PickleSensei/Captures/import-123.mov';
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await extractImportedPoseSequence({ ...importedClip, uri }, null, {
+      operationId: 'relocated-retry',
+    });
+    expect(mockBridge.extractImportedPoseSequence).toHaveBeenCalledWith({
+      uri,
+      operationId: 'relocated-retry',
+    });
   });
 
   it('accepts a payload without a poster (posterUri stays absent)', async () => {
@@ -145,7 +186,7 @@ describe('extractImportedPoseSequence', () => {
 
   it('passes native rejections through with their contract codes intact', async () => {
     const tooLong = Object.assign(
-      new Error('Imported videos longer than 30 seconds are not supported.'),
+      new Error('Imported videos longer than 60 seconds are not supported.'),
       { code: 'camera.import_too_long' },
     );
     mockBridge.extractImportedPoseSequence!.mockRejectedValue(tooLong);
@@ -162,11 +203,455 @@ describe('extractImportedPoseSequence', () => {
   });
 });
 
+function deferredNative() {
+  let resolve!: (value: unknown) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<unknown>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function flushNativeCompletion() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+describe('native import cancellation interface', () => {
+  it('ignores old guided cancellation and its abort signal while a later import owns native work', async () => {
+    const guidedResult = deferredNative();
+    const oldController = new AbortController();
+    mockBridge.capture!.mockReturnValue(guidedResult.promise);
+    const guided = captureStrokeVideo({
+      operationId: 'guided-before-import',
+      signal: oldController.signal,
+    });
+    void guided.catch(() => {});
+    cancelCameraOperation('guided-before-import');
+    guidedResult.reject(
+      Object.assign(new Error('Native cancelled'), {
+        code: 'camera.cancelled',
+      }),
+    );
+    await expect(guided).rejects.toMatchObject({ code: 'camera.cancelled' });
+    const nativeResult = deferredNative();
+    mockBridge.importVideo!.mockReturnValue(nativeResult.promise);
+    const run = importStrokeVideo({ operationId: 'import-after-guided' });
+    void run.catch(() => {});
+    const callsBeforeOldCancellation = mockBridge.cancel!.mock.calls.length;
+    let callsAfterOldCancellation = -1;
+    try {
+      cancelCameraOperation('guided-before-import');
+      oldController.abort();
+      callsAfterOldCancellation = mockBridge.cancel!.mock.calls.length;
+      cancelCameraOperation('import-after-guided');
+    } finally {
+      nativeResult.resolve(importedClipPayload);
+      await flushNativeCompletion();
+    }
+    expect(callsBeforeOldCancellation).toBe(1);
+    expect(callsAfterOldCancellation).toBe(callsBeforeOldCancellation);
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(2);
+    await expect(run).rejects.toMatchObject({
+      code: 'camera.cancelled',
+      message: 'Camera operation was canceled.',
+    });
+  });
+
+  it('ignores old import cancellation and its abort signal while a later guided attempt owns native work', async () => {
+    const oldController = new AbortController();
+    mockBridge.importVideo!.mockResolvedValue(importedClipPayload);
+    await importStrokeVideo({
+      operationId: 'import-before-guided',
+      signal: oldController.signal,
+    });
+    const nativeResult = deferredNative();
+    const controller = new AbortController();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const run = captureStrokeVideo({
+      operationId: 'guided-after-import',
+      signal: controller.signal,
+    });
+    void run.catch(() => {});
+    let staleCancelCalls = -1;
+    try {
+      cancelCameraOperation('import-before-guided');
+      oldController.abort();
+      staleCancelCalls = mockBridge.cancel!.mock.calls.length;
+      controller.abort();
+    } finally {
+      nativeResult.reject(
+        Object.assign(new Error('Native cancelled'), {
+          code: 'camera.cancelled',
+        }),
+      );
+      await flushNativeCompletion();
+    }
+    expect(staleCancelCalls).toBe(0);
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    await expect(run).rejects.toMatchObject({
+      code: 'camera.cancelled',
+      message: 'Camera operation was canceled.',
+    });
+  });
+
+  it('keeps the picker and cancel argument shapes compatible with the exported native bridge', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.importVideo!.mockReturnValue(nativeResult.promise);
+    const run = importStrokeVideo({ operationId: 'logical-picker-attempt' });
+    expect(mockBridge.importVideo).toHaveBeenCalledWith();
+    cancelCameraOperation('logical-picker-attempt');
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.cancel).toHaveBeenCalledWith();
+    nativeResult.reject(
+      Object.assign(new Error('Cancelled'), { code: 'camera.cancelled' }),
+    );
+    await flushNativeCompletion();
+  });
+
+  it('rejects overlapping import and guided requests without canceling someone else’s camera', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const guided = captureStrokeVideo();
+    await expect(importStrokeVideo()).rejects.toMatchObject({
+      code: 'camera.busy',
+    });
+    await expect(
+      extractImportedPoseSequence(importedClip),
+    ).rejects.toMatchObject({ code: 'camera.busy' });
+    cancelCameraOperation('not-this-guided-capture');
+    expect(mockBridge.importVideo).not.toHaveBeenCalled();
+    expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    nativeResult.reject(
+      Object.assign(new Error('Cancelled'), { code: 'camera.cancelled' }),
+    );
+    await expect(guided).rejects.toMatchObject({ code: 'camera.cancelled' });
+    mockBridge.importVideo!.mockResolvedValue(importedClipPayload);
+    await expect(importStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'imported_video',
+    });
+  });
+
+  it('does not extract imported poses while a canceled guided capture is still draining', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.capture!.mockReturnValue(nativeResult.promise);
+    const run = captureStrokeVideo({ operationId: 'guided-before-extraction' });
+    void run.catch(() => {});
+    cancelCameraOperation('guided-before-extraction');
+    try {
+      await expect(
+        extractImportedPoseSequence(importedClip),
+      ).rejects.toMatchObject({ code: 'camera.busy' });
+      expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+    } finally {
+      nativeResult.reject(
+        Object.assign(new Error('Native cancelled'), {
+          code: 'camera.cancelled',
+        }),
+      );
+      await flushNativeCompletion();
+    }
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await expect(
+      extractImportedPoseSequence(importedClip),
+    ).resolves.toMatchObject({ framesTotal: 126 });
+  });
+
+  it('does not open guided capture while an abandoned import is still draining', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    const run = extractImportedPoseSequence(importedClip);
+    cancelCameraOperation();
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    await expect(captureStrokeVideo()).rejects.toMatchObject({
+      code: 'camera.busy',
+    });
+    expect(mockBridge.capture).not.toHaveBeenCalled();
+    nativeResult.resolve(validExtractionPayload());
+    await flushNativeCompletion();
+  });
+
+  it('does not treat an empty foreign id as an unscoped cancellation', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    const run = extractImportedPoseSequence(importedClip);
+    cancelCameraOperation('');
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    nativeResult.resolve(validExtractionPayload());
+    await expect(run).resolves.toMatchObject({ framesTotal: 126 });
+  });
+
+  it('handles an abort during listener registration without starting or canceling native work', async () => {
+    const signal = {
+      aborted: false,
+      addEventListener: jest.fn((_type, listener) => {
+        signal.aborted = true;
+        listener();
+      }),
+      removeEventListener: jest.fn(),
+    };
+    await expect(
+      importStrokeVideo({ signal: signal as unknown as AbortSignal }),
+    ).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.importVideo).not.toHaveBeenCalled();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    mockBridge.importVideo!.mockResolvedValue(importedClipPayload);
+    await expect(importStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'imported_video',
+    });
+  });
+
+  it('settles synchronous native errors and detaches the original signal even if options mutate', async () => {
+    const controller = new AbortController();
+    const options: NativeImportOptions = { signal: controller.signal };
+    const remove = jest.spyOn(controller.signal, 'removeEventListener');
+    mockBridge.importVideo!.mockImplementation(() => {
+      options.signal = new AbortController().signal;
+      throw new Error('Bridge unavailable');
+    });
+    await expect(importStrokeVideo(options)).rejects.toThrow(
+      'Bridge unavailable',
+    );
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    controller.abort();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    mockBridge.importVideo!.mockResolvedValue(importedClipPayload);
+    await expect(importStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'imported_video',
+    });
+  });
+
+  it('still rejects cancellation if the native cancel bridge throws, while retaining the drain barrier', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    mockBridge.cancel!.mockImplementation(() => {
+      throw new Error('Bridge unavailable');
+    });
+    const run = extractImportedPoseSequence(importedClip);
+    expect(() => cancelCameraOperation()).not.toThrow();
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    await expect(importStrokeVideo()).rejects.toMatchObject({
+      code: 'camera.busy',
+    });
+    nativeResult.reject(new Error('Decoder stopped'));
+    await flushNativeCompletion();
+    mockBridge.importVideo!.mockResolvedValue(importedClipPayload);
+    await expect(importStrokeVideo()).resolves.toMatchObject({
+      captureMode: 'imported_video',
+    });
+  });
+
+  it.each([
+    'camera.import_timeout',
+    'camera.import_low_storage',
+    'camera.import_resource_limit',
+    'camera.invalid_media',
+  ])(
+    'preserves %s and permits a subsequent attempt after native settles',
+    async code => {
+      mockBridge.importVideo!.mockRejectedValue(
+        Object.assign(new Error('Import refused'), { code }),
+      );
+      await expect(importStrokeVideo()).rejects.toMatchObject({ code });
+      mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+        validExtractionPayload(),
+      );
+      await expect(
+        extractImportedPoseSequence(importedClip),
+      ).resolves.toMatchObject({ framesTotal: 126 });
+    },
+  );
+
+  it('forwards an explicit extraction operation id', async () => {
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await extractImportedPoseSequence(importedClip, null, {
+      operationId: 'owned-run-1',
+    });
+    expect(mockBridge.extractImportedPoseSequence).toHaveBeenCalledWith({
+      uri: importedClip.uri,
+      operationId: 'owned-run-1',
+    });
+  });
+
+  it('creates distinct extraction ids when the caller does not provide one', async () => {
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await extractImportedPoseSequence(importedClip);
+    await extractImportedPoseSequence(importedClip);
+    const ids = mockBridge.extractImportedPoseSequence!.mock.calls.map(
+      ([request]) => request.operationId,
+    );
+    expect(ids[0]).toEqual(expect.any(String));
+    expect(ids[0]).not.toEqual(ids[1]);
+  });
+
+  it.each([
+    '',
+    '../escape',
+    'x'.repeat(129),
+    'run\n',
+    'run\r',
+    'run with spaces',
+  ])(
+    'rejects invalid operation id %s before native work',
+    async operationId => {
+      await expect(
+        extractImportedPoseSequence(importedClip, null, { operationId }),
+      ).rejects.toThrow(/operation id/i);
+      expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not start an already-aborted extraction or picker', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      extractImportedPoseSequence(importedClip, null, {
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ code: 'camera.cancelled' });
+    await expect(
+      importStrokeVideo({ signal: controller.signal }),
+    ).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.extractImportedPoseSequence).not.toHaveBeenCalled();
+    expect(mockBridge.importVideo).not.toHaveBeenCalled();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+  });
+
+  it('cancels extraction promptly, suppresses late success, and does not abandon a concurrent native job', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    const controller = new AbortController();
+    const published = jest.fn();
+    const run = extractImportedPoseSequence(importedClip, null, {
+      signal: controller.signal,
+    });
+    void run.then(published, () => {});
+    controller.abort();
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    await expect(
+      extractImportedPoseSequence(importedClip),
+    ).rejects.toMatchObject({ code: 'camera.busy' });
+    await expect(importStrokeVideo()).rejects.toMatchObject({
+      code: 'camera.busy',
+    });
+    expect(mockBridge.extractImportedPoseSequence).toHaveBeenCalledTimes(1);
+    expect(mockBridge.importVideo).not.toHaveBeenCalled();
+    nativeResult.resolve(validExtractionPayload());
+    await flushNativeCompletion();
+    expect(published).not.toHaveBeenCalled();
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await expect(
+      extractImportedPoseSequence(importedClip),
+    ).resolves.toMatchObject({ framesTotal: 126 });
+  });
+
+  it('cancels a pending picker and never returns its late capture', async () => {
+    const nativeResult = deferredNative();
+    mockBridge.importVideo!.mockReturnValue(nativeResult.promise);
+    const controller = new AbortController();
+    const run = importStrokeVideo({
+      operationId: 'picker-1',
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    nativeResult.resolve(importedClipPayload);
+    await flushNativeCompletion();
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+  });
+
+  it('ignores cancellation of an old id while a different extraction is active', async () => {
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await extractImportedPoseSequence(importedClip, null, {
+      operationId: 'run-A',
+    });
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    const run = extractImportedPoseSequence(importedClip, null, {
+      operationId: 'run-B',
+    });
+    cancelCameraOperation('run-A');
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    cancelCameraOperation('run-B');
+    await expect(run).rejects.toMatchObject({ code: 'camera.cancelled' });
+    expect(mockBridge.cancel).toHaveBeenCalledTimes(1);
+    nativeResult.reject(
+      Object.assign(new Error('Cancelled'), { code: 'camera.cancelled' }),
+    );
+    await flushNativeCompletion();
+  });
+
+  it('detaches an old abort signal before a later extraction starts', async () => {
+    const controller = new AbortController();
+    mockBridge.extractImportedPoseSequence!.mockResolvedValue(
+      validExtractionPayload(),
+    );
+    await extractImportedPoseSequence(importedClip, null, {
+      signal: controller.signal,
+    });
+    const nativeResult = deferredNative();
+    mockBridge.extractImportedPoseSequence!.mockReturnValue(
+      nativeResult.promise,
+    );
+    const run = extractImportedPoseSequence(importedClip);
+    controller.abort();
+    expect(mockBridge.cancel).not.toHaveBeenCalled();
+    nativeResult.resolve(validExtractionPayload());
+    await expect(run).resolves.toMatchObject({ framesTotal: 126 });
+  });
+});
+
 describe('assertImportedPoseExtraction (receipt validation)', () => {
   it('accepts the exact frozen-contract payload', () => {
     expect(() =>
       assertImportedPoseExtraction(validExtractionPayload()),
     ).not.toThrow();
+  });
+
+  it('accepts real no-person gaps and the provisional analyzed-frame boundary', () => {
+    expect(
+      assertImportedPoseExtraction({
+        ...validExtractionPayload(),
+        framesTotal: MAX_IMPORTED_POSE_FRAMES,
+      }).framesWithPose,
+    ).toBe(126);
+    expect(
+      assertImportedPoseExtraction({
+        ...validExtractionPayload(),
+        poseSequence: {
+          ...validPoseSequence,
+          frameCount: MAX_IMPORTED_POSE_FRAMES,
+        },
+        framesWithPose: MAX_IMPORTED_POSE_FRAMES,
+        framesTotal: MAX_IMPORTED_POSE_FRAMES,
+      }).framesTotal,
+    ).toBe(MAX_IMPORTED_POSE_FRAMES);
   });
 
   it.each([
@@ -205,6 +690,13 @@ describe('assertImportedPoseExtraction (receipt validation)', () => {
     ['negative frames with pose', { framesWithPose: -1 }],
     ['missing frame totals', { framesTotal: undefined }],
     ['more pose frames than frames', { framesWithPose: 200, framesTotal: 5 }],
+    ['a sidecar-count mismatch', { framesWithPose: 125 }],
+    [
+      'an analyzed-frame budget overflow',
+      { framesTotal: MAX_IMPORTED_POSE_FRAMES + 1 },
+    ],
+    ['a non-finite frame total', { framesTotal: Number.POSITIVE_INFINITY }],
+    ['a fractional pose count', { framesWithPose: 125.5 }],
   ] as const)('rejects a receipt with %s', (_label, override) => {
     expect(() =>
       assertImportedPoseExtraction({

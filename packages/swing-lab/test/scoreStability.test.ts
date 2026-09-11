@@ -50,13 +50,24 @@ describe("score stability probe (formula-level diagnostic)", () => {
     }
   });
 
-  it("low-confidence input abstains at baseline and stays abstained — no score is invented", () => {
-    const probe = runStabilityProbe("forehand_drive", measurementFixture(0.1), 25);
+  it("input with no observed checkpoint abstains at baseline and stays abstained — no score is invented", () => {
+    // Zero-confidence measurements observe nothing; perturbation never
+    // inflates confidence, so no trial can conjure a checkpoint to score.
+    const probe = runStabilityProbe("forehand_drive", measurementFixture(0), 25);
     expect(probe.baseline.presentation).toBe("abstain");
     expect(probe.baseline.score).toBeNull();
     for (const summary of probe.summaries) {
       expect(summary.scoredTrials).toBe(0);
     }
+  });
+
+  it("low-visibility input is scored as lower_confidence at baseline — the grade is disclosed, not withheld", () => {
+    // 2026-09-10: the engine abstains only with nothing observed; a 0.1-
+    // confidence read scores from its observed checkpoints with the
+    // presentation capped at lower_confidence.
+    const probe = runStabilityProbe("forehand_drive", measurementFixture(0.1), 25);
+    expect(probe.baseline.presentation).toBe("lower_confidence");
+    expect(probe.baseline.score).not.toBeNull();
   });
 
   it("probe results are reproducible run-to-run (seeded)", () => {

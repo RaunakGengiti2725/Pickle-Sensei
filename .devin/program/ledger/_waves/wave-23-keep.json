@@ -1,0 +1,18 @@
+{
+  "base_sha": "7cfeacbbfe7545b42f4a319aa4b952b0c5a4c1f6",
+  "integration_order": {},
+  "packages": {
+    "W05-04": {
+      "agent_counts": {
+        "completed": 12,
+        "failed": 0,
+        "launched": 12,
+        "requested": 12
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-23-keep"
+}

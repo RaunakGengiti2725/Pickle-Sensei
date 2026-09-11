@@ -1,0 +1,273 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-H09-01-r3",
+      "phase": "implement",
+      "prompt_sha256": "843b758ad2fddd107043749a428ec80331f1357b756a0b208a499be93b869a14",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-H09-01-r3",
+      "phase": "review",
+      "prompt_sha256": "d7e86c8767f38418d231fe0f0eae8b227bd000c6d34098077d4bba0532f5aed6",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-H09-01-r3",
+      "phase": "adversary",
+      "prompt_sha256": "a6d7d0812e43aab8e5903082afd7a898ad0ae961fe278b05e8192ce8a90f13f0",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+  "candidate": {
+    "branch": "devin/pp/h09-01/impl-r3",
+    "head_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+    "round": 3
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.5",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "H09-01",
+  "requeued_from": {
+    "branch": "devin/pp/h09-01/impl-r2",
+    "findings": {
+      "judge": [
+        "impl: H09-01-AC1 1 skipped/ignored"
+      ]
+    },
+    "head_sha": "5514297cc2bfce45a8c2d31aaf92c07d7ae58115"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/29e18aeb-b587-4b9e-a3fe-0101f49e6dbd/attack-run3.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/93e75637-7950-4dc7-a5cd-9ff169929ce7/ac1-jest-full-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a0d48f7f-ae9b-411c-8574-2ab512a068b4/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/68a95f3d-d19b-4337-81ba-f2ec3a9abc15/ac3-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1ad79e93-a5c0-418f-b628-1477a5afcfa1/independent_reachable.json"
+        ],
+        "attack_branch": "devin/pp/h09-01/attack-75114f58",
+        "attack_branch_sha": "ac5f51a4de97ccaf23b4160b732113f42fe909ea",
+        "attacked_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+        "attacks_tried": 30,
+        "breaks": [
+          {
+            "expected": "D-044 / implementer summary: the contract 'fails if either retired module returns, if any mobile source imports @pickle/audio-coach-core, or if a dormant engine module ... becomes reachable from index.js/App.tsx'. Any form Metro would actually bundle should turn the contract red.",
+            "observed": "Candidate contract exits 0 / 3 passed when: (1) LiveCourtEngine returns as src/flow/liveCourt/index.ts (directory module); (2) the voice adapter returns as src/flow/liveSessionCoach.ios.ts (platform file); (3) a mobile source imports '@pickle/audio-coach-core/src/liveSession' (subpath — the assertion matches only the exact bare specifier); (4) the dormant engine is mounted via a template-literal dynamic import; (5) the dormant engine is mounted through a platform-specific screen (Foo.ios.tsx — the BFS never resolves .ios/.native so the chain is cut); (6) a no-whitespace import (`import{x}from'./flow/session'`) is not matched by the regex.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/contractWalkerEvasion.attack.test.ts  (exit 1; 6 failed / 3 passed). Each failing case copies the candidate's liveCourt.test.ts into a replica tree, applies one mutation and runs it under a nested jest; the baseline and the plain-relative-import sanity case pass, proving the harness. Manual confirmation: replica with src/flow/liveCourt/index.ts exporting `LiveCourtEngine` -> candidate contract exit 0, 3 passed (/home/ubuntu/attack-logs/manual_replica.js).",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attackH09/contractWalkerEvasion.attack.test.ts",
+            "title": "Retirement contract (__tests__/liveCourt.test.ts) is evaded by six Metro-valid forms of the very regressions it claims to pin"
+          },
+          {
+            "expected": "Objective: 'Enumerate unreachable paths (liveCourt.ts etc.), retire code that is out of v1 scope ... and record the decision'. Each unreachable module should be listed with a retire/keep-dormant/hand-off decision (the six-file account-deletion operation cluster with no shipping caller is exactly the 'new module nothing in the shipping app calls' pattern the program flags).",
+            "observed": "Off-graph and absent from docs/DECISIONS.md D-044: src/account/deletionCapabilityVault.ts, deletionOperation.ts, deletionOperationContracts.ts, deletionOperationJournal.ts, deletionOperationTransport.ts, src/account/index.ts, src/audio/tts.ts, src/camera/deviceBench.ts, src/data/offlineCapabilities.ts, src/training/index.ts. Only the 5 dormant engine modules are named/decided.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/independentReachability.attack.test.ts -t 'names every off-graph module'  (exit 1). Independent walk uses ts.preProcessFile + Metro .ios/.native/extension resolution from index.js + App.tsx; the count (161 src files, 15 off-graph; 163/17 on f250acd7) matches D-044, so the enumeration itself is reproduced.",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/attackH09/independentReachability.attack.test.ts",
+            "title": "D-044 enumeration is incomplete: 10 of the 15 off-graph mobile src modules are neither retired nor documented"
+          },
+          {
+            "expected": "The authoritative agent notes match the tree after the retirement, or the divergence is at least listed as an out_of_scope_files wiring edit rather than left to an unnamed owner.",
+            "observed": "AGENTS.md names `liveCourt.ts`, `liveSessionCoach.ts` as dormant in-tree modules and lists `liveCourt.test.ts`, `liveSessionCoach` among 'Engine suites still run'. Both modules and liveSessionCoach.test.ts are deleted by 75114f58; liveCourt.test.ts is now a retirement contract, not an engine suite. D-044 defers the fix to 'whoever owns' AGENTS.md, but AGENTS.md is under no serial_group_paths prefix in .devin/program/manifest.json, so nothing prevented aligning it (would need listing in out_of_scope_files).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/agentsLiveCourtSection.attack.test.ts  (exit 1; 2 failed). Also: grep -n 'liveCourt\\|liveSessionCoach\\|still run' AGENTS.md -> lines 805, 812, 814.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attackH09/agentsLiveCourtSection.attack.test.ts",
+            "title": "AGENTS.md Live Court section still inventories the deleted liveCourt.ts / liveSessionCoach.ts and says liveCourt/liveSessionCoach suites 'still run'"
+          },
+          {
+            "expected": "docs/prompts/codex-production-readiness.md: dead paths are removed only with deliberate test migration — every deleted assertion is either mapped to a surviving test or explicitly recorded as retired.",
+            "observed": "'stays quiet for pending events and speaks the moment one turns terminal' (pending→terminal gating of the voice adapter) is neither named among the migrated behaviours nor among the assertions D-044 records as retired; the other 16 are accounted for. The other 5 D-044 tree claims checked in this file hold (retired modules absent in every Metro form, no residual importer, continueAsGuest has no shipping caller and exactly the listed 7 suites reference it, ResultDetails registered-but-unnavigated, migrated suites carry the named behaviours).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/decisionD044Claims.attack.test.ts -t 'either migrated or explicitly recorded'  (exit 1).",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attackH09/decisionD044Claims.attack.test.ts",
+            "title": "Migration ledger in D-044 omits one of the 17 assertions deleted with liveSessionCoach.test.ts"
+          },
+          {
+            "expected": "A type move that 'keeps the LiveCoachCue/LiveCoachRecap types the durable summary persists' preserves the vocabulary (import LiveCueCategory from @pickle/shared-types or re-declare the union), or D-044 records the widening deliberately.",
+            "observed": "src/flow/liveSessionSummary.ts declares `category: string`; on f250acd7 the persisted cue type (SpokenCue in liveSessionCoach.ts) was `SpokenCueCategory = LiveCueCategory | 'SESSION_START' | 'SESSION_END'`. The durable-summary type now accepts any string. Additionally (decisionD044Claims test 6) nothing outside liveSessionSummary.ts consumes LiveCoachCue/LiveCoachRecap any more — the moved types are dead by the candidate's own reachability standard.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/liveCoachTypeParity.attack.test.ts  (exit 1; 1 failed / 1 passed). The test compiles a probe against the mobile tsconfig: category 'SESSION_START' -> 0 diagnostics (pass); category 'NOT_A_LIVE_CUE_CATEGORY' -> 0 diagnostics (expected >0).",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attackH09/liveCoachTypeParity.attack.test.ts",
+            "title": "Moved LiveCoachCue.category widened from the SpokenCueCategory union to string"
+          },
+          {
+            "expected": "Product invariant: 'unknown/corrupt state never becomes fabricated ... history'. A corrupt row is dropped, or every field round-trips exactly; a session with no scored swings cannot be an improved session. Flagged for the engine owner; the path is unreachable from the shipping graph (VERIFIED by the independent walk) so it is not a supported-path defect.",
+            "observed": "buildLiveSessionSummary writes recap.spokenCount NaN / negative correctionsByCheckpoint straight into the record; parseLiveSessionSummary turns scoredCount -6 / durationMs 2**60 into 0 and still returns the row (countOrZero), so a corrupt row becomes a zeroed historical session instead of being rejected; a row with scoredCount 0, delta 1 yields buildGameplayProgression(...).improvedSessions === 1 with trendPoints []. Null/empty/foreign-version/foreign-source payloads ARE rejected (pass).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/attackH09/liveSessionSummaryBoundaries.attack.test.ts  (exit 1; 4 failed / 2 passed). `git diff f250acd7 75114f58 -- apps/mobile/src/flow/liveSessionSummary.ts` shows only the type move; behaviour is identical on BASE.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/attackH09/liveSessionSummaryBoundaries.attack.test.ts",
+            "title": "Durable live-session summary coerces corrupt/NaN/negative/unsafe counters to 0 and counts a zero-scored row as an 'improved session' (pre-existing on BASE, dormant path, not introduced by the candidate)"
+          }
+        ],
+        "package_id": "H09-01",
+        "summary": "ADVERSARY H09-01 vs candidate 75114f584b5bd54cfb67ba2b94eeb928a5fd446e (branch devin/pp/h09-01/impl-r3, base f250acd7). Attack branch devin/pp/h09-01/attack-75114f58 @ ac5f51a4de97ccaf23b4160b732113f42fe909ea (pushed, no force, no PR; candidate production code and candidate-owned tests untouched — the only commit adds apps/mobile/__tests__/attackH09/*.ts, which pass root prettier --check and eslint).\n\nACCEPTANCE ON CANDIDATE (VERIFIED, run before the attack files existed / with them removed):\n- H09-01-AC1 `cd apps/mobile && npx jest --ci --silent`: exit 0; suites 311 passed / 1 skipped / 0 failed (311 of 312); tests 6037 passed / 1 skipped / 0 failed (6038); the skipped suite is the documented importedRealFootageAnalysis.test.ts. Log: ac1-jest-full-run2.log. Note: a first run on the pre-existing node_modules failed on missing @sentry/react-native (declared 8.24.0 in package.json); `npm ci --no-audit --no-fund` fixed it — environment, not candidate.\n- H09-01-AC2 `cd apps/mobile && npx tsc --noEmit`: exit 0 on the candidate tree alone (/home/ubuntu/attack-logs/ac2-tsc-candidate-only.log) and exit 0 with the attack suites included (ac2-tsc.log).\n- H09-01-AC3 root `npx eslint apps/mobile/__tests__/liveCourt.test.ts apps/mobile/src/flow/liveSessionSummary.ts` exit 0; `npx prettier --check` on those two + docs/DECISIONS.md exit 0 (ac3-lint.log). Changed set = `git diff --name-only f250acd7 75114f58` (3 modified/added; 3 deletions not lintable).\n\nATTACKS: 30 attack tests in 6 suites, run with `cd apps/mobile && npx jest --ci --verbose __tests__/attackH09` -> exit 1, 15 failed / 15 passed / 0 skipped (attack-run3.log). The 15 failures are the confirmed findings (6 break objects); the 15 passes are attacks that did NOT break the candidate: contract baseline + plain-relative-import + apostrophe-in-comment evasion caught; retired modules absent in .ts/.tsx/.ios/.native/index forms with no residual importer; continueAsGuest has no shipping caller and exactly the 7 D-044-listed suites reference it; ResultDetails registered-only; migrated suites (audio-coach-core liveSession/cueEngine, sessionFlow, gameplayProgression) carry the named behaviours; candidate regex misses no relative specifier vs ts.preProcessFile on the shipping graph; RootNavigator reachable and the 5 dormant modules unreachable under Metro-style resolution; no @pickle/audio-coach-core import on the graph (any subpath); 15/161 off-graph count reproduces D-044; well-formed summary round-trip; null/empty/foreign payloads rejected; vocabulary cue category type-checks.\n\nVERDICT: no P0/P1. Two P2s go to the package's core deliverable: (1) the retirement contract is bypassed by six Metro-valid forms (directory index, .ios platform file, cue-engine subpath import, template-literal dynamic import, platform-specific screen in the chain, whitespace-free import) so 'fails if either retired module returns' is over-claimed; (2) the 'enumerate unreachable paths' objective stops at the 5 engine modules — 10 further off-graph src modules (six-file account-deletion operation cluster, audio/tts, camera/deviceBench, data/offlineCapabilities, training/index) are undocumented. P3s: stale AGENTS.md Live Court inventory (file not serial-grouped), one deleted adapter assertion missing from the D-044 migration ledger, LiveCoachCue.category widened to string (and the moved types now have no consumer), and pre-existing corrupt-state coercion in the dormant summary/progression path (unchanged by the candidate; recorded for the engine owner). UNVERIFIED/UNKNOWN: nothing Apple-side was claimed or run (Linux only, no --remote); network/auth/billing attack classes are not applicable to this package (no runtime/SQL/Edge surface changed)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cdcf8c14-dfec-425d-af2d-a4acba102f46/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent",
+            "executed": 6038,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC1",
+            "note": "Test Suites: 1 skipped, 311 passed, 311 of 312 total; Tests: 1 skipped, 6037 passed, 6038 total; 0 failed. The one skipped suite is the documented Mac-artifact skip importedRealFootageAnalysis.test.ts (docs/devin/TEST_MATRIX.md), verified by running `cd apps/mobile && npx jest --ci __tests__/importedRealFootageAnalysis.test.ts` alone -> 'Test Suites: 1 skipped, 0 of 1 total' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/ff81195c-992d-443b-a374-adfd9b93b9dc/ac1-skip-identity.log). Regression proof (procedural, not an extra id): `cd apps/mobile && npx jest --ci __tests__/liveCourt.test.ts` with the new contract on BASE_SHA f250acd7 -> exit 1, 3 executed / 1 passed / 2 failed / 0 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6e3d9e4c-8037-46a6-912b-6a64bdf76a2c/regress-base-liveCourt.test.log); on HEAD 75114f58 -> exit 0, 3 executed / 3 passed / 0 failed / 0 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/3e13d454-9678-4a2f-9ef1-a37bed92d680/regress-head-liveCourt.test.log).",
+            "passed": 6037,
+            "skipped": 1,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d6643835-3bed-4a29-b501-087398462705/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC2",
+            "note": "No diagnostics emitted (log contains only the exit code line).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8a34e58e-f04e-46d4-a26f-1cef864c412e/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/liveCourt.test.ts apps/mobile/src/flow/liveSessionSummary.ts && npx prettier --check apps/mobile/__tests__/liveCourt.test.ts apps/mobile/src/flow/liveSessionSummary.ts docs/DECISIONS.md",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC3",
+            "note": "Run from repo root (root ESLint/Prettier). The other three changed paths are deletions (liveCourt.ts, liveSessionCoach.ts, liveSessionCoach.test.ts) so have nothing to lint. Also VERIFIED: `pnpm format:check` exit 0 'All matched files use Prettier code style!' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/900d0d46-26c0-4b6c-a263-ec5a96f92f2c/root-format-check.log); `git diff --check f250acd768bfdd9c04949e03e97002125958641e HEAD` exit 0, no output (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b6f508e-9359-4df3-97db-8b615fca4716/git-diff-check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Checked out f250acd7, created devin/pp/h09-01/impl-r3, cherry-picked the r2 test commit verbatim (66bb4975 -> 3202e19f), then applied the r2 implementation + docs commits as one commit (75114f58) with D-044 updated for the round-3 base facts (17/163 re-run on f250acd7; AGENTS.md's stale dormant-module list noted as superseded, AGENTS.md itself left untouched as out of scope). Regression proof by placing the contract test on a clean BASE_SHA checkout (red) and on HEAD (green). Ran AC1/AC2/AC3 exactly as written plus pnpm format:check and git diff --check.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cdcf8c14-dfec-425d-af2d-a4acba102f46/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ff81195c-992d-443b-a374-adfd9b93b9dc/ac1-skip-identity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d6643835-3bed-4a29-b501-087398462705/ac2-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8a34e58e-f04e-46d4-a26f-1cef864c412e/ac3-eslint-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/900d0d46-26c0-4b6c-a263-ec5a96f92f2c/root-format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b6f508e-9359-4df3-97db-8b615fca4716/git-diff-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6e3d9e4c-8037-46a6-912b-6a64bdf76a2c/regress-base-liveCourt.test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3e13d454-9678-4a2f-9ef1-a37bed92d680/regress-head-liveCourt.test.log"
+        ],
+        "base_sha": "f250acd768bfdd9c04949e03e97002125958641e",
+        "baseline_failures_observed": [
+          "cd apps/mobile && npx jest --ci --silent — 1 skipped suite on Linux: importedRealFootageAnalysis.test.ts (documented Mac-artifact skip in docs/devin/TEST_MATRIX.md; requires Mac-generated pose/meta artifacts). Pre-existing on BASE_SHA; recorded, not waived, not caused by this package."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/h09-01/impl-r3",
+        "files_changed": [
+          "apps/mobile/__tests__/liveCourt.test.ts",
+          "apps/mobile/__tests__/liveSessionCoach.test.ts",
+          "apps/mobile/src/flow/liveCourt.ts",
+          "apps/mobile/src/flow/liveSessionCoach.ts",
+          "apps/mobile/src/flow/liveSessionSummary.ts",
+          "docs/DECISIONS.md"
+        ],
+        "head_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+        "out_of_scope_files": [],
+        "package_id": "H09-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/liveCourt.test.ts"
+        ],
+        "residual_risks": [
+          "AGENTS.md Live Court section (outside write_paths) still lists liveCourt.ts/liveSessionCoach.ts and their suites as dormant; D-044 notes it as superseded and it should be corrected by whoever next owns AGENTS.md.",
+          "The inert `@pickle/audio-coach-core` alias remains in apps/mobile/tsconfig.json and jest.config.js (outside write_paths); no mobile source imports it and the retirement contract fails if one is added.",
+          "Guest-entry (authStore.continueAsGuest) and the registered-but-unreachable ResultDetails route are documented in D-044, not changed — both are owned by other serial groups (auth/data-owner, mobile-navigation).",
+          "Environment: acceptance ran on Node v24.19.0 (repo docs cite Node 22.x as canonical); root pnpm install --frozen-lockfile and apps/mobile npm ci both succeeded."
+        ],
+        "summary": "Defect on BASE_SHA f250acd7 (VERIFIED by a relative-import BFS from apps/mobile/index.js + App.tsx: 17 of 163 files under apps/mobile/src are off the shipping graph): apps/mobile/src/flow/liveCourt.ts:1-139 (pre-D-040 `LiveCourtEngine`, only importer __tests__/liveCourt.test.ts) and apps/mobile/src/flow/liveSessionCoach.ts:1-276 (Live Court voice adapter, importers: its own test + a type-only import at src/flow/liveSessionSummary.ts:3) were unreachable dead paths that still kept `@pickle/audio-coach-core` on the mobile import surface; nothing pinned them as retired or pinned the dormant session engine (session.ts, sessionNative.ts, sessionProgress.ts, liveSessionSummary.ts, progress/gameplayProgression.ts) as present-but-unmounted. Fix (r2 work cherry-picked onto BASE_SHA, reviewed and re-verified): commit 3202e19f rewrites __tests__/liveCourt.test.ts into a retirement contract (fails if either retired module returns, if any mobile source imports @pickle/audio-coach-core, or if a dormant engine module is removed or becomes reachable from index.js/App.tsx; RootNavigator.tsx reachability is the sanity anchor); commit 75114f58 deletes liveCourt.ts, liveSessionCoach.ts and the adapter-only suite liveSessionCoach.test.ts, moves the `LiveCoachCue`/`LiveCoachRecap` types the durable summary persists into liveSessionSummary.ts, and records D-044 in docs/DECISIONS.md (reachability enumeration incl. the f250acd7 re-run, deliberate test migration to packages/audio-coach-core/test/liveSession.test.ts + cueEngine.test.ts, __tests__/sessionFlow.test.ts and __tests__/gameplayProgression.test.ts, adapter-only assertions recorded as retired, guest entry documented as dead-entry/live-hydration and left to the auth owner, no 3D source in the mobile tree, ResultDetails registered-but-unreachable left to the navigation owner, alternatives and reversal path). Prior-round finding 'H09-01-AC1 1 skipped/ignored' resolved: the single skipped suite is the manifest's documented Mac-artifact skip `importedRealFootageAnalysis.test.ts` (VERIFIED: full run 311 passed / 1 skipped suites, and running that suite alone reports 1 skipped / 0 run), reported under AC1 by name; no extra acceptance ids are emitted. Regression proof VERIFIED: contract dropped onto BASE_SHA -> exit 1, 2 failed / 1 passed; on candidate -> exit 0, 3 passed. No PR opened, no push to main/ci/mac-*, no force-push."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7b0dbcad-b0b7-429e-b0db-069c0126b5a7/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent",
+            "executed": 6038,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC1",
+            "note": "VERIFIED on 75114f58: Test Suites 1 skipped, 311 passed, 311 of 312 total; Tests 1 skipped, 6037 passed, 6038 total; 0 failed. The single skipped suite/test is the documented Mac-artifact skip importedRealFootageAnalysis.test.ts (docs/devin/TEST_MATRIX.md, describe.skip when Mac-generated pose/meta artifacts are absent). Identity confirmed by running that suite alone: `cd apps/mobile && npx jest --ci __tests__/importedRealFootageAnalysis.test.ts` -> 'Test Suites: 1 skipped, 0 of 1 total; Tests: 1 skipped, 1 total' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/03a09e7f-4ffa-4566-9bce-aeb7279ec165/ac1-skip-identity.log). Node v24.19.0, pnpm 10.15.1, root pnpm install --frozen-lockfile exit 0, apps/mobile npm ci exit 0.",
+            "passed": 6037,
+            "skipped": 1,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d3abf73e-6a1f-4cf0-b2be-4520cb563d7e/ac2-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC2",
+            "note": "VERIFIED: no diagnostics emitted; exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c119d53a-18ff-4261-b702-e461e7a72a50/ac3-eslint-prettier.log",
+            "command": "npx eslint apps/mobile/__tests__/liveCourt.test.ts apps/mobile/src/flow/liveSessionSummary.ts && npx prettier --check apps/mobile/__tests__/liveCourt.test.ts apps/mobile/src/flow/liveSessionSummary.ts docs/DECISIONS.md",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H09-01-AC3",
+            "note": "VERIFIED from repo root (root ESLint/Prettier): eslint no output, prettier 'All matched files use Prettier code style!', exit 0. The remaining three changed paths (src/flow/liveCourt.ts, src/flow/liveSessionCoach.ts, __tests__/liveSessionCoach.test.ts) are deletions with nothing to lint. Also `git diff --check f250acd7 HEAD` exit 0.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "AGENTS.md 'Live Court — REMOVED from the v1 launch (engine dormant)' section (lines ~792-816, outside write_paths) still lists liveCourt.ts, liveSessionCoach.ts, liveCourt.test.ts and liveSessionCoach as dormant/still-running; D-044 explicitly declares it superseded and defers the edit to the AGENTS.md owner. Should be reconciled in a follow-up package that holds AGENTS.md.",
+          "The now-inert @pickle/audio-coach-core alias remains in apps/mobile/tsconfig.json:7 and apps/mobile/jest.config.js:8 (outside write_paths); the new contract test fails if any mobile source starts importing it, so the residue is pinned rather than silently reusable.",
+          "liveSessionSummary.ts now owns LiveCoachCue/LiveCoachRecap with `category: string` where the deleted SpokenCue used the narrower `SpokenCueCategory` union; acceptable for a dormant persisted schema, but a relaunch should re-narrow it.",
+          "The contract test declares `require`/`__dirname` via `declare const` and parses imports with a regex; it is a static reachability heuristic (relative imports only, no `@pickle/*` resolution) — adequate given shared packages cannot import back into apps/mobile, but a future path-aliased import inside apps/mobile would not be followed."
+        ],
+        "package_id": "H09-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "75114f584b5bd54cfb67ba2b94eeb928a5fd446e",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope VERIFIED clean: `git diff --stat f250acd7..75114f58` touches exactly the six write_paths files (liveCourt.test.ts rewritten, liveSessionCoach.test.ts / liveCourt.ts / liveSessionCoach.ts deleted, liveSessionSummary.ts +20/-1, docs/DECISIONS.md +8); no serial-group paths touched, out_of_scope_files empty. Objective met as shipped behaviour (not a dangling module): two dead modules are removed from the tree and the retirement is pinned by a contract test that runs in the shipping Jest gate. Acceptance re-executed by me on the candidate: AC1 jest exit 0, 6038 executed / 6037 passed / 0 failed / 1 skipped where the one skip is the manifest's documented_skips entry importedRealFootageAnalysis.test.ts (identity confirmed by running that suite alone); AC2 tsc exit 0; AC3 root eslint+prettier exit 0 (plus git diff --check exit 0). Regression proof VERIFIED: candidate's liveCourt.test.ts placed on a clean f250acd7 checkout -> exit 1, 3 executed / 1 passed / 2 failed (the 'retired modules absent' and 'no @pickle/audio-coach-core importer' assertions fail because base still has the files and the type import); same file on 75114f58 -> exit 0, 3/3 passed. Implementer claims independently confirmed: on BASE the only importers of liveCourt.ts / liveSessionCoach.ts were their own tests plus a type-only import at liveSessionSummary.ts:3 (git grep); LiveCourtEngine predates D-040's canonical LiveSessionFlow; the deliberate test-migration targets named in D-044 exist and are green (`pnpm --filter @pickle/audio-coach-core test` -> 29 passed, cueEngine.test.ts + liveSession.test.ts incl. 'session framing lines'; sessionFlow.test.ts and gameplayProgression.test.ts run inside the AC1 full suite); continueAsGuest has no non-test caller in apps/mobile/src and no shipping navigate('ResultDetails') exists, matching the 'documented, not retired' disposition. Invariant review: no test weakened/skipped/reordered (the deleted liveSessionCoach suite tested only the deleted adapter; the engine-behaviour assertions in the old liveCourt.test.ts tested only the deleted LiveCourtEngine), no `|| true`/`any`/`@ts-ignore`/`eslint-disable`/timeout inflation, no existing code comments modified (the moved LiveCoachRecap type carries new doc comments in a new location; the original file is deleted), no migrations, RLS, grants, session, billing, copy or diagnostics changes; the phrase 'Live Court' appears only in code comments, test names and docs, never user-facing copy. Non-blocking: AGENTS.md Live Court section is now stale relative to D-044 (outside write_paths, flagged in D-044), and the inert audio-coach-core alias remains in tsconfig/jest config. No PR opened, nothing pushed, no ci/mac-* or Mac runner use.",
+        "verdict": "approve"
+      },
+      "round": 3
+    }
+  ],
+  "start_round": 3,
+  "status": "ACCEPTED",
+  "wave_id": "wave-3"
+}

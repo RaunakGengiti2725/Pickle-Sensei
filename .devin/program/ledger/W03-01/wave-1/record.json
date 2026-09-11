@@ -1,0 +1,583 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-W03-01-r3",
+      "phase": "implement",
+      "prompt_sha256": "f64a9521aa5117d665f7789bf3ef1070eef4a9bcd2d50820509ac61096e528f4",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W03-01-r3",
+      "phase": "review",
+      "prompt_sha256": "5b851bf3421e8f5312ef8528abe8c42e2d0d4f3455c797ddd472c01f6375548d",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W03-01-r3",
+      "phase": "adversary",
+      "prompt_sha256": "934f8496192056b1891eb3371a67c88ffc1a2877b162262fd19b14218eec3ec6",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W03-01-r4",
+      "phase": "implement",
+      "prompt_sha256": "b1286538a98ca5c585753714d87443edeb0044f63d18c6acadcce01cc7d906e4",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W03-01-r4",
+      "phase": "review",
+      "prompt_sha256": "a5c98cb1f0bb34ba55dd8072aa67444d5bb5af8b2e13936551df18cad27e9867",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W03-01-r4",
+      "phase": "adversary",
+      "prompt_sha256": "3fa32efa3263721cda59ac3e0eaed63596291e8d261455c6c22caee723fae509",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.3",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W03-01",
+  "requeued_from": {
+    "branch": "devin/pp/w03-01/impl-r2",
+    "findings": {
+      "adversary_branch": "devin/pp/w03-01/attack-b8c1afd4",
+      "adversary_breaks": [
+        {
+          "expected": "outcome.kind='unavailable' with reason importAdmissionRejectionMessage('multiple_stroke_events'), zero permit reservations, zero finalizations.",
+          "observed": "VERIFIED: admitImportedClip(clip, rally) returns {admitted:false, reason:'multiple_stroke_events'} for the SAME clip that runCaptureAnalysis then analyses: POST /v1/analysis-permits called once (permitReservations=1), the permit is finalized with {outcome:'unsupported', ratingId:null} by the downstream quality gate, outcome.kind='quality_blocked'. No credit was consumed in this repro, but the clip was never refused with the precise admission reason and a permit was reserved. INFERRED: write_paths restricted the candidate to importAdmission.ts + its test, so nothing in apps/mobile calls admitImportedClip (grep: only the two candidate files reference it) — the work-package objective 'ambiguous clips are rejected with a precise reason and never reach charging' is not met end to end.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 1' (exit 1)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+          "title": "Admission gate is not wired into runCaptureAnalysis: an ambiguous two-stroke import still reserves an analysis permit (reaches the charging path)"
+        },
+        {
+          "expected": "admitted:false, reason 'multiple_stroke_events' (abstain on multiple comparable events; never pick one silently — docs/prompts/codex-production-readiness.md §6.3).",
+          "observed": "VERIFIED: (a) two identical generateSwingSequence() cores trimmed to [200,1500] ms and concatenated with a 100 ms gap → admitted:true, one event startMs=300 endMs=2417 peakMs=867 (the second swing's peak ~1.5 s later is silently absorbed); with gaps 0 and 100 ms admitted, ≥200 ms rejected. (b) two identical 2.5 IH/s speed humps with peaks 600 ms and 800 ms apart → admitted:true, comparableEventCount=1, event spans both humps. sameEventPeakDistanceMs=350 says these are distinct events, but merging runs across a <500 ms pause happens BEFORE clustering so the second peak never becomes a candidate.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 2' (exit 1; 2 tests)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+          "title": "Two comparable strokes separated by a quiet gap < mergeGapMs (500 ms) are fused into ONE admitted stroke (peaks up to 1.5 s apart)"
+        },
+        {
+          "expected": "Extra motion can only make a clip more ambiguous; admitted:false with 'multiple_stroke_events'.",
+          "observed": "VERIFIED: right-wrist humps at 1000 ms and 2800 ms alone → rejected multiple_stroke_events (2 comparable). Same clip plus a left-wrist hump (peak 1.17 IH/s, 1100–2700 ms, 51% of peak → comparable) → admitted:true, comparableEventCount=1, event = {right_wrist, startMs 800, endMs 3017, peakMs 2817}: overlap-based clustering chains stroke1↔left↔stroke2 into one cluster and reports the SECOND stroke's peak as the single event.",
+          "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 3' (exit 1)",
+          "severity": "P1",
+          "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+          "title": "Transitive cluster bridging: slow motion of the OTHER wrist between two rejected strokes turns the rejection into an admission (non-monotonic gate)"
+        }
+      ],
+      "judge": [
+        "reviewer verdict 'request_changes'",
+        "reviewer blocking issues: 1",
+        "adversarial P0/P1 breaks: 3"
+      ],
+      "review_blocking": [
+        "apps/mobile/src/camera/importAdmission.ts:58 (`mergeGapMs: 500`) + :68 (`maxStrokeMotionMs: 3500`) + motionRuns() (:395-434, merge branch `if (quietMs < limits.mergeGapMs)` at :428) + maxStrokeMotionMs ceiling check at :654: two FULL, identical-amplitude strokes are fused into ONE motion run and the clip is ADMITTED as a single stroke whenever the wrist's quiet time between them is < 500 ms, because merging is run-level (no within-run peak separation) and the 3.5 s core ceiling is wide enough to hold two complete swings. VERIFIED (reviewer probe, exit 0, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/89f53c9c-89ed-446e-9ca3-1d1e4431a184/reviewer-probe-two-stroke-merge.log, probe source https://la-hacks-rttothemoon.devinenterprise.com/attachments/cdd9d547-3824-47d3-a9c3-f81ed8047f5b/reviewer-probe-two-stroke-merge.test.ts): `concat(generateSwingSequence({readyMs:400,recoverMs:550}).sequence, generateSwingSequence({readyMs:200,recoverMs:550}).sequence, 0)` — same generator and concat helper as the candidate's own regression test, second swing's ready pause 200 ms instead of 400 — yields admitted=true, comparableEventCount=1, a single candidate right_wrist 500–3617 ms, event {startMs 500, endMs 3617, peakMs 1067} although the two contacts are at 1100 ms and 2867 ms (1.77 s apart, a normal same-player rally cadence). Same result for {readyMs:100}, {readyMs:300,recoverMs:300 on the first}, {readyMs:200,recoverMs:400}; with readyMs:300/recoverMs:550 (quiet 517 ms) it correctly rejects — so the gate flips from reject to admit on a ~100 ms change in the player's pause. This is the exact ambiguity the P0 objective forbids (\"ambiguous clips are rejected with a precise reason\"; codex §6.3 \"abstain on multiple comparable events\"), and worse than picking the loudest event: the admitted event window spans both strokes. Fix inside write_paths: split a merged run at interior dips (e.g. detect local peaks within a run that clear `comparablePeakRatio` and are separated by > `sameEventPeakDistanceMs` with the smoothed speed dropping below `runFloorRatio`×peak or a fraction of the lesser peak between them), and/or lower `maxStrokeMotionMs` to a value a single swing can satisfy but two cannot (the candidate's own single swing measures ~1350 ms core), and add a regression test for the sub-500 ms inter-stroke pause case in w03ImportAdmission.test.ts."
+      ],
+      "review_invariants": []
+    },
+    "head_sha": "b8c1afd4e83a73e7b1c888cfb4d62e01fd0cb729"
+  },
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0f4e636d-62e3-4644-9eec-a60cdba732ae/attack-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d0cbd1c0-c98d-443e-8cf3-c33c822a7cb2/attack-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3ad31cdc-d148-4a5f-9cc3-91e26722c7c2/tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aad96cc1-9ee9-4c1a-92ce-66741ed11334/eslint-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/11402255-0bec-4214-afbb-5a928234d055/prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4db9e381-739f-4784-b9ab-bbb52bc31bf0/ac1-attack-branch.log"
+        ],
+        "attack_branch": "devin/pp/w03-01/attack-e7d0a078",
+        "attack_branch_sha": "1620c5b622bd84e5e7550ad2221ed925c7a697ee",
+        "attacked_sha": "e7d0a0781e956e7de5e4eda44c6f3de832642a01",
+        "attacks_tried": 12,
+        "breaks": [
+          {
+            "expected": "Objective + implementer summary: 'extra motion never reduces the comparable count'; a clip whose sub-clips are each an admitted stroke is a rally and must be refused with multiple_stroke_events, never reduced to the loudest peak.",
+            "observed": "VERIFIED: two generateSwingSequence() swings (peak 2.421 each) → comparableEventCount=2, refused multiple_stroke_events. Append a third stroke that is admitted ON ITS OWN (generateSwingSequence({backswingLengthNorm:1.4, accelerateMs:150, followMs:200, torsoLength:0.3}), peak 6.508) → comparableEventCount drops to 1 and admitImportedStrokeEvents(...) returns admitted=true with the drive as THE stroke. Same for dink+dink+drive (each admitted alone; combined admitted=true, count=1, event.peakMs=7233) and for a 130/200/300 ms half-width synthetic burst 4x the drive peak appended after two full strokes (combined admitted=true, count=1). Root cause (INFERRED from importAdmission.ts): comparablePeakRatio=0.4 is applied relative to the STRONGEST cluster peak, so 2.421/6.508=0.37 < 0.4 removes both real strokes from the comparable set; the 'anchored on first peak' fix only makes the same-event clustering monotonic, not the comparable count.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 2' (4 failing tests: 'adding a third motion 3x faster…', 'a brief wrist-tracking jump…', 'two soft strokes followed by one hard stroke (dink, dink, drive)…', 'comparable count is monotonic under appending ANY admitted stroke…')",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Comparable-event count is NOT monotonic: a stronger third stroke demotes two real strokes and the rally is admitted as a single stroke (loudest-peak selection)"
+          },
+          {
+            "expected": "Objective: ambiguous clips 'never reach charging' — no journal attempt, no permit reservation (server or port), no network dependence for a refused clip; the player must see the precise reason on every run. On the saved path the candidate's gate runs inside runCaptureAnalysisCore AFTER originalAnalysisOperations.admit() created the attempt, and the 'unavailable' return does not release it.",
+            "observed": "VERIFIED: runOriginalCaptureAnalysis() on an imported two-stroke clip (and on a 500 ms clip) returns the precise admission reason on the FIRST run, but leaves original_analysis attempt row {state:'reserve_pending', permit_id:null, release_outcome:null} (ATTACK 7). recoverAnalysisJournals() after simulated process death calls port.reserve once for that attempt (ATTACK 8). reconcileOriginalCaptureAnalysis() issues POST /v1/analysis-permits then POST /v1/analysis-permits/<id>/finalize on the real HTTP path — a server-side reservation for a clip that was never admitted (ATTACK 9; with a 429+Retry-After or 503 on reserve the row becomes {state:'release_pending', last_http_status:429|503, release_outcome:'cancelled'} and waits on the network). A second run of the same saved analysis, before or after reconcile, returns cause='recovery_pending' with 'This saved analysis is awaiting recovery…' instead of the multiple_stroke_events copy (ATTACK 10). Conservation held: charges=0, no permit finalized 'scored', analyzeCapture never called (passing test 'never charges a free rating').",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionOriginalPathAttack.test.ts (8 failing tests across ATTACK 7/8/9/10)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionOriginalPathAttack.test.ts",
+            "title": "Signed-in saved-original path: a refused import leaves a reserve_pending journal attempt; startup recovery / Check then RESERVES a server permit for a clip the gate refused, and every retry shows the generic 'awaiting recovery' copy instead of the precise reason"
+          },
+          {
+            "expected": "A probe (rotation, codec tag, track count) reaches the gate from the import pipeline, or the objective is narrowed explicitly.",
+            "observed": "VERIFIED (source-level): the only admitImportedMedia(...) call in runCaptureAnalysis.ts has one argument; the only admitImportedClip(...) call has two. Unsupported rotation, codec and multi-track imports therefore cannot be refused on the shipping path; the objective's 'frame-rate/rotation/codec support' is met for frame rate only.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 6' (failing: 'runCaptureAnalysis feeds a media probe (rotation/codec/tracks) to the admission gate'; passing companion documents CapturedClip has no codec/rotationDegrees field and admitImportedMedia(clip) admits it)",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Rotation / codec / track-layout admission is dead code on the shipping path: runCaptureAnalysis calls admitImportedMedia(clip) and admitImportedClip(clip, sequence) with the default {} probe, and CapturedClip carries no rotation/codec/track fields"
+          },
+          {
+            "expected": "A clip where the hitting arm is unmeasured for 90 % of its length is ambiguous (other strokes may have happened unobserved) and should be refused (wrist_not_tracked / pose_coverage_incomplete) under the 'conservative admission' objective.",
+            "observed": "VERIFIED: admitImportedClip() admits a 20 s sequence with 9 s of wrist-visibility=0 frames before and after one swing (all other landmarks tracked) — the 2.5 s untracked-span rule never fires because it looks at frame confidence, and the wrist-gap rule only affects speed computation.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'ATTACK 3'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Pose coverage counts body frames, not hitting-wrist evidence: a 20 s clip whose wrists are invisible for ~18 s around one visible swing is admitted as a plausible single stroke"
+          }
+        ],
+        "package_id": "W03-01",
+        "summary": "Adversary for W03-01 against e7d0a0781e956e7de5e4eda44c6f3de832642a01 (branch devin/pp/w03-01/impl-r3). Attack branch devin/pp/w03-01/attack-e7d0a078 @ 1620c5b6 (one commit adding ONLY apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts and apps/mobile/__tests__/w03ImportAdmissionOriginalPathAttack.test.ts; no candidate production code or candidate tests touched; pushed, no force, no PR).\n\nRUNS (all VERIFIED on HEAD=e7d0a078 with the two attack files present; attack tests are written so a FAILURE = confirmed break):\n- `cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts __tests__/w03ImportAdmissionOriginalPathAttack.test.ts` → exit 1; Test Suites 2 failed/2; Tests 14 failed, 98 passed, 112 total, 0 skipped (attack-head.log).\n- Base regression: `git checkout 42291369…`, copied only the two attack files, same jest command → exit 1, 2 suites failed, 0 tests (both files cannot resolve ../src/camera/importAdmission — the module does not exist on base) (attack-base.log); restored attack branch afterwards.\n- Candidate acceptance suites on the attack branch: `npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts` → exit 0, 2/2 suites, 64/64 tests (ac1-attack-branch.log).\n- `cd apps/mobile && npx tsc --noEmit` → exit 0 (tsc-head.log; required a fresh `npm ci` — the snapshot's node_modules lacked @sentry/react-native, environment issue not candidate).\n- Root `npx eslint <2 attack files>` → exit 0; `npx prettier --check <2 attack files>` → exit 0 (eslint-head.log, prettier-head.log).\n\nATTACKS TRIED (12 classes/attacks): (1) boundary values on media envelope — NaN/±Infinity/negative/zero duration+fps, inclusive limits, 4096-px and pixel-cap edges, rotation ∈{0,90,180,270} vs 45/-90/360/NaN, codec case/syntax (uppercase, 9-char, non-alnum), track counts NaN/-1/0/1.5/2/∞ → all refused precisely, no throw (held; note: `avc3` is refused although the implementer summary lists it as supported — documented, not counted as break). (2) comparable-event monotonicity / rally reduction → BREAK P1. (3) pose coverage vs wrist evidence → BREAK P2. (4) timeline/coverage boundaries — untracked span exactly 2500 ms vs 2501, sidecar overrun exactly 50 ms vs 51, negative first timestamp, frameCount ±1, duplicate/rewinding timestamps, non-finite landmark coords, exactly 12 vs 11 frames, empty sequence/empty landmarks → all held, no NaN/Infinity speeds, no throws. (5) player copy for all 20 reasons — dossier-forbidden terms, accuracy %, superlatives, template leaks, distinctness → held. (6) rotation/codec/track probe reachability from runCaptureAnalysis → BREAK P2 (dead code). (7) saved-original path refused import leaves no attempt → BREAK P1. (8) process death + startup recovery → BREAK (reserve called). (9) explicit Check/reconcile + 429 Retry-After + 5xx at reserve → BREAK (server permit reserved+finalized; rows held on network) — conservation sub-assertion (no charge, no 'scored' finalize, analyzeCapture never called) HELD. (10) retry after refusal keeps precise reason → BREAK (generic recovery_pending copy). (11) concurrent double submit of a refused import → held (no permit traffic, no duplicate attempt). (12) account switch after refusal → held (other account's recovery sees nothing, cannot reserve).\n\nNot applicable / not attempted: unauthorised-role SQL/Edge (package adds no SQL/Edge surface); clock rollback (gate is clock-free). UNKNOWN: an imported clip with fps=10 on the saved path returned recovery_pending rather than frame_rate_too_low in an early fixture; not classified, scenario removed from the pushed tests."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "reviewer verdict 'request_changes'",
+          "reviewer blocking issues: 1",
+          "adversarial P0/P1 breaks: 2"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c849a56a-301c-4b74-b21d-6cb7256e8428/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts",
+            "executed": 64,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC1",
+            "note": "VERIFIED on HEAD 65ca2d2e (write-path files unchanged in the final commit e7d0a078). Test Suites: 2 passed, 2 total.",
+            "passed": 64,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a001b579-f0aa-4c40-a5bf-749c94e78a4a/ac2-base-jest.log",
+            "command": "git worktree add --detach /home/ubuntu/w03-base 42291369fc4387571ac8821410353e0f99404484; copy apps/mobile/__tests__/w03ImportAdmission.test.ts + apps/mobile/__tests__/importedCaptureAnalysis.test.ts from HEAD; cd /home/ubuntu/w03-base/apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts  (BASE) ; then same command on HEAD",
+            "executed": 64,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC2",
+            "note": "BASE run: exit 1; Test Suites: 2 failed, 2 total; Tests: 4 failed, 7 passed, 11 total. w03ImportAdmission.test.ts fails to load on BASE ('Cannot find module ../src/camera/importAdmission'), and the 4 new importedCaptureAnalysis end-to-end cases fail because BASE runs the import straight to the permit path (observed: two-stroke rally / sub-500 ms rally / bridge clip reserve a permit; 45 s media reaches sidecar read). HEAD run: exit 0, 64/64 (AC1 log). Proof outcome = 0.",
+            "passed": 64,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46e32c6f-a744-43dc-ab38-096935633075/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC3",
+            "note": "VERIFIED. A first run exited 2 solely because apps/mobile/node_modules lacked @sentry/react-native in this VM (environment, not code); after the repo-mandated `cd apps/mobile && npm ci` the check exits 0 with no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/48d85304-d3b0-48b2-bf47-1c53ed7b0228/ac4-eslint.log",
+            "command": "npx eslint apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts && npx prettier --check <same 4 files>; plus npx eslint + npx prettier --check apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC4",
+            "note": "VERIFIED from repo root. eslint exit 0 (no output); prettier exit 0 'All matched files use Prettier code style!' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ed96891-1eb2-4204-b28e-4ae72196ff2a/ac4-prettier.log). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/fac1f24c-c604-49de-a333-3378a9d1a8a6/format-check.log) and `git diff --check` exit 0 (with the new file intent-added).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA, reused the sound parts of round 2 (envelope limits, reason set, copy) and rewrote event detection: speed peaks + valley-split instead of quiet-gap run merging; anchored (first-peak) clustering instead of transitive overlap; added coverage and metadata edge checks. Wired admission into the shipping runCaptureAnalysisCore at two points (pre-sidecar media envelope, post-parse single-stroke) ahead of any permit reservation. Verified with the frozen acceptance commands, base-vs-head worktree proof, the prior adversary suite, and the full mobile Jest run.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c849a56a-301c-4b74-b21d-6cb7256e8428/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a001b579-f0aa-4c40-a5bf-749c94e78a4a/ac2-base-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/46e32c6f-a744-43dc-ab38-096935633075/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/48d85304-d3b0-48b2-bf47-1c53ed7b0228/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6ed96891-1eb2-4204-b28e-4ae72196ff2a/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fac1f24c-c604-49de-a333-3378a9d1a8a6/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/57ab9a81-7c0b-41c0-8832-0667fe386707/full-mobile-jest-head.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w03-01/impl-r3",
+        "files_changed": [
+          "apps/mobile/src/camera/importAdmission.ts",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/__tests__/w03ImportAdmission.test.ts",
+          "apps/mobile/__tests__/importedCaptureAnalysis.test.ts",
+          "apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts"
+        ],
+        "head_sha": "e7d0a0781e956e7de5e4eda44c6f3de832642a01",
+        "out_of_scope_files": [
+          "apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts — its 4th case pinned the pre-W03-01 contract (12 fps import reserves a permit, then the pose-quality gate releases it as 'unsupported'); wiring admission ahead of reservation makes that clip refused with the frame-rate reason and ZERO reservations, so the assertion was updated to the strictly stronger charging invariant (kind='unavailable', reason /too few frames per second/, reserves 0, releases []). Not under any serial_group_paths prefix; header comment untouched."
+        ],
+        "package_id": "W03-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w03ImportAdmission.test.ts (new, 47 tests: envelope bounds incl. duration_unknown/non-finite rotation/codec tags/track layout; sidecar geometry/timeline/coverage incl. 45 s clip with 2 s sidecar and negative timestamps; single-stroke plausibility incl. trimmed swings 0/100/200 ms apart, peaks 600/800/1000 ms apart, left-wrist bridge, same-wrist bridge, brief-dip single swing; determinism/non-mutation; copy rules)",
+          "apps/mobile/__tests__/importedCaptureAnalysis.test.ts (extended, 17 tests: runCaptureAnalysis end-to-end — two-stroke rally, sub-500 ms-pause rally, oversized 45 s media, and bridge clip all return kind='unavailable' with the precise reason and fetch/permit/finalize/db are never touched)"
+        ],
+        "residual_risks": [
+          "INFERRED: the App Store reviewer 'Import Video' sample clip (docs/APP_STORE_SUBMISSION.md) must itself satisfy the new envelope and single-stroke rules; if that asset contains a rally or excessive untracked lead-in/tail it would now be refused with the admission message. Not verifiable on Linux (native extraction) — needs a Mac/device check of the shipped sample.",
+          "INFERRED: single-stroke thresholds (distinctPeakRatio 2.5, comparablePeakRatio 0.4, eventValleyRatio 0.5, sameEventPeakDistanceMs 350, core 150-2000 ms) are calibrated on the synthetic generator and speed-profile fixtures, not on real Vision sidecars; real two-handed backhands or pronounced follow-through could register as a second comparable peak and be conservatively refused (false rejection, never a false admission).",
+          "VERIFIED-adjacent: the xc 12 fps test now pins that unsupported-fps imports never reserve a permit; any future change that moves admission after reservation will fail it (intentional)."
+        ],
+        "summary": "Defect on BASE_SHA 42291369 (VERIFIED): apps/mobile/src/camera/importAdmission.ts does not exist, and apps/mobile/src/analysis/runCaptureAnalysis.ts runCaptureAnalysisCore() goes from the sidecar hash/canonical-parse/metadata checks (~:1240-1310) straight into createFusionProviders() → entitlement → journal → POST /v1/analysis-permits with no import admission, so an ambiguous two-stroke import reserved a permit (prior adversary ATTACK 1 reproduced: reserves=1, finalized 'unsupported', kind='quality_blocked'). Round-2 module defects (reviewer + ATTACK 2/3): run-level merge across quiet gaps < mergeGapMs=500 fused two full swings into one admitted stroke; overlap-based clustering let a slow left-wrist hump bridge two rejected strokes into one admitted cluster. Fix: (1) new importAdmission.ts — admitImportedMedia() (duration incl. unknown/non-finite, fps 15-240, rotation ∈ {0,90,180,270} finite, codec tag /^[a-z0-9]{1,8}$/ ∈ {hvc1,hev1,avc1,avc3,h264,hevc}, dimensions/pixel caps, single video track), admitImportedPoseSequence() (geometry match, non-negative strictly increasing timeline within 50 ms of clip duration, ≥12 frames, pose coverage: longest untracked span ≤ 2.5 s incl. lead-in/tail), admitImportedStrokeEvents() (dominant-wrist speed from consecutive tracked samples only, gap-aware smoothing, local peaks above a motion floor, events split at interior valleys ≤ 50 % of the lesser peak or > 350 ms apart, comparable-event clustering anchored on the open cluster's FIRST peak so it is monotonic — extra motion never reduces the comparable count; zero events → no_stroke_event, ≥2 comparable → multiple_stroke_events, edge-truncated / 150-2000 ms core bounds); admitImportedClip() composes all three; importAdmissionRejectionMessage() maps each reason to dossier-compliant player copy. (2) runCaptureAnalysis.ts: for captureMode='imported_video', admitImportedMedia() runs before readCaptureArtifact and admitImportedClip() runs after canonical parse, both returning kind='unavailable' with the precise reason BEFORE createFusionProviders/entitlement/journal/permit reservation (AnalyzeScreen shows outcome.reason to the player). All 13 prior adversary tests (w03ImportAdmissionAttack.test.ts from devin/pp/w03-01/attack-b8c1afd4, run locally, not committed) pass on the candidate: exit 0, 13/13. Full mobile Jest on HEAD: exit 0, 308 suites passed / 1 skipped, 5946 passed / 1 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/57ab9a81-7c0b-41c0-8832-0667fe386707/full-mobile-jest-head.log). Commits: 9c51f2f5 (tests first), 65ca2d2e (implementation + 17 ms frame-gap correction in importedCaptureAnalysis.test.ts), e7d0a078 (xc 12 fps test contract update). Pushed devin/pp/w03-01/impl-r3 (new branch, no force, no PR)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f47bb0d2-99cd-4562-8a24-4226474b0a01/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts",
+            "executed": 64,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC1",
+            "note": "VERIFIED by reviewer on e7d0a078: Test Suites 2 passed / 2; Tests 64 passed / 64. Deps: root `pnpm install --frozen-lockfile` exit 0, `cd apps/mobile && npm ci` exit 0.",
+            "passed": 64,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/367c62bc-e38d-401a-9e8a-9da0145c17e4/ac2-jest-base.log",
+            "command": "git worktree add --detach /home/ubuntu/w03-base 42291369fc4387571ac8821410353e0f99404484; cp apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts (from e7d0a078) into the base worktree; cd /home/ubuntu/w03-base/apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts (BASE, must fail); same command on e7d0a078 (must pass)",
+            "executed": 64,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC2",
+            "note": "VERIFIED. BASE run: exit 1; Test Suites 2 failed / 2; Tests 4 failed, 7 passed, 11 total. w03ImportAdmission.test.ts fails to load on BASE (Cannot find module '../src/camera/importAdmission'); the 4 new importedCaptureAnalysis cases fail on BASE with: two-stroke rally -> received 'quality_blocked' (permit reserved then released), sub-500 ms rally -> received 'scored' (rally CHARGED on base), sliver sidecar -> 'scored', oversized media -> sidecar read reached. HEAD run: exit 0, 64/64 (AC1 log). Also re-ran the changed xc test: BASE 1 failed / 3 passed (exit 1, https://la-hacks-rttothemoon.devinenterprise.com/attachments/9493377b-d51d-4b9d-85fd-28d08e9ef5c5/xc-12fps-base.log), HEAD 4/4 (exit 0, https://la-hacks-rttothemoon.devinenterprise.com/attachments/8bf5ab6b-fef0-41d5-b0bf-7ff3c58bb755/xc-12fps-head.log). Proof outcome = 0.",
+            "passed": 64,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e3468ef4-2b52-40cc-9ac5-c66e3fc3646d/ac3-tsc-head.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC3",
+            "note": "VERIFIED on e7d0a078 after `cd apps/mobile && npm ci`: exit 0, no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/df9cad94-1783-4242-a987-ce8b32e3bdad/ac4-eslint-prettier-head.log",
+            "command": "npx eslint apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts && npx prettier --check <same 5 files>",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC4",
+            "note": "VERIFIED from repo root on e7d0a078 over all 5 changed files: eslint exit 0 (no output); prettier exit 0 ('All matched files use Prettier code style!').",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f47bb0d2-99cd-4562-8a24-4226474b0a01/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/367c62bc-e38d-401a-9e8a-9da0145c17e4/ac2-jest-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e3468ef4-2b52-40cc-9ac5-c66e3fc3646d/ac3-tsc-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/df9cad94-1783-4242-a987-ce8b32e3bdad/ac4-eslint-prettier-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/09363fd0-95d6-42ca-aa80-62dfe22977a5/full-mobile-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/9493377b-d51d-4b9d-85fd-28d08e9ef5c5/xc-12fps-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8bf5ab6b-fef0-41d5-b0bf-7ff3c58bb755/xc-12fps-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1451c5fd-fc1a-4544-b931-9aab35852196/probe-original-path-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cbecea4d-23bb-48d4-8cd9-8967d6a9de80/probe-original-path-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/72b0abe0-f8b7-4196-a291-e5ec294285db/reviewerProbeDurableImportPath.test.ts"
+        ],
+        "blocking_issues": [
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts:1248-1256 and :1333-1341 — the two new W03-01 gates return {kind:'unavailable'} without releasing the durable original attempt when `original` is set. In the shipping signed-in flow imported clips ALWAYS run through prepareOriginalCaptureAnalysis -> runOriginalCaptureAnalysis (AnalyzeScreen.tsx:1803-1847: clipSupportsScoring() is true for every imported clip), where originalAnalysisOperations.admit() has already created an attempt in state 'reserve_pending' before runCaptureAnalysisCore is entered (runCaptureAnalysis.ts:872-914). VERIFIED with a reviewer probe on e7d0a078 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/72b0abe0-f8b7-4196-a291-e5ec294285db/reviewerProbeDurableImportPath.test.ts, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/1451c5fd-fc1a-4544-b931-9aab35852196/probe-original-path-head.log): two-stroke rally AND 12 fps import via runOriginalCaptureAnalysis -> first run returns unavailable with the precise reason and 0 fetches (good), but the attempt is left {state:'reserve_pending', releaseOutcome:null, permitId:null}; a retry returns cause:'recovery_pending'; reconcileOriginalCaptureAnalysis then POSTs /v1/analysis-permits and finalizes the permit 'cancelled' — i.e. the admission-refused clip DOES reach the permit endpoint after the fact (no credit consumed, but contradicts the 'zero reservations' contract the candidate itself pins in importedClip24fpsGate.xc.test.ts). Consequence for the player (INFERRED from AnalyzeScreen.tsx:1438-1446 + 1364-1424, combined with the VERIFIED attempt state): finishOriginalOutcome routes every 'unavailable' outcome to showOriginalRecovery, which never displays outcome.reason; with currentAttemptId set and run.state !== 'released' it shows 'The saved analysis or its rating hold is still uncertain. Check only reconciles this original analysis; it does not start another rating.' with canStartAnotherClip=false. So for signed-in users (the only users who can rate) the precise admission reason is never shown, and for a 12 fps import this is a UX regression versus BASE, where the same probe returns quality_blocked with the frame-rate reason and a released 'unsupported' attempt (https://la-hacks-rttothemoon.devinenterprise.com/attachments/cbecea4d-23bb-48d4-8cd9-8967d6a9de80/probe-original-path-base.log). The implementer claim 'AnalyzeScreen shows outcome.reason to the player' holds only for the session-less runCaptureAnalysis path. Reproduce: drop the attached probe test into apps/mobile/__tests__/ and run `npx jest __tests__/reviewerProbeDurableImportPath.test.ts`. Fix direction (within write_paths): when `original` is set and admission refuses, release the attempt the way the sidecar-read failure branch does (runCaptureAnalysis.ts:1263-1281: originalAnalysisOperations.requestRelease + original.releaseAdmissionGuard() + journal.recover) or run admitImportedMedia/admitImportedClip in runOriginalCaptureAnalysis BEFORE originalAnalysisOperations.admit() so no attempt is minted; plus surface the reason for a refused import in the durable-path UI (AnalyzeScreen.tsx is not under any serial-group path, so a minimal wiring edit is admissible) and add a regression test through runOriginalCaptureAnalysis asserting released attempt + zero permit calls including after reconcile."
+        ],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/__tests__/xc/adjudication/importedClip24fpsGate.xc.test.ts (out_of_scope_files): accepted as justified minimal wiring — the 12 fps case's expectation moved from post-reservation quality_blocked/release to pre-reservation unavailable with 0 reserves; the assertion is strictly stronger, the header comment is untouched, and the path is not under any serial-group prefix. VERIFIED it fails on BASE (1/4) and passes on HEAD (4/4).",
+          "Single-stroke thresholds (distinctPeakRatio 2.5, comparablePeakRatio 0.4, eventValleyRatio 0.5, sameEventPeakDistanceMs 350) are calibrated only on the synthetic generator; false-rejection rate on real Vision sidecars (two-handed backhands, long follow-through) is UNKNOWN on Linux and needs the Mac/device check the implementer also flagged. The App Store reviewer 'Import Video' sample clip must itself pass the new envelope/single-stroke rules — UNKNOWN on Linux.",
+          "Full mobile Jest on e7d0a078 (not a frozen criterion, informational): exit 0, 308 suites passed / 1 skipped, 5946 passed / 1 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/09363fd0-95d6-42ca-aa80-62dfe22977a5/full-mobile-jest-head.log)."
+        ],
+        "package_id": "W03-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "e7d0a0781e956e7de5e4eda44c6f3de832642a01",
+        "scope_violation": false,
+        "summary": "Reviewed e7d0a0781e956e7de5e4eda44c6f3de832642a01 against BASE 42291369. Scope: `git diff --stat` shows exactly the 4 write_paths files plus the declared out-of-scope xc test, which is accepted as justified minimal wiring (not under a foreign serial-group prefix; assertion strengthened, comment untouched) -> scope_violation=false. Shipped behaviour VERIFIED: importAdmission.ts is called from runCaptureAnalysisCore at two points (pre-sidecar media envelope, post-parse single-stroke) ahead of createFusionProviders/entitlement/journal/permit reservation, and admission copy complies with APP_STORE_SUBMISSION.md. All four frozen acceptance criteria re-verified PASS with my own runs (AC1 64/64 exit 0; AC3 exit 0; AC4 eslint+prettier exit 0 over all 5 changed files) and the regression proof holds (BASE: exit 1, 2 suites failed, 4 failed/7 passed — including a sub-500 ms two-stroke rally that base SCORES/charges; HEAD 64/64). Diff read against REVIEW.md: no `any`/ts-ignore/eslint-disable/skip/only/timeout inflation, no comment edits, no migration/RLS/grant changes, no test weakening; full mobile Jest on HEAD 308 suites/5946 tests green. Verdict request_changes for ONE blocking issue found by an independent probe of the durable signed-in path (the path every real import takes via AnalyzeScreen -> prepareOriginalCaptureAnalysis -> runOriginalCaptureAnalysis, which the frozen acceptance tests do not exercise): the new gates return 'unavailable' without releasing the already-minted original attempt, leaving it 'reserve_pending' with no permit; the player-facing screen then shows generic 'rating hold is still uncertain' recovery copy instead of the precise admission reason (12 fps imports regress from base's frame-rate message), retries return recovery_pending, and 'Check'/reconcile subsequently reserves and cancels a server permit for the already-refused clip. No credit is consumed (billing conservation holds), but 'rejected with a precise reason' is not met as shipped behaviour for signed-in users. Fixable inside write_paths (release the attempt like the sidecar-read failure branch, or admit before originalAnalysisOperations.admit) with a small AnalyzeScreen wiring edit to surface the reason, plus a runOriginalCaptureAnalysis regression test.",
+        "verdict": "request_changes"
+      },
+      "round": 3
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b198898d-9db5-4a95-87c3-a4565a749ef8/attack-candidate-ad5187ac.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/39d87ff6-ad8a-43b6-80aa-dc8d28119c7a/attack-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/42833280-a8ae-4e51-b899-44b202c05000/ac1-candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/79fc8259-1317-4363-b8a2-4766d1c885d7/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d0d5816-2ad6-4c1b-a5ed-367634158328/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0665af72-a95c-411e-983b-a84c33f4a0d4/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/128d5c27-017c-49ce-b4c7-8667d1ea5245/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7ab8288-0909-40a1-b1c6-287e01c3cb3a/w03-01-attack-report.json"
+        ],
+        "attack_branch": "devin/pp/w03-01/attack-ad5187ac",
+        "attack_branch_sha": "f48c577d7d0e481bcd7fdfb42caced86c4a78a37",
+        "attacked_sha": "ad5187ac4b0e855fa6666fc6c59b7de26aa77db3",
+        "attacks_tried": 9,
+        "breaks": [
+          {
+            "expected": "admitted=false, reason='multiple_stroke_events', comparableEventCount=2 — an ambiguous two-stroke clip must be refused with a precise reason.",
+            "observed": "admitImportedStrokeEvents(wristSpeedProfile(3000, 60, sum(hump@1200ms peak 1.0 h/s, hump@1800ms peak 3.0 h/s))) -> {admitted: true, comparableEventCount: 1}. decision.candidates has 2 entries and BOTH have peakTorsoPerSecond >= IMPORT_ADMISSION_LIMITS.minStrokePeakTorsoPerSecond (4). Each hump alone is admitted as a stroke (test 'A alone and B alone…' passes: ~4.2 and ~12.7 torso/s). The two humps are separated by 300 ms of exactly zero wrist speed, so the first is a finished stroke, not a wind-up. Cause: importAdmission.ts candidatesFor() sets `preparation = later.peakMs - candidate.peakMs <= 700 && candidate.peakSpeed < later.peakSpeed * 0.4` and then `comparable = !preparation && (...)` — the preparation demotion is applied BEFORE and overrides the absolute 4 torso/s stroke floor, contradicting the implementer summary claim that the absolute floor means 'an appended louder stroke can never demote a real one'.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'two complete strokes 600 ms apart' (VERIFIED: fails on candidate; test file cannot even load on BASE 42291369 — Cannot find module ../src/camera/importAdmission)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Preparation-window rule demotes a complete, independently-admitted stroke: a soft stroke followed 600 ms later by a ~3x harder stroke is admitted as ONE stroke"
+          },
+          {
+            "expected": "Adding more/harder stroke-like motion to a refused clip must never make it admitted (the candidate's own 'monotonicity' test asserts this invariant for equal-strength strokes); the 3-stroke rally must be refused as multiple_stroke_events; a 17 ms shift in peak spacing must not flip the verdict.",
+            "observed": "(a) soft(1.0)+hard(x) at 600 ms spacing: x=1.5 -> refused (multiple_stroke_events), x in {2.6, 3.0, 5.0} -> admitted. Making the second stroke HARDER turns a refusal into an admission. (b) Escalating 3-stroke rally 1.0/2.6/7.0 h/s (each admitted alone, peaks 600 ms apart): candidates=3, admitted=true as one stroke — a whole rally with increasing pace becomes one 'stroke'. (c) soft(1.0)+hard(3.0) with peaks 717 ms apart -> refused; peaks 700 ms apart -> admitted. The 700 ms preparationWindowMs is a hard cliff on real rally cadence.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'is monotonic in the second stroke|escalating three-stroke|700 or 717 ms' (VERIFIED: 3 failures on candidate)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Admission verdict is non-monotonic in the appended stroke's speed and flips on a one-frame peak-spacing change (700 vs 717 ms)"
+          },
+          {
+            "expected": "outcome.kind === 'quality_blocked' with the multiple_stroke_events copy; zero calls to /v1/analysis-permits; no analysis_execution_attempts row.",
+            "observed": "Session-less: runCaptureAnalysis(...) with an imported clip whose sidecar is the soft-then-hard rally -> fetch called with https://api.test/v1/analysis-permits (permitCalls length 1), i.e. a permit is reserved and inference runs for an ambiguous clip. Saved-original (durable) path: prepareOriginalCaptureAnalysis + runOriginalCaptureAnalysis on the same clip -> POST /v1/analysis-permits also issued (attempt row minted). This is the end-to-end consequence of break #1: 'ambiguous clips … never reach charging' is violated for a realistic soft-then-hard two-stroke import.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'reaches charging|refused on the saved path' (VERIFIED: 2 failures on candidate)",
+            "severity": "P1",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "The demoted two-stroke clip reaches the permit reservation (charging) on BOTH the session-less and the saved-original analysis paths"
+          },
+          {
+            "expected": "Either the native extraction result populates rotation/codec/trackCount on the imported CapturedClip (or a probe) and the app passes it to admitImportedMedia, or the objective's rotation/codec claim is explicitly scoped to the native layer with a test pinning that.",
+            "observed": "The objective names 'frame-rate/rotation/codec support'. The TypeScript gate implements rotation/codec/track checks only behind an optional `probe` argument that no production call site populates (CapturedClip carries no rotation/codec/track fields), so on the candidate those three rejection reasons (unsupported_rotation, unsupported_codec, unsupported_track_layout) can only be produced by unit tests. INFERRED from reading ClipMediaStore.swift: the native import pass (ProvisionalImportBudget / metadata validation) does enforce single-video-track, finite preferredTransform and AVFoundation-decodable format, so the practical exposure is limited to the JS gate being documentation-only rather than a supported clip being mis-admitted. Severity P3 (objective coverage / dead code), not a charging defect.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts -t 'hand a container probe' (VERIFIED: fails on candidate). Static: runCaptureAnalysis.ts calls admitImportedMedia(clip) twice and admitImportedClip(clip, parsed.value) twice, never with a probe.",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts",
+            "title": "Rotation, codec and video-track-layout gates of admitImportedMedia are unreachable from the shipping app (no ImportedMediaProbe is ever passed)"
+          }
+        ],
+        "package_id": "W03-01",
+        "summary": "Adversarial pass on W03-01 candidate ad5187ac (branch devin/pp/w03-01/impl-r4). Attack suite apps/mobile/__tests__/w03ImportAdmissionAttack.test.ts (16 tests) pushed once to devin/pp/w03-01/attack-ad5187ac @ f48c577d; no candidate production code or candidate tests were modified, no PR opened, no force-push.\n\nATTACK RESULTS vs candidate (VERIFIED: `cd apps/mobile && npx jest --ci __tests__/w03ImportAdmissionAttack.test.ts` exit 1, 16 executed / 9 passed / 7 failed / 0 skipped; log attached):\n1. Preparation-window demotion of a complete stroke (soft 600 ms before ~3x harder) -> BREAK P1 (admitted as one stroke although both candidates clear the absolute 4 torso/s floor).\n2. Monotonicity in appended-stroke speed / escalating 3-stroke rally / 700-vs-717 ms peak-spacing cliff -> BREAK P1 (3 failing tests; harder second stroke flips refusal to admission; a 3-stroke escalating rally is admitted as one).\n3. End-to-end: demoted rally on session-less runCaptureAnalysis -> BREAK P1: POST /v1/analysis-permits issued.\n4. End-to-end: same rally on the saved-original (durable) path -> BREAK P1: permit reserved + attempt minted (reported together with #3).\n5. Probe wiring: no production call passes ImportedMediaProbe -> BREAK P3 (rotation/codec/track gates unreachable; native layer INFERRED to cover the practical cases).\n6. Corrupt persisted sidecar (hash matches, canonical parse fails) on the saved-original path -> NO BREAK: no attempt row, no permit call, analyzeCapture not invoked.\n7. Container-envelope boundary values (inclusive limits 800/60000 ms, 240 fps, 4096x2160; one step beyond; -1, -0, NaN, +Inf, 0, negative, non-integer dims; earliest-gate precedence) -> NO BREAK.\n8. Sidecar timeline/coverage boundaries (timelineToleranceMs exact/+1, maxUntrackedSpanMs exact/+1) -> NO BREAK.\n9. Degenerate sidecars (zero frames; all frames same timestamp) -> NO BREAK (too_few_pose_frames / refused).\n\nACCEPTANCE on candidate ad5187ac:\n- AC1 `cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts` -> VERIFIED exit 0, 2 suites, 84 passed / 0 failed / 0 skipped.\n- AC2 base regress: git worktree at 42291369, copied ONLY the candidate's two test files (w03ImportAdmission.test.ts new, importedCaptureAnalysis.test.ts modified) -> VERIFIED exit 1, both suites fail to load (`Cannot find module '../src/camera/importAdmission'`, 0 tests executed) = FAIL on base as required; same files pass on HEAD (AC1). The attack suite likewise fails to load on base (attack-base.log).\n- AC3 `cd apps/mobile && npx tsc --noEmit` -> VERIFIED exit 0, 0 errors (after `npm ci` in apps/mobile; the pre-provisioned node_modules lacked @sentry/react-native and produced 11 unrelated TS errors before reinstall — environment, not candidate).\n- AC4 `npx eslint` + `npx prettier --check` on the 4 candidate-changed files plus the attack test -> VERIFIED exit 0 / exit 0.\n\nRoot cause (INFERRED from importAdmission.ts candidatesFor): `preparation` (later peak within 700 ms and >2.5x stronger) is evaluated first and `comparable = !preparation && (absoluteFloor || relative)`, so the absolute stroke floor never protects an earlier real stroke. Suggested direction for the implementer (not applied): only treat a candidate as preparation when it does NOT itself clear minStrokePeakTorsoPerSecond, or require the wrist speed not to return to (near) zero between the wind-up and the stroke peak.\n\nNo copy/accessibility violation found in importAdmissionRejectionMessage (the candidate's own copy test passes). Not exercised: network-failure matrix and 429/5xx (permit reservation is downstream of the admission gate and unchanged by this package); Apple runtime claims (M4 runner not used, per instructions)."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d73454d-f903-4037-ad92-d748336bbd1a/ac1-jest.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC1",
+            "note": "VERIFIED on HEAD ad5187ac. Test Suites: 2 passed; Tests: 84 passed (65 in w03ImportAdmission, 19 in importedCaptureAnalysis).",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f51e06fb-8586-409d-b83d-fae1a7cac405/ac2-base-tests-only.log",
+            "command": "git worktree add --detach /home/ubuntu/w03base 42291369fc4387571ac8821410353e0f99404484 && cp apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts <base>/apps/mobile/__tests__/ && cd <base>/apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts ; then same command on HEAD",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC2",
+            "note": "BASE run (tests only, exact manifest protocol): exit 1, Test Suites 2 failed, Tests 0 total — both suites fail at 'Cannot find module ../src/camera/importAdmission' because the production module does not exist on BASE (log above). Because a 0-test run is weak evidence, a SUPPLEMENTARY base run copied the NEW, UNWIRED module apps/mobile/src/camera/importAdmission.ts onto BASE as well (nothing on BASE calls it): exit 1, Tests 11 failed / 73 passed / 84 total — the 11 failures are exactly the session-less and durable-path integration tests (rally admitted, 500 ms and 241 fps clips reach sidecar read, attempts minted, permits reserved on recovery/reconcile) proving the ambiguous clip IS admitted by the shipping path on BASE: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5cbb7a4-f856-40d1-9f52-3f2eb7574ad7/ac2-base-tests-plus-unwired-module.log . Prior candidate e7d0a078 with the same tests: exit 1, 21 failed / 63 passed / 84 (both prior-round breaks reproduced): https://la-hacks-rttothemoon.devinenterprise.com/attachments/0da9e825-8e33-438a-91b4-e8908027136d/ac2-prior-candidate-e7d0a078.log . HEAD run: exit 0, 84/84 (AC1 log). Base worktree used symlinked node_modules from the HEAD checkout; no @pickle/* package source differs between BASE and HEAD.",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b0beb7b-f1fd-4d7e-9981-4a5f1480fea4/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC3",
+            "note": "VERIFIED on HEAD ad5187ac; no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc1def8-a7d2-42aa-b9f8-343a613f3cc4/ac4-eslint.log",
+            "command": "npx eslint apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts && npx prettier --check apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC4",
+            "note": "VERIFIED at repo root on HEAD ad5187ac: eslint exit 0; prettier exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3b76258-8ea5-4361-8348-ae1509c3a1e2/ac4-prettier.log). Also root `pnpm format:check` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/95e546ad-3642-45e0-a8f8-05cd62cd2102/format-check.log) and `git diff --check` exit 0. Full mobile suite `cd apps/mobile && npx jest --ci --silent`: exit 0, Test Suites 308 passed / 1 skipped, Tests 5966 passed / 1 skipped (https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fa7242f-a992-4829-9e59-4ddddb9d012b/full-mobile-jest.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "TDD: regression suites first (commit 193f143e; fail on BASE with module-not-found, and 11 integration failures on BASE when the unwired module is dropped in), then the module + wiring (e22c2cd0), then a correction commit (ad5187ac) after the full mobile suite showed the pre-existing 12 fps XC test expects the pose-quality insufficient_fps verdict (not a container-fps refusal) — removed the metadata fps floor and made smoothing time-based so a 12 fps single swing is admitted by the stroke gate and reaches that pre-existing gate exactly as before.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7d73454d-f903-4037-ad92-d748336bbd1a/ac1-jest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f51e06fb-8586-409d-b83d-fae1a7cac405/ac2-base-tests-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d5cbb7a4-f856-40d1-9f52-3f2eb7574ad7/ac2-base-tests-plus-unwired-module.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0da9e825-8e33-438a-91b4-e8908027136d/ac2-prior-candidate-e7d0a078.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b0beb7b-f1fd-4d7e-9981-4a5f1480fea4/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc1def8-a7d2-42aa-b9f8-343a613f3cc4/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f3b76258-8ea5-4361-8348-ae1509c3a1e2/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/95e546ad-3642-45e0-a8f8-05cd62cd2102/format-check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7fa7242f-a992-4829-9e59-4ddddb9d012b/full-mobile-jest.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w03-01/impl-r4",
+        "files_changed": [
+          "apps/mobile/src/camera/importAdmission.ts",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/__tests__/w03ImportAdmission.test.ts",
+          "apps/mobile/__tests__/importedCaptureAnalysis.test.ts"
+        ],
+        "head_sha": "ad5187ac4b0e855fa6666fc6c59b7de26aa77db3",
+        "out_of_scope_files": [],
+        "package_id": "W03-01",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w03ImportAdmission.test.ts (new, 65 tests): container envelope incl. no minFps and 12..240 fps admitted by media gate; 241 fps / 60_001 ms / 500 ms / 4097 px / fps 0 refused; rotation/codec/track-layout probe; single-swing admitted at 12/24/30/120/240 fps; stronger 3rd stroke keeps comparable count >= 2 and rally refused multiple_stroke_events; dink+dink+drive = 3; lone fidget motion_not_stroke_like; body_scale_unmeasured; wind-up within 700 ms is one stroke; separated weaker stroke stays separate; pose/wrist coverage; truncated-at-edge; reason messages",
+          "apps/mobile/__tests__/importedCaptureAnalysis.test.ts (extended, +11 W03-01 tests): session-less — two-stroke rally refused with precise reason before any permit; stronger 3rd stroke still refused; too-short and 241 fps refused before the sidecar is read; durable runOriginalCaptureAnalysis — refused rally returns precise reason, 0 fetches, no inference, no attempt row; too-short refused before extraction; recoverAnalysisJournals after simulated death reserves nothing; reconcileOriginalCaptureAnalysis performs no permit traffic; every retry before/after reconcile repeats the precise reason; concurrent runs mint nothing; other account cannot recover/reserve; control: admitted import DOES reserve"
+        ],
+        "residual_risks": [
+          "Rotation/codec/video-track-count admission is reachable only through the optional ImportedMediaProbe argument; the native CapturedClip payload today carries durationMs/width/height/fps (dimensions already transform-applied by the Swift preflight) and no codec/rotation fields, so those two checks are wired but receive no probe from the shipping native path until the native import preflight reports them (native/ is outside this package's write paths). Documented in importAdmission.ts as INFERRED from the Swift preflight code.",
+          "Stroke-plausibility thresholds (1 / 4 torso-lengths per second, 85 ms smoothing, 700 ms wind-up window) were tuned against the deterministic @pickle/evaluation swing generator and synthetic profiles, not against a corpus of real imported clips; real-clip calibration on device (Mac/iOS plane) was out of scope for this cloud package.",
+          "AnalyzeScreen.tsx was not modified (outside write_paths); the durable path now returns kind:'quality_blocked' which AnalyzeScreen already routes to qualityBlockedMessage()/outcome.reason display (INFERRED from reading AnalyzeScreen.tsx finishOriginalOutcome), verified only via the runOriginalCaptureAnalysis outcome in tests, not via UI."
+        ],
+        "summary": "Defects on BASE_SHA 42291369 (VERIFIED by running the new tests against base): (1) apps/mobile/src/camera/importAdmission.ts does not exist and apps/mobile/src/analysis/runCaptureAnalysis.ts has no import-specific admission — runCaptureAnalysis (session-less, ~L1139-1200 on base) and runOriginalCaptureAnalysis -> runCaptureAnalysisCore (durable, admit() at ~L872-914 before the core is entered) read the sidecar, seal the observation, reserve a permit and run inference for ANY imported clip, so a two-stroke rally, a 500 ms clip or a 241 fps clip reaches reservation. (2) The prior r3 candidate e7d0a078 additionally had a strongest-relative comparablePeakRatio (a 3x harder appended stroke demoted two real strokes -> admitted as one), and gated inside runCaptureAnalysisCore AFTER originalAnalysisOperations.admit(), leaving reserve_pending attempts that recovery/reconcile later reserved. Fix (3 commits on devin/pp/w03-01/impl-r4, tests committed first at 193f143e): importAdmission.ts — admitImportedMedia() (imported captureMode, 800 ms..60 s duration, measured fps <= 240, <= 4096 px / 4096x2160, optional probe rotation 0/90/180/270, codec avc1/hvc1/h264/hevc, single video track) and admitImportedClip() (sidecar present + geometry match, <= 2500 ms untracked body AND wrist spans, >= 12 pose frames, body scale from median torso length, wrist-speed events per torso length: candidate floor 1 torso/s, stroke floor 4 torso/s ABSOLUTE so an appended louder stroke can never demote a real one; comparable = absolute stroke floor OR >= 0.4 of strongest; wind-up within 700 ms below 0.4 of the following peak is the same stroke; exactly one comparable cluster else multiple_stroke_events / no_stroke_event / motion_not_stroke_like / stroke_truncated_at_clip_edge). Smoothing is a fixed 85 ms time span (5 samples at 60 fps) not a sample count, so the same swing is admitted at 12..240 fps. No container-fps floor: a low measured frame rate stays the quantization-aware pose-quality gate's verdict (insufficient_fps), which the pre-existing importedClip24fpsGate.xc suite pins. runCaptureAnalysis.ts — session-less path: admitImportedMedia before the sidecar is read, admitImportedClip after canonical parse, both before any permit; durable path runOriginalCaptureAnalysis: admitImportedMedia BEFORE extraction and BEFORE originalAnalysisOperations.admit(), and admitImportedClip on the parsed sidecar BEFORE sealObservation()/admit(), returning {kind:'quality_blocked', reason: importAdmissionRejectionMessage(reason)} so no attempt is minted and AnalyzeScreen's existing quality_blocked routing shows the precise reason on every run; a defensive refuseImport() in runCaptureAnalysisCore releases ('unsupported') + recovers any already-minted attempt if a gate is reached with `original` set. Player copy per reason follows APP_STORE_SUBMISSION.md (no superlatives/claims). Full mobile suite: 308 suites / 5966 tests pass (1 pre-existing skipped suite). No PR opened; no force-push; branch pushed once."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8db27808-4f7c-4b12-a873-d1bcf12c8a43/ac1-jest-head.log",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC1",
+            "note": "VERIFIED by reviewer on ad5187ac after `cd apps/mobile && npm ci --no-audit --no-fund` (exit 0). Test Suites: 2 passed / 2; Tests: 84 passed / 84 (65 w03ImportAdmission + 19 importedCaptureAnalysis). Verbose per-test listing: https://la-hacks-rttothemoon.devinenterprise.com/attachments/000a4449-5a15-42b5-ad73-abb6a8790654/ac1-jest-head-verbose.log",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3f663e58-6478-469c-83da-8f9d91c05f21/ac2-base-tests-plus-unwired-module.log",
+            "command": "git worktree add --detach /home/ubuntu/w03base 42291369fc4387571ac8821410353e0f99404484; cp apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts /home/ubuntu/w03base/apps/mobile/__tests__/; (cd /home/ubuntu/w03base/apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts) [must FAIL]; then on HEAD: cd apps/mobile && npx jest --ci --silent __tests__/w03ImportAdmission.test.ts __tests__/importedCaptureAnalysis.test.ts [must PASS]",
+            "executed": 84,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC2",
+            "note": "PROOF HOLDS (exit_code 0 = new tests FAIL on BASE and PASS on HEAD). BASE run A (exact manifest protocol, tests only): exit 1, Test Suites 2 failed / 2, Tests 0 total — both suites fail at 'Cannot find module ../src/camera/importAdmission' (log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/495f934b-d3ec-421f-8611-8928802f584d/ac2-base-tests-only.log). Because a 0-test run is weak evidence, BASE run B additionally copied ONLY the new module apps/mobile/src/camera/importAdmission.ts onto BASE (runCaptureAnalysis.ts left at BASE, so nothing calls it): exit 1, Test Suites 1 failed / 1 passed, Tests 11 failed / 73 passed / 84 — the 11 failures are exactly the new session-less + durable integration tests (rally/too-short/241fps refusal, recovery, reconcile, retries, concurrency, cross-account), each receiving outcome.kind 'unavailable'/'scored' instead of 'quality_blocked' (artifact above). Reviewer-authored ad-hoc probe on BASE (not committed, deleted after): a two-stroke rally imported clip on BASE's runCaptureAnalysis reached POST /v1/analysis-permits then /finalize (permit reserved for an ambiguous clip), and a 500 ms clip was 'scored' after reserving a permit — confirming the base defect is in the shipping path: https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea511e70-7c21-4f0b-83d3-dae7c9b554e6/ac2-base-reviewer-probe.log. HEAD run: exit 0, 84/84 (AC1 artifact). Base worktree used node_modules symlinked from the HEAD checkout.",
+            "passed": 84,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12f16257-1a2f-4ea0-95d6-fdd42ad5a566/ac3-tsc.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC3",
+            "note": "VERIFIED by reviewer on ad5187ac; exit 0, no diagnostics (non-test check: counts 0 by schema convention).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c8b7e514-ff13-46cb-8d42-f612555223b0/ac4-eslint.log",
+            "command": "npx eslint apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts && npx prettier --check apps/mobile/src/camera/importAdmission.ts apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/__tests__/w03ImportAdmission.test.ts apps/mobile/__tests__/importedCaptureAnalysis.test.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W03-01-AC4",
+            "note": "VERIFIED by reviewer at repo root on ad5187ac: eslint exit 0; prettier --check exit 0 ('All matched files use Prettier code style!', log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9991a3f-362d-4499-bb3c-4bf154601ddc/ac4-prettier.log). Non-test check: counts 0 by schema convention.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/74079cd7-ee7f-423c-b780-aeb36a7ddf86/verdict.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/8db27808-4f7c-4b12-a873-d1bcf12c8a43/ac1-jest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/000a4449-5a15-42b5-ad73-abb6a8790654/ac1-jest-head-verbose.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/495f934b-d3ec-421f-8611-8928802f584d/ac2-base-tests-only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/3f663e58-6478-469c-83da-8f9d91c05f21/ac2-base-tests-plus-unwired-module.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea511e70-7c21-4f0b-83d3-dae7c9b554e6/ac2-base-reviewer-probe.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/12f16257-1a2f-4ea0-95d6-fdd42ad5a566/ac3-tsc.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c8b7e514-ff13-46cb-8d42-f612555223b0/ac4-eslint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d9991a3f-362d-4499-bb3c-4bf154601ddc/ac4-prettier.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5229d0b9-51ea-41b5-a6e2-f394ad32a1e6/full-mobile-jest.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "apps/mobile/src/camera/importAdmission.ts rotation/codec/single-video-track checks are only reachable via the optional ImportedMediaProbe argument; CapturedClip (apps/mobile/src/camera/capture.ts) carries no codec/rotation/track fields and both shipping call sites in runCaptureAnalysis.ts (L843, L1305) call admitImportedMedia(clip) without a probe, so those three rules are dead until the native import preflight (native/, serial group not held by this package) reports them. Duration/fps/dimension/pose/stroke-plausibility rules ARE wired. Recommend a follow-up package that extends the Swift preflight payload and passes a probe.",
+          "Durable path (runOriginalCaptureAnalysis, runCaptureAnalysis.ts ~L890-901) runs admitImportedClip on the parsed sidecar BEFORE the sha256 integrity check performed later in runCaptureAnalysisCore. Consequence is only that a corrupted-but-parseable sidecar could surface an import-refusal message instead of the integrity message; no charge, no fabricated success, so not an invariant violation.",
+          "Stroke-plausibility thresholds (1 / 4 torso-lengths per s, 85 ms smoothing, 700 ms wind-up, 350 ms same-event) are calibrated against the deterministic @pickle/evaluation swing generator and synthetic profiles only; no real imported-clip corpus evidence (implementer disclosed this). False-refusal rate on real footage is UNKNOWN from Linux.",
+          "The defensive refuseImport() branch in runCaptureAnalysisCore that releases an already-minted attempt with 'unsupported' + recover is effectively unreachable for imports now that both gates run before originalAnalysisOperations.admit(); it is not covered by a dedicated test. Harmless dead-defense, not a bypass."
+        ],
+        "package_id": "W03-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "ad5187ac4b0e855fa6666fc6c59b7de26aa77db3",
+        "scope_violation": false,
+        "summary": "APPROVE W03-01 candidate ad5187ac4b0e855fa6666fc6c59b7de26aa77db3 (branch devin/pp/w03-01/impl-r4) against BASE 42291369. SCOPE: `git diff --stat` shows exactly the four write_paths files (importAdmission.ts new +1117, runCaptureAnalysis.ts +80/-7, w03ImportAdmission.test.ts new +1264, importedCaptureAnalysis.test.ts +481); no out-of-scope files; apps/mobile/src/analysis/ is in the held mobile-analysis group. scope_violation=false. WIRING (1b): admitImportedMedia/admitImportedClip are called by both shipping paths — session-less runCaptureAnalysis (L1305 before sidecar read, L1373 after canonical parse, both before any permit) and durable runOriginalCaptureAnalysis (L843 before verifyCapturedClipCurrentBytes/extraction, L897 before sealObservation/admit()), returning kind:'quality_blocked' with importAdmissionRejectionMessage(reason); AnalyzeScreen already routes quality_blocked to qualityBlockedMessage (L1273, L1447, unchanged). ACCEPTANCE (all re-run by reviewer): AC1 jest exit 0, 84/84/0/0; AC3 tsc exit 0; AC4 eslint exit 0 + prettier exit 0. REGRESSION PROOF: exact protocol on BASE → exit 1, 0 tests (module-not-found); strengthened run with only the unwired module dropped onto BASE → exit 1, 11 failed / 73 passed, the 11 being the new integration tests; my own ad-hoc probe on BASE showed a two-stroke rally reserving and finalizing a permit and a 500 ms clip scoring — i.e. ambiguous/unsupported imports reached charging on BASE. HEAD → 84/84. regression_fails_on_base=true. FULL MOBILE SUITE on HEAD (beyond acceptance): `cd apps/mobile && npx jest --ci --silent` exit 0, Test Suites 308 passed / 1 skipped (importedRealFootageAnalysis, skipped identically on BASE), Tests 5966 passed / 1 skipped: https://la-hacks-rttothemoon.devinenterprise.com/attachments/5229d0b9-51ea-41b5-a6e2-f394ad32a1e6/full-mobile-jest.log. INVARIANTS: no RLS/grant/migration/session-check changes (mobile-only diff); billing conservation preserved — rejected imports return before any permit reservation or attempt row, tests assert 0 permit calls, no fetch, no inference, no attempt row, recovery/reconcile reserve nothing, other account cannot recover, and a control admitted import still reserves; no test removed/skipped/reordered (diff removes only import/helper lines that were refactored, zero `it(`/`expect(` deletions); no @ts-ignore/any/eslint-disable/|| true/passWithNoTests/.skip/.only/forceExit/testTimeout added; the only removed production lines are the parsePoseSequence(...) call moved verbatim into parseRecordedPoseSequence(); no existing comments edited; user-facing copy per reason is factual and free of Android/Google Play/guest/Live Court/DUPR/competitor/accuracy-%/superlative terms. Module carries IMPORT_ADMISSION_VERSION='import-admission-1'; admitted clips' analysis output is unchanged so no scoring/geometry version bump or benchmark is required. Non-blocking notes listed separately (probe-only rotation/codec/track rules, admission-before-hash ordering in durable path, synthetic-only threshold calibration, unreachable defensive release branch).",
+        "verdict": "approve"
+      },
+      "round": 4
+    }
+  ],
+  "start_round": 3,
+  "status": "REQUEUE",
+  "wave_id": "wave-1"
+}

@@ -1,0 +1,466 @@
+{
+  "agent_counts": {
+    "completed": 6,
+    "failed": 0,
+    "launched": 6,
+    "requested": 6
+  },
+  "agents": [
+    {
+      "label": "implement-H07-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "0c72ec888bed2006d092a62b4221888e0f5cf34433ad94f26b2fb24a48daa8a4",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-H07-01-r1",
+      "phase": "review",
+      "prompt_sha256": "417c0488deeb20156a99047c386296fb3d9dfa35845bda8d24a8973a921da8e9",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-H07-01-r1",
+      "phase": "adversary",
+      "prompt_sha256": "b14348f432b4bb55222fbbf93869e9229453c5618808f272a4704f95591ac93f",
+      "role": "adversary",
+      "status": "completed"
+    },
+    {
+      "label": "implement-H07-01-r2",
+      "phase": "implement",
+      "prompt_sha256": "f14b5f2f4a6ce0fb79e04618197d33126928da1ff028282230f9cf75c7d0b548",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-H07-01-r2",
+      "phase": "review",
+      "prompt_sha256": "e699416173da313a25cc1b901e42a619bfa57fd2acd26489281bb222e10e8932",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-H07-01-r2",
+      "phase": "adversary",
+      "prompt_sha256": "16f7c5a2b7a4f6e0f779f5ef31d8c5c85bc4b9feb20add0d2477b07da34be503",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "candidate": {
+    "branch": "devin/pp/h07-01/impl-r2",
+    "head_sha": "2bfe49a10418640f995be0ad17ff830d7e2206f3",
+    "round": 2
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "H07-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e24ab065-5384-43a2-9d80-f84d5c3a4695/args.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b8904587-a395-41c7-88a4-6711ee2ed57e/live.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cba44e24-295f-404b-af74-73c2c25e8ccd/report.json"
+        ],
+        "attack_branch": "devin/pp/h07-01/attack-a84b02bf",
+        "attack_branch_sha": "c6606996bb6984d2e3b3b8630e6ae6d965e27572",
+        "attacked_sha": "a84b02bf5bf49a1828a0a4aadce6d94f305734cc",
+        "attacks_tried": 21,
+        "breaks": [
+          {
+            "expected": "A run that fails part-way still persists report.json (bundle metrics + completed cycles, status 'unavailable'/'partial', ok=false) so the evidence survives the crash; only the exit code should signal failure.",
+            "observed": "VERIFIED: stdout '[bundle] cycle 1: serve ready 1235.42 ms, cold /healthz 78.03 ms, warm median 2.42 ms'; process exits 1 with 'supabase functions serve exited before the runtime became healthy'; out dir contains only serve-*.log + workdir/ — no report.json, so the bundle size/sha256/deno-info summary and the cycle-1 sample are all lost. measureServeTarget rethrows on the first failed cycle instead of recording the partial target, and main() only writes report.json after every target completes.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'crash between steps'  (runs `deno run -A tools/diagnostics/edge_cold_start.ts --cycles 2 --out <tmp>`, deletes <tmp>/workdir/supabase/functions/api/index.js after '[bundle] cycle 1:' is printed)",
+            "severity": "P1",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Crash between steps: a failed later cycle discards the whole measurement (no report.json) although cycle 1 was measured"
+          },
+          {
+            "expected": "Terminating the script (Ctrl-C, CI timeout, SIGTERM) tears down the CLI tree it spawned and the edge-runtime container; no orphan processes on port 54321/8081.",
+            "observed": "VERIFIED (2/2 runs + 1 manual): parent deno exited on SIGTERM but 3 Supabase CLI processes (npm exec → sh → node/supabase binary, e.g. pids 26798,26799,26817) kept running; a manual run earlier showed the same tree alive >13 s until SIGINT was sent by hand. interruptTree() only runs from the `finally` block, there is no Deno.addSignalListener, and the child is not in its own process group.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'process death'  (spawns `deno run -A tools/diagnostics/edge_cold_start.ts --cycles 1 --out <tmp>`, sends SIGTERM once the bundle serve is up, waits 5 s, `pgrep -f 'supabase --workdir <tmp>/workdir'`)",
+            "severity": "P1",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Process death: SIGTERM/SIGKILL to the script orphans the `supabase functions serve` process tree"
+          },
+          {
+            "expected": "A 'reproducible method' yields the same served-bundle size/sha256 for the same commit on any checkout path (e.g. bundle from a path-normalised location, strip/ignore path comments, or document that raw bytes/sha vary with DENO_DIR location and record gzip size/module count as the stable metrics).",
+            "observed": "VERIFIED: /home/ubuntu/repos/Pickle-Sensei → 1,033,186 B sha256 4585b5cb…8374 (the number recorded in docs/OBSERVABILITY.md); /tmp/h07-attack-repro-… → 1,033,690 B sha256 230f8cda…ef6e. `deno bundle` writes module-path comments/keys like `// ../../home/ubuntu/.cache/deno/npm/registry.npmjs.org/tslib/2.8.1/tslib.js` relative to the entry dir, so the documented raw size and sha256 are a property of the machine layout, not of the entrypoint. The doc presents sha256 as the bundle identity for the method.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'where the checkout lives'  — or manually: `git worktree add --detach /tmp/wt HEAD && (cd /tmp/wt && deno bundle --config supabase/functions/api/deno.json --platform deno -o /tmp/b.js supabase/functions/api/index.ts) && sha256sum /tmp/b.js` vs the same command from /home/ubuntu/repos/Pickle-Sensei",
+            "severity": "P1",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Reproducibility: bundle raw bytes and sha256 depend on where the checkout lives relative to $DENO_DIR"
+          },
+          {
+            "expected": "Concurrent invocations either serialise (lock on the project/edge container) or fail fast with a clear message; they never both emit a report claiming a measured cold start against a shared, mutually-destroyed runtime.",
+            "observed": "VERIFIED, non-deterministic: in the pushed test runs both processes exited 0 and both reported 'RESULT: measured' while each `docker rm -f supabase_edge_runtime_pickle-sensei` before/after its own cycle (so the runtime one run timed may be the sibling's, INFERRED); in an earlier manual run both exited 1 (A: 'Conflict. The container name \"/supabase_edge_runtime_pickle-sensei\" is already in use', B: 'cold GET /healthz returned 502'). No lock, no per-run container name, no detection of a sibling serve.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter concurrency  (two `deno run -A tools/diagnostics/edge_cold_start.ts --cycles 1 --out <tmpA|tmpB>` in parallel)",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Concurrency: two simultaneous runs share the fixed container name and both publish 'measured' results (or both fail) without any guard"
+          },
+          {
+            "expected": "Refuse/abort when the name is already taken by something this run did not start (or at least warn and require --force); a measurement tool must not delete another session's container.",
+            "observed": "VERIFIED: script exit 0; `docker inspect supabase_edge_runtime_pickle-sensei` afterwards exits 1 — the container the script did not create was destroyed by removeEdgeContainer() (`docker rm -f`).",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'foreign container'  (docker create --name supabase_edge_runtime_pickle-sensei --label h07.attack=foreign kong:2.8.1 sleep 600; then `deno run -A tools/diagnostics/edge_cold_start.ts --cycles 1`)",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Corrupt/foreign state: a pre-existing container that merely has the edge-runtime name is force-removed"
+          },
+          {
+            "expected": "Running the acceptance command leaves the git checkout clean; a diagnostic must not modify tracked files.",
+            "observed": "VERIFIED: exit 0 and `git status` shows ' M supabase/.temp/cli-latest' (v2.116.0 → v2.117.0); earlier full runs also left untracked supabase/.branches/. The doc mentions this as a known side effect instead of preventing it (e.g. running the CLI from the generated workdir, or restoring the file).",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'dirty tracked files'  (restores HEAD content, runs `deno run -A tools/diagnostics/edge_cold_start.ts --cycles 1 --out <tmp>`, `git status --porcelain -- supabase/.temp supabase/.branches`)",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Side effects: a successful run rewrites the tracked file supabase/.temp/cli-latest (and creates supabase/.branches/)"
+          },
+          {
+            "expected": "Empty --out is rejected (like empty --cycles is), or falls back to the default artifacts/edge-cold-start/<UTC>/ directory.",
+            "observed": "VERIFIED (in a throwaway worktree): exit 0; `git status --untracked-files=all` shows '?? report.json', '?? workdir/supabase/config.toml', '?? workdir/supabase/functions/api/index.js', '?? workdir/supabase/.temp/cli-latest' at the repo root. parseArgs stores '' (not undefined) and main() does resolve(repoRoot, '') === repoRoot.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter \"--out ''\"  and the pure check in edge_cold_start_args.attack.test.ts (`parseArgs(['--out',''])`)",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Boundary: `--out \"\"` is accepted and writes report.json + workdir/ into the repository root"
+          },
+          {
+            "expected": "The recorded command equals the executed one: `npx --yes supabase@2.117.0 start -x …`.",
+            "observed": "VERIFIED: stdout 'starting local stack: npx --yes supabase@2.117.0 supabase@2.117.0 start -x gotrue,…' — `args.slice(1)` keeps the `supabase@<version>` element, so pasting the recorded command runs `supabase supabase@2.117.0 start` (invalid).",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts --filter 'recorded `supabase start`'  (npx --yes supabase@2.117.0 stop; deno run -A tools/diagnostics/edge_cold_start.ts --cycles 1)",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts",
+            "title": "Reproducibility: the printed `supabase start` command is not the command executed (package spec duplicated)"
+          },
+          {
+            "expected": "Reject values that are not safe integers (or above a sane upper bound) with the same 'positive integer' error.",
+            "observed": "VERIFIED: parseArgs(['--cycles','99999999999999999999']).cycles === 1e20 (Number.isSafeInteger false); '--warm-requests 18446744073709551616' → 18446744073709552000. An unbounded run would loop effectively forever; cycles.length === options.cycles can never hold.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts --filter MAX_SAFE_INTEGER",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts",
+            "title": "Boundary: --cycles / --warm-requests accept integers beyond Number.MAX_SAFE_INTEGER"
+          },
+          {
+            "expected": "Option values starting with '--' are rejected as missing values.",
+            "observed": "VERIFIED: parseArgs(['--out','--cycles']).outDir === '--cycles'; a run would write artifacts to <repo>/--cycles with default cycles instead of erroring.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts --filter 'swallowed silently'",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts",
+            "title": "Boundary: `--out --cycles` silently uses the flag name as the output directory"
+          },
+          {
+            "expected": "Parse config.toml with a TOML parser (e.g. jsr:@std/toml) or restrict to top-level keys explicitly, so behaviour matches the CLI.",
+            "observed": "VERIFIED: `api.port = 55555` (dotted key) and `api = { port = 55556 }` (inline table) → 54321 (script would probe the wrong Kong port while the CLI serves on the configured one); `project_id = 'pickle-sensei'` (TOML literal string) → throws 'has no project_id'; a project_id that only exists under `[remotes.production]` is accepted as the local project id (script would look for supabase_db_<remote-ref> containers and start a stack for it). Current repo config.toml happens to use the forms the regex handles.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts --filter 'ATTACK config'",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts",
+            "title": "Config parsing: readApiPort/readProjectId disagree with the TOML the Supabase CLI accepts"
+          },
+          {
+            "expected": "Filter or reject non-finite samples so the report never contains null statistics.",
+            "observed": "VERIFIED on the helper: summarize([1, NaN, 3]) → {min:1, median:NaN, mean:NaN, max:3} which JSON.stringify emits as null. INFERRED: not reachable from the shipping call sites (samples come from performance.now() deltas), so this is a robustness nit only.",
+            "repro": "deno test -A tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts --filter 'NaN/null'",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts",
+            "title": "summarize() propagates NaN samples into report.json as null median/mean"
+          }
+        ],
+        "package_id": "H07-01",
+        "summary": "Attacked H07-01 candidate a84b02bf (tools/diagnostics/edge_cold_start.ts + docs/OBSERVABILITY.md) on Linux with Docker 29.7.2, Deno 2.9.6, Supabase CLI 2.117.0; production project never contacted. Baseline VERIFIED: `deno run -A tools/diagnostics/edge_cold_start.ts` exit 0 (report artifacts/edge-cold-start/20260908T184842Z/report.json: 1,033,186 B raw / 218,834 B gzip / 62 modules; bundle cold /healthz min 46.58 / median 47.53 / max 83.39 ms, warm median 2.67 ms; source-tree target UNAVAILABLE as documented). Attack tests pushed on devin/pp/h07-01/attack-a84b02bf @ c6606996 in tools/diagnostics/__attack__/ (two Deno test files; candidate code/tests untouched; generated CLI state not committed). Results VERIFIED: `deno test -A tools/diagnostics/__attack__/edge_cold_start_args.attack.test.ts` → exit 1, 11 passed / 8 failed (19 executed = 8 candidate self-tests imported via the module + 11 attacks; 3 attacks did not break: malformed-int rejection, commented-out port, TOML escape round-trip). `deno test -A tools/diagnostics/__attack__/edge_cold_start_live.attack.test.ts` → exit 1, 1 passed / 8 failed (9 executed; deno.lock-untouched attack did not break); identical outcome on a prior run (live.raw.log). Plus manual attacks with no break: partial bundle deletion (exit 1, no false pass), bundle determinism at a same-depth long path (identical sha). attacks_tried = 11 pure + 9 live + 1 manual-only (relative-path/partial-bundle) = 21. Confirmed breaks: 3×P1 (partial failure loses report.json incl. cycle-1 evidence; SIGTERM orphans the supabase CLI tree; bundle size/sha256 vary with checkout path so the documented numbers are layout-dependent), 5×P2 (no concurrency guard — both parallel runs claim measured or both fail; force-removes a foreign container of the same name; rewrites tracked supabase/.temp/cli-latest; `--out \"\"` writes artifacts into the repo root; printed `supabase start` command duplicates the package spec and is not pasteable), 4×P3 (unsafe-integer counts accepted; `--out --flag` swallowed; regex TOML parsing diverges from the CLI; NaN → null in summarize, unreachable in practice). The AC command itself produces a measurement, but the 'reproducible method' claim is weakened by the P1 path-dependence and the wrong printed start command. Local stack (db+kong) left running as the candidate does; all test-created containers/processes/worktrees cleaned up."
+      },
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": [
+          "adversarial P0/P1 breaks: 3"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/60e6d35e-abe1-481c-8c58-8a336fe44727/acceptance.log",
+            "command": "deno run -A tools/diagnostics/edge_cold_start.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H07-01-AC1",
+            "note": "VERIFIED at HEAD sources on Linux x86_64, Deno 2.9.6, Supabase CLI 2.117.0 (npx), Docker 29.7.2, supabase-edge-runtime-1.74.3. Output 'RESULT: measured', exit 0. Bundle (deno bundle --config supabase/functions/api/deno.json --platform deno): 1,033,186 B raw, 218,834 B gzip, 62 modules, sha256 4585b5cb…; deno info graph: 17 first-party modules 438,144 B, 13 npm packages. Cold GET /functions/v1/api/healthz on a fresh edge-runtime container serving the bundle: 91.65 / 57.24 / 48.87 ms over 3 cycles (min 48.87, median 57.24, max 91.65); warm median 2.44 ms (n=30); CLI spawn→runtime healthy median 2048.81 ms. Full report JSON: https://la-hacks-rttothemoon.devinenterprise.com/attachments/06e4ef79-328c-48eb-a99f-e8a2fc3d7c8c/acceptance-report.json ; per-cycle CLI log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/2e1ff6f7-887d-40e3-8ca2-3618c600e22a/serve-bundle-1.log . Same command on BASE_SHA (git worktree at 55d80326): exit 1, 'Module not found tools/diagnostics/edge_cold_start.ts' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/fd2cfab6-edd7-4a97-8961-37228abd6a7a/base-acceptance.log). The 'source-tree' serve target is reported UNAVAILABLE (CLI error 'failed to read file: open packages/shared-types/src/techniqueBenchmark.js', log https://la-hacks-rttothemoon.devinenterprise.com/attachments/e50a7140-adfb-4546-8ef2-7ff4ba7a4e5f/serve-source-tree-1.log) and is informational only; exit code depends on the 'bundle' target. Local containerised numbers only — no hosted-latency claim.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Deno bundle of the real entrypoint (import map + lockfile honoured, npm deps inlined) served through the pinned Supabase CLI against a local Postgres+Kong stack; fresh edge-runtime container per cycle so the first /healthz is a true worker cold start; min/median/mean/max aggregation; stdout-writer output (root ESLint forbids console.log); exit nonzero unless every requested cycle produced a bundle-target sample.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/60e6d35e-abe1-481c-8c58-8a336fe44727/acceptance.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/06e4ef79-328c-48eb-a99f-e8a2fc3d7c8c/acceptance-report.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/fd2cfab6-edd7-4a97-8961-37228abd6a7a/base-acceptance.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5d88ae-7715-47bf-b3da-61a6766656de/base-selftest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d3c8834-7a3d-4274-9a9a-931522f4cfdc/head-selftest.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2e1ff6f7-887d-40e3-8ca2-3618c600e22a/serve-bundle-1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e50a7140-adfb-4546-8ef2-7ff4ba7a4e5f/serve-source-tree-1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/45e94c9d-7265-40dd-aa2e-a6ab8ef38e8d/pnpm-lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/90a030f4-d086-4bae-8517-a43f4bf5e3fb/pnpm-typecheck.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "VERIFIED (CLI 2.117.0): `npx --yes supabase@2.117.0 functions serve --no-verify-jwt` from the repo root on BASE_SHA exits before starting the edge runtime with `failed to read file: open packages/shared-types/src/techniqueBenchmark.js: no such file or directory` — the CLI's import scanner resolves the relative `.js` imports inside packages/shared-types/src/*.ts literally instead of through the `.js→.ts` import-map entries in supabase/functions/api/deno.json. Pre-existing, outside write_paths (shared-types / edge-index serial groups); not fixed, recorded in docs/OBSERVABILITY.md."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/h07-01/impl-r1",
+        "files_changed": [
+          "tools/diagnostics/edge_cold_start.ts",
+          "docs/OBSERVABILITY.md"
+        ],
+        "head_sha": "a84b02bf5bf49a1828a0a4aadce6d94f305734cc",
+        "out_of_scope_files": [],
+        "package_id": "H07-01",
+        "regression_tests_added": [
+          "tools/diagnostics/edge_cold_start.ts (embedded Deno.test self-tests, 8 tests; commit 9ba6f1c7 'test(diagnostics): self-tests for edge_cold_start helpers'; `deno test -A tools/diagnostics/edge_cold_start.ts` — BASE_SHA: exit 1 'Import ... failed, not found' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd5d88ae-7715-47bf-b3da-61a6766656de/base-selftest.log); HEAD: exit 0, 8 passed / 0 failed (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0d3c8834-7a3d-4274-9a9a-931522f4cfdc/head-selftest.log))"
+        ],
+        "residual_risks": [
+          "Numbers are for the local containerised runtime (supabase-edge-runtime-1.74.3) on this Linux box; hosted cold start (eszip load, isolate scheduling on ucqnaiwqwjtgvlduiuib) remains UNKNOWN and is explicitly labelled as such in docs.",
+          "The source-tree serve target is UNAVAILABLE on this checkout because of the Supabase CLI import-scanner vs Deno import-map mismatch; making `supabase functions serve` work on the raw checkout needs a shared-types or edge-index change outside this package.",
+          "Raw bundle bytes vary slightly (~170 B) with the bundle output path because esbuild emits module-path comments relative to cwd; the script always runs from the repo root so repeated runs are byte-identical (sha256 4585b5cb… across all three runs this session).",
+          "Running the Supabase CLI from the repo root rewrites the tracked marker supabase/.temp/cli-latest and `supabase start` creates supabase/.branches/; both were restored/removed before committing and the behaviour is documented.",
+          "Self-tests cover the pure helpers only; the docker/CLI orchestration is exercised by the acceptance run, not by unit tests."
+        ],
+        "summary": "Gap on BASE_SHA: tools/diagnostics/edge_cold_start.ts did not exist (`deno run -A tools/diagnostics/edge_cold_start.ts` → exit 1, module not found) and docs/OBSERVABILITY.md had no Edge bundle-size / cold-start section; H07-COLD-START in docs/RELEASE_READINESS_2026-09-07.md §11 was open with no measurement of supabase/functions/api/index.ts (Deno.serve entrypoint). Implemented tools/diagnostics/edge_cold_start.ts: bundles the shipping entrypoint with `deno bundle --config supabase/functions/api/deno.json --platform deno` (raw/gzip bytes, module count, sha256), summarises `deno info --json` (first-party modules/bytes, npm packages), ensures the minimal local Supabase stack (Postgres+Kong, project pickle-sensei) and, per cycle, removes the edge-runtime container, spawns the pinned CLI `npx --yes supabase@2.117.0 functions serve --no-verify-jwt`, waits for /functions/v1/_internal/health, times the first GET /functions/v1/api/healthz (cold) then N warm requests, and writes report.json + per-cycle CLI logs under git-ignored artifacts/edge-cold-start/<UTC>/. Two serve targets: source-tree (informational, UNAVAILABLE on this checkout due to the CLI import-scanner issue) and bundle (generated workdir whose [functions.api] entrypoint is the bundle; required for exit 0). Recorded in docs/OBSERVABILITY.md: method, exact commands, tool versions, the measured numbers (1,033,186 B raw / 218,834 B gzip / 62 modules; cold /healthz min 48.87 / median 57.24 / max 91.65 ms over 3 cycles; warm median 2.44 ms), the hosted-latency limitation (local containerised runtime is not hosted evidence), and the source-tree serve limitation. Verification (all VERIFIED at HEAD): acceptance command exit 0; `deno test -A tools/diagnostics/edge_cold_start.ts` 8 passed; `deno check` OK; `npx eslint tools/diagnostics/edge_cold_start.ts` OK; `pnpm format:check` exit 0; `git diff --check` exit 0; `pnpm lint` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/45e94c9d-7265-40dd-aa2e-a6ab8ef38e8d/pnpm-lint.log); `pnpm typecheck` exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/90a030f4-d086-4bae-8517-a43f4bf5e3fb/pnpm-typecheck.log). Commits: 9ba6f1c7 (self-tests + pure helpers, test-first) then a84b02bf (measurement orchestration + docs). Pushed devin/pp/h07-01/impl-r1 (no force, no PR). Production project never contacted."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/63eb5070-1342-4bda-b69b-55c77f32ca0a/acceptance-head.log",
+            "command": "deno run -A tools/diagnostics/edge_cold_start.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H07-01-AC1",
+            "note": "VERIFIED by my own run at a84b02bf from the repo root (Linux x86_64, Deno 2.9.6, Supabase CLI 2.117.0 via npx, Docker 29.7.2, supabase-edge-runtime-1.74.3). Output ends 'RESULT: measured', exit 0. Bundle byte-identical to the implementer's claim: 1,033,186 B raw / 218,834 B gzip / 62 modules / sha256 4585b5cb9fa4… (reproducible method confirmed). deno info: 17 first-party modules, 438,144 B, 13 npm packages. Cold GET /functions/v1/api/healthz on a fresh edge-runtime container per cycle: 80.04 / 82.94 / 52.03 ms (min 52.03, median 80.04, max 82.94; implementer had 48.87/57.24/91.65 — same order of magnitude, run-to-run variance expected); warm median 2.44 ms (n=30); CLI spawn→runtime healthy median 2052.96 ms. The bundle target's serve log shows the real handler answering ('serving the request with supabase/functions/api', api_request evt route=/api/healthz status=200), so the measurement is of the shipping function, not a stub. source-tree target UNAVAILABLE with the same CLI error ('failed to read file: open packages/shared-types/src/techniqueBenchmark.js') — VERIFIED, log https://la-hacks-rttothemoon.devinenterprise.com/attachments/80ac822a-7554-4092-9683-ea28eb62335e/serve-source-tree-1.log. Full report.json: https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea4bfd0b-261f-41c2-8a10-aff0d6b84c6e/acceptance-report.json ; bundle cycle-1 CLI log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f4c4251-b9b9-4238-843a-f35681ace8b7/serve-bundle-1.log. Same command on BASE_SHA 55d80326 (git worktree): exit 1, 'Module not found …/tools/diagnostics/edge_cold_start.ts' (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0c893155-8396-49e8-8b3a-dcafa30eca87/acceptance-base.log). No hosted project contact observed (grep for ucqnaiwqwjtgvlduiuib / supabase.co in all run logs: no matches). Local stack was stopped afterwards (supabase stop).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/63eb5070-1342-4bda-b69b-55c77f32ca0a/acceptance-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ea4bfd0b-261f-41c2-8a10-aff0d6b84c6e/acceptance-report.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0c893155-8396-49e8-8b3a-dcafa30eca87/acceptance-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/96951669-a347-4d66-a89d-5c2ae23b914f/selftest-head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/569c2e88-e0e2-4a6d-ac24-def557835686/selftest-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/80ac822a-7554-4092-9683-ea28eb62335e/serve-source-tree-1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4f4c4251-b9b9-4238-843a-f35681ace8b7/serve-bundle-1.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0967e93c-013f-4891-9892-ca23c56243ae/lint.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5a859612-6731-496a-b504-fdfae616e797/typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c3dba015-4c38-4d65-83d3-4cba9dc60224/format.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Regression-proof step is structurally inapplicable rather than passing: the 8 Deno.test self-tests live INSIDE tools/diagnostics/edge_cold_start.ts (the implementation). Copying 'only the test file' onto BASE_SHA copies the implementation too, so `deno test -A tools/diagnostics/edge_cold_start.ts` on base-with-file-copied PASSES (8/8, https://la-hacks-rttothemoon.devinenterprise.com/attachments/569c2e88-e0e2-4a6d-ac24-def557835686/selftest-base.log). The implementer's 'BASE exit 1 not found' claim only reflects the file being absent. The manifest has no kind=regress criterion and no invariants for this package, so this does not block; a future revision could move the self-tests to tools/diagnostics/edge_cold_start.test.ts so the proof is meaningful. HEAD self-tests VERIFIED: 8 passed / 0 failed, exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/96951669-a347-4d66-a89d-5c2ae23b914f/selftest-head.log).",
+          "tools/diagnostics/edge_cold_start.ts:658 — cosmetic: the 'starting local stack' progress line prints the CLI spec twice (`npx --yes supabase@2.117.0 supabase@2.117.0 start -x …`) because `cli.args(...)` already contains `--yes supabase@<v>` and the line slices only one element. Report contents are unaffected.",
+          "docs/OBSERVABILITY.md — the explanation of WHY the CLI import scanner fails (\"matches import-map keys against the raw specifier (spec-strict exact / /-suffixed prefix match)\") is presented without a VERIFIED/INFERRED label; the failure itself is VERIFIED (I reproduced it), the mechanism is INFERRED from CLI behaviour, not from CLI source reviewed in this session.",
+          "Running the script mutates the tracked marker supabase/.temp/cli-latest (v2.116.0 → v2.117.0) and creates supabase/.branches/ — documented by the implementer in docs/OBSERVABILITY.md and confirmed here; I restored both after my run. Contributors must remember to do the same before committing.",
+          "The script leaves supabase_db_pickle-sensei + supabase_kong_pickle-sensei running after a run (documented; `npx --yes supabase@2.117.0 stop` tears them down)."
+        ],
+        "package_id": "H07-01",
+        "regression_fails_on_base": false,
+        "reviewed_sha": "a84b02bf5bf49a1828a0a4aadce6d94f305734cc",
+        "scope_violation": false,
+        "summary": "APPROVE H07-01 at a84b02bf (base 55d80326). SCOPE (VERIFIED): `git diff --stat` shows exactly 2 files, both in write_paths — tools/diagnostics/edge_cold_start.ts (+976) and docs/OBSERVABILITY.md (+100); no serial-group paths touched, out_of_scope_files empty and accurate; scope_violation=false. OBJECTIVE MET AS BEHAVIOUR: the objective is a measurement script + documented method/numbers, and the script is directly runnable from the repo root; it bundles the real shipping entrypoint (deno bundle with the function's deno.json import map + lockfile) and serves that bundle through the pinned Supabase CLI against a local Postgres+Kong stack, and the serve log proves the real handler answered /api/healthz (api_request events). ACCEPTANCE H07-01-AC1 (VERIFIED, my run): exit 0, RESULT: measured; bundle bytes and sha256 identical to the implementer's run (1,033,186 B raw, 218,834 B gzip, 62 modules, 4585b5cb9fa4…) — the method is reproducible; cold /healthz min 52.03 / median 80.04 / max 82.94 ms over 3 fresh-container cycles, warm median 2.44 ms (n=30); the numbers in docs/OBSERVABILITY.md are clearly labelled as a recorded local run with tool versions, and hosted latency is explicitly marked UNKNOWN (no fabricated hosted claim). On BASE_SHA the acceptance command exits 1 (module not found). GATES (VERIFIED at HEAD): `deno test -A tools/diagnostics/edge_cold_start.ts` 8 passed/0 failed; `deno check tools/diagnostics/edge_cold_start.ts` OK; `npx eslint tools/diagnostics/edge_cold_start.ts` OK; `pnpm format:check` exit 0; `pnpm lint` exit 0; `pnpm typecheck` exit 0; `git diff --check 55d80326..a84b02bf` exit 0. HARD RULES/INVARIANTS (diff read in full): no tests weakened/skipped/deleted, no `|| true`/`--passWithNoTests`/`@ts-ignore`/`any`/`eslint-disable`, no existing comments modified, no migrations, no RLS/grant/session changes, no production Supabase contact (logs grep clean for ucqnaiwqwjtgvlduiuib/supabase.co; `supabase start`/`functions serve` are Docker-local), no secrets, no forbidden copy terms in either file (docs/OBSERVABILITY.md is internal documentation, not user-facing copy). The script's exit code is honest: 'unavailable' targets are never counted as samples and exit is nonzero unless every requested bundle-target cycle produced a sample (REVIEW.md: no skipped-as-passed). REGRESSION PROOF: regression_fails_on_base=false because the check is structurally inapplicable — the self-tests are embedded in the implementation file, so copying 'only the test file' onto base yields a passing run (8/8); the manifest has no kind=regress criterion and no invariants for this package, so I treat this as non-blocking and record it explicitly. Non-blocking nits: duplicated CLI spec in one progress line (edge_cold_start.ts:658), unlabelled INFERRED mechanism sentence in the docs, and the documented side effects on supabase/.temp/cli-latest and supabase/.branches/ (restored here). Implementer's baseline observation (source-tree serve fails on CLI import-scanner vs import-map mismatch) independently reproduced.",
+        "verdict": "approve"
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/37a84153-d38a-4c3c-832e-3fbe204cc0fa/result.json",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/1e12b591-82e8-4559-a964-bbc8dbe91517/unit-attacks-run2.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d7b6d678-80e9-4b99-9804-0d3c00cfbe0b/integration-attacks-run2.log"
+        ],
+        "attack_branch": "devin/pp/h07-01/attack-2bfe49a1",
+        "attack_branch_sha": "d2929ebfbccdf922fa5569244b148271b84c3b4b",
+        "attacked_sha": "2bfe49a10418640f995be0ad17ff830d7e2206f3",
+        "attacks_tried": 13,
+        "breaks": [
+          {
+            "expected": "docs/OBSERVABILITY.md §H07-COLD-START: normalised raw bytes/gzip/sha256 'identify (commit, deno.lock, Deno version) on any checkout path' with unresolved = 0. A symlinked checkout (or a symlinked ~/.cache) is an ordinary checkout path; the numbers recorded in the docs are not reproducible from such a path (only a WARNING is printed, exit code stays 0).",
+            "observed": "measureBundle(<symlinked checkout path>) and measureBundle(<real path>, DENO_DIR=<symlink to cache>) both return pathNormalization.unresolved = 41 (assertion '41 !== 0'); rewrites = 0; raw bytes/sha256 differ from the real-path run. The cwd→DENO_DIR relative prefix is computed from the un-realpath'd cwd and DENO_DIR, so esbuild's relative labels never match the needle and nothing is rewritten.",
+            "repro": "git checkout d2929ebf && deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'symlink'  (tests: 'attack: bundle identity survives a symlinked checkout at a different depth', 'attack: bundle identity survives DENO_DIR pointing through a symlink'; both call the exported measureBundle() on a mini-checkout of the candidate files). VERIFIED exit 1, both FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "Bundle identity is NOT path-independent when the checkout or DENO_DIR is reached through a symlink (41 unresolved labels, different sha256)"
+          },
+          {
+            "expected": "Candidate claim (header + docs): 'a per-project run lock' serialises measurements on one machine so two `functions serve` never interleave against the same Kong. After a crash (the exact case the reclaim path exists for) two operators/CI jobs restarting must still be serialised: at most one acquire() succeeds (e.g. rename-based takeover or re-verify the pid after createNew).",
+            "observed": "'acquired 26367' and 'acquired 26368' — both processes hold the lock (assertion '2 !== 1'). Sequence: A reads dead holder → A remove()+createNew (wins) → B, which read the same dead holder earlier, remove()s A's fresh lock and createNew()s its own.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'stale lock'  (two subprocesses call RunLock.acquire() against one lock file left by a dead pid; a `ps` shim answers the second caller 1 s later to pin the interleaving). VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "Stale-lock reclamation is a check-then-act race: two concurrent runs both acquire the per-project lock"
+          },
+          {
+            "expected": "Every run keeps its own durable report (the docs call the report 'persisted to report.json as soon as each step completes' and use the directory as evidence path). A double-submit must either get a unique directory (ms + pid suffix / mkdir without recursive and retry) or refuse before writing into a directory another run owns.",
+            "observed": "Both runs announce and write `artifacts/edge-cold-start/20260908T200300Z`; only one directory exists afterwards (assertion '1 !== 2'). utcStamp() has 1 s resolution; mkdir, the first `report.json` persist, `deno bundle -o <out>/workdir/.../index.js` and the source-graph persist all happen BEFORE RunLock.acquire (main(): lines 1392-1506), so the two processes overwrite each other's report.json and bundle file.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'same second'  (two `deno run -A tools/diagnostics/edge_cold_start.ts` with no --out, docker shimmed away so both fail closed after the bundle step). VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P2",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "Two default invocations started in the same UTC second share one artifacts/edge-cold-start/<stamp> directory (report.json and workdir bundle written by both before the lock is taken)"
+          },
+          {
+            "expected": "The docs state the sha256 identifies (commit, deno.lock, Deno version). Numbers copied into docs from a report must be attributable to a commit; a report generated from uncommitted sources should say so (e.g. record `git status --porcelain` non-empty / `gitDirty: true`).",
+            "observed": "Both reports carry identical provenance {\"gitHead\":\"eb9c3581…\"} while bundle.sha256 differs; no dirty flag, no source digest, no `git status` field.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'dirty tree'  (runs the candidate CLI on a clean mini-checkout, then appends a line to supabase/functions/api/index.ts without committing and runs it again). VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "report.json provenance cannot distinguish a dirty tree from the recorded HEAD"
+          },
+          {
+            "expected": "`--out DIR` is a documented option; a relative DIR should follow CLI convention (caller cwd) or the docs must state it is checkout-relative. Undocumented either way.",
+            "observed": "<elsewhere>/rel-out/report.json does not exist; <repo>/rel-out/report.json does (resolve(repoRoot, options.outDir), main() line 1392). `rel-out` is not git-ignored, so `git status` of the checkout is dirtied.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'relative --out'  (cwd=<elsewhere>, `deno run -A <repo>/tools/diagnostics/edge_cold_start.ts --out rel-out`). VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "Relative `--out DIR` is resolved against the checkout root, not the caller's cwd, silently writing untracked files into the repo"
+          },
+          {
+            "expected": "Candidate claims 'robust TOML parsing' of `[api] port`; a port outside 1..65535 is a config error and should be rejected with the same clear message used for non-integers.",
+            "observed": "readApiPort('[api]\\nport = 0') returns 0 (65536 and 70000 likewise) instead of throwing; the run later probes http://127.0.0.1:0 and fails with a fetch error rather than a config error.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'outside 1..65535'. VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "readApiPort accepts ports that cannot host Kong (0, 65536, 70000)"
+          },
+          {
+            "expected": "TOML v1.0 allows `_` between digits; a config.toml the CLI starts fine must not make the measurement refuse. Fail-closed with a clear message, so minor.",
+            "observed": "readApiPort('[api]\\nport = 54_321') throws 'supabase/config.toml [api] port is not an integer: 54_321'.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts --filter 'digit separator'. VERIFIED FAILED; log artifacts/h07-attack/unit-attacks-run2.log",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts",
+            "title": "TOML digit separators in `[api] port` (valid TOML, accepted by the Supabase CLI's parser) are rejected"
+          },
+          {
+            "expected": "Docs/header: a measurement never leaves the checkout dirty ('restoration of supabase/.temp/cli-latest'). The killed process cannot restore, but the restart is a supported path and could compare against `git show HEAD:supabase/.temp/cli-latest` (or warn) instead of blessing the dirty state.",
+            "observed": "`git status --porcelain -- supabase/.temp supabase/.branches` = 'M supabase/.temp/cli-latest' after the orphan stops (the CLI truncates the file to 0 bytes; HEAD has 'v2.116.0'), and it is still 'M …' after run 3 — CheckoutMarkers.snapshot() captures the already-dirty content and restore() puts the dirty content back.",
+            "repro": "deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.integration.test.ts --filter SIGKILL  (needs Docker + the local stack from a previous run; never touches the hosted project). Run 1 is SIGKILLed while the edge runtime is up; run 2 refuses because of the orphan (VERIFIED: exit 1, 'another `supabase functions serve` is running', dead lock reclaimed, failed report persisted); the orphan is stopped; run 3 (`--startup-timeout-ms 1`) exits 1. VERIFIED FAILED; log artifacts/h07-attack/integration-attacks-run2.log",
+            "severity": "P3",
+            "test_file": "tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.integration.test.ts",
+            "title": "After SIGKILL (no handler can run) the tracked marker supabase/.temp/cli-latest stays modified and a restarted run does not restore it"
+          }
+        ],
+        "package_id": "H07-01",
+        "summary": "H07-01 adversarial pass against candidate 2bfe49a1 (branch devin/pp/h07-01/impl-r2). Baseline VERIFIED: `deno run -A tools/diagnostics/edge_cold_start.ts` exit 0, RESULT: measured (bundle 1,032,850 B / gzip 218,821 B / 62 modules / sha256 4d6cb2a8…, 3/3 bundle cycles, source-tree target UNAVAILABLE because packages/shared-types/src/techniqueBenchmark.js is missing on the checkout — log artifacts/h07-attack/acceptance-run1.log, report artifacts/edge-cold-start/20260908T194525Z/report.json); `deno test -A tools/diagnostics/edge_cold_start.ts` 20 passed / 0 failed; prettier/eslint/`git diff --check` on the candidate files exit 0. Production project ucqnaiwqwjtgvlduiuib never contacted; only the local Docker stack (supabase_db_/supabase_kong_pickle-sensei) was used.\n\n13 attacks written as real Deno tests on branch devin/pp/h07-01/attack-2bfe49a1 (pushed, head d2929ebf; only tools/diagnostics/__attack__/h07_01/{harness.ts,assert.ts,edge_cold_start_attack.test.ts,edge_cold_start_attack.integration.test.ts} added — candidate code and its self-tests untouched; `git diff 2bfe49a1..d2929ebf --name-only` lists only those 4 files). Attack files pass `npx prettier --check`, `npx eslint`, `deno check`.\n\nUnit attacks — `deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.test.ts` → exit 1, 20 passed (candidate self-tests re-registered via import) / 8 failed (all 8 'attack:' tests) — log artifacts/h07-attack/unit-attacks-run2.log. All 8 are confirmed breaks: symlinked checkout and symlinked DENO_DIR defeat path normalisation (P2, 41 unresolved labels, sha differs — the documented 'any checkout path' identity claim is false); stale-lock TOCTOU lets two concurrent runs both acquire the lock (P2); same-second default artifact dir shared and overwritten by two runs because bundle/report writes precede the lock (P2); dirty-tree provenance indistinguishable from HEAD (P3); relative --out resolved against repo root (P3); port 0/65536/70000 accepted (P3); TOML `54_321` rejected (P3).\n\nIntegration attacks against the real candidate + local stack — `deno test -A tools/diagnostics/__attack__/h07_01/edge_cold_start_attack.integration.test.ts` → exit 1, 4 passed / 1 failed — log artifacts/h07-attack/integration-attacks-run2.log. Did NOT break (VERIFIED held): SIGTERM mid-cycle → exit 143, report.status 'interrupted', bundle metrics kept, no `functions serve` survivor, edge-runtime container removed, lock released, checkout clean; `--startup-timeout-ms 1` → exit 1, both targets UNAVAILABLE with 'runtime not healthy after 1ms', no process/container/lock leak; Kong stopped beside a running db → exit 1, names the missing container, failed report persisted, no serve attempted, lock released; foreign container squatting on supabase_edge_runtime_pickle-sensei with a different com.supabase.cli.project label → exit 1 'refusing to remove it', container untouched, no serve launched. Broke (P3): SIGKILL + restart — the restarted run refuses on the orphan and reclaims the dead lock correctly, but supabase/.temp/cli-latest (truncated by the orphan CLI) stays 'M' and neither the refusing run nor a subsequent run restores it.\n\nNot in scope for this package (no SQL/Edge/auth/billing surface): unauthorised roles, replay/duplicate identities, free-rating conservation, copy/accessibility. Attack-agnostic observation (INFERRED, not tested): the source-tree serve target is UNAVAILABLE on this checkout, so the docs' comparison target has no numbers here.\n\nEnvironment left clean: no orphan `functions serve`, no lock, checkout clean apart from the attack branch commit; local db/kong containers left running (as the candidate documents)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "artifacts/h07-01/acceptance_final.log",
+            "command": "deno run -A tools/diagnostics/edge_cold_start.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H07-01-AC1",
+            "note": "VERIFIED on the final script (identical to HEAD c59f7945/2bfe49a1). RESULT: measured; report artifacts/edge-cold-start/20260908T193622Z/report.json (status=measured, ok=true). Served bundle (path-normalised): 1,032,850 B raw, 218,821 B gzip, 62 modules, sha256 4d6cb2a82a12b8f31356699e5aa6ce3f50d1c883c1706b685caa93f76d4e6ce3, 42 path labels rewritten / 0 unresolved, pre-rewrite 1,033,186 B; bundle time 80.78 ms. Source graph: 17 first-party modules, 438,144 B, 13 npm packages. serve[bundle] MEASURED on supabase-edge-runtime-1.74.3: cold GET /healthz min 55.79 / median 60.25 / max 93.99 ms over 3 cycles; warm median 2.57 ms (n=30); serve-ready median 2065.95 ms. Two earlier runs of the same commit (…/20260908T192141Z, …/20260908T193247Z) reproduced every bundle metric byte-for-byte (cold medians 58.06 / 55.42 ms). The comparative `source-tree` serve target is UNAVAILABLE (pre-existing CLI import-scan limitation, see baseline_failures_observed) — it is diagnostic only and does not gate the result. Local-only measurement (Docker); hosted cold start UNKNOWN. Required checks on HEAD: `pnpm format:check` exit 0 (artifacts/h07-01/format_check_head.log); `git diff --check 55d80326 HEAD` exit 0 (artifacts/h07-01/git_diff_check_head.log). Self-tests on HEAD: `deno test -A tools/diagnostics/edge_cold_start.ts` exit 0, 20 executed / 20 passed / 0 failed / 0 skipped (artifacts/h07-01/regression_tests_head.log); on the tests-first commit 20659f67 (r1 implementation + new suite): `deno test -A` exit 1 (type-check: missing symbols, artifacts/h07-01/regression_tests_before_fix.log) and `deno test -A --no-check` exit 1, 20 executed / 6 passed / 14 failed (artifacts/h07-01/regression_tests_before_fix_nocheck.log). Also `deno check` and `npx eslint tools/diagnostics/edge_cold_start.ts` exit 0. Adversary suite (devin/pp/h07-01/attack-a84b02bf, edge_cold_start_live.attack.test.ts) run against HEAD: 8 passed / 1 failed (artifacts/h07-01/attack_live_on_head.log) — 'process death', 'crash between steps', 'foreign container', 'side effects', 'concurrency', '`supabase start` command recorded' all pass; the one failure ('bundle bytes/sha256 must not depend on where the checkout lives') invokes raw `deno bundle` directly and bypasses the script, so it asserts a property of Deno's bundler, not of the measurement; the script's own cross-checkout test (`measureBundle: same bytes + sha256 from a checkout at a different path`) passes and the docs record the raw-vs-normalised distinction explicitly.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Started from BASE_SHA on devin/pp/h07-01/impl-r2, reused the sound parts of r1 (bundle/deno-info/serve/cycle structure, report shape, docs skeleton), wrote the r2 self-test suite against the r1 script and committed it separately (proved red), then rewrote the runtime core: ReportFile (tmp+rename atomic persistence, called after each step/cycle), measureCycles/finalizeReport (partial/unavailable/measured status, ok gated on the required `bundle` target only), ShutdownController (tracked children, descendant traversal via /proc parent links, SIGTERM→SIGKILL escalation, cleanup callbacks, signal listeners, 128+signo exit), classifyContainer (docker inspect label ownership), RunLock (OS-temp lock keyed by project_id, live-pid check), CheckoutMarkers, normalizeBundlePaths (rewrites `// <rel>/…` labels and `__commonJS({\"<rel>/…\"` keys where <rel> = relative(cwd, DENO_DIR from `deno info --json`), counts unresolved outside-cwd labels), stricter parseArgs/TOML/summarize. Verified with deno check, eslint, prettier, the in-file suite, the exact acceptance command (3 runs), and the r1 adversary live suite (8/9; the remaining one tests raw `deno bundle`, not the script). Docs updated with method + the final run's numbers.",
+        "attachment_urls": [],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [
+          "`npx --yes supabase@2.117.0 --workdir <generated> functions serve --no-verify-jwt` on the unbundled source tree (the script's comparative `source-tree` target) exits before the runtime is healthy with `failed to read file: open packages/shared-types/src/techniqueBenchmark.js: no such file or directory` — the function-local import map maps `.js` specifiers to `.ts` files, which `deno bundle`/`deno info` resolve but the local CLI's import scanner does not. Pre-existing on BASE_SHA, outside write_paths (packages/shared-types/src/ is the `shared-types` serial group; supabase/functions/api/index.ts is `edge-index`); recorded in docs/OBSERVABILITY.md; impact on `supabase functions deploy` UNKNOWN (not tested against production)."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/h07-01/impl-r2",
+        "files_changed": [
+          "tools/diagnostics/edge_cold_start.ts",
+          "docs/OBSERVABILITY.md"
+        ],
+        "head_sha": "2bfe49a10418640f995be0ad17ff830d7e2206f3",
+        "out_of_scope_files": [],
+        "package_id": "H07-01",
+        "regression_tests_added": [
+          "tools/diagnostics/edge_cold_start.ts (in-file `deno test -A` suite, commit 20659f67 — tests-first, fails on the r1 script: `measureCycles: a failing later cycle records a PARTIAL target and keeps cycle 1`, `measureCycles: no completed cycle → UNAVAILABLE; all cycles → MEASURED`, `finalizeReport: ok only when the bundle target measured every cycle`, `ReportFile.persist writes valid JSON atomically`, `ShutdownController.shutdown interrupts every descendant of a tracked process`, `ShutdownController runs per-process cleanup and tolerates its failure`, `classifyContainer: absent / CLI-owned / foreign`, `RunLock: refuses a live holder, reclaims a dead one, releases`, `normalizeBundlePaths rewrites the cwd→DENO_DIR prefix in labels and keys`, `measureBundle: same bytes + sha256 from a checkout at a different path`, `parseForeignServeProcesses ignores our own tree and unrelated matches`, plus stricter parseArgs / readProjectId+readApiPort (TOML) / summarize (non-finite) tests)"
+        ],
+        "residual_risks": [
+          "Comparative `source-tree` serve target is UNAVAILABLE locally (CLI import scanner cannot resolve shared-types `.js`→`.ts` import-map specifiers); whether the hosted deploy bundler is affected is UNKNOWN — worth checking on the next `supabase functions deploy` dry run, outside this package's scope.",
+          "All latency numbers are local Docker (supabase-edge-runtime-1.74.3, Deno v2.1.4 compat) on one Linux x86_64 host; hosted cold-start latency remains UNKNOWN and must come from hosted logs.",
+          "Bundle identity is stable only after path normalisation; raw `deno bundle` output remains checkout-path dependent by design of Deno's bundler (documented). The rewrite assumes DENO_DIR labels appear as cwd-relative POSIX paths; a layout where DENO_DIR sits inside the checkout, or a future Deno that changes label format, would surface as `unresolved > 0` / a WARNING rather than silent drift.",
+          "Process-tree teardown reads /proc for descendant discovery — Linux-only; on macOS the script falls back to signalling the direct child (not exercised here).",
+          "Measured with Deno 2.9.6 (local `deno`), not the frozen `npx --yes deno@2.5.6` used for edge typechecks; normalised sha256 is expected to differ across Deno versions by construction."
+        ],
+        "summary": "Defects on BASE_SHA: tools/diagnostics/edge_cold_start.ts does not exist at 55d80326 (the r1 candidate a84b02bf lived only on its branch), so the H07-01 objective was unmet; the r1 script additionally had the three adversary breaks — (1) measureServeTarget rethrew on the first failed cycle and main() wrote report.json only after every target completed, so a failed cycle 2 discarded bundle metrics and the cycle-1 sample; (2) interruptTree() ran only from a `finally` block with no Deno.addSignalListener, so SIGTERM left the npx→sh→node/supabase tree and the edge-runtime container alive; (3) `deno bundle` labels npm modules with cwd-relative paths into $DENO_DIR, so the documented raw size/sha256 changed with checkout location. Round 2 (3 commits on devin/pp/h07-01/impl-r2, head 2bfe49a1): tests-first commit 20659f67 (r1 impl + new suite, red: 14/20 fail), implementation c59f7945, docs 2bfe49a1. The script now: writes report.json atomically after every step and every completed cycle, records a target as PARTIAL/UNAVAILABLE with all samples kept and exits 1 when the bundle measurement is incomplete; installs SIGINT/SIGTERM/SIGHUP handlers that interrupt every descendant of the spawned CLI tree, remove only the edge-runtime container whose com.supabase.cli.project label matches this run, persist an 'interrupted' report and exit 128+signal; rewrites the cwd→DENO_DIR prefix to the literal `$DENO_DIR/` before hashing/serving so raw bytes, gzip and sha256 identify (commit, deno.lock, Deno version) on any checkout path, recording pre-rewrite bytes and rewrite/unresolved counts separately (warning when unresolved>0); adds a per-project run lock, refusal to run beside a foreign `functions serve`, restoration of supabase/.temp/cli-latest and removal of generated supabase/.branches, robust TOML parsing, non-finite-sample refusal and the exact `supabase start` command in the report. docs/OBSERVABILITY.md gains the H07-COLD-START section (exact invocation, local-only scope, prerequisites, bundle/source-graph/cold-start method, normalisation methodology, partial-report and signal semantics, verified numbers with report paths, and the source-tree limitation marked UNKNOWN for deploy). Acceptance `deno run -A tools/diagnostics/edge_cold_start.ts` exit 0 (RESULT: measured); pnpm format:check and git diff --check exit 0; deno test 20/20 on HEAD. No PR opened, nothing pushed to main/ci/mac-*, production Supabase untouched."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/review-h07-01/acceptance_run1.log",
+            "command": "deno run -A tools/diagnostics/edge_cold_start.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "H07-01-AC1",
+            "note": "VERIFIED (reviewer re-run on 2bfe49a1, Deno 2.9.6, supabase CLI 2.117.0, Docker 29.7.2, supabase-edge-runtime-1.74.3). RESULT: measured, EXIT=0; report artifacts/edge-cold-start/20260908T194553Z/report.json (status=measured, ok=true, gitHead=2bfe49a1). Bundle metrics reproduced byte-for-byte vs the implementer's documented run: 1,032,850 B raw (normalised), 218,821 B gzip, 62 modules, sha256 4d6cb2a82a12b8f31356699e5aa6ce3f50d1c883c1706b685caa93f76d4e6ce3, 42 path rewrites / 0 unresolved; source graph 17 first-party modules / 438,144 B / 13 npm packages. serve[bundle] MEASURED 3/3 cycles: cold GET /healthz 90.74/125.39/55.89 ms (median 90.74 — timing differs from the docs' 60.25 ms as expected for latency on a different host state; the method, not the number, is the reproducible part), warm median ~2.6 ms, serve-ready 8001.66 ms on cycle 1 (image pull) then ~2.04-2.07 s. serve[source-tree] UNAVAILABLE (CLI import scanner: packages/shared-types/src/techniqueBenchmark.js not found) — diagnostic-only target, explicitly non-gating and printed as UNAVAILABLE, not as a pass. No production project contacted (stack is `supabase start -x ...` locally; reviewer stopped it afterwards). Supporting checks on HEAD: `deno test -A tools/diagnostics/edge_cold_start.ts` exit 0, 20/20/0/0 (artifacts/review-h07-01/regression_tests_head.log); `pnpm format:check` exit 0 (format_check.log); `npx eslint tools/diagnostics/edge_cold_start.ts` exit 0 (eslint.log); `deno check` exit 0 (deno_check.log); `git diff --check 55d80326 HEAD` exit 0 (git_diff_check.log).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "docs/OBSERVABILITY.md says the bundle honours 'the function's import map and deno.lock'; with the root deno.json declaring supabase/functions/api as a workspace member, Deno warns that the function-local `lock`/`nodeModulesDir` fields are ignored and the root frozen deno.lock applies (both lockfiles pin @supabase/supabase-js@2.112.4, so resolution is unaffected). Wording nit only.",
+          "The comparative `source-tree` serve target is UNAVAILABLE on every run (pre-existing CLI import-scan limitation on `.js`->`.ts` import-map specifiers, outside write_paths). Correctly reported as unavailable and non-gating; the open question of whether hosted `supabase functions deploy` is affected stays UNKNOWN and belongs to a separate package.",
+          "Cold-start latency numbers in docs (median 60.25 ms) are one host's sample; my re-run measured 90.74 ms median. The docs already label them as local, single-host and machine-dependent — acceptable, but readers should treat the bundle-size metrics (byte-identical across runs) as the stable output and the latencies as indicative."
+        ],
+        "package_id": "H07-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "2bfe49a10418640f995be0ad17ff830d7e2206f3",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope: `git diff --stat 55d80326..2bfe49a1` touches exactly tools/diagnostics/edge_cold_start.ts (+2164) and docs/OBSERVABILITY.md (+141) — both in write_paths, no out-of-scope files. The objective is a standalone diagnostic script (not shipped app behaviour), invoked directly by the acceptance command, so 1b does not apply. Acceptance H07-01-AC1 re-run by me: exit 0, RESULT: measured, bundle metrics byte-identical to the implementer's documented run (see acceptance object). Regression proof: on BASE_SHA the suite cannot run (file absent; `deno test -A tools/diagnostics/edge_cold_start.ts` exit 1, regression_tests_base_missing.log); the meaningful proof is the tests-first commit 20659f67 (r1 implementation + r2 suite): `deno test -A` exit 1 with 50 type errors / missing symbols (regression_tests_r1tests_check.log) and `deno test -A --no-check` exit 1, 20 executed / 6 passed / 14 failed (regression_tests_r1tests_nocheck.log); on the candidate 20/20 pass, exit 0. Invariants: no migrations, RLS, grants, session, billing, mobile or existing-comment edits; no `any`/ts-ignore/eslint-disable/`|| true`; no secrets read or printed; docs contain no prohibited copy; production Supabase untouched (local Docker stack only). format:check, eslint, deno check, git diff --check all exit 0. Non-blocking notes on docs wording and the unavailable source-tree target are listed.",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-2"
+}

@@ -1,11 +1,9 @@
 /**
  * Adjudication reproductions for area xc-ux-a11y-i18n (locale/time zone).
  *
- * Jest sandboxes `process.env`, so the zone cannot be switched in-process:
- * each block runs only when the process was started under that TZ, e.g.
- *   cd apps/mobile && TZ=Pacific/Auckland npx jest --ci __tests__/adjudicateXcUxA11yI18nLocale.test.ts
- *   cd apps/mobile && TZ=Europe/Berlin npx jest --ci __tests__/adjudicateXcUxA11yI18nLocale.test.ts
- *   cd apps/mobile && TZ=America/Los_Angeles npx jest --ci __tests__/adjudicateXcUxA11yI18nLocale.test.ts
+ * Jest sandboxes `process.env`; timezone-sensitive cases run the production
+ * pure modules in a child Node process started with the required TZ. Every
+ * zone runs on every invocation, including the raw-JS hazard controls.
  *
  * `expected` blocks assert the product contract against the production code;
  * `hazard` blocks pin the raw JS behaviour that produced the defect observed
@@ -16,9 +14,58 @@ import { formatDayKey } from '../src/consistency/engine';
 import { buildNotificationPlan } from '../src/notifications/plan';
 import { DEFAULT_NOTIFICATION_PREFS } from '../src/notifications/types';
 
-declare const process: { env: Record<string, string | undefined> };
-const TZ = process.env.TZ ?? '';
-const inZone = (...zones: string[]) => (zones.includes(TZ) ? test : test.skip);
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+
+interface ZoneSample {
+  zone: string;
+  title: string;
+  noonUtcTitle: string;
+  plans: Record<string, Record<string, string>>;
+  hazards: Record<string, string[]>;
+}
+const zoneSamples = new Map<string, ZoneSample>();
+function sampleZone(zone: string): ZoneSample {
+  const cached = zoneSamples.get(zone);
+  if (cached) return cached;
+  const script = `
+    const fs = require('node:fs');
+    const ts = require('typescript');
+    require.extensions['.ts'] = (module, filename) => {
+      const source = fs.readFileSync(filename, 'utf8');
+      module._compile(ts.transpileModule(source, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+      }).outputText, filename);
+    };
+    const { formatDayKey } = require('./src/consistency/engine.ts');
+    const { buildNotificationPlan } = require('./src/notifications/plan.ts');
+    const { DEFAULT_NOTIFICATION_PREFS } = require('./src/notifications/types.ts');
+    const wallClock = ms => { const d = new Date(ms); return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0'); };
+    const plans = {}, hazards = {};
+    for (const day of ['2026-03-29', '2026-11-01']) {
+      plans[day] = Object.fromEntries(buildNotificationPlan(
+        {...DEFAULT_NOTIFICATION_PREFS, enabled:true},
+        {nowMs:new Date(day+'T09:00:00').getTime(), streakDays:3, practicedToday:false, hasAnyHistory:true}
+      ).map(p => [p.id, wallClock(p.timestampMs)]));
+      const midnight = new Date(day+'T09:00:00'); midnight.setHours(0,0,0,0);
+      hazards[day] = [17*60+30,19*60+30].map(minutes => wallClock(midnight.getTime()+minutes*60000));
+    }
+    process.stdout.write(JSON.stringify({zone:Intl.DateTimeFormat().resolvedOptions().timeZone,
+      title:formatDayKey('2026-09-04',{weekday:'long',month:'long',day:'numeric'}),
+      noonUtcTitle:new Date('2026-09-04T12:00:00Z').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}), plans, hazards}));
+  `;
+  const value = JSON.parse(
+    execFileSync(process.execPath, ['-e', script], {
+      cwd: path.resolve(__dirname, '..'),
+      env: { ...process.env, TZ: zone },
+      encoding: 'utf8',
+      timeout: 10000,
+    }),
+  ) as ZoneSample;
+  expect(value.zone).toBe(zone);
+  zoneSamples.set(zone, value);
+  return value;
+}
 
 /** The production formatter behind the StreakCalendarScreen selected-day
  * title and AchievementsShowcase's "Earned" label. */
@@ -30,22 +77,13 @@ function productionDayTitle(day: string): string {
   });
 }
 
-/** The defective formula observed on 4d812e1a, kept verbatim as a hazard. */
-function deviceZoneNoonUtcTitle(day: string): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  });
-}
-
 describe('A1 — calendar day labels anchored at 12:00Z roll to the next day at UTC+12 and beyond', () => {
   const east = ['Pacific/Auckland', 'Pacific/Fiji', 'Pacific/Kiritimati'];
 
-  inZone(...east)(
-    'expected: selected day 2026-09-04 renders as September 4',
-    () => {
-      expect(productionDayTitle('2026-09-04')).toBe('Friday, September 4');
+  test.each(east)(
+    'expected: selected day 2026-09-04 renders as September 4 in %s',
+    zone => {
+      expect(sampleZone(zone).title).toBe('Friday, September 4');
     },
   );
 
@@ -53,14 +91,9 @@ describe('A1 — calendar day labels anchored at 12:00Z roll to the next day at 
     expect(productionDayTitle('2026-09-04')).toBe('Friday, September 4');
   });
 
-  inZone(...east)(
-    'hazard: a 12:00Z anchor formatted in the device zone renders September 5',
-    () => {
-      expect(deviceZoneNoonUtcTitle('2026-09-04')).toBe(
-        'Saturday, September 5',
-      );
-    },
-  );
+  test.each(east)('hazard: a 12:00Z anchor renders September 5 in %s', zone => {
+    expect(sampleZone(zone).noonUtcTitle).toBe('Saturday, September 5');
+  });
 
   test('control: ProgressScreen local-noon anchor names the selected day in the current zone', () => {
     expect(
@@ -90,45 +123,44 @@ function planOn(localDay: string) {
   );
 }
 
-/** The defective formula observed on 4d812e1a: local midnight + minutes. */
-function midnightPlusMinutes(localDay: string, minutes: number): string {
-  const midnight = new Date(`${localDay}T09:00:00`);
-  midnight.setHours(0, 0, 0, 0);
-  return localWallClock(midnight.getTime() + minutes * 60_000);
-}
-
 describe('A2 — notifications/plan.ts anchors on local midnight + minutes, drifting on DST transition days', () => {
-  inZone('Europe/Berlin')(
+  test.each(['Europe/Berlin'])(
     'expected: 2026-03-29 (spring forward) keeps 17:30 / 19:30',
-    () => {
-      const times = planOn('2026-03-29');
+    zone => {
+      const times = sampleZone(zone).plans['2026-03-29'];
+      if (!times) throw new Error(`Missing spring-forward plan for ${zone}`);
       expect(times['ps.reminder.practice']).toBe('17:30');
       expect(times['ps.reminder.streak']).toBe('19:30');
     },
   );
 
-  inZone('Europe/Berlin')(
+  test.each(['Europe/Berlin'])(
     'hazard: midnight + minutes on 2026-03-29 lands at 18:30 / 20:30',
-    () => {
-      expect(midnightPlusMinutes('2026-03-29', 17 * 60 + 30)).toBe('18:30');
-      expect(midnightPlusMinutes('2026-03-29', 19 * 60 + 30)).toBe('20:30');
+    zone => {
+      expect(sampleZone(zone).hazards['2026-03-29']).toEqual([
+        '18:30',
+        '20:30',
+      ]);
     },
   );
 
-  inZone('America/Los_Angeles')(
+  test.each(['America/Los_Angeles'])(
     'expected: 2026-11-01 (fall back) keeps 17:30 / 19:30',
-    () => {
-      const times = planOn('2026-11-01');
+    zone => {
+      const times = sampleZone(zone).plans['2026-11-01'];
+      if (!times) throw new Error(`Missing fall-back plan for ${zone}`);
       expect(times['ps.reminder.practice']).toBe('17:30');
       expect(times['ps.reminder.streak']).toBe('19:30');
     },
   );
 
-  inZone('America/Los_Angeles')(
+  test.each(['America/Los_Angeles'])(
     'hazard: midnight + minutes on 2026-11-01 lands at 16:30 / 18:30',
-    () => {
-      expect(midnightPlusMinutes('2026-11-01', 17 * 60 + 30)).toBe('16:30');
-      expect(midnightPlusMinutes('2026-11-01', 19 * 60 + 30)).toBe('18:30');
+    zone => {
+      expect(sampleZone(zone).hazards['2026-11-01']).toEqual([
+        '16:30',
+        '18:30',
+      ]);
     },
   );
 

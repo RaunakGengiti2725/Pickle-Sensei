@@ -41,6 +41,9 @@ import {
   detectFlatDisagreement,
   detectHierarchicalDisagreement,
   drillMappingVersionForProfile,
+  isDeclaredTechniqueIntent,
+  isConfirmationTimestamp,
+  isStrokeIntentEnvelope,
   resolvePredictedProfile,
   resolveSlugProfileId,
   type CaptureAnalysisRecord,
@@ -48,6 +51,8 @@ import {
   type IHierarchicalStrokeClassifier,
   type StrokeIntentEnvelope,
   type StrokeResolutionBasis,
+  type TechniqueConfirmationEvidence,
+  type TechniqueConfirmationReason,
 } from "./strokeAutoResolution.js";
 
 /**
@@ -103,6 +108,7 @@ export interface CaptureAnalysisInput {
    * support. declared/predicted stay separate regardless.
    */
   declaredCanonical?: string | null;
+  techniqueConfirmation?: TechniqueConfirmationEvidence;
   handedness: Handedness;
   cameraView: CameraView;
   capturedAtIso: string;
@@ -122,6 +128,15 @@ export interface CaptureAnalysisOptions {
    * CAPTURE_ENVELOPE_VERSION_NOT_MEASURED — never guessed.
    */
   captureEnvelopeThresholdsVersion?: string | null;
+  /**
+   * Advisory capture-quality reasons the pre-analysis gate measured on this
+   * capture (`capture_quality:<reason>` tokens, see
+   * `captureQualityLimitingFactors`). The capture is degraded but measurable:
+   * the tokens join the record's limiting factors and the presentation is
+   * capped at `lower_confidence` — a degraded read is never presented as a
+   * confident one, and never refused because of its degradation.
+   */
+  captureQualityFactors?: readonly string[];
 }
 
 const CHECKPOINT_PHASE: Record<string, PhaseKey> = {
@@ -183,6 +198,24 @@ export async function analyzeCapture(
     );
   }
 
+  if (
+    input.techniqueConfirmation &&
+    (!isDeclaredTechniqueIntent(input.techniqueConfirmation.intent) ||
+      input.techniqueConfirmation.intent.legacySlug !== input.stroke.declared ||
+      input.techniqueConfirmation.intent.canonical !== input.declaredCanonical ||
+      input.techniqueConfirmation.analysisId === options.analysisId ||
+      !isStrokeIntentEnvelope(input.techniqueConfirmation.originalStrokeIntent, false) ||
+      !isConfirmationTimestamp(input.techniqueConfirmation.confirmedAtIso))
+  ) {
+    return fail(
+      failure(
+        "permanent",
+        "fusion.invalid_technique_confirmation",
+        "The technique confirmation does not match this declared analysis.",
+      ),
+    );
+  }
+
   // ── Stroke identity ────────────────────────────────────────────────────
   let identity = input.stroke;
   if (providers.classifier) {
@@ -222,15 +255,23 @@ export async function analyzeCapture(
     if (prediction.ok) autoPrediction = prediction.value;
   }
 
-  const resolution = resolveStroke(identity, {
-    predictionConfidenceThreshold: PREDICTION_CONFIDENCE_THRESHOLD,
-  });
+  const resolution: StrokeResolution =
+    identity.declared !== null
+      ? { kind: "declared", shotType: identity.declared }
+      : resolveStroke(identity, {
+          predictionConfidenceThreshold: PREDICTION_CONFIDENCE_THRESHOLD,
+        });
 
   // Declared-vs-predicted disagreement (both must genuinely exist; the
   // hierarchical prediction is checked first, the flat one as fallback).
   const disagreement =
     identity.declared !== null
-      ? ((autoPrediction && detectHierarchicalDisagreement(identity.declared, autoPrediction)) ??
+      ? ((autoPrediction &&
+          detectHierarchicalDisagreement(
+            identity.declared,
+            autoPrediction,
+            input.declaredCanonical,
+          )) ??
         detectFlatDisagreement(identity.declared, identity.predicted))
       : null;
 
@@ -239,6 +280,7 @@ export async function analyzeCapture(
   let resolutionBasis: StrokeResolutionBasis;
   let resolvedProfileId: string | null;
   let resolvedProfileVersion: string | null;
+  let confirmationReason: TechniqueConfirmationReason | null = null;
 
   if (resolution.kind === "unresolved") {
     if (identity.declared === null && autoPrediction !== null) {
@@ -254,22 +296,25 @@ export async function analyzeCapture(
         resolutionBasis = "predicted_l3";
         resolvedProfileId = predictedProfile.profileId;
         resolvedProfileVersion = predictedProfile.profileVersion;
+        confirmationReason = "unvalidated_prediction";
       } else if (predictedProfile.kind === "side") {
-        // Depth-2 side commitment: score with the side's shared swing
-        // profile. The representative target set is the side's drive
-        // configuration — the canonical full swing for that side.
+        // Depth-2 side commitment is family evidence, not an exact
+        // technique. Keep it unscored until the user confirms a supported
+        // canonical choice instead of substituting the side's drive.
         // Provenance stays family-level: basis "predicted_family" plus the
-        // shared side profile id, so the record never claims a leaf the
-        // classifier did not commit to.
-        shotType = predictedProfile.side === "FOREHAND" ? "forehand_drive" : "backhand_drive";
-        strokeResolution = {
-          kind: "predicted",
-          shotType,
-          confidence: autoPrediction.confidence,
-        };
-        resolutionBasis = "predicted_family";
-        resolvedProfileId = predictedProfile.profileId;
-        resolvedProfileVersion = predictedProfile.profileVersion;
+        // original prediction, so confirmation remains distinguishable
+        // from a leaf the classifier actually committed to.
+        return partialAutoRecord({
+          providers,
+          input,
+          options,
+          run,
+          modelRuns,
+          identity,
+          autoPrediction,
+          resolution: predictedProfile,
+          confirmationReason: "family_only",
+        });
       } else {
         // Abstention: the classifier would not commit even to a side, so
         // there is no defensible target set to score against. Return a
@@ -280,12 +325,27 @@ export async function analyzeCapture(
           options,
           run,
           modelRuns,
+          identity,
           autoPrediction,
           resolution: predictedProfile,
+          confirmationReason:
+            predictedProfile.reason === "auto_stroke_leaf_not_in_registry"
+              ? "unsupported_technique"
+              : "unresolved_technique",
         });
       }
     } else {
-      return fail(failure("low_confidence", "fusion.stroke_unresolved", resolution.reason));
+      return partialAutoRecord({
+        providers,
+        input,
+        options,
+        run,
+        modelRuns,
+        identity,
+        autoPrediction,
+        resolution: { kind: "abstain", reason: "auto_stroke_prediction_unavailable" },
+        confirmationReason: "unresolved_technique",
+      });
     }
   } else if (resolution.kind === "declared") {
     shotType = resolution.shotType;
@@ -302,6 +362,11 @@ export async function analyzeCapture(
     const profile = resolveSlugProfileId(resolution.shotType, null);
     resolvedProfileId = profile.profileId;
     resolvedProfileVersion = profile.profileVersion;
+    confirmationReason = "unvalidated_prediction";
+  }
+
+  if (resolvedProfileId === null) {
+    confirmationReason = input.declaredCanonical ? "unsupported_technique" : "ambiguous_technique";
   }
 
   const strokeIntent: StrokeIntentEnvelope = {
@@ -311,7 +376,24 @@ export async function analyzeCapture(
     resolvedProfileId,
     resolvedProfileVersion,
     disagreement,
+    ...(identity.predicted ? { flatPrediction: identity.predicted } : {}),
+    ...(input.techniqueConfirmation ? { confirmation: input.techniqueConfirmation } : {}),
   };
+
+  if (confirmationReason !== null) {
+    return partialAutoRecord({
+      providers,
+      input,
+      options,
+      run,
+      modelRuns,
+      identity,
+      autoPrediction,
+      strokeIntent,
+      resolution: { kind: "abstain", reason: confirmationReason },
+      confirmationReason,
+    });
+  }
 
   // ── Temporal structure ─────────────────────────────────────────────────
   const legacyFrames = toLegacyPoseFrames(input.pose);
@@ -323,7 +405,10 @@ export async function analyzeCapture(
     confidence: input.trigger.confidence,
   };
   const phases = await run("phase_segmentation", segDescriptor(providers.phase), () =>
-    providers.phase.segmentPhases(legacyFrames, [], strokeEvent),
+    providers.phase.segmentPhases(legacyFrames, [], strokeEvent, {
+      width: input.pose.video.width,
+      height: input.pose.video.height,
+    }),
   );
   if (!phases.ok) return phases;
 
@@ -344,7 +429,23 @@ export async function analyzeCapture(
   const scored = await run("technique_scoring", providers.scorer.descriptor, () =>
     providers.scorer.score({ shotType, measurements: measurements.value, embedding: null }),
   );
-  if (!scored.ok) return scored;
+  if (!scored.ok) {
+    if (scored.failure.code === "scoring.unsupported_stroke") {
+      return partialAutoRecord({
+        providers,
+        input,
+        options,
+        run,
+        modelRuns,
+        identity,
+        autoPrediction,
+        strokeIntent,
+        resolution: { kind: "abstain", reason: scored.failure.code },
+        confirmationReason: "unsupported_technique",
+      });
+    }
+    return scored;
+  }
 
   const faults = await run("fault_detection", providers.faultDetector.descriptor, () =>
     providers.faultDetector.detectFaults({
@@ -354,11 +455,19 @@ export async function analyzeCapture(
     }),
   );
 
-  const uncertainty = await run("uncertainty_estimation", providers.uncertainty.descriptor, () =>
+  // A capture the gate measured as degraded (advisory reasons) is scored from
+  // what was measured but never presented as a confident read.
+  const captureQualityFactors = [...new Set(options.captureQualityFactors ?? [])];
+  const presentation =
+    captureQualityFactors.length > 0 && scored.value.presentation === "normal"
+      ? "lower_confidence"
+      : scored.value.presentation;
+
+  const estimated = await run("uncertainty_estimation", providers.uncertainty.descriptor, () =>
     providers.uncertainty.estimate({
       checkpoints: scored.value.checkpoints,
       analysisConfidence: scored.value.analysisConfidence,
-      presentation: scored.value.presentation,
+      presentation,
       modalitiesUsed: {
         pose: true,
         paddle: input.paddle.status === "measured",
@@ -367,10 +476,15 @@ export async function analyzeCapture(
       },
     }),
   );
-  if (!uncertainty.ok) return uncertainty;
+  if (!estimated.ok) return estimated;
+  const uncertainty: UncertaintySummary = {
+    ...estimated.value,
+    presentation,
+    limitingFactors: [...new Set([...estimated.value.limitingFactors, ...captureQualityFactors])],
+  };
 
   const coached =
-    scored.value.presentation === "abstain"
+    presentation === "abstain"
       ? null
       : await run("coaching_ranking", providers.coach.descriptor, () =>
           providers.coach.rank({
@@ -427,7 +541,7 @@ export async function analyzeCapture(
     checkpoints: scored.value.checkpoints,
     overallScore: scored.value.overallScore,
     analysisConfidence: scored.value.analysisConfidence,
-    resultKind: scored.value.presentation === "abstain" ? "low_confidence" : "scored",
+    resultKind: presentation === "abstain" ? "low_confidence" : "scored",
     guidance: scored.value.guidance,
     priorityFix: coached && coached.ok ? coached.value : null,
     versionVector: {
@@ -473,7 +587,7 @@ export async function analyzeCapture(
     }),
     result,
     faults: faults.ok ? faults.value : [],
-    uncertainty: uncertainty.value,
+    uncertainty,
     evidence,
     shadow,
     strokeIntent,
@@ -481,11 +595,11 @@ export async function analyzeCapture(
 }
 
 /**
- * AUTO run that could not reach any scoring route: the classifier abstained
- * (basis "abstained") — it would not commit even to a side. Produces a
- * durable AnalysisRecord with result:null — the classifier's output is
- * preserved for reprocessing history, and nothing slug-conditioned was
- * executed, so no stroke, measurement, or score is invented.
+ * Run requiring explicit technique confirmation, including unsupported
+ * declared scorers. Produces a durable AnalysisRecord with result:null;
+ * family, leaf, abstained and declared evidence stay distinguishable.
+ * Existing model executions are retained for reprocessing history, and
+ * no successful score is invented.
  */
 async function partialAutoRecord(args: {
   providers: FusionProviders;
@@ -497,12 +611,15 @@ async function partialAutoRecord(args: {
     execute: () => Promise<Result<T>>,
   ) => Promise<Result<T>>;
   modelRuns: ModelRunRecord[];
-  autoPrediction: HierarchicalStrokePrediction;
+  identity: StrokeIdentity;
+  autoPrediction: HierarchicalStrokePrediction | null;
+  strokeIntent?: StrokeIntentEnvelope;
+  confirmationReason: TechniqueConfirmationReason;
   resolution:
     | { kind: "side"; side: "FOREHAND" | "BACKHAND"; profileId: string; profileVersion: string }
     | { kind: "abstain"; reason: string };
 }): Promise<Result<CaptureAnalysisRecord>> {
-  const { providers, input, options, run, modelRuns, autoPrediction, resolution } = args;
+  const { providers, input, options, run, modelRuns, identity, autoPrediction, resolution } = args;
 
   // Temporal structure is slug-independent perception — run and record it
   // for the side-resolved case so the record carries a real event window.
@@ -511,13 +628,18 @@ async function partialAutoRecord(args: {
   if (resolution.kind === "side") {
     const legacyFrames = toLegacyPoseFrames(input.pose);
     const phases = await run("phase_segmentation", segDescriptor(providers.phase), () =>
-      providers.phase.segmentPhases(legacyFrames, [], {
-        startMs: input.trigger.startMs,
-        endMs: input.trigger.endMs,
-        contactMs: input.trigger.peakMotionMs,
-        shotTypeHypothesis: null,
-        confidence: input.trigger.confidence,
-      }),
+      providers.phase.segmentPhases(
+        legacyFrames,
+        [],
+        {
+          startMs: input.trigger.startMs,
+          endMs: input.trigger.endMs,
+          contactMs: input.trigger.peakMotionMs,
+          shotTypeHypothesis: null,
+          confidence: input.trigger.confidence,
+        },
+        { width: input.pose.video.width, height: input.pose.video.height },
+      ),
     );
     if (phases.ok) {
       const contact = phases.value.find((span) => span.key === "contact");
@@ -527,12 +649,13 @@ async function partialAutoRecord(args: {
 
   const limitingFactors = [
     ...new Set([
-      ...autoPrediction.limitingFactors,
+      ...(autoPrediction?.limitingFactors ?? []),
       ...(input.paddle.status === "measured" ? [] : ["paddle_track_unavailable"]),
       ...(input.ball.status === "measured" ? [] : ["ball_track_unavailable"]),
       resolution.kind === "side"
         ? "auto_stroke_resolved_at_side_depth_no_leaf_for_scoring"
         : resolution.reason,
+      ...(options.captureQualityFactors ?? []),
     ]),
   ];
   const uncertainty: UncertaintySummary = {
@@ -544,7 +667,7 @@ async function partialAutoRecord(args: {
   };
 
   const evidence: EvidenceRef[] =
-    resolution.kind === "side"
+    resolution.kind === "side" && autoPrediction !== null
       ? [
           {
             claim: `stroke:predicted_side:${resolution.side}`,
@@ -559,13 +682,15 @@ async function partialAutoRecord(args: {
         ]
       : [];
 
-  const strokeIntent: StrokeIntentEnvelope = {
-    declaredStroke: null,
+  const strokeIntent: StrokeIntentEnvelope = args.strokeIntent ?? {
+    declaredStroke: identity.declared,
     predictedStroke: autoPrediction,
     resolutionBasis: resolution.kind === "side" ? "predicted_family" : "abstained",
     resolvedProfileId: resolution.kind === "side" ? resolution.profileId : null,
     resolvedProfileVersion: resolution.kind === "side" ? resolution.profileVersion : null,
     disagreement: null,
+    ...(identity.predicted ? { flatPrediction: identity.predicted } : {}),
+    ...(input.techniqueConfirmation ? { confirmation: input.techniqueConfirmation } : {}),
   };
 
   const createdAtIso = options.nowIso();
@@ -576,12 +701,14 @@ async function partialAutoRecord(args: {
     createdAtIso,
     engineVersion: FUSION_ENGINE_VERSION,
     strokeTaxonomyVersion: STROKE_TAXONOMY_VERSION,
+    kind: "needs_technique_confirmation",
+    confirmationReason: args.confirmationReason,
     strokeResolution: {
       kind: "unresolved",
       reason:
         resolution.kind === "side"
           ? `AUTO resolved to shared profile ${resolution.profileId} at taxonomy depth 2; no leaf technique was claimed.`
-          : `AUTO abstained: ${resolution.reason}.`,
+          : `Technique confirmation required: ${resolution.reason}.`,
     },
     modalities: {
       pose: true,

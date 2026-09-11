@@ -77,6 +77,7 @@ describe('SplashScreen', () => {
     expect(player.muted).toBeUndefined();
     expect(player.volume).toBe(1);
     expect(player.ignoreSilentSwitch).toBe('obey');
+    expect(player.disableAudioSessionManagement).toBe(true);
     expect(player.source).toBeDefined();
     // Nothing leaves before the intro is over.
     expect(skipButton(renderer)).toBeUndefined();

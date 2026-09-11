@@ -3,7 +3,6 @@ import type {
   Handedness,
   Measurement,
   PaddleFrame,
-  PhaseKey,
   PhaseSpan,
   PoseFrame,
   PoseLandmarkName,
@@ -16,7 +15,6 @@ import {
   angularDifferenceDeg,
   clamp,
   distance,
-  frameNearest,
   framesWithin,
   interiorAngleDeg,
   landmark,
@@ -48,12 +46,24 @@ import {
  * joints it used, scaled by documented method factors. Metrics whose joints
  * were not measured are omitted so the scoring engine can abstain rather than
  * receive fabricated values.
+ *
+ * features-geometry-3 degrades instead of refusing (2026-09-10 field
+ * failure: a live swing ended in "Acceleration and contact-proxy observations
+ * are required" and no score). A missing phase now falls back to the
+ * neighbouring measured phase, the torso length and ground line fall back to
+ * the whole recording when the stroke window itself did not show them, and
+ * the forward direction is read from the first and last visible wrist inside
+ * the run-up when the exact boundary frames hide it. Nothing is invented:
+ * every fallback is another measured frame of the same clip, and a metric
+ * whose joints were never measured is still omitted.
  */
 
-export const FEATURE_EXTRACTOR_VERSION = "features-geometry-1";
+export const FEATURE_EXTRACTOR_VERSION = "features-geometry-3";
 
 const PADDLE_PROXY_FACTOR = 0.75;
 const SIDE_VIEW_TURN_FACTOR = 0.7;
+/** Confidence factor for a phase span stood in for by a neighbouring phase. */
+const FALLBACK_PHASE_FACTOR = 0.5;
 
 interface Body {
   dominant: {
@@ -65,8 +75,8 @@ interface Body {
     ankle: PoseLandmarkName;
   };
   torsoLength: number;
-  groundY: number;
-  forwardSign: 1 | -1;
+  groundY: number | null;
+  forwardSign: 1 | -1 | null;
 }
 
 export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
@@ -86,26 +96,59 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     handedness: Handedness;
     cameraView: CameraView;
   }): Promise<Result<Measurement[]>> {
-    const { poseFrames, phases, handedness, cameraView } = input;
+    const { phases, handedness, cameraView } = input;
     const phaseByKey = new Map(phases.map((phase) => [phase.key, phase]));
-    const required: PhaseKey[] = [
-      "ready",
-      "prepare",
-      "accelerate",
-      "contact",
-      "follow_through",
-      "recover",
-    ];
-    for (const key of required) {
-      if (!phaseByKey.has(key)) {
-        return fail(
-          failure("low_confidence", "features.missing_phase", `Phase "${key}" is missing.`),
-        );
-      }
+    if (
+      phaseByKey.size !== phases.length ||
+      phases.some(
+        (phase) =>
+          ![phase.startMs, phase.representativeMs, phase.endMs, phase.confidence].every(
+            Number.isFinite,
+          ) ||
+          phase.startMs < 0 ||
+          phase.startMs > phase.representativeMs ||
+          phase.representativeMs > phase.endMs ||
+          phase.confidence < 0 ||
+          phase.confidence > 1,
+      )
+    ) {
+      return fail(
+        failure(
+          "low_confidence",
+          "features.invalid_phase",
+          "Phase observations are invalid or duplicated.",
+        ),
+      );
     }
-    const phase = (key: PhaseKey): PhaseSpan => phaseByKey.get(key) as PhaseSpan;
+    if (phases.length === 0) {
+      return fail(
+        failure(
+          "low_confidence",
+          "features.missing_phase",
+          "No stroke phase was observed; nothing can be measured.",
+        ),
+      );
+    }
+    const { accelerate, contact } = resolveSwingSpans(phases, phaseByKey);
+    const ready = phaseByKey.get("ready");
+    const prepareSpan = phaseByKey.get("prepare");
+    const followSpan = phaseByKey.get("follow_through");
+    const observedPhases = [
+      ...phases.filter((phase) => phase.key !== "recover"),
+      accelerate,
+      contact,
+    ];
+    const poseFrames = framesWithin(
+      input.poseFrames,
+      Math.min(...observedPhases.map((phase) => phase.startMs)),
+      Math.max(...observedPhases.map((phase) => phase.endMs)),
+    );
+    const frameInPhase = (
+      phase: PhaseSpan | undefined,
+      position: "startMs" | "endMs" | "representativeMs",
+    ) => (phase ? this.observedPhaseFrame(poseFrames, phase, phase[position]) : null);
 
-    const body = this.measureBody(poseFrames, handedness, phase("accelerate"), phase("contact"));
+    const body = this.measureBody(poseFrames, input.poseFrames, handedness, accelerate, contact);
     if (!body.ok) return body;
     const { torsoLength, groundY, forwardSign, dominant } = body.value;
 
@@ -117,7 +160,13 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       unit: Measurement["unit"],
       confidence: number,
     ): void => {
-      if (value === null || !Number.isFinite(value)) return;
+      if (
+        value === null ||
+        !Number.isFinite(value) ||
+        !Number.isFinite(confidence) ||
+        confidence <= 0
+      )
+        return;
       measurements.push({
         metricKey,
         value,
@@ -127,10 +176,10 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       });
     };
 
-    const readyFrame = frameNearest(poseFrames, phase("ready").representativeMs);
-    const prepareEndFrame = frameNearest(poseFrames, phase("prepare").endMs);
-    const contactFrame = frameNearest(poseFrames, phase("contact").representativeMs);
-    const accelerateStartFrame = frameNearest(poseFrames, phase("accelerate").startMs);
+    const readyFrame = frameInPhase(ready, "representativeMs");
+    const prepareEndFrame = frameInPhase(prepareSpan, "endMs");
+    const contactFrame = frameInPhase(contact, "representativeMs");
+    const accelerateStartFrame = frameInPhase(accelerate, "startMs");
 
     // ready_position + athletic_base --------------------------------------
     if (readyFrame) {
@@ -171,11 +220,9 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     }
 
     // preparation ----------------------------------------------------------
-    const turnFrames = framesWithin(
-      poseFrames,
-      phase("prepare").startMs,
-      phase("accelerate").startMs,
-    );
+    const turnFrames = prepareSpan
+      ? framesWithin(poseFrames, prepareSpan.startMs, prepareSpan.endMs)
+      : [];
     const turnSamples: number[] = [];
     let turnVisibility = 0;
     for (const frame of turnFrames) {
@@ -207,29 +254,32 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
         const hipCenter = midpoint(hips[0], hips[1]);
         const visibility = this.visibility([wrist, ...hips]) * PADDLE_PROXY_FACTOR;
         add("paddle_set_height_ratio", (hipCenter.y - wrist.y) / torsoLength, "ratio", visibility);
-        add(
-          "paddle_set_forward_norm",
-          ((wrist.x - hipCenter.x) * forwardSign) / torsoLength,
-          "normalized",
-          visibility,
-        );
+        if (forwardSign !== null) {
+          add(
+            "paddle_set_forward_norm",
+            ((wrist.x - hipCenter.x) * forwardSign) / torsoLength,
+            "normalized",
+            visibility,
+          );
+        }
       }
     }
 
     // swing_length ----------------------------------------------------------
-    const prepareSpan = phase("prepare");
-    add(
-      "backswing_length_norm",
-      pathLength(poseFrames, dominant.wrist, prepareSpan.startMs, prepareSpan.endMs, aspect) /
-        torsoLength,
-      "normalized",
-      this.spanWristVisibility(poseFrames, prepareSpan),
-    );
+    if (prepareSpan && this.wristSampleCount(poseFrames, prepareSpan, dominant.wrist) >= 2) {
+      add(
+        "backswing_length_norm",
+        pathLength(poseFrames, dominant.wrist, prepareSpan.startMs, prepareSpan.endMs, aspect) /
+          torsoLength,
+        "normalized",
+        this.spanWristVisibility(poseFrames, prepareSpan),
+      );
+    }
 
     // sequencing -----------------------------------------------------------
-    const lag = this.hipShoulderLagMs(poseFrames, phase("accelerate"), phase("contact"));
+    const lag = this.hipShoulderLagMs(poseFrames, accelerate, contact);
     if (lag !== null) add("hip_shoulder_lag_ms", lag.valueMs, "ms", lag.confidence);
-    if (accelerateStartFrame && contactFrame) {
+    if (accelerateStartFrame && contactFrame && forwardSign !== null) {
       const startHips = this.pair(accelerateStartFrame, "left_hip", "right_hip");
       const contactHips = this.pair(contactFrame, "left_hip", "right_hip");
       if (startHips && contactHips) {
@@ -249,11 +299,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     // swing up to contact — the drop-then-brush-up a coach looks for.
     if (contactFrame) {
       const contactWrist = landmark(contactFrame, dominant.wrist, aspect);
-      const swingFrames = framesWithin(
-        poseFrames,
-        phase("accelerate").startMs,
-        phase("contact").representativeMs,
-      );
+      const swingFrames = framesWithin(poseFrames, accelerate.startMs, contact.representativeMs);
       let lowest: Point | null = null;
       for (const frame of swingFrames) {
         const wrist = landmark(frame, dominant.wrist, aspect);
@@ -276,7 +322,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       const wrist = landmark(contactFrame, dominant.wrist, aspect);
       const hips = this.pair(contactFrame, "left_hip", "right_hip");
       const shoulders = this.pair(contactFrame, "left_shoulder", "right_shoulder");
-      if (wrist && hips) {
+      if (wrist && hips && forwardSign !== null) {
         add(
           "contact_forward_of_hip_norm",
           ((wrist.x - midpoint(hips[0], hips[1]).x) * forwardSign) / torsoLength,
@@ -284,7 +330,7 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
           this.visibility([wrist, ...hips]),
         );
       }
-      if (wrist && shoulders) {
+      if (wrist && shoulders && groundY !== null) {
         const shoulderHeight = groundY - midpoint(shoulders[0], shoulders[1]).y;
         if (shoulderHeight > 1e-6) {
           add(
@@ -298,12 +344,13 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     }
 
     // face_wrist_stability ---------------------------------------------------
-    const stabilityWindow = framesWithin(
-      poseFrames,
-      phase("accelerate").endMs,
-      phase("follow_through").startMs +
-        (phase("follow_through").endMs - phase("follow_through").startMs) / 2,
-    );
+    const stabilityWindow = followSpan
+      ? framesWithin(
+          poseFrames,
+          accelerate.endMs,
+          followSpan.startMs + (followSpan.endMs - followSpan.startMs) / 2,
+        )
+      : [];
     const forearmAngles: number[] = [];
     let forearmVisibility = 0;
     for (const frame of stabilityWindow) {
@@ -323,16 +370,15 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     }
 
     // follow_through + recovery ---------------------------------------------
-    const followSpan = phase("follow_through");
-    add(
-      "follow_through_length_norm",
-      pathLength(poseFrames, dominant.wrist, followSpan.startMs, followSpan.endMs, aspect) /
-        torsoLength,
-      "normalized",
-      this.spanWristVisibility(poseFrames, followSpan),
-    );
-    const recoverSpan = phase("recover");
-    add("recovery_time_ms", recoverSpan.endMs - followSpan.endMs, "ms", recoverSpan.confidence);
+    if (followSpan && this.wristSampleCount(poseFrames, followSpan, dominant.wrist) >= 2) {
+      add(
+        "follow_through_length_norm",
+        pathLength(poseFrames, dominant.wrist, followSpan.startMs, followSpan.endMs, aspect) /
+          torsoLength,
+        "normalized",
+        this.spanWristVisibility(poseFrames, followSpan),
+      );
+    }
 
     if (measurements.length === 0) {
       return fail(
@@ -346,37 +392,62 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     return ok(measurements);
   }
 
+  /**
+   * Torso length (shoulder-center → hip-center) and ground line (lowest
+   * ankle) as measured across `frames`; both are body constants, so the
+   * stroke window is preferred and the whole recording stands in when the
+   * window itself did not show the joints.
+   */
+  private bodyConstants(frames: readonly PoseFrame[]): {
+    torsoSamples: number[];
+    groundSamples: number[];
+  } {
+    const torsoSamples: number[] = [];
+    const groundSamples: number[] = [];
+    for (const frame of frames) {
+      const shoulders = this.pair(frame, "left_shoulder", "right_shoulder");
+      const hips = this.pair(frame, "left_hip", "right_hip");
+      if (shoulders && hips) {
+        const torso = distance(midpoint(shoulders[0], shoulders[1]), midpoint(hips[0], hips[1]));
+        if (Number.isFinite(torso) && torso >= 1e-4) torsoSamples.push(torso);
+      }
+      const ankles = this.pair(frame, "left_ankle", "right_ankle");
+      if (ankles) {
+        const ground = Math.max(ankles[0].y, ankles[1].y);
+        if (Number.isFinite(ground)) groundSamples.push(ground);
+      }
+    }
+    return { torsoSamples, groundSamples };
+  }
+
   private measureBody(
     poseFrames: readonly PoseFrame[],
+    allFrames: readonly PoseFrame[],
     handedness: Handedness,
     accelerate: PhaseSpan,
     contact: PhaseSpan,
   ): Result<Body> {
     const aspect = this.aspectRatio;
-    const torsoSamples: number[] = [];
-    const groundSamples: number[] = [];
-    for (const frame of poseFrames) {
-      const shoulders = this.pair(frame, "left_shoulder", "right_shoulder");
-      const hips = this.pair(frame, "left_hip", "right_hip");
-      if (shoulders && hips) {
-        torsoSamples.push(
-          distance(midpoint(shoulders[0], shoulders[1]), midpoint(hips[0], hips[1])),
-        );
-      }
-      const ankles = this.pair(frame, "left_ankle", "right_ankle");
-      if (ankles) groundSamples.push(Math.max(ankles[0].y, ankles[1].y));
-    }
+    const inWindow = this.bodyConstants(poseFrames);
+    const whole =
+      inWindow.torsoSamples.length >= 4 && inWindow.groundSamples.length > 0
+        ? inWindow
+        : this.bodyConstants(allFrames);
+    const torsoSamples =
+      inWindow.torsoSamples.length >= 4 ? inWindow.torsoSamples : whole.torsoSamples;
+    const groundSamples =
+      inWindow.groundSamples.length > 0 ? inWindow.groundSamples : whole.groundSamples;
     const torsoLength = median(torsoSamples);
-    if (torsoSamples.length < 4 || torsoLength < 1e-4) {
+    if (torsoSamples.length === 0 || !Number.isFinite(torsoLength) || torsoLength < 1e-4) {
       return fail(
         failure(
           "low_confidence",
           "features.torso_not_measured",
-          "Torso landmarks were not measured reliably; body-relative metrics are impossible.",
+          "Torso landmarks were not measured anywhere in the recording; body-relative metrics are impossible.",
         ),
       );
     }
-    const groundY = groundSamples.length > 0 ? median(groundSamples) : 1;
+    const groundY = groundSamples.length > 0 ? median(groundSamples) : null;
 
     const side =
       handedness === "left"
@@ -403,16 +474,47 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
             ankle: "right_ankle",
           };
 
-    // Forward = measured travel direction of the swinging wrist to contact.
-    const startFrame = frameNearest(poseFrames, accelerate.startMs);
-    const contactFrame = frameNearest(poseFrames, contact.representativeMs);
-    let forwardSign: 1 | -1 = 1;
-    if (startFrame && contactFrame) {
-      const start = landmark(startFrame, dominant.wrist, aspect);
-      const end = landmark(contactFrame, dominant.wrist, aspect);
-      if (start && end && end.x !== start.x) forwardSign = end.x > start.x ? 1 : -1;
-    }
+    // Forward = measured travel direction of the swinging wrist to contact:
+    // the run-up's first frame to the contact frame when both show the wrist,
+    // else the first and last frames inside the run-up that do.
+    const startFrame = this.observedPhaseFrame(poseFrames, accelerate, accelerate.startMs);
+    const contactFrame = this.observedPhaseFrame(poseFrames, contact, contact.representativeMs);
+    let forwardSign: 1 | -1 | null = null;
+    const start =
+      (startFrame && landmark(startFrame, dominant.wrist, aspect)) ??
+      this.firstWrist(poseFrames, dominant.wrist, accelerate.startMs, contact.representativeMs);
+    const end =
+      (contactFrame && landmark(contactFrame, dominant.wrist, aspect)) ??
+      this.lastWrist(poseFrames, dominant.wrist, accelerate.startMs, contact.endMs);
+    if (start && end && end.x !== start.x) forwardSign = end.x > start.x ? 1 : -1;
     return ok({ dominant, torsoLength, groundY, forwardSign });
+  }
+
+  private firstWrist(
+    frames: readonly PoseFrame[],
+    wrist: PoseLandmarkName,
+    startMs: number,
+    endMs: number,
+  ): Point | null {
+    for (const frame of framesWithin(frames, startMs, endMs)) {
+      const point = landmark(frame, wrist, this.aspectRatio);
+      if (point) return point;
+    }
+    return null;
+  }
+
+  private lastWrist(
+    frames: readonly PoseFrame[],
+    wrist: PoseLandmarkName,
+    startMs: number,
+    endMs: number,
+  ): Point | null {
+    const inSpan = framesWithin(frames, startMs, endMs);
+    for (let index = inSpan.length - 1; index >= 0; index -= 1) {
+      const point = landmark(inSpan[index]!, wrist, this.aspectRatio);
+      if (point) return point;
+    }
+    return null;
   }
 
   private busierWristSide(
@@ -436,6 +538,21 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
     return right >= left ? "right" : "left";
   }
 
+  private observedPhaseFrame(
+    frames: readonly PoseFrame[],
+    phase: PhaseSpan,
+    timestampMs: number,
+  ): PoseFrame | null {
+    return (
+      frames.find(
+        (frame) =>
+          frame.timestampMs === timestampMs &&
+          frame.timestampMs >= phase.startMs &&
+          frame.timestampMs <= phase.endMs,
+      ) ?? null
+    );
+  }
+
   private pair(
     frame: PoseFrame,
     left: PoseLandmarkName,
@@ -448,6 +565,16 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
 
   private visibility(points: readonly Point[]): number {
     return mean(points.map((point) => point.visibility));
+  }
+
+  private wristSampleCount(
+    poseFrames: readonly PoseFrame[],
+    span: PhaseSpan,
+    wrist: PoseLandmarkName,
+  ): number {
+    return framesWithin(poseFrames, span.startMs, span.endMs).filter(
+      (frame) => landmark(frame, wrist, this.aspectRatio) !== null,
+    ).length;
   }
 
   private spanWristVisibility(poseFrames: readonly PoseFrame[], span: PhaseSpan): number {
@@ -503,6 +630,59 @@ export class PoseGeometryFeatureExtractor implements IFeatureExtractor {
       confidence: mean(frames.map((frame) => frame.confidence)) * 0.85,
     };
   }
+}
+
+/**
+ * The run-up and contact-proxy spans the measurements are anchored on. The
+ * segmenter emits both for every peak it finds; when one is absent (an older
+ * or foreign segmenter), the neighbouring measured phase stands in at
+ * reduced confidence rather than refusing every metric of the read.
+ */
+function resolveSwingSpans(
+  phases: readonly PhaseSpan[],
+  phaseByKey: ReadonlyMap<PhaseSpan["key"], PhaseSpan>,
+): { accelerate: PhaseSpan; contact: PhaseSpan } {
+  let contact = phaseByKey.get("contact");
+  let accelerate = phaseByKey.get("accelerate");
+  if (!contact) {
+    // The contact proxy is the peak-speed instant; without it, the end of
+    // the latest phase that precedes any follow-through stands in.
+    const anchor =
+      accelerate ??
+      [...phases]
+        .filter((phase) => phase.key !== "follow_through" && phase.key !== "recover")
+        .sort((a, b) => b.endMs - a.endMs)[0] ??
+      phases[0]!;
+    contact = {
+      key: "contact",
+      startMs: anchor.endMs,
+      representativeMs: anchor.endMs,
+      endMs: anchor.endMs,
+      confidence: anchor.confidence * FALLBACK_PHASE_FACTOR,
+    };
+  }
+  if (!accelerate) {
+    const proxyStart = contact.startMs;
+    const before = [...phases]
+      .filter((phase) => phase.key !== "contact" && phase.endMs <= proxyStart)
+      .sort((a, b) => b.endMs - a.endMs)[0];
+    accelerate = before
+      ? {
+          key: "accelerate",
+          startMs: before.startMs,
+          representativeMs: before.representativeMs,
+          endMs: proxyStart,
+          confidence: before.confidence * FALLBACK_PHASE_FACTOR,
+        }
+      : {
+          key: "accelerate",
+          startMs: proxyStart,
+          representativeMs: proxyStart,
+          endMs: proxyStart,
+          confidence: contact.confidence * FALLBACK_PHASE_FACTOR,
+        };
+  }
+  return { accelerate, contact };
 }
 
 function indexOfMax(values: readonly number[]): number {

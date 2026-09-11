@@ -25,8 +25,9 @@ import {
 } from "./routesHarness.ts";
 import {
   dbUnavailable,
-  ENTITLEMENTS_URL,
+  VERDICT_URL,
   EVENTS_URL,
+  EVENT_COMPLETE_URL,
   expiredSubscriber,
   type Row,
   simulate,
@@ -232,7 +233,7 @@ Deno.test(
 // ── 3. same id, different body ──────────────────────────────────────────────
 
 Deno.test(
-  "ATK5-3: a redelivery with the SAME id but a DIFFERENT body (other user, forged entitlements) — in flight or after completion — is a duplicate ack: 1 RC call for the original subject, no write for the forged subject, audit row keeps the first body",
+  "ATK5-3: a redelivery with the SAME id but a DIFFERENT body (other user, forged entitlements) — in flight or after completion — is rejected: 1 RC call for the original subject, no write for the forged subject, audit row keeps the first body",
   async () => {
     const sim = await simulate();
     try {
@@ -259,10 +260,11 @@ Deno.test(
       const inFlight = sim.h.handler(webhookRequest(forged));
       const [o, f] = await drain([await owner, await inFlight]);
       assertEquals(o.body, { received: true, verified: true });
-      assertEquals(f.status, 200);
-      assertEquals(f.body, { received: true, duplicate: true });
+      assertEquals(f.status, 503);
+      assertEquals(f.body.duplicate, undefined);
       const later = await drain([await sim.h.handler(webhookRequest(forged))]);
-      assertEquals(later[0].body, { received: true, duplicate: true });
+      assertEquals(later[0].status, 503);
+      assertEquals(later[0].body.duplicate, undefined);
 
       assertEquals(sim.rcCalls(), 1, "only the original subject was verified");
       assertEquals(
@@ -349,7 +351,7 @@ Deno.test(
             times: 2,
           });
           sim.faults.push({
-            match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+            match: (m, u) => m === "POST" && u.startsWith(VERDICT_URL),
             ...dbUnavailable,
             times: 1,
           });
@@ -369,7 +371,8 @@ Deno.test(
             `loser must not ack an unpersisted verdict: ${JSON.stringify(l)}`,
           );
           assert(l.body.duplicate === undefined);
-          assertEquals(sim.auditRows.size, 0, "reservation released");
+          assertEquals(sim.auditRows.get(event.id)?.processed_at, null);
+          assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null);
           assertEquals(sim.entitlementWrites.length, 0);
 
           const redelivery = await drain([await sim.h.handler(webhookRequest(event))]);
@@ -386,7 +389,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ATK5-6: owner persisted the verdict but the completion PATCH fails → owner 503 Retry-After 30, row stays in flight; a redelivery inside the lease waits then 503s WITHOUT a second RC call; once the lease lapses the redelivery reclaims, re-verifies once and completes — 1 audit row throughout",
+  "ATK5-6: owner persisted the verdict but the completion RPC fails → owner 503 Retry-After 30, row stays in flight; a redelivery inside the lease waits then 503s WITHOUT a second RC call; once the lease lapses the redelivery reclaims, re-verifies once and completes — 1 audit row throughout",
   async () => {
     const sim = await simulate();
     try {
@@ -399,7 +402,7 @@ Deno.test(
             times: 3,
           });
           sim.faults.push({
-            match: (m, u) => m === "PATCH" && u.startsWith(EVENTS_URL),
+            match: (m, u) => m === "POST" && u.startsWith(EVENT_COMPLETE_URL),
             ...dbUnavailable,
             times: 1,
           });
@@ -424,11 +427,14 @@ Deno.test(
           );
           assertEquals(inLease.retryAfter, "30");
           assertEquals(sim.rcCalls(), 1, "no re-verification while the lease is honoured");
-          assertEquals(sim.auditUpserts(), 2);
+          assert(
+            sim.auditUpserts() >= 2 && sim.auditUpserts() <= 2 + Math.ceil(150 / 10),
+            "owner and duplicate claims include bounded lease polling",
+          );
           assertEquals(sim.auditRows.size, 1, "no second audit row");
 
           // lease lapses (isolate that owned it is gone)
-          row.claimed_at = new Date(Date.now() - 6 * 60_000).toISOString();
+          sim.expireLease(String(row.id));
           const [afterLease] = await drain([await sim.h.handler(webhookRequest(event))]);
           assertEquals(afterLease.body, { received: true, verified: true });
           assertEquals(sim.rcCalls(), 2, "exactly one re-verification after reclaim");
@@ -448,7 +454,7 @@ Deno.test(
 );
 
 Deno.test(
-  "ATK5-7: lease reclaimed (clock skew ≥ lease) while the original owner is still verifying → both copies verify (2 RC calls, 2 upserts), both 200, single audit row, final row = newest request_date_ms; the original owner's late completion cannot un-finalize the row",
+  "ATK5-7: lease reclaimed (clock skew ≥ lease) while the original owner is still verifying → both copies attempt verification (2 RC calls, 2 verdict RPCs), reclaimer 200 and stale owner 503, single audit row, final row = newest request_date_ms; the original owner's late completion cannot un-finalize the row",
   async () => {
     const sim = await simulate();
     try {
@@ -469,11 +475,13 @@ Deno.test(
       // A second isolate whose clock is > 5 min ahead sees the fresh lease as lapsed.
       const row = sim.auditRows.get(event.id);
       assert(row);
-      row.claimed_at = new Date(Date.parse(String(row.claimed_at)) - 6 * 60_000).toISOString();
+      sim.expireLease(event.id);
       const reclaimer = await sim.h.handler(webhookRequest(event));
       const [r, o] = await drain([reclaimer, await owner]);
       assertEquals(r.body, { received: true, verified: true });
-      assertEquals(o.body, { received: true, verified: true });
+      assertEquals(o.status, 503);
+      assertEquals(o.body.verified, undefined);
+      assertEquals(sim.entitlementWrites.length, 1, "stale lease cannot persist");
       assertEquals(sim.rcCalls(), 2);
       assertEquals(sim.auditRows.size, 1);
       const final = sim.entitlementRows.get(TEST_USER_ID);
@@ -503,7 +511,7 @@ Deno.test(
             times: 1,
           });
           sim.faults.push({
-            match: (m, u) => m === "GET" && u.startsWith(EVENTS_URL),
+            match: (m, u) => m === "GET" && u.startsWith(EVENTS_URL) && sim.rcCalls() > 0,
             ...dbUnavailable,
             times: 1,
           });
@@ -703,7 +711,7 @@ Deno.test(
       let entitlementPosts = 0;
       sim.faults.push({
         match: (m, u) => {
-          if (m !== "POST" || !u.startsWith(ENTITLEMENTS_URL)) return false;
+          if (m !== "POST" || !u.startsWith(VERDICT_URL)) return false;
           entitlementPosts += 1;
           return entitlementPosts === 2;
         },
@@ -718,7 +726,8 @@ Deno.test(
       };
       const [first] = await drain([await sim.h.handler(webhookRequest(event))]);
       assertEquals(first.status, 503);
-      assertEquals(sim.auditRows.size, 0, "released");
+      assertEquals(sim.auditRows.get(event.id)?.processed_at, null);
+      assertEquals(sim.h.tables.billing_webhook_claims?.[0]?.lease_token, null);
       assertEquals(sim.rcCalls(), 2);
       assertEquals(sim.entitlementRows.has(TEST_USER_ID), true, "first subject persisted");
       assertEquals(sim.entitlementRows.has(OTHER_USER_ID), false);

@@ -1,0 +1,299 @@
+{
+  "agent_counts": {
+    "completed": 2,
+    "failed": 0,
+    "launched": 2,
+    "requested": 2
+  },
+  "agents": [
+    {
+      "label": "review-W05-07-v4282f5ea",
+      "phase": "review",
+      "prompt_sha256": "f376dafbd72a378aa35224e7d6f720976bbf955cfe4461ca6ee73331c515297f",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W05-07-v4282f5ea",
+      "phase": "adversary",
+      "prompt_sha256": "4c8cba5fc715143a551f3b6978b0fb80b8ba9ae57cc24e2378595d4bd4fa498e",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "8e525d876c04d2682b2bb206fd10667fee66c849",
+  "candidate": {
+    "branch": "devin/pp/w05-07/impl-r4",
+    "head_sha": "4282f5eafbfbad9db9eb6baf2c3ffd210e2066e6",
+    "lane": 1,
+    "round": 6
+  },
+  "coordinator_evidence": [],
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "kind": "candidate_verification",
+  "lib_version": "2026-09-08.10",
+  "manifest_sha256": "69dc1d54190aaeb01e69c20c65fe86d15cc51d7699550c8c0635b0b14d59d957",
+  "manifest_version": "2026-09-08.4",
+  "package_id": "W05-07",
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [],
+        "attack_branch": "devin/pp/w05-07/attack-4282f5ea",
+        "attack_branch_sha": "0ffa09a11006a421e0f91922107160e1eb87701a",
+        "attacked_sha": "4282f5eafbfbad9db9eb6baf2c3ffd210e2066e6",
+        "attacks_tried": 16,
+        "breaks": [
+          {
+            "expected": "The lost race should end on the same honest no-score `unavailable` outcome a sequential second capture gets — a lost ticket race is a foreseeable outcome, not an exception. INFERRED: the shipping AnalyzeScreen serialises captures per OriginalAnalysisExecution, so this needs two callers of runCaptureAnalysis in one process; the thrown error would surface as a generic 'error' phase with retry rather than the no-score copy.",
+            "observed": "VERIFIED on 4282f5ea: exactly one run scores, one ticket is consumed, one receipt is queued, one local_shot and zero outbox rows (money/data invariants hold), but the losing promise REJECTS with 'Every ticket of the held offline grant has been spent on this device.' (consumeOfflineAllocation throws offline.allocation_exhausted inside the commit transaction; the catch path reaches `throw error` at runCaptureAnalysis.ts:2270). A sequential second capture after the last ticket returns kind:'unavailable' (passes), and retrying the loser afterwards returns kind:'unavailable' with nothing further spent (passes).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack2.test.ts -t 'exactly one read scores, the loser ends on an honest outcome'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack2.test.ts",
+            "title": "Two concurrent runCaptureAnalysis() calls racing for the LAST held ticket: the loser rejects with OfflineGrantError instead of the honest `unavailable` outcome"
+          },
+          {
+            "expected": "Fail closed on the corrupt row only (skip/quarantine it, keep it visible as HOLD), while healthy receipts of the same owner are still presented and settled. Failing closed for the whole owner is not fabrication (invariant respected) but converts one bad row into a permanent non-settlement of every paid read and a permanent grant-pull outage. Note: pendingOfflineReceipts() predates the candidate (W05-04), but the candidate is what makes receipts reachable on the shipping path.",
+            "observed": "VERIFIED on 4282f5ea: with two paid receipts and the FIRST row's `receipt` JSON made unparseable, drainOfflineReceipts() rejects (parseReceiptRow → corrupt) with 0 POSTs to /v1/offline/receipts; the healthy receipt is never presented and its shot is never marked synced. Observed {drain:'rejected', posts:0, presented:[]}; expected {drain:'fulfilled', posts:1, presented:[<healthy id>]}. The corrupt row itself is (correctly) never presented as a receipt, and the Result surface/run replay for the healthy shot still work (companion test passes). Since syncRuntime.pass() runs reconcileOfflineWallet before pullOfflineGrant, INFERRED: the same throw also stops the device from ever pulling a fresh grant until the row is repaired.",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack2.test.ts -t 'does not starve settlement of the healthy receipt'",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack2.test.ts",
+            "title": "One corrupt offline_receipt row starves settlement of EVERY other pending receipt of the owner (drain rejects before any POST)"
+          },
+          {
+            "expected": "freeLimitReached:true when the consumed grant leaves 0 remaining free tickets (the grant is the server-issued, allowance-clamped fact), so AnalyzeScreen shows the same free-limit/upgrade prompt as the live path; the next capture otherwise lands on a generic 'unavailable' error instead of the upgrade prompt.",
+            "observed": "VERIFIED on 4282f5ea: an identity_lifetime_free grant with one remaining ticket → offline scored read → outcome.kind:'scored' with freeLimitReached:false (the live path sets it when the reserved permit reports availableToReserve === 0).",
+            "repro": "cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack2.test.ts -t 'spending the last free ticket on court reports the free limit exactly as the live path does'",
+            "severity": "P3",
+            "test_file": "apps/mobile/__tests__/w05CourtOfflineRun.attack2.test.ts",
+            "title": "Court-offline read that spends the LAST free ticket returns freeLimitReached:false, so the free-limit prompt the live path shows is skipped"
+          }
+        ],
+        "package_id": "W05-07",
+        "summary": "Adversarial round 2 against W05-07 candidate 4282f5ea (branch devin/pp/w05-07/impl-r4). The candidate already carries a 47-test first-round attack suite (w05CourtOfflineRun.attack.test.ts, A0–A10) which passes; this round adds apps/mobile/__tests__/w05CourtOfflineRun.attack2.test.ts with 16 new attacks in 12 groups: B1 two captures racing for the LAST ticket (+ loser retry, + sequential second capture), B2 account switch inside the commit transaction, B3 route-level `rejected` entry without ledger verdict, B4 corrupt receipt row ahead of a healthy one (drain + Result surface/replay), B5 clock rollback and NaN wall clock at settlement, B6 owner purge racing an in-flight presentation, B7 free-limit signal after the last free ticket, B8 crash between server verdict and local apply, B9 captive-portal redirect on the drain, B10 receipt id duplicated across `receipts` and `rejected`, B11 mixed accepted/pending verdict batch, B12 APP_STORE_SUBMISSION copy rules on the new Result strings. RESULTS (VERIFIED): candidate HEAD `cd apps/mobile && npx jest --ci __tests__/w05CourtOfflineRun.attack2.test.ts` → exit 1, 16 executed / 13 passed / 3 failed / 0 skipped (/home/ubuntu/w0507-attack/attack2-run2.log); the 3 failures are the confirmed breaks above (two P2, one P3) — no P0/P1: in every attack the money/data invariants held (exactly one ticket spent per scored read, abstention/partial spends nothing, no outbox row for offline reads, receipt id stable across retries, purged owner never resurrected, cross-account grant never spent, duplicate/ambiguous verdicts settle nothing and stay HOLD, no unparseable settled_at). BASE regression (AC2, VERIFIED): worktree at 8e525d87 + only the new test file → exit 1, 16 executed / 0 passed / 16 failed (/home/ubuntu/w0507-attack/attack2-base.log) — every attack encodes W05-07 behaviour absent on base. Candidate acceptance (VERIFIED): AC1 `npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts` → exit 0, 3 suites / 69 passed / 0 failed / 0 skipped (/home/ubuntu/w0507-attack/ac1-candidate.log); AC3 full `npx jest --ci --silent` with the attack file present → exit 1, 334 suites: 332 passed, 1 failed (only w05CourtOfflineRun.attack2.test.ts, the 3 breaks), 1 skipped (importedRealFootageAnalysis.test.ts, documented Mac-artifact skip), 6790 tests: 6786 passed / 3 failed / 1 skipped (/home/ubuntu/w0507-attack/ac3-candidate-full.log) — i.e. 0 candidate-owned failures; AC4 `npx tsc --noEmit` → exit 0 (after `npm ci` restored @sentry/react-native); AC5 root `npx eslint apps/mobile/__tests__/w05CourtOfflineRun.attack2.test.ts` → exit 0 and `npx prettier --check` → exit 0. No candidate production code or candidate-owned tests were modified; the branch contains one commit adding only the new test file, pushed without force to origin/devin/pp/w05-07/attack-4282f5ea at 0ffa09a1. Not exercised (UNKNOWN): live Edge/SQL authorization paths for /v1/offline/receipts (no Deno/Postgres surface was added by this package; the mobile-side contract was attacked through scripted fetch)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "coordinator shell transcript",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05CourtOfflineRun.attack.test.ts __tests__/w05CourtOfflineRunAdversary.test.ts __tests__/runJournal*.test.ts __tests__/wf/fix-12-result-outbox-status.test.tsx __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts",
+            "executed": 217,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC1",
+            "note": "Coordinator run on 4282f5ea in /home/ubuntu/wt-w05-01/apps/mobile: 'Test Suites: 7 passed, 7 total; Tests: 217 passed, 217 total'. Note the frozen AC1 glob __tests__/w01*.test.ts matches no file (w01PartialOutcome.test.tsx is covered by AC3).",
+            "passed": 217,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "coordinator shell transcript",
+            "command": "reviewer: check out BASE_SHA, copy ONLY the new test file(s) over, run them -> must FAIL; run on HEAD -> must PASS",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC2",
+            "note": "Coordinator proof of the r6-specific regressions: the verify-5 adversary suite w05CourtOfflineRun.attackR4.test.tsx (from devin/pp/w05-07/attack-1e9124bd @ 2a96294a) fails 5/14 on 1e9124bd (R1 purge x2, R4 digest, R8 queued/held/refused) and passes 14/14 on 4282f5ea. Base 8e525d87 has no offline branch (verify-5 reviewer: 49/79 failed). Reviewer to re-verify.",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "coordinator shell transcript",
+            "command": "cd apps/mobile && npx jest --ci --silent",
+            "executed": 6774,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC3",
+            "note": "'Test Suites: 1 skipped, 332 passed, 332 of 333 total; Tests: 1 skipped, 6773 passed, 6774 total' on 4282f5ea — the one skip is the documented importedRealFootageAnalysis.test.ts skip.",
+            "passed": 6773,
+            "skipped": 1,
+            "status": "PASS"
+          },
+          {
+            "artifact": "coordinator shell transcript",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC4",
+            "note": "TSC exit 0 on 4282f5ea. No supabase/ source changed since 1e9124bd (deno check ok + Edge 1024/0 there); r6 touches apps/mobile only.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "coordinator shell transcript",
+            "command": "npx eslint <every changed apps/mobile file> && npx prettier --check <every changed file> (repo root)",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC5",
+            "note": "ESLint 0 problems; 'All matched files use Prettier code style!' on 4282f5ea.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "r6 (candidate 4282f5ea, a NEW commit on top of the rejected 1e9124bd; nothing amended) fixes the verify-5 reviewer + adversary findings. SCOPE: apps/mobile/src/analysis/runJournal.ts is restored byte-for-byte to the integration base 8e525d87 (mobile-analysis group not held); the recovery regression 'a recovery caller with a RAW permit port...' now drives the SHIPPING guard in syncRuntime.ts (held mobile-data group) instead. COMMENTS: the openPresentation / reconcileOfflineWallet doc comments in offlineWallet.ts are the base text again (new sentences added as separate comments), and '// Promote to the product rating; the sync transaction consumes the permit.' is back in runCaptureAnalysis.ts (re-indented inside the live-permit branch). P0 purge: OWNER_SCOPED_TABLES in repository.ts gains offline_wallet_journal, offline_receipt, offline_ticket, offline_grant, so purgeOwnerData(db, owner) (the account-deletion purge) removes the owner's whole wallet and leaves the other owner's rows untouched. P1 digest binding: sync.ts exports offlineOutputSha256(analysis) = sha256Hex(originalCanonicalJson(toOfflineOutput(analysis))); the spend (runCaptureAnalysis consume), the lost-ack replay identity check and saveOfflineAnalysis() all use it; saveOfflineAnalysis() parses the durable receipt row safely (malformed JSON -> the controlled 'does not name this analysis' error, no write), requires receipt.resultId === analysis.id AND receipt.fullOutputSha256 === offlineOutputSha256(analysis), and refuses to write local_shot otherwise (same result id with a different output is rejected). P1 Result copy: offlineCapabilities.readOfflineReceiptForResult() (owner-scoped, every candidate row goes through parseReceiptRow()) + offlineWallet.readOfflineReceiptEvidence(): accepted -> synced; refused -> refusal + server code from the applied journal; held -> server HOLD (answered) ; null settlement -> 'presented but unanswered' when an in_flight journal names the receipt, else 'queued'. ResultScreen's SyncEvidenceState gains offline_queued / offline_held{answered} / offline_refused{code}; the evidence loader checks the durable shot.sync receipt first, then the offline receipt evidence, then the outbox row; a wallet read failure falls back to the outbox state; accepted unlocks plan creation exactly like a synced shot.sync. r5 and r4 content (frozen shot.sync output shape, corrupt-payload isolation, chunked drain, guarded recovery, complete-evidence-before-in_flight) is unchanged.",
+        "attachment_urls": [],
+        "base_sha": "8e525d876c04d2682b2bb206fd10667fee66c849",
+        "baseline_failures_observed": [
+          "The full DB-backed Edge suite fails 4 W04-04 live-DB tests against a Postgres built before the merged W04-04 migrations (settle_offline_receipt(jsonb,unknown,jsonb,text,boolean) does not exist); against a fresh xc_pg_up.sh database built from this head's migrations it is 1024 passed / 0 failed."
+        ],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w05-07/impl-r4",
+        "files_changed": [
+          "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts",
+          "apps/mobile/__tests__/w05CourtOfflineRun.test.ts",
+          "apps/mobile/__tests__/w05CourtOfflineRunAdversary.test.ts",
+          "apps/mobile/__tests__/wf/fix-12-result-outbox-status.test.tsx",
+          "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+          "apps/mobile/src/data/api.ts",
+          "apps/mobile/src/data/offlineCapabilities.ts",
+          "apps/mobile/src/data/offlineWallet.ts",
+          "apps/mobile/src/data/repository.ts",
+          "apps/mobile/src/data/sync.ts",
+          "apps/mobile/src/data/syncRuntime.ts",
+          "apps/mobile/src/screens/ResultScreen.tsx",
+          "supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts"
+        ],
+        "head_sha": "4282f5eafbfbad9db9eb6baf2c3ffd210e2066e6",
+        "out_of_scope_files": [
+          "apps/mobile/src/data/sync.ts — held mobile-data group; additive toOfflineOutput()/offlineOutputSha256() wiring the objective requires (canonical output digest)",
+          "apps/mobile/src/data/syncRuntime.ts — held mobile-data group; wraps the recovery permit port in guardOfflinePaidReservations() and excludes offline-paid journals from the unfinished-recovery count (required for the reconnect invariant)",
+          "apps/mobile/src/screens/ResultScreen.tsx — UI wiring the objective requires ('held stays pending (W05-04 copy); refused is surfaced honestly'); additive SyncEvidenceState variants + copy only",
+          "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts — additive regression suite (adversary attacks kept as regressions + A10 for the r6 fixes)",
+          "apps/mobile/__tests__/w05CourtOfflineRunAdversary.test.ts — additive regression suite (independent adversary A1-A10)",
+          "apps/mobile/__tests__/wf/fix-12-result-outbox-status.test.tsx — existing Result-details suite extended with the offline receipt states (mock of readOfflineReceiptEvidence)",
+          "supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts — additive Edge test only (no edge-index source change): frozen shape -> result_recorded, verbatim ShotAnalysis -> HELD"
+        ],
+        "package_id": "W05-07",
+        "regression_tests_added": [
+          "apps/mobile/__tests__/w05CourtOfflineRun.test.ts (shipping original path scores offline with one spend, one receipt, one local_shot, no shot.sync row; reconnect sweep via configureSyncRuntime()/triggerOutboxSync() reserves no permit and settles the receipt; lost commit ack returns the durable read; drain journals only what it sends; missing grant → no POST, no in_flight; two-chunk drain; lost first chunk)",
+          "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts (A1–A10 adversary suite kept as regression: double submit, restart+reconnect through the shipping sync runtime, other-owner grant, tampered output hash, expired lease, abstention spends nothing, receipt conflict, wallet corruption never empty)",
+          "apps/mobile/__tests__/w05CourtOfflineRunAdversary.test.ts (independent adversary suite A1-A10: frozen wire shape + digest, corrupt local_shot payload does not starve the drain, Pro lease read, lease bound, grant withdrawn mid-run, drain racing a read, restart after abstention, trusted-time boundaries, cross-account isolation, 429/403/5xx classification)",
+          "apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts A10 (new in r6): purgeOwnerData removes offline_grant/offline_ticket/offline_receipt/offline_wallet_journal of the purged owner only; saveOfflineAnalysis refuses a same-result-id payload whose output differs from the receipt digest and refuses a malformed receipt row; readOfflineReceiptEvidence: queued -> held{answered:false} -> held{answered:true} -> accepted; refused carries the server code; another owner's receipt is invisible",
+          "apps/mobile/__tests__/wf/fix-12-result-outbox-status.test.tsx (new in r6): Result copy for queued / unanswered / server-held / refused(code) / accepted offline receipts; accepted unlocks plan creation; durable shot.sync receipt wins; wallet read failure falls back to the outbox state",
+          "supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts (real Edge handler: verbatim ShotAnalysis output -> HELD evidence_ambiguous on every redelivery; frozen shot.sync shape -> result_recorded)",
+          "Coordinator also ran the verify-5 adversary's own suite (devin/pp/w05-07/attack-1e9124bd: apps/mobile/__tests__/w05CourtOfflineRun.attackR4.test.tsx) on 4282f5ea: 14/14 pass (5 failed on 1e9124bd)"
+        ],
+        "residual_risks": [
+          "An offline-paid journal row stays release_pending/held on the device (it never becomes a permit-backed completion); the sweep treats it as settled work, not unfinished recovery.",
+          "Chunk size is measured on the JSON wire length (1_000_000 chars) under the Edge 2 MB body cap; a single receipt larger than the cap is still sent alone.",
+          "readOfflineReceiptForResult() pre-filters candidate rows with an owner-scoped `receipt LIKE %\"<resultId>\"%` JSON substring match and then confirms parseReceiptRow(row).resultId === resultId; a normalized result_id column would replace the substring pre-filter in a later schema change."
+        ],
+        "round": 6,
+        "summary": "Court-offline scored read on the shipping path (AnalyzeScreen -> prepareOriginalCaptureAnalysis -> runOriginalCaptureAnalysis) and on plain runCaptureAnalysis: connectivity-class permit failure + cached release policy + executable held grant -> on-device rating, exactly one consumeOfflineAllocation() in the commit transaction, saveOfflineAnalysis() writes local_shot (digest-bound to the receipt) with NO shot.sync outbox row, the receipt drain sends the frozen 1.0 wire entry { receipt, grant:{schemaVersion,compactJws}, output } in bounded chunks, hasShotSyncReceipt() is written only on an accepted settlement, a lost commit acknowledgement returns the durable paid read, the SHIPPING sync runtime's recovery sweep never reserves a live permit for an operation already paid offline, an owner purge removes every offline wallet row of that owner, and the Result surface names queued / presented-unanswered / HELD / REFUSED / ACCEPTED receipts truthfully."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "artifacts/review-w05-07/ac1-cand.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e5ce752-663c-4d9e-a28c-7835be9d647b/ac1-cand.log)",
+            "command": "cd apps/mobile && npx jest --ci --silent __tests__/w05CourtOfflineRun.test.ts __tests__/w05WalletRecovery.test.ts __tests__/w04OfflineGrants.test.ts __tests__/w01*.test.ts",
+            "executed": 69,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC1",
+            "note": "VERIFIED on 4282f5ea in /home/ubuntu/wt-cand: 'Test Suites: 3 passed, 3 total; Tests: 69 passed, 69 total'. The __tests__/w01*.test.ts glob matches no file (only w01PartialOutcome.test.tsx exists; covered by AC3).",
+            "passed": 69,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w05-07/ac2-cand.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/e12cb38f-2aa7-4d6c-bbbd-e9d746c8689e/ac2-cand.log); base: artifacts/review-w05-07/ac2-base.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/2dbece20-93c8-46ee-8d50-71e174522b81/ac2-base.log)",
+            "command": "BASE: git worktree at 8e525d87 + cp of apps/mobile/__tests__/{w05CourtOfflineRun.test.ts,w05CourtOfflineRun.attack.test.ts,w05CourtOfflineRunAdversary.test.ts,wf/fix-12-result-outbox-status.test.tsx} from 4282f5ea; cd apps/mobile && npx jest --ci --silent <those 4 files>. HEAD: same command on 4282f5ea.",
+            "executed": 97,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC2",
+            "note": "VERIFIED proof holds. BASE run (8e525d87 + only the 4 test files copied): exit 1, 'Test Suites: 4 failed, 4 total; Tests: 59 failed, 38 passed, 97 total' — all four suites fail with behavioural assertion failures (no module-not-found). HEAD run (4282f5ea): exit 0, 'Test Suites: 4 passed, 4 total; Tests: 97 passed, 97 total'. The new Edge test w05_07_offline_output_shape.test.ts passes 2/2 on both base and HEAD (edge source unchanged) and is excluded from the proof.",
+            "passed": 97,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w05-07/ac3-full-cand.log (https://la-hacks-rttothemoon.devinenterprise.com/attachments/c689ea80-3b9d-4f37-98ff-d68d937e57cf/ac3-full-cand.log)",
+            "command": "cd apps/mobile && npx jest --ci --silent",
+            "executed": 6774,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC3",
+            "note": "VERIFIED on 4282f5ea: 'Test Suites: 1 skipped, 332 passed, 332 of 333 total; Tests: 1 skipped, 6773 passed, 6774 total; Time: 413.666 s'. The single skip is the documented importedRealFootageAnalysis.test.ts (describe.skip when Mac artifacts are absent; confirmed by running that file alone: 1 skipped).",
+            "passed": 6773,
+            "skipped": 1,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w05-07/ac4-tsc-cand.log",
+            "command": "cd apps/mobile && npx tsc --noEmit",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC4",
+            "note": "VERIFIED on 4282f5ea: tsc exit 0, no diagnostics.",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "artifacts/review-w05-07/ac5-eslint-cand.log, artifacts/review-w05-07/ac5-prettier-cand.log",
+            "command": "npx eslint apps/mobile/__tests__/w05CourtOfflineRun.attack.test.ts apps/mobile/__tests__/w05CourtOfflineRun.test.ts apps/mobile/__tests__/w05CourtOfflineRunAdversary.test.ts apps/mobile/__tests__/wf/fix-12-result-outbox-status.test.tsx apps/mobile/src/analysis/runCaptureAnalysis.ts apps/mobile/src/data/api.ts apps/mobile/src/data/offlineCapabilities.ts apps/mobile/src/data/offlineWallet.ts apps/mobile/src/data/repository.ts apps/mobile/src/data/sync.ts apps/mobile/src/data/syncRuntime.ts apps/mobile/src/screens/ResultScreen.tsx && npx prettier --check <all 13 changed files incl. supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts> (repo root)",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W05-07-AC5",
+            "note": "VERIFIED on 4282f5ea at repo root: eslint exit 0 (0 problems); prettier exit 0 ('All matched files use Prettier code style!').",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6bad34d2-0fcd-47b9-b4ee-8d6cd2766cdd/w05-07-review-r4-artifacts.tar.gz",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c689ea80-3b9d-4f37-98ff-d68d937e57cf/ac3-full-cand.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2dbece20-93c8-46ee-8d50-71e174522b81/ac2-base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/e12cb38f-2aa7-4d6c-bbbd-e9d746c8689e/ac2-cand.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0e5ce752-663c-4d9e-a28c-7835be9d647b/ac1-cand.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED: isReservationConnectivityFailure() (apps/mobile/src/analysis/runCaptureAnalysis.ts ~L1163) classifies HTTP 5xx and 408 as connectivity failures alongside TypeError/network.* codes; typed 4xx (paywall, allowance, 429, 403, 409 release refusal) are correctly NOT offline. A 5xx is a service failure rather than a refusal, so spending an already-allocated device grant under it is within the allocation contract, but the manifest text says 'network/offline classification only' — coordinator may want to confirm 5xx is intended.",
+          "INFERRED (implementer-declared residual): an offline-paid analysis_run_journal row is never committed (no permit exists); it stays in its post-reservation-failure state and is excluded from unfinished-recovery via offlinePaidOperationIds() + guardOfflinePaidReservations() in syncRuntime.ts. Tests cover the sweep reserving no permit; a future journal-state cleanup could make this explicit.",
+          "INFERRED: for the original (shipping) path, an offline-scored run bypasses originalAnalysisOperations.commit(), so analysis_logical_operations.final_record_id/completion_kind are not written; hasProduct() (local_analysis_record/local_shot) still blocks a second attempt and readOfflineScoredReplay() serves the replay, so no double spend — but the logical-operation row does not record completion for offline-paid runs.",
+          "INFERRED (implementer-declared residual): readOfflineReceiptForResult() pre-filters with an owner-scoped SQL LIKE on the receipt JSON, then confirms via parseReceiptRow().resultId; a normalized result_id column would be cleaner.",
+          "VERIFIED: the frozen AC1 glob __tests__/w01*.test.ts matches no file (the W01 suite is w01PartialOutcome.test.tsx, covered by AC3: full suite 6773 passed). AC1 therefore ran 3 suites / 69 tests, not 4 suites.",
+          "VERIFIED: the new Edge test supabase/functions/api/__wf__/w05_07_offline_output_shape.test.ts passes on BOTH base and candidate (2/2 each; no edge source changed) — it is a server-contract pin, not a regression test for this package; it is not counted toward the AC2 proof.",
+          "VERIFIED: grant.schemaVersion on the wire is OFFLINE_SIGNED_GRANT_SCHEMA_VERSION = 'offline-signed-execution-grant-v1' (packages/shared-types), not the manifest's literal 'offline-signed-grant-v1'; the server validator requires the constant, so the code is right and the manifest text is a paraphrase (already adjudicated in the W05-07 ledger). The wire entry keeps flat receipt fields beside nested receipt/grant/output because pre-existing suites pin entry.receiptId; parseOfflineReceiptEntry() (index.ts L5178) reads only the nested keys."
+        ],
+        "package_id": "W05-07",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4282f5eafbfbad9db9eb6baf2c3ffd210e2066e6",
+        "scope_violation": false,
+        "summary": "APPROVE W05-07 candidate devin/pp/w05-07/impl-r4 @ 4282f5eafbfbad9db9eb6baf2c3ffd210e2066e6 (base 8e525d87). SCOPE (VERIFIED, git diff --stat: 13 files, +5144/-66): 6 files in write_paths; api.ts is purely additive (new OfflineReceiptWireEntry extends OfflineReceiptSubmission, nothing changed); sync.ts and syncRuntime.ts are under mobile-data (held) and are minimal wiring (offlineOutputSha256/toOfflineOutput; guardOfflinePaidReservations around the shipping recovery permit port + offline-paid exclusion from unfinished recovery); ResultScreen.tsx (apps/mobile/src/screens/, no serial group) is additive UI wiring the objective's 'held stays pending / refused surfaced honestly' clause requires; the three test files and the Edge __wf__ test are additive (fix-12 suite: +122/-0). No file under a serial group this package does not hold (runJournal.ts is untouched vs base). scope_violation=false. SHIPPING WIRING (VERIFIED by grep): runCaptureAnalysisCore serves both plain runCaptureAnalysis and runOriginalCaptureAnalysis (AnalyzeScreen path); saveOfflineAnalysis is called from the commit transaction; reconcileOfflineWallet/guardOfflinePaidReservations/offlinePaidOperationIds are called from configureSyncRuntime; readOfflineReceiptEvidence from ResultScreen. ACCEPTANCE (all re-run by me): AC1 exit 0, 69/69 (w01* glob matches nothing; W01 covered by AC3); AC2 proof holds — base 59 failed/38 passed of 97, exit 1; HEAD 97/97, exit 0; AC3 exit 0, 6773 passed / 1 skipped (importedRealFootageAnalysis.test.ts only) / 0 failed of 6774; AC4 tsc exit 0; AC5 eslint 0 problems + prettier clean on all 13 changed files. INVARIANTS (VERIFIED by reading the diff): the offline branch runs only when isReservationConnectivityFailure(error) AND trustedTime reads AND readCachedReleasePolicy().status==='active' AND readOfflineAllocation() yields an execution.kind==='active' grant (free grants need remaining>0); otherwise the pre-existing paywall/unavailable path is preserved verbatim. A scored result calls consumeOfflineAllocation({operationId,resultId,fullOutputSha256=sha256Hex(originalCanonicalJson(toOfflineOutput(result))),grantId}) inside the commit transaction (nested withTransaction is safe: scopedDatabase.transaction runs inline) and then saveOfflineAnalysis(), which re-parses the durable receipt row and refuses unless receipt.resultId===analysis.id and receipt.fullOutputSha256===offlineOutputSha256(analysis); it writes local_shot only — no shot.sync outbox row. Abstentions take the saveLocalOnlyAnalysis + requestRelease('low_confidence') path with no consume. consumed.replayed on a fresh run is an invalid_transition. Lost-ack after COMMIT returns the durable paid read via readOfflineScoredReplay (digest re-checked) rather than re-spending; hasProduct() blocks a second original attempt. Drain: wireEntry = {...flatReceipt, receipt:<persisted submission>, grant:{schemaVersion: OFFLINE_SIGNED_GRANT_SCHEMA_VERSION, compactJws:<held grant JWS>}, output: toOfflineOutput(shot) only if its digest equals receipt.fullOutputSha256 else null}; server parseOfflineReceiptEntry reads only nested keys. Accepted → recordShotSyncReceipt() = the same INSERT OR REPLACE INTO sync_receipt ('shot.sync', id) a successful shot.sync performs; held stays pending (re-presented next drain); refused is settled and surfaced with the server code on ResultScreen. Owner isolation: OWNER_SCOPED_TABLES gains offline_wallet_journal/offline_receipt/offline_ticket/offline_grant so purgeOwnerData removes the owner's wallet; all new receipt reads are owner_key-scoped and go through parseReceiptRow. No migrations, RLS, grants, edge index, diagnostics or secrets touched. Comment check: every base comment line in all 9 changed source/test files is present verbatim in the candidate (script over base vs HEAD, 0 missing). No test deletions/reorders (test diffs are additions only), no || true / passWithNoTests / ts-ignore / any / eslint-disable / .skip / .only / timeouts in the diff. User-facing copy (ResultScreen) uses 'rated on court with an offline allocation', 'receipt', 'server accepts' — no forbidden terms, accuracy claims or superlatives. Non-blocking notes are listed separately (5xx counted as connectivity; offline-paid journal row never committed but excluded from recovery; AC1 glob mismatch; Edge test is a contract pin passing on base too).",
+        "verdict": "approve"
+      },
+      "round": 6
+    }
+  ],
+  "status": "ACCEPTED",
+  "wave_id": "verify-6"
+}

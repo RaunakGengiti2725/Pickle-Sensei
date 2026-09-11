@@ -22,6 +22,8 @@ export interface OutboxRow {
   payload: string;
   attempts: number;
   last_error: string | null;
+  last_attempt_order: number;
+  repair_reason: string | null;
 }
 
 export interface FakeLocalDb {
@@ -31,7 +33,12 @@ export interface FakeLocalDb {
   receipts: Array<{ owner: string; kind: string; entityId: string }>;
   kv: Map<string, string>;
   shots: Array<{ owner: string; id: string; sessionId: string | null }>;
-  sessions: Array<{ owner: string; id: string; mode: string }>;
+  sessions: Array<{
+    owner: string;
+    id: string;
+    mode: string;
+    startedAt?: string;
+  }>;
   captures: Array<{ owner: string; id: string }>;
   analysisRecords: Array<{ owner: string; id: string }>;
   /** Fail the next statement whose SQL contains `needle` (once). */
@@ -126,18 +133,93 @@ export function createFakeLocalDb(): FakeLocalDb {
           payload: String(params[params.length - 1]),
           attempts: 0,
           last_error: null,
+          last_attempt_order: 0,
+          repair_reason: null,
         });
         return { rows: [] };
       }
+      if (sql.startsWith('SELECT payload FROM outbox')) {
+        const key = sql.includes("'$.trialId'") ? 'trialId' : 'id';
+        return {
+          rows: outbox
+            .filter(row => {
+              if (row.owner_key !== params[0] || row.kind !== params[1])
+                return false;
+              try {
+                const value: unknown = JSON.parse(row.payload);
+                return (
+                  typeof value === 'object' &&
+                  value !== null &&
+                  !Array.isArray(value) &&
+                  (value as Record<string, unknown>)[key] === params[2]
+                );
+              } catch {
+                return false;
+              }
+            })
+            .slice(0, 51)
+            .map(row => ({ payload: row.payload })),
+        };
+      }
+      if (sql.startsWith('SELECT COALESCE(MAX(last_attempt_order)')) {
+        return {
+          rows: [
+            {
+              ordinal:
+                Math.max(
+                  0,
+                  ...outbox
+                    .filter(row => row.owner_key === params[0])
+                    .map(row => row.last_attempt_order),
+                ) + 1,
+            },
+          ],
+        };
+      }
+      if (sql.startsWith('SELECT id, started_at FROM local_session')) {
+        return {
+          rows: sessions
+            .filter(row => row.owner === params[0] && row.id === params[1])
+            .slice(0, 1)
+            .map(row => ({ id: row.id, started_at: row.startedAt })),
+        };
+      }
       if (sql.startsWith('SELECT id, kind, payload')) {
+        if (sql.includes("kind = 'session.create'")) {
+          return {
+            rows: outbox
+              .filter(row => {
+                if (
+                  row.owner_key !== params[0] ||
+                  row.kind !== 'session.create'
+                )
+                  return false;
+                try {
+                  return (
+                    (JSON.parse(row.payload) as { id?: unknown } | null)?.id ===
+                    params[1]
+                  );
+                } catch {
+                  return false;
+                }
+              })
+              .sort((a, b) => a.id - b.id)
+              .slice(0, 1)
+              .map(row => ({ ...row })),
+          };
+        }
         return {
           rows: outbox
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
+                r.attempts < Number(params[1]) &&
+                r.repair_reason === null,
             )
-            .sort((a, b) => a.id - b.id)
+            .sort(
+              (a, b) =>
+                a.last_attempt_order - b.last_attempt_order || a.id - b.id,
+            )
             .slice(0, 50)
             .map(r => ({ ...r })),
         };
@@ -150,16 +232,32 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('UPDATE outbox')) {
+        const repair = sql.includes('SET repair_reason = ?, last_error = ?');
         const row = outbox.find(
-          r => r.owner_key === params[1] && r.id === params[2],
+          r =>
+            r.owner_key === params[repair ? 2 : 1] &&
+            r.id === params[repair ? 3 : 2],
         );
         if (row) {
-          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
-          row.last_error = String(params[0]);
+          if (repair) {
+            row.repair_reason = String(params[0]);
+            row.last_error = String(params[1]);
+          } else if (sql.includes('SET last_attempt_order = ?'))
+            row.last_attempt_order = Number(params[0]);
+          else if (
+            sql.includes('SET attempts = attempts + 1, last_error = ?')
+          ) {
+            row.attempts += 1;
+            row.last_error = String(params[0]);
+          } else if (sql.includes('SET last_error = ?'))
+            row.last_error = String(params[0]);
+          else throw new Error(`fakeLocalDb: unknown outbox update ${sql}`);
         }
         return { rows: [] };
       }
-      if (sql.includes('SELECT attempts, last_error FROM outbox')) {
+      if (
+        sql.includes('SELECT attempts, last_error, repair_reason FROM outbox')
+      ) {
         const rows = outbox
           .filter(r => {
             if (r.owner_key !== params[0] || r.kind !== 'shot.sync') {
@@ -175,7 +273,11 @@ export function createFakeLocalDb(): FakeLocalDb {
           })
           .sort((a, b) => b.id - a.id)
           .slice(0, 1)
-          .map(r => ({ attempts: r.attempts, last_error: r.last_error }));
+          .map(r => ({
+            attempts: r.attempts,
+            last_error: r.last_error,
+            repair_reason: r.repair_reason,
+          }));
         return { rows };
       }
       if (sql.startsWith('SELECT count(*)')) {
@@ -206,6 +308,7 @@ export function createFakeLocalDb(): FakeLocalDb {
           owner: String(params[0]),
           id: String(params[1]),
           mode: String(params[2]),
+          startedAt: String(params[3]),
         });
         return { rows: [] };
       }
@@ -252,6 +355,8 @@ export function createFakeLocalDb(): FakeLocalDb {
         payload: JSON.stringify(payload),
         attempts: 0,
         last_error: null,
+        last_attempt_order: 0,
+        repair_reason: null,
       });
       return id;
     },

@@ -56,6 +56,151 @@ export const color = {
   flameTint: 'rgba(255,155,66,0.12)',
 } as const;
 
+/**
+ * Rank insignia materials — one flat four-tone palette per tier (shadow
+ * facet → body → lit facet → brightest edge), so the badges read as copper,
+ * steel, gold, ice and sapphire without a single gradient. `accent` is the
+ * tone the surrounding UI borrows (ladder fills, pills); every tier's
+ * `accent` keeps ≥ 4.5:1 against `color.surfaceDark`.
+ */
+export const rankTier = {
+  bronze: {
+    deep: '#6B3A1A',
+    base: '#B0683A',
+    light: '#DC9962',
+    bright: '#F7CFA3',
+    accent: '#DC9962',
+    tint: 'rgba(220,153,98,0.14)',
+  },
+  silver: {
+    deep: '#5A686F',
+    base: '#97A5AC',
+    light: '#C6D2D7',
+    bright: '#F0F5F7',
+    accent: '#C6D2D7',
+    tint: 'rgba(198,210,215,0.14)',
+  },
+  gold: {
+    deep: '#8A5B08',
+    base: '#D6A21F',
+    light: '#F4C84C',
+    bright: '#FFEBA8',
+    accent: '#F4C84C',
+    tint: 'rgba(244,200,76,0.14)',
+  },
+  platinum: {
+    deep: '#1C6874',
+    base: '#3CA5B3',
+    light: '#7DD5DF',
+    bright: '#CBF4F8',
+    accent: '#7DD5DF',
+    tint: 'rgba(125,213,223,0.14)',
+  },
+  diamond: {
+    deep: '#39379B',
+    base: '#5E65E2',
+    light: '#9AA8FF',
+    bright: '#DCE1FF',
+    accent: '#9AA8FF',
+    tint: 'rgba(154,168,255,0.14)',
+  },
+} as const;
+
+/**
+ * Achievement badge materials — one flat four-tone palette per RARITY
+ * (shadow facet → body → lit facet → brightest edge), the same grammar as
+ * `rankTier` so the consistency badges and the rank insignia read as one
+ * family without a gradient anywhere. The ladder climbs from chalk through
+ * the court's own greens to the house volt, then violet, the streak's flame
+ * and a mythic ember: common → uncommon → rare → epic → legendary → mythic.
+ * `accent` is what the surrounding UI borrows on dark surfaces (≥ 4.5:1
+ * against `color.surfaceDark`); `deep` is the text tone on light surfaces
+ * (≥ 4.5:1 against `color.surface`). `plaque` is the engraved band the
+ * numeral sits on — ink for every rarity, so the digits always read.
+ */
+export const achievementRarity = {
+  common: {
+    deep: '#6A665A',
+    base: '#A39E8F',
+    light: '#D2CEC1',
+    bright: '#F3F0E6',
+    accent: '#D2CEC1',
+    tint: 'rgba(210,206,193,0.14)',
+  },
+  uncommon: {
+    deep: '#0B4A35',
+    base: '#0F7A56',
+    light: '#3FB88A',
+    bright: '#A6EBCB',
+    accent: '#3FB88A',
+    tint: 'rgba(63,184,138,0.14)',
+  },
+  rare: {
+    deep: '#5A6A0C',
+    base: '#A8C51C',
+    light: '#D7FA45',
+    bright: '#F1FFB0',
+    accent: '#D7FA45',
+    tint: 'rgba(215,250,69,0.14)',
+  },
+  epic: {
+    deep: '#4A2C8F',
+    base: '#6E48CF',
+    light: '#9C7DF2',
+    bright: '#D9CCFF',
+    accent: '#B39CFF',
+    tint: 'rgba(179,156,255,0.14)',
+  },
+  legendary: {
+    deep: '#8A3E0B',
+    base: '#D66A1F',
+    light: '#FF9B42',
+    bright: '#FFD1A8',
+    accent: '#FF9B42',
+    tint: 'rgba(255,155,66,0.14)',
+  },
+  mythic: {
+    deep: '#7A1F3D',
+    base: '#C2325F',
+    light: '#FF6B9A',
+    bright: '#FFC1D6',
+    accent: '#FF8FB3',
+    tint: 'rgba(255,143,179,0.14)',
+  },
+} as const;
+
+/**
+ * Membership plan materials (the paywall's pricing page, on the app's chalk
+ * surface). The recommended plan is the one ink card on the page and its
+ * siblings are white — the dark "Pro" tile beside the standard models — so
+ * the recommendation is carried by the fill itself, not by chips or badges.
+ * Flat fills only; volt appears exactly twice: the recommended plan's badge
+ * and its amount while selected. Text on these fills keeps ≥ 4.5:1
+ * (`color.ink`/`color.inkSoft` on `plan`; `color.onDark`/`color.onDarkMuted`
+ * and `color.volt` on `hero`).
+ */
+export const membership = {
+  /** Sibling (non-recommended) plan card and its edge; ink-edged when chosen. */
+  plan: color.surfaceElevated,
+  planLine: color.line,
+  planSelectedLine: color.ink,
+  /** Recommended plan card; volt-edged when chosen. */
+  hero: color.ink,
+  heroSelectedLine: color.volt,
+} as const;
+
+/** The unearned badge: the same shapes cast in charcoal — visible on
+ * purpose (the silhouette of what is not yet earned is the advertisement)
+ * but never mistaken for a material. */
+export const achievementLocked = {
+  deep: '#10271E',
+  base: '#1A2D25',
+  light: '#31433B',
+  bright: '#66736D',
+  accent: '#819087',
+  tint: 'rgba(255,255,255,0.06)',
+} as const;
+
 export const space = {
   xxs: 2,
   xs: 4,

@@ -480,7 +480,10 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
             ).toHaveLength(0);
             expect(
               fake.outbox.filter(r => r.owner_key === ownerA),
-            ).toHaveLength(0);
+            ).toHaveLength(shotsA);
+            expect(
+              fake.receipts.some(receipt => receipt.owner === ownerA),
+            ).toBe(false);
             // Only B's runtime may hold a timer; A's stale schedule() is a
             // no-op for its dead generation.
             expect(jest.getTimerCount()).toBe(1);
@@ -602,10 +605,10 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
     );
   });
 
-  it('a shot whose session.create row never exists is re-sent on every drain with attempts pinned at 0 (unbounded retry — see analyzeScreenMatrix close-during-measuring)', async () => {
+  it('a missing session with no recoverable original metadata enters repair and is not sent on every timer tick', async () => {
     await recordScenario(
       SUITE,
-      'orphanSessionUnbounded',
+      'orphanSessionRepair',
       0,
       { drains: 40 },
       async () => {
@@ -616,14 +619,12 @@ describe('xc-matrix-behavioral: sync runtime under interleaving storms', () => {
           await advance(SYNC_RETRY_MAX_MS * 1.3);
         }
         const sends = server.received.filter(id => id === 'shot-0').length;
-        // Observational: the transient classification is by design
-        // (sync.ts TRANSIENT_SYNC_REJECTION_CODES) so the row is re-sent on
-        // every cadence tick for as long as the app lives.
-        expect(sends).toBe(41);
+        expect(sends).toBe(1);
         expect(fake.outbox[0]!.attempts).toBe(0);
-        expect(fake.outbox[0]!.last_error).toContain(
-          SESSION_NOT_FOUND_REJECTION,
-        );
+        expect(fake.outbox[0]).toMatchObject({
+          repair_reason: 'session.missing',
+          last_error: 'session.missing',
+        });
         return { sends, attempts: fake.outbox[0]!.attempts };
       },
     );

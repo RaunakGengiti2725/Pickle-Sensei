@@ -1,0 +1,120 @@
+{
+  "area": "native-bridge-contract",
+  "breaks": [
+    {
+      "expected": "TS seam rejects a request it can prove invalid before crossing the bridge (defense in depth; the seam is the only place a JS-side engine bug would be caught). Scope note: at 30a40650 no shipping screen calls startSessionCapture/extractSessionEventClip (only src/flow/*, src/data/offlineCapabilities.ts reference it), so this is a library-seam gap, not a user-reachable break — hence P3.",
+      "observed": "VERIFIED: all 8 invalid requests reached mockBridge.extractSessionEventClip (received labels: NaN startMs, reversed bounds, zero-length window, negative startMs, peak outside window, confidence above 1, infinite endMs, empty detectionModelVersion). TS relies entirely on Swift `camera.invalid_extraction_request` (INFERRED from PickleVideoCapture.swift; not proven on Linux).",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A1'  (exit 1 in the full-file run: 6 failed/13 passed/0 skipped of 19; artifact artifacts/adv/session-attack.run2.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+      "title": "extractSessionEventClip() forwards semantically invalid extraction requests (NaN/reversed/zero-length/negative bounds, peak outside window, confidence>1, infinite end, empty model version) to native without TS-side validation"
+    },
+    {
+      "expected": "Receipt id validated against the shape Swift actually issues (UUID-like / no control chars / bounded length) so a corrupt receipt fails fast instead of being threaded into stop()/extract()/event correlation. Library seam not wired to a screen at this SHA -> P3.",
+      "observed": "VERIFIED: receipts {sessionCaptureId:'   '}, 'a\\nb', 'a\\u0000b', 'x'.repeat(4096) all resolved as valid receipts; only `typeof === 'string' && length > 0` is checked (capture.ts startSessionCapture).",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A2'  (artifact artifacts/adv/session-attack.run2.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+      "title": "startSessionCapture() accepts any non-empty string as sessionCaptureId (whitespace-only, embedded newline, NUL byte, 4096-char id) and records camera_startup_succeeded"
+    },
+    {
+      "expected": "Ids native could never have issued are rejected at the TS seam. Library seam -> P3.",
+      "observed": "VERIFIED: mockBridge.stopSessionCapture was called with '', '   ' and 'a\\nb'. Native mapping to camera.session_not_found is INFERRED only.",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A3 .* does not forward'  (artifact artifacts/adv/session-attack.run2.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+      "title": "stopSessionCapture() forwards empty / whitespace-only / control-character session ids to native instead of rejecting locally"
+    },
+    {
+      "expected": "Returned trigger provenance cross-checked against the request before the clip is bound to the event (or documented as intentionally native-trusted). Library seam -> P3.",
+      "observed": "VERIFIED: a clip whose trigger spans 300ms for an 800ms proposal, and a clip stamped modelVersion 'temporal-stroke-heuristic-2' for a request made with SESSION_ENGINE_VERSION, both returned status 'extracted'. Only captureMode and poseSequence presence are checked (sessionNative.ts). Swift echoes detectionModelVersion and rebases the window (INFERRED from ClipMediaStore.swift 1189-1199), so a healthy native never produces this; TS simply trusts it.",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A4'  (2 of 3 A4 tests fail; artifact artifacts/adv/session-attack.run2.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+      "title": "createNativeSessionEventClipSource() attaches a native clip to a session event without correlating the returned trigger window length or trigger.modelVersion to the proposal / SESSION_ENGINE_VERSION"
+    },
+    {
+      "expected": "start refuses (or callers are contractually required to gate on sessionCaptureAvailable(); today the only caller path is nativeSessionMotionFeedAvailability() in src/flow/session.ts, and no screen starts a session at this SHA) -> P3.",
+      "observed": "VERIFIED: with NativeModules.PickleVideoCapture.stopSessionCapture deleted, sessionCaptureAvailable() === false yet startSessionCapture() resolved {sessionCaptureId:'orphan'} — a session that can never be stopped from TS.",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'partial bridge'  (artifact artifacts/adv/session-attack.run2.log lines 124-140)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+      "title": "startSessionCapture() succeeds on a partial bridge (stopSessionCapture missing) while sessionCaptureAvailable() reports false — start is gated only on its own method"
+    },
+    {
+      "expected": "A file URI with an empty path is rejected like other malformed URIs; downstream readCaptureArtifact/verify would otherwise fail later with a less honest error.",
+      "observed": "VERIFIED: guided payload with uri 'file:' validated as a CapturedClip; the other 5 malformed scalars in the same attack (fps:true, width:'1080', byteSize:0, preRollMs:-1, capturedAtIso:'yesterday') were rejected. Swift emits url.absoluteString of a real file (INFERRED), so this is only reachable via a corrupt persisted payload or bridge fault.",
+      "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.capture.attack.test.ts -t 'malformed scalars'  (exit 1 in the full-file run: 1 failed/15 passed/0 skipped of 16; artifact artifacts/adv/capture-attack.run2.log)",
+      "severity": "P3",
+      "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.capture.attack.test.ts",
+      "title": "assertCapturedClip() accepts a path-less `uri: 'file:'` (startsWith('file:') is the only URI check)"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-native-bridge-contract-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/568ba46f-afd4-4aa9-a71a-4fb7fbd142e4/session-attack.run2.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/b2115eb0-e58d-4987-a4e9-76b3aa7004be/capture-attack.run2.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6dd8108b-1f36-4273-8b90-2ab78deb13d8/mobile-jest-full.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f966a3eb-3ddd-41bb-8c36-ea1c608c3215/tsc.log"
+    ],
+    "attack_branch": "devin/pp/adv/native-bridge-contract-30a40650",
+    "attack_branch_sha": "250434737ddd799e1730a466a556564aa66e597d",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 35,
+    "breaks": [
+      {
+        "expected": "TS seam rejects a request it can prove invalid before crossing the bridge (defense in depth; the seam is the only place a JS-side engine bug would be caught). Scope note: at 30a40650 no shipping screen calls startSessionCapture/extractSessionEventClip (only src/flow/*, src/data/offlineCapabilities.ts reference it), so this is a library-seam gap, not a user-reachable break — hence P3.",
+        "observed": "VERIFIED: all 8 invalid requests reached mockBridge.extractSessionEventClip (received labels: NaN startMs, reversed bounds, zero-length window, negative startMs, peak outside window, confidence above 1, infinite endMs, empty detectionModelVersion). TS relies entirely on Swift `camera.invalid_extraction_request` (INFERRED from PickleVideoCapture.swift; not proven on Linux).",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A1'  (exit 1 in the full-file run: 6 failed/13 passed/0 skipped of 19; artifact artifacts/adv/session-attack.run2.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+        "title": "extractSessionEventClip() forwards semantically invalid extraction requests (NaN/reversed/zero-length/negative bounds, peak outside window, confidence>1, infinite end, empty model version) to native without TS-side validation"
+      },
+      {
+        "expected": "Receipt id validated against the shape Swift actually issues (UUID-like / no control chars / bounded length) so a corrupt receipt fails fast instead of being threaded into stop()/extract()/event correlation. Library seam not wired to a screen at this SHA -> P3.",
+        "observed": "VERIFIED: receipts {sessionCaptureId:'   '}, 'a\\nb', 'a\\u0000b', 'x'.repeat(4096) all resolved as valid receipts; only `typeof === 'string' && length > 0` is checked (capture.ts startSessionCapture).",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A2'  (artifact artifacts/adv/session-attack.run2.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+        "title": "startSessionCapture() accepts any non-empty string as sessionCaptureId (whitespace-only, embedded newline, NUL byte, 4096-char id) and records camera_startup_succeeded"
+      },
+      {
+        "expected": "Ids native could never have issued are rejected at the TS seam. Library seam -> P3.",
+        "observed": "VERIFIED: mockBridge.stopSessionCapture was called with '', '   ' and 'a\\nb'. Native mapping to camera.session_not_found is INFERRED only.",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A3 .* does not forward'  (artifact artifacts/adv/session-attack.run2.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+        "title": "stopSessionCapture() forwards empty / whitespace-only / control-character session ids to native instead of rejecting locally"
+      },
+      {
+        "expected": "Returned trigger provenance cross-checked against the request before the clip is bound to the event (or documented as intentionally native-trusted). Library seam -> P3.",
+        "observed": "VERIFIED: a clip whose trigger spans 300ms for an 800ms proposal, and a clip stamped modelVersion 'temporal-stroke-heuristic-2' for a request made with SESSION_ENGINE_VERSION, both returned status 'extracted'. Only captureMode and poseSequence presence are checked (sessionNative.ts). Swift echoes detectionModelVersion and rebases the window (INFERRED from ClipMediaStore.swift 1189-1199), so a healthy native never produces this; TS simply trusts it.",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'ATTACK A4'  (2 of 3 A4 tests fail; artifact artifacts/adv/session-attack.run2.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+        "title": "createNativeSessionEventClipSource() attaches a native clip to a session event without correlating the returned trigger window length or trigger.modelVersion to the proposal / SESSION_ENGINE_VERSION"
+      },
+      {
+        "expected": "start refuses (or callers are contractually required to gate on sessionCaptureAvailable(); today the only caller path is nativeSessionMotionFeedAvailability() in src/flow/session.ts, and no screen starts a session at this SHA) -> P3.",
+        "observed": "VERIFIED: with NativeModules.PickleVideoCapture.stopSessionCapture deleted, sessionCaptureAvailable() === false yet startSessionCapture() resolved {sessionCaptureId:'orphan'} — a session that can never be stopped from TS.",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts -t 'partial bridge'  (artifact artifacts/adv/session-attack.run2.log lines 124-140)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.session.attack.test.ts",
+        "title": "startSessionCapture() succeeds on a partial bridge (stopSessionCapture missing) while sessionCaptureAvailable() reports false — start is gated only on its own method"
+      },
+      {
+        "expected": "A file URI with an empty path is rejected like other malformed URIs; downstream readCaptureArtifact/verify would otherwise fail later with a less honest error.",
+        "observed": "VERIFIED: guided payload with uri 'file:' validated as a CapturedClip; the other 5 malformed scalars in the same attack (fps:true, width:'1080', byteSize:0, preRollMs:-1, capturedAtIso:'yesterday') were rejected. Swift emits url.absoluteString of a real file (INFERRED), so this is only reachable via a corrupt persisted payload or bridge fault.",
+        "repro": "cd apps/mobile && npx jest --ci --silent __tests__/adv/nativeBridgeContract.capture.attack.test.ts -t 'malformed scalars'  (exit 1 in the full-file run: 1 failed/15 passed/0 skipped of 16; artifact artifacts/adv/capture-attack.run2.log)",
+        "severity": "P3",
+        "test_file": "apps/mobile/__tests__/adv/nativeBridgeContract.capture.attack.test.ts",
+        "title": "assertCapturedClip() accepts a path-less `uri: 'file:'` (startsWith('file:') is the only URI check)"
+      }
+    ],
+    "package_id": "INT-native-bridge-contract",
+    "summary": "INT-native-bridge-contract adversary against 30a4065036a917514fb4984fde73f87867f38619 (branch devin/1788854799-production-program-integration). Attack branch devin/pp/adv/native-bridge-contract-30a40650 @ 250434737ddd799e1730a466a556564aa66e597d adds ONLY two Jest files under apps/mobile/__tests__/adv/ (no production code, no existing test touched; `git diff --stat HEAD~1 HEAD` = 2 files, +1272). 35 attack tests in 14 groups. No P0/P1 found: every confirmed finding is P3 defense-in-depth on TS seams that either (a) belong to the session-capture surface which NO shipping screen invokes at this SHA (grep: only src/camera/capture.ts, src/flow/session.ts, src/flow/sessionNative.ts, src/data/offlineCapabilities.ts reference startSessionCapture/extractSessionEventClip/LiveSessionFlow), or (b) require a payload Swift does not emit.\n\nCOMMANDS/RESULTS (all VERIFIED, all run from apps/mobile after `npm ci` — the pre-existing node_modules lacked @sentry/react-native@8.24.0 and produced 20 unrelated tsc errors until reinstalled):\n1. `npx tsc --noEmit` -> exit 0 (artifacts/adv/tsc.log, empty).\n2. `npx jest --ci --silent __tests__/adv/nativeBridgeContract.session.attack.test.ts` -> exit 1; 19 executed, 13 passed, 6 failed, 0 skipped (artifacts/adv/session-attack.run2.log). Failing = breaks A1, A2, A3, A4(x2), A8-partial-bridge above.\n3. `npx jest --ci --silent __tests__/adv/nativeBridgeContract.capture.attack.test.ts` -> exit 1; 16 executed, 15 passed, 1 failed, 0 skipped (artifacts/adv/capture-attack.run2.log). Failing = break B3-uri above.\n4. Canonical full mobile suite `npx jest --ci --silent` -> exit 1; Test Suites 2 failed / 1 skipped / 313 passed (316); Tests 7 failed / 1 skipped / 6076 passed (6084) (artifacts/adv/mobile-jest-full.log). The 2 failing suites are exactly the two attack files (7 = 6+1); every pre-existing suite passes on HEAD, the skipped suite is pre-existing.\n\nATTACKS THAT DID NOT BREAK (passing tests are seam evidence; commands = #2 for A*, #3 for B*):\n- A2 (numeric/missing sessionCaptureId receipt): rejected with 'invalid session receipt' and camera_startup_failed{invalid_session_receipt} recorded.\n- A3 (native rejects stop with camera.session_not_found): error propagated verbatim with code.\n- A4 control: a clip whose trigger mirrors the proposal is 'extracted'.\n- A5 hostile motion payloads (string numerics, negative/infinite tMs, negative v, non-string captureId/emittedAtIso, missing fields, null/array/valueOf objects): all 13 dropped, droppedInvalidSamples()==13, engine never fed, valid sample after storm flows; unrelated event types and foreign captureId ignored without counting.\n- A6 event ordering: late motion samples after flow.ended()/stop are ignored and the feed disconnects; out-of-order/replayed samples do not crash.\n- A7 double start: second startSessionCapture while native reports camera.session_busy propagates the busy error unchanged.\n- A8 permission denial / camera.session_start_failed / non-Error rejection: propagated verbatim with camera_startup_failed{native_session_start_error}; partial-bridge capability reporting itself (sessionCaptureAvailable()==false) is correct.\n- A9 null-vs-omitted optional fields in extracted clip receipts: validator behaves identically for null and undefined where the contract says optional; required fields as null rejected.\n- B1 permission denial then recovery: camera.permission_denied propagates verbatim, lock released, next capture and import start; synchronous native throw surfaces its own code (not camera.busy) and releases the lock.\n- B2 settlement order after cancel: native rejecting with camera.interrupted after cancel still yields camera.cancelled; a poisoned native success (https uri) arriving after cancel is discarded, never validated/returned; a hung native op keeps the camera.busy barrier until native settles (documented recovery cost, not a break).\n- B3 boundary: trigger.endMs === durationMs accepted, durationMs+1 rejected; evidence trackedDurationMs > trigger window rejected.\n- B4 imported pose receipt: framesTotal == MAX_IMPORTED_POSE_FRAMES accepted, +1 rejected; sidecar frameCount drift / zero poses / framesWithPose>framesTotal rejected; seed {0,1} forwarded, seeds 1.0000001 / NaN / -0.0001 rejected before the bridge; all six camera.import_* failure codes survive runNativeCameraOperation and the lock is released.\n- B5 byte-comparison echo: extra key, stale operationId, foreign receiptId, stringified expectedByteSize, status 'verified'/true, array echo -> all 'invalid'; default operation id matches Swift's ^[A-Za-z0-9_-]{1,128}$ and the request carries exactly {uri, operationId, byteSize, nativeMediaIdentity}; camera.byte_comparison_unavailable -> 'unavailable', camera.invalid_byte_comparison_request / undefined echo -> 'invalid'; account switch mid-comparison -> 'cancelled' even when native answers verified.\n\nNOT_YET_VERIFIABLE (needs Xcode/simulator/device; NOT run per coordinator rule; exact command from a Mac checkout of 30a40650: `scripts/mac-full-verify.sh --remote`, or locally `scripts/mac-full-verify.sh`):\n- INFERRED risk worth a native test: ClipMediaStore.exportStrokeWindow emits trigger.endMs = event.endMs - selectedStart (line ~1192) but durationMs = measured exported asset duration (line ~1337). When the rolling recording ends at/near the stroke end (selectedEnd clamped to artifact.lastFrameTimestampMs, e.g. stop immediately after a swing), frame-boundary rounding can make measured durationMs < trigger.endMs by a few ms and TS assertCapturedClip (isTrigger endMs <= durationMs) would reject the clip as 'invalid or incomplete'. Only an on-device export can confirm or refute.\n- Swift-side mappings assumed by the TS tests: camera.session_busy on second start, camera.permission_denied, camera.session_not_found, camera.invalid_extraction_request, camera.extraction_failed, import_pose_extraction progress events carrying captureId/operationId, real compareCapturedClipBytes echo shape, and NativeEventEmitter delivery order under backgrounding.\n- Simulator vs device: Vision body-pose availability, AVAssetExportSession passthrough behaviour and camera permission prompts.\n\nOther observations (not breaks): assertCapturedClip accepts non-integer durationMs/postRollMs (Swift always emits Int); AnalyzeScreen import-progress matching accepts events with captureId === undefined after a run has latched an id (screen-level, not attacked here). No PR opened; nothing pushed to main or ci/mac-*; no force-push."
+  },
+  "status": "DONE"
+}

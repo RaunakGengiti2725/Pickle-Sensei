@@ -35,13 +35,55 @@ export function firstPlayableMedia(
   );
 }
 
-function MediaAttribution(props: { media: InstructionalMedia }) {
+function MediaAttribution(props: {
+  media: InstructionalMedia;
+  dark?: boolean;
+}) {
   return (
-    <Text style={[type.caption, styles.attribution]}>
+    <Text
+      style={[
+        type.caption,
+        styles.attribution,
+        props.dark && { color: color.onDarkMuted },
+      ]}
+    >
       {props.media.creatorName} · {props.media.licenseName}
     </Text>
   );
 }
+
+/** Text/tint roles of a drill card on the light (Library) and dark (Result
+ * breakdown) surfaces; layout is shared, only color changes. */
+const CARD_PALETTE = {
+  light: {
+    text: color.ink,
+    muted: color.inkSoft,
+    accent: color.court,
+    badge: color.courtSoft,
+    badgeDone: color.court,
+    chip: color.surfaceAlt,
+    cue: color.voltSoft,
+    cueDot: color.court,
+    line: color.line,
+    button: color.ink,
+    buttonDone: color.goodSoft,
+    done: color.good,
+  },
+  dark: {
+    text: color.onDark,
+    muted: color.onDarkMuted,
+    accent: color.volt,
+    badge: color.voltTint,
+    badgeDone: color.volt,
+    chip: color.onDarkTint,
+    cue: color.voltTint,
+    cueDot: color.volt,
+    line: color.lineDark,
+    button: color.volt,
+    buttonDone: color.mintTint,
+    done: color.mint,
+  },
+} as const;
 
 export function SavedDrillCard(props: {
   drill: SavedDrill;
@@ -115,6 +157,8 @@ export function PlanDrillCard(props: {
   onToggleSaved: () => void;
   onConfirmComplete: () => void;
   onOpenMedia: (media: InstructionalMedia) => void;
+  /** On the dark result breakdown: dark card, light text, volt accents. */
+  dark?: boolean;
 }) {
   const { item } = props;
   const drill = item.drill;
@@ -122,19 +166,31 @@ export function PlanDrillCard(props: {
   const media = firstPlayableMedia(props.detail);
   const target = prescriptionLabel(item);
   const complete = item.completion;
+  const dark = props.dark === true;
+  const palette = dark ? CARD_PALETTE.dark : CARD_PALETTE.light;
+  const buttonLabelColor = complete
+    ? palette.done
+    : dark
+      ? color.onVolt
+      : color.onDark;
   return (
-    <Card style={styles.planCard}>
+    <Card tone={dark ? 'dark' : 'light'} style={styles.planCard}>
       <View style={styles.cardTop}>
-        <View style={[styles.numberBadge, complete && styles.numberBadgeDone]}>
+        <View
+          style={[
+            styles.numberBadge,
+            { backgroundColor: complete ? palette.badgeDone : palette.badge },
+          ]}
+        >
           {complete ? (
             <Icon name="check" size={17} color={color.onVolt} />
           ) : (
-            <Text style={[type.micro, { color: color.court }]}>
+            <Text style={[type.micro, { color: palette.accent }]}>
               0{item.position}
             </Text>
           )}
         </View>
-        <Text style={[type.micro, { color: color.inkSoft }]}>
+        <Text style={[type.micro, { color: palette.muted }]}>
           {item.kind === 'warmup' ? 'WARM-UP' : 'TARGETED'}
         </Text>
         <View style={styles.flex} />
@@ -145,30 +201,38 @@ export function PlanDrillCard(props: {
           disabled={props.busy}
           onPress={props.onToggleSaved}
           containerStyle={styles.bookmarkContainer}
-          style={styles.bookmarkButton}
+          style={[styles.bookmarkButton, { backgroundColor: palette.chip }]}
         >
           <Icon
             name="bookmark"
             size={19}
-            color={drill.saved ? color.court : color.inkSoft}
+            color={drill.saved ? palette.accent : palette.muted}
           />
         </PressableScale>
       </View>
-      <Text style={[type.h2, styles.drillTitle]}>{drill.title}</Text>
-      <Text style={[type.body, styles.description]}>{drill.description}</Text>
+      <Text style={[type.h2, styles.drillTitle, { color: palette.text }]}>
+        {drill.title}
+      </Text>
+      <Text style={[type.body, styles.description, { color: palette.muted }]}>
+        {drill.description}
+      </Text>
       {item.cueText ? (
-        <View style={styles.cueRow}>
-          <View style={styles.cueDot} />
-          <Text style={[type.bodyBold, styles.cueText]}>{item.cueText}</Text>
+        <View style={[styles.cueRow, { backgroundColor: palette.cue }]}>
+          <View style={[styles.cueDot, { backgroundColor: palette.cueDot }]} />
+          <Text
+            style={[type.bodyBold, styles.cueText, { color: palette.text }]}
+          >
+            {item.cueText}
+          </Text>
         </View>
       ) : null}
-      <View style={styles.prescriptionRow}>
-        <Text style={[type.micro, { color: color.inkSoft }]}>PRESCRIPTION</Text>
-        <Text style={[type.bodyBold, { color: color.ink }]}>
+      <View style={[styles.prescriptionRow, { borderTopColor: palette.line }]}>
+        <Text style={[type.micro, { color: palette.muted }]}>PRESCRIPTION</Text>
+        <Text style={[type.bodyBold, { color: palette.text }]}>
           {target ?? '—'}
         </Text>
         {item.restSeconds !== null ? (
-          <Text style={[type.caption, { color: color.inkSoft }]}>
+          <Text style={[type.caption, { color: palette.muted }]}>
             {item.restSeconds}s rest
           </Text>
         ) : null}
@@ -178,18 +242,18 @@ export function PlanDrillCard(props: {
           accessibilityLabel={`Watch reviewed instruction for ${drill.title}`}
           accessibilityHint={media.attribution}
           onPress={() => props.onOpenMedia(media)}
-          style={styles.mediaRow}
+          style={[styles.mediaRow, { backgroundColor: palette.chip }]}
         >
           <View style={styles.playIcon}>
             <Icon name="play" size={18} color={color.onVolt} />
           </View>
           <View style={styles.flex}>
-            <Text style={[type.bodyBold, { color: color.ink }]}>
+            <Text style={[type.bodyBold, { color: palette.text }]}>
               Watch form
             </Text>
-            <MediaAttribution media={media} />
+            <MediaAttribution media={media} dark={dark} />
           </View>
-          <Icon name="arrow" size={18} color={color.inkSoft} />
+          <Icon name="arrow" size={18} color={palette.muted} />
         </PressableScale>
       ) : null}
       {complete || target !== null ? (
@@ -204,20 +268,17 @@ export function PlanDrillCard(props: {
             onPress={props.onConfirmComplete}
             style={[
               styles.completionButton,
-              complete && styles.completionButtonDone,
+              {
+                backgroundColor: complete ? palette.buttonDone : palette.button,
+              },
             ]}
           >
             <Icon
               name={complete ? 'check' : 'plus'}
               size={18}
-              color={complete ? color.good : color.onDark}
+              color={buttonLabelColor}
             />
-            <Text
-              style={[
-                type.bodyBold,
-                { color: complete ? color.good : color.onDark },
-              ]}
-            >
+            <Text style={[type.bodyBold, { color: buttonLabelColor }]}>
               {complete
                 ? complete.qualifiesForStreak
                   ? 'Completed · streak credit earned'
@@ -225,14 +286,22 @@ export function PlanDrillCard(props: {
                 : `I completed ${target}`}
             </Text>
           </PressableScale>
-          <Text style={[type.caption, styles.evidenceNote]}>
+          <Text
+            style={[
+              type.caption,
+              styles.evidenceNote,
+              { color: palette.muted },
+            ]}
+          >
             {complete
               ? `Logged ${new Date(complete.completedAt).toLocaleDateString()}`
               : 'Tap only after doing the prescribed work. The server records your confirmation as practice evidence.'}
           </Text>
         </>
       ) : (
-        <Text style={[type.caption, styles.evidenceNote]}>
+        <Text
+          style={[type.caption, styles.evidenceNote, { color: palette.muted }]}
+        >
           No sets, reps, or time were prescribed for this drill, so there is
           nothing to log yet. Save it to revisit once a prescription is
           attached.
@@ -256,7 +325,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10,
   },
-  numberBadgeDone: { backgroundColor: color.court },
   bookmarkContainer: { borderRadius: 22 },
   bookmarkButton: {
     width: 44,
@@ -324,7 +392,6 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     paddingHorizontal: space.md,
   },
-  completionButtonDone: { backgroundColor: color.goodSoft },
   evidenceNote: {
     color: color.inkSoft,
     textAlign: 'center',

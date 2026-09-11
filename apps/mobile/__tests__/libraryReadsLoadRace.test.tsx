@@ -1,3 +1,4 @@
+import { setActiveDataOwner } from '../src/data/accountScope';
 /**
  * XC-UAI-05 orderings the happy-path tests do not drive: a stale in-flight
  * read that settles AFTER a newer focus load, a read that settles after
@@ -181,6 +182,7 @@ function renderedTextOf(node: TestRenderer.ReactTestInstance): string {
 }
 
 beforeEach(() => {
+  setActiveDataOwner('11111111-1111-4111-8111-111111111111');
   mockNavigate.mockClear();
   mockFocus.callback = null;
   mockFocus.cleanup = undefined;

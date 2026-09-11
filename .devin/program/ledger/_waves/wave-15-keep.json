@@ -1,0 +1,48 @@
+{
+  "base_sha": "674bcacca4b58fef3864b25c0802be1954a54a83",
+  "integration_order": {},
+  "packages": {
+    "W04-03": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": null,
+      "status": "REQUEUE"
+    },
+    "W04-05": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w04-05/impl-r2",
+        "head_sha": "7ec8d097716ec08a6472462771be2d10d4821dd9",
+        "lane": 1,
+        "round": 2
+      },
+      "status": "ACCEPTED"
+    },
+    "W08-01": {
+      "agent_counts": {
+        "completed": 6,
+        "failed": 0,
+        "launched": 6,
+        "requested": 6
+      },
+      "candidate": {
+        "branch": "devin/pp/w08-01/impl-r9",
+        "head_sha": "4d0f5fab23fc7a27cf03d0175b30fd9568ae9956",
+        "lane": 1,
+        "round": 9
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-15-keep"
+}

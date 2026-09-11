@@ -1,0 +1,202 @@
+{
+  "area": "analysis-scoring",
+  "breaks": [
+    {
+      "expected": "SCORING_DEFINITION.version ('rank-form-weighted-v2') on every served rank so a consumer can tell a rating computed under an older definition apart (scoringDefinition.ts: 'summaries carry definitionVersion'; historical results never reinterpreted).",
+      "observed": "VERIFIED: body.rank = {\"rating\":7.5,\"tier\":\"diamond\",\"techniqueCount\":1,\"scoredShotCount\":3,\"updatedAt\":\"2026-09-01T00:00:00.000Z\",\"techniques\":[…]} — no definitionVersion key in either branch (buildRankResponse / inline fallback in supabase/functions/api/index.ts).",
+      "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (tests 'ADV R1 … (saved state)' and 'ADV R1 … (inline fallback)'; file result: 6 passed | 6 failed, exit 1)",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+      "title": "Edge GET /v1/rank payload carries no definitionVersion (saved state AND inline fallback) — historical rating cannot be attributed to its scoring definition"
+    },
+    {
+      "expected": "Corrupted persisted state never becomes a fabricated rank: tier re-derived via playerRankTierForRating(rating) or the row treated as no evidence / 503; rating outside [0,10] refused.",
+      "observed": "VERIFIED: {\"rating\":1.25,\"tier\":\"diamond\",…} served as-is; tier \"legend\" reaches the payload; rating 42 served with HTTP 200.",
+      "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (tests 'ADV R2: a saved tier that contradicts its rating…', 'ADV R2: an unknown saved tier string…', 'ADV R2: an out-of-range saved rating (42)…')",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+      "title": "Edge GET /v1/rank serves corrupt persisted player_rank_state verbatim: contradictory tier (diamond @ 1.25), unknown tier ('legend'), out-of-range rating (42) all return 200"
+    },
+    {
+      "expected": "A technique row with a null score is not countable (countability rule: finite score in [0,10] for scored rows) → { rank: null }.",
+      "observed": "VERIFIED: {\"rating\":0,\"tier\":\"bronze\",\"techniqueCount\":1,\"scoredShotCount\":null,\"updatedAt\":null,\"techniques\":[{\"shot_type\":\"dink\",\"score\":0,…}]} — Number(null) === 0 path in the fallback. (NaN / 'abc' / Infinity technique scores ARE correctly dropped → { rank: null }.)",
+      "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (test 'ADV R3: a technique row with a NULL score is no evidence → { rank: null }, not a Bronze 0.00')",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+      "title": "Edge inline rank fallback coerces a NULL technique score into 0 and serves Bronze 0.00 (fabricated numeric output from no evidence)"
+    },
+    {
+      "expected": "One verdict per submitted id (dedupe before settlement, or reject the batch as malformed) — acceptedIds ∩ rejected = ∅.",
+      "observed": "VERIFIED: {\"acceptedIds\":[\"c7b2e80f-…\"],\"rejected\":[{\"id\":\"c7b2e80f-…\",\"code\":\"access.release_not_authorized\",…}]} — the low_confidence copy settles, the scored copy is rejected, both under one id. The mobile parser (parseShotSyncAcknowledgement) refuses this body as sync.invalid_acknowledgement/502, so the whole batch is retried instead of being acknowledged.",
+      "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts  (test 'ADV A5'; file result: 9 passed | 2 failed, exit 1)",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts",
+      "title": "Edge POST /v1/shots:sync emits one id in BOTH acceptedIds and rejected when a batch carries the same id as scored and as low_confidence (no release authority)"
+    },
+    {
+      "expected": "Unique ids in acceptedIds ∪ rejected, each submitted id exactly once.",
+      "observed": "VERIFIED: acceptedIds = [\"e6d6a3a7-…\",\"e6d6a3a7-…\"] (apply_synced_shot answers 'accepted' for the idempotent replay too, and the route does not dedupe ids). The mobile parser refuses the body (502) so the settled shot is re-sent on the next flush — no double charge observed in the harness, but the client can never receive a clean ack for that batch until the duplicate disappears from its outbox.",
+      "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts  (test 'ADV A6b')",
+      "severity": "P1",
+      "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts",
+      "title": "Edge POST /v1/shots:sync returns duplicate acceptedIds for one scored id submitted twice under active release authority (repeated/double action)"
+    },
+    {
+      "expected": "Non-finite measurement values are not evidence: abstain (overallScore null, resultKind low_confidence) or drop the metric; a 'normal' run always has a finite score in [0,10].",
+      "observed": "VERIFIED: 'NaN value: presentation=normal with overallScore=NaN' and 'all NaN values: presentation=normal with overallScore=NaN'. P2 not P1 because on the shipping path packages/vision-geometry featureExtractor.add() drops non-finite values before the engine (INFERRED from code) and parseSyncShot refuses a NaN score at the Edge; the engine boundary itself has no finite guard.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringSyncAck.adv.test.ts __tests__/adv/analysisScoringEngineGates.adv.test.ts  (tests 'ADV engine gates › E2' and 'E2b'; file result: 3 failed, 12 passed, 15 total, exit 1)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringEngineGates.adv.test.ts",
+      "title": "packages/scoring scoreShot() yields presentation='normal' with overallScore=NaN when a measurement value is NaN (one metric or all metrics)"
+    },
+    {
+      "expected": "analysisConfidence clamped/validated to [0,1]; confidence outside the domain treated as invalid input, never amplified.",
+      "observed": "VERIFIED: Expected: <= 1, Received: 5. featureExtractor.add() only checks confidence is finite and > 0 (no upper clamp), so an over-1 pose confidence would reach the engine; the Edge parser would then refuse the row (confidence must be in [0,1]) and the device would retry forever.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringEngineGates.adv.test.ts  (test 'ADV engine gates › E5')",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringEngineGates.adv.test.ts",
+      "title": "packages/scoring scoreShot() propagates measurement confidence 5 into analysisConfidence=5 (outside [0,1]) on a 'normal' run"
+    },
+    {
+      "expected": "Identical technique order on mobile, Edge and TS for the same evidence (code-unit ascending on ties).",
+      "observed": "VERIFIED: expected [\"Dink\",\"_serve\",\"backhand\"], received [\"_serve\",\"backhand\",\"Dink\"] (apps/mobile/src/progress/playerRank.ts: a.shotType.localeCompare(b.shotType)). Edge fallback and computePlayerRank use code-unit order per SCORING_DEFINITION.components.recencyOrdering.techniqueOrder collation 'code-unit'.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (tests 'ADV M1 › summaryFromServer orders equal-score techniques exactly as computePlayerRank' and 'device and account summaries … same order'; file result: 15 failed, 40 passed, 55 total, exit 1)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+      "title": "Mobile summaryFromServer() orders equal-score techniques with localeCompare, not the declared code-unit collation → device vs account summaries disagree for the golden code-unit case"
+    },
+    {
+      "expected": "Tier always derived from rating (or the row refused) so a corrupted/legacy row never displays a wrong tier.",
+      "observed": "VERIFIED: tier stays 'diamond' at 1.25 (tierByKey(server.tier) ?? playerRankTierForRating(server.rating) only re-derives when the key is unknown).",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (tests 'ADV M2 › a known tier key that contradicts the rating…' and 'a contradictory stored tier never yields a negative next-tier gap')",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+      "title": "Mobile parsePlayerRank/summaryFromServer trusts a known-but-contradictory stored tier (diamond @ rating 1.25) → negative next-tier gap"
+    },
+    {
+      "expected": "Only primitive finite numbers in domain (rating/score in [0,10], counts non-negative integers consistent with technique rows); anything else → no rank shown (unknown/corrupt state never becomes a fabricated Bronze 0.00).",
+      "observed": "VERIFIED: finiteNumber() does Number(value) so Number('')===0, Number(true)===1, Number(null)===0, Number([])===0 become ratings; technique score 42 and count inconsistencies pass through. (String 'NaN', numeric NaN/Infinity and numeric out-of-range RATING are correctly refused.)",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (describe 'ADV M3: hostile /v1/rank payloads' — 10 failing cases)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+      "title": "Mobile parsePlayerRank accepts coercible/malformed /v1/rank values: \"7.5\", \"\" (→0, Bronze), true (→1), null (→0), [] (→0), technique score 42, fractional/negative techniqueCount, negative scoredShotCount, techniqueCount ≠ technique rows"
+    },
+    {
+      "expected": "Both summaries state the definition they were computed under so a historical server rating is never silently presented as a current-definition result.",
+      "observed": "VERIFIED: summaryFromServer(...) result has no definitionVersion; the device path (computePlayerRank) reports 'rank-form-weighted-v2'.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (test 'ADV M4 › the account summary carries the definitionVersion it was computed under')",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+      "title": "Mobile account summary (summaryFromServer) carries no definitionVersion while the device summary does"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-analysis-scoring-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7271aa9c-41ba-49e1-a565-bfe671ce0f36/jest-rank-parity.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/44188d1e-5a37-461e-bd90-894a9dd00d55/jest-syncack-engine.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/85039825-09e5-4cc2-943b-db054fa6624a/deno-rank-route.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d83b1c09-b6ab-493a-9b8c-45b814680231/deno-release-sync.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31c5a862-7c02-4598-990f-202750f1a0ec/deno-w06-golden-sql.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f47e2251-1492-4c90-acd4-930a0e120697/sql-adv.log"
+    ],
+    "attack_branch": "devin/pp/adv/analysis-scoring-30a40650",
+    "attack_branch_sha": "a57af77da166759b669e58ad7d7c1bbf9c5190f2",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 109,
+    "breaks": [
+      {
+        "expected": "SCORING_DEFINITION.version ('rank-form-weighted-v2') on every served rank so a consumer can tell a rating computed under an older definition apart (scoringDefinition.ts: 'summaries carry definitionVersion'; historical results never reinterpreted).",
+        "observed": "VERIFIED: body.rank = {\"rating\":7.5,\"tier\":\"diamond\",\"techniqueCount\":1,\"scoredShotCount\":3,\"updatedAt\":\"2026-09-01T00:00:00.000Z\",\"techniques\":[…]} — no definitionVersion key in either branch (buildRankResponse / inline fallback in supabase/functions/api/index.ts).",
+        "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (tests 'ADV R1 … (saved state)' and 'ADV R1 … (inline fallback)'; file result: 6 passed | 6 failed, exit 1)",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+        "title": "Edge GET /v1/rank payload carries no definitionVersion (saved state AND inline fallback) — historical rating cannot be attributed to its scoring definition"
+      },
+      {
+        "expected": "Corrupted persisted state never becomes a fabricated rank: tier re-derived via playerRankTierForRating(rating) or the row treated as no evidence / 503; rating outside [0,10] refused.",
+        "observed": "VERIFIED: {\"rating\":1.25,\"tier\":\"diamond\",…} served as-is; tier \"legend\" reaches the payload; rating 42 served with HTTP 200.",
+        "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (tests 'ADV R2: a saved tier that contradicts its rating…', 'ADV R2: an unknown saved tier string…', 'ADV R2: an out-of-range saved rating (42)…')",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+        "title": "Edge GET /v1/rank serves corrupt persisted player_rank_state verbatim: contradictory tier (diamond @ 1.25), unknown tier ('legend'), out-of-range rating (42) all return 200"
+      },
+      {
+        "expected": "A technique row with a null score is not countable (countability rule: finite score in [0,10] for scored rows) → { rank: null }.",
+        "observed": "VERIFIED: {\"rating\":0,\"tier\":\"bronze\",\"techniqueCount\":1,\"scoredShotCount\":null,\"updatedAt\":null,\"techniques\":[{\"shot_type\":\"dink\",\"score\":0,…}]} — Number(null) === 0 path in the fallback. (NaN / 'abc' / Infinity technique scores ARE correctly dropped → { rank: null }.)",
+        "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts  (test 'ADV R3: a technique row with a NULL score is no evidence → { rank: null }, not a Bronze 0.00')",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts",
+        "title": "Edge inline rank fallback coerces a NULL technique score into 0 and serves Bronze 0.00 (fabricated numeric output from no evidence)"
+      },
+      {
+        "expected": "One verdict per submitted id (dedupe before settlement, or reject the batch as malformed) — acceptedIds ∩ rejected = ∅.",
+        "observed": "VERIFIED: {\"acceptedIds\":[\"c7b2e80f-…\"],\"rejected\":[{\"id\":\"c7b2e80f-…\",\"code\":\"access.release_not_authorized\",…}]} — the low_confidence copy settles, the scored copy is rejected, both under one id. The mobile parser (parseShotSyncAcknowledgement) refuses this body as sync.invalid_acknowledgement/502, so the whole batch is retried instead of being acknowledged.",
+        "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts  (test 'ADV A5'; file result: 9 passed | 2 failed, exit 1)",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts",
+        "title": "Edge POST /v1/shots:sync emits one id in BOTH acceptedIds and rejected when a batch carries the same id as scored and as low_confidence (no release authority)"
+      },
+      {
+        "expected": "Unique ids in acceptedIds ∪ rejected, each submitted id exactly once.",
+        "observed": "VERIFIED: acceptedIds = [\"e6d6a3a7-…\",\"e6d6a3a7-…\"] (apply_synced_shot answers 'accepted' for the idempotent replay too, and the route does not dedupe ids). The mobile parser refuses the body (502) so the settled shot is re-sent on the next flush — no double charge observed in the harness, but the client can never receive a clean ack for that batch until the duplicate disappears from its outbox.",
+        "repro": "deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts  (test 'ADV A6b')",
+        "severity": "P1",
+        "test_file": "supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts",
+        "title": "Edge POST /v1/shots:sync returns duplicate acceptedIds for one scored id submitted twice under active release authority (repeated/double action)"
+      },
+      {
+        "expected": "Non-finite measurement values are not evidence: abstain (overallScore null, resultKind low_confidence) or drop the metric; a 'normal' run always has a finite score in [0,10].",
+        "observed": "VERIFIED: 'NaN value: presentation=normal with overallScore=NaN' and 'all NaN values: presentation=normal with overallScore=NaN'. P2 not P1 because on the shipping path packages/vision-geometry featureExtractor.add() drops non-finite values before the engine (INFERRED from code) and parseSyncShot refuses a NaN score at the Edge; the engine boundary itself has no finite guard.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringSyncAck.adv.test.ts __tests__/adv/analysisScoringEngineGates.adv.test.ts  (tests 'ADV engine gates › E2' and 'E2b'; file result: 3 failed, 12 passed, 15 total, exit 1)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringEngineGates.adv.test.ts",
+        "title": "packages/scoring scoreShot() yields presentation='normal' with overallScore=NaN when a measurement value is NaN (one metric or all metrics)"
+      },
+      {
+        "expected": "analysisConfidence clamped/validated to [0,1]; confidence outside the domain treated as invalid input, never amplified.",
+        "observed": "VERIFIED: Expected: <= 1, Received: 5. featureExtractor.add() only checks confidence is finite and > 0 (no upper clamp), so an over-1 pose confidence would reach the engine; the Edge parser would then refuse the row (confidence must be in [0,1]) and the device would retry forever.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringEngineGates.adv.test.ts  (test 'ADV engine gates › E5')",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringEngineGates.adv.test.ts",
+        "title": "packages/scoring scoreShot() propagates measurement confidence 5 into analysisConfidence=5 (outside [0,1]) on a 'normal' run"
+      },
+      {
+        "expected": "Identical technique order on mobile, Edge and TS for the same evidence (code-unit ascending on ties).",
+        "observed": "VERIFIED: expected [\"Dink\",\"_serve\",\"backhand\"], received [\"_serve\",\"backhand\",\"Dink\"] (apps/mobile/src/progress/playerRank.ts: a.shotType.localeCompare(b.shotType)). Edge fallback and computePlayerRank use code-unit order per SCORING_DEFINITION.components.recencyOrdering.techniqueOrder collation 'code-unit'.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (tests 'ADV M1 › summaryFromServer orders equal-score techniques exactly as computePlayerRank' and 'device and account summaries … same order'; file result: 15 failed, 40 passed, 55 total, exit 1)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+        "title": "Mobile summaryFromServer() orders equal-score techniques with localeCompare, not the declared code-unit collation → device vs account summaries disagree for the golden code-unit case"
+      },
+      {
+        "expected": "Tier always derived from rating (or the row refused) so a corrupted/legacy row never displays a wrong tier.",
+        "observed": "VERIFIED: tier stays 'diamond' at 1.25 (tierByKey(server.tier) ?? playerRankTierForRating(server.rating) only re-derives when the key is unknown).",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (tests 'ADV M2 › a known tier key that contradicts the rating…' and 'a contradictory stored tier never yields a negative next-tier gap')",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+        "title": "Mobile parsePlayerRank/summaryFromServer trusts a known-but-contradictory stored tier (diamond @ rating 1.25) → negative next-tier gap"
+      },
+      {
+        "expected": "Only primitive finite numbers in domain (rating/score in [0,10], counts non-negative integers consistent with technique rows); anything else → no rank shown (unknown/corrupt state never becomes a fabricated Bronze 0.00).",
+        "observed": "VERIFIED: finiteNumber() does Number(value) so Number('')===0, Number(true)===1, Number(null)===0, Number([])===0 become ratings; technique score 42 and count inconsistencies pass through. (String 'NaN', numeric NaN/Infinity and numeric out-of-range RATING are correctly refused.)",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (describe 'ADV M3: hostile /v1/rank payloads' — 10 failing cases)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+        "title": "Mobile parsePlayerRank accepts coercible/malformed /v1/rank values: \"7.5\", \"\" (→0, Bronze), true (→1), null (→0), [] (→0), technique score 42, fractional/negative techniqueCount, negative scoredShotCount, techniqueCount ≠ technique rows"
+      },
+      {
+        "expected": "Both summaries state the definition they were computed under so a historical server rating is never silently presented as a current-definition result.",
+        "observed": "VERIFIED: summaryFromServer(...) result has no definitionVersion; the device path (computePlayerRank) reports 'rank-form-weighted-v2'.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts  (test 'ADV M4 › the account summary carries the definitionVersion it was computed under')",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/analysisScoringRankParity.adv.test.ts",
+        "title": "Mobile account summary (summaryFromServer) carries no definitionVersion while the device summary does"
+      }
+    ],
+    "package_id": "INT-analysis-scoring",
+    "summary": "INDEPENDENT INTEGRATION ADVERSARY — INT-analysis-scoring @ 30a4065036a917514fb4984fde73f87867f38619 (branch devin/1788854799-production-program-integration). Attack branch devin/pp/adv/analysis-scoring-30a40650 @ a57af77da166759b669e58ad7d7c1bbf9c5190f2 (pushed; NO PR opened) contains ONLY six new test files (3 Jest, 2 Deno, 1 SQL); no production code, no existing test, no migration touched (`git show --stat a57af77`). Failing tests are left failing on purpose — they reproduce the confirmed breaks.\n\nATTACK BOUNDARIES PROBED (18): (1) mobile/Edge/SQL golden-fixture parity; (2) empty evidence → unranked, never Bronze; (3) 1-analysis window + confidence weight; (4) NaN/±Inf/negative/>10 scores; (5) low_confidence ⇒ no score / no rank contribution; (6) partial rows never chargeable/scored; (7) duplicate ids + conflicting replay order; (8) captured_at grammar/bounds; (9) shot_type length/whitespace; (10) definitionVersion provenance / no benchmark rescale; (11) missing/withdrawn/expired/not-yet-valid/half-approved release authority; (12) release-policy storage failure & slow read; (13) authority blocks scored while non-scored settles; (14) SQL recompute_player_rank parity with TS; (15) corrupt persisted rank state; (16) network loss / slow response / double action / account switch on rank & sync routes; (17) engine hostile measurements; (18) pipeline empty/short input. 109 test cases total (Jest 55+15, Deno 12+11, SQL 16 probes).\n\nRUNS (all VERIFIED on this Linux box, Node 22 / Deno 2.9.6 / postgres:16 throwaway container `pickle-audit` on 127.0.0.1:55432 with shim_auth.sql + every migration applied):\n• `cd apps/mobile && npx jest __tests__/adv/analysisScoringRankParity.adv.test.ts` → exit 1, Tests: 15 failed, 40 passed, 55 total (artifact artifacts/adv/analysis-scoring/jest-rank-parity.log, uploaded).\n• `cd apps/mobile && npx jest __tests__/adv/analysisScoringSyncAck.adv.test.ts __tests__/adv/analysisScoringEngineGates.adv.test.ts` → exit 1, Tests: 3 failed, 12 passed, 15 total (jest-syncack-engine.log).\n• `deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_rank_route.test.ts` → exit 1, 6 passed | 6 failed (deno-rank-route.log).\n• `deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_analysis_scoring_release_sync.test.ts` → exit 1, 9 passed | 2 failed (deno-release-sync.log).\n• `docker cp supabase/tests/adv_analysis_scoring.sql pickle-audit:/tests/ && docker exec pickle-audit psql -U postgres -d postgres -v ON_ERROR_STOP=1 -f /tests/adv_analysis_scoring.sql` → exit 0, 16/16 probes passed, 1 NOTICE observation (sql-adv.log). Equivalent local: `psql \"$PICKLE_AUDIT_PG_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/adv_analysis_scoring.sql`.\n• Existing opt-in SQL parity suite run as corroborating evidence (not modified): `PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/w06_01_golden_parity.test.ts` → exit 0, ok | 17 passed | 0 failed | 0 ignored (deno-w06-golden-sql.log).\n• Hygiene on the new files only: `npx prettier --check` (apps/mobile) exit 0; root `npx eslint apps/mobile/__tests__/adv/analysisScoring*.adv.test.ts` exit 0; `deno fmt --check` + `deno lint` on the two Deno files exit 0.\n\nPASSING ATTACKS (no break; evidence):\n— Edge release authority (adv_analysis_scoring_release_sync.test.ts): A1 withdrawnAt in the past with deny switch still false → scored refused access.release_not_authorized; A2 validFrom in the future → refused; A3/A3b only benchmark / only mechanics approved → refused; A4 withdrawal scheduled in the future leaves policy active; A6 same scored id twice WITHOUT authority → two typed rejections, zero settlements; A7 1.2 s slow authority read still settles (no premature 503); A8 account switch: B's /v1/rank right after A's cached read issues B's own user-filtered queries; A9 score literals -0 and 1e1 accepted, 10.000000000000002 / \"7.5\" / null(scored) refused at parseSyncShot. Also (existing release_policy_admission + my A-suite): storage unavailable → 503, never authorized.\n— Edge rank route (adv_analysis_scoring_rank_route.test.ts): R3 NaN/'abc'/Infinity technique scores → { rank: null }; R3 saved row with no technique evidence → unranked wins; R4 inline fallback reproduces computePlayerRank for every golden case; R5 technique-view failure → 503; R5 saved-state read failure → 503 (no silent recompute); R6 concurrent GETs share one verdict within TTL.\n— Mobile (analysisScoringRankParity 40 passing): M5 every golden case reproduces through resolvePlayerRank/computePlayerRank; low_confidence rows with/without a score never count; fixture-source rows never count; null/NaN/Infinity/out-of-range scores never count; empty evidence → null (no Bronze); single-scored-analysis golden case (rating = the rounded score); string 'NaN', numeric NaN/Infinity and numeric out-of-range RATING refused by parsePlayerRank; device summary carries definitionVersion; unknown tier string is re-derived; definition declares code-unit collation; M6 a stored score is used verbatim whatever produced it (no rescale), only the rank definition version is stamped.\n— Mobile sync ack parser (analysisScoringSyncAck, 5 passing): refuses accepted∩rejected overlap, duplicate acceptedIds, unknown ids, partial acks; accepts one well-formed verdict.\n— Engine (analysisScoringEngineGates, 7 passing): E0 all-in-range dink scores normally; E1 empty measurements → abstain with null overall/checkpoint scores; E3 ±Infinity values stay in 0..10 or abstain; E4 NaN confidence never yields a normal run with NaN confidence; E6 a single observed metric cannot clear abstention; E7 Sm1TechniqueScorer forwards null score on abstention for every configured stroke; E8 same measurements → same score, version string is not an input (no rescale path).\n— SQL (adv_analysis_scoring.sql, 16 probes): RK1 low_confidence-only → no player_rank_state row and no player_technique_rating row; RK2 partial-only → no rank row; RK3 deleting the only scored shot removes the rank row (Gold 6.30 → gone); RK4 rows under scoring_model_version sm-v0/sm-v1/sm-v9-future rank verbatim = golden 7.05 Platinum (no per-version rescale); RK5 low_confidence + numeric score refused (shots_low_confidence_unscored); RK6 scored+null, 10.01, -0.01, NaN::numeric all refused; RK7 6.335 → 6.34 in both rank row and technique view; RK8 9 rows → newest-8 window, Σweights 36 → 5.67, sampled_count 8, confidence_weight 5, scored_shot_count 9; RK9 captured_at 2100-01-01 and 1999-12-31 refused; RA2 expired and not-yet-valid policies cannot be activated; RA3 approval and activation refused after withdrawal; RA4 decisions update/delete and policy delete refused (append-only/immutable triggers hold for superuser too); RA5 same version with different bytes → unique_violation; RA6 deny_new then re-activate clears the switch and every step is audited (5 decisions); RA7 no approval timestamps reported without an active policy.\n— Existing w06_01 golden parity vs the real SQL plane: 17/17 including replay-order, uppercase-uuid tie, half-tie rounding and 2100-bound cases.\n\nOBSERVATION (not a break, P3, INFERRED+VERIFIED): SQL allows ONE actor to approve mechanics, approve benchmark and activate the same policy (RA1 NOTICE in sql-adv.log). 'Independent approval' is enforced only by process, not by api_private.analysis_release_* — coordinator may want a reviewer-distinctness constraint.\n\nNOT_YET_VERIFIABLE (needs Mac/device; no verdict claimed): on-device Apple Vision pose → featureExtractor → scoreShot path with missing camera permission, missing/corrupt media, process death mid-analysis and relaunch — `scripts/mac-full-verify.sh` on the M4 runner (coordinator-run; I did NOT use --remote), plus `xcodebuild test -workspace apps/mobile/ios/PickleSensei.xcworkspace -scheme PickleSensei -destination 'platform=iOS Simulator,name=iPhone 16'` for the XCTest/pose fixtures; real StoreKit/RevenueCat and production Supabase (ucqnaiwqwjtgvlduiuib) release-authority reads were not touched.\n\nSEVERITY NOTE: no P0 found — every fabricated-number path requires corrupt persisted server state or a hostile measurement source, and the Edge parseSyncShot + SQL constraints hold on every supported ingress path tested; the duplicate-ack breaks did not double-charge in the harness (replay returns 'accepted' without a second settlement) but do make the client-side ack unparseable (502 → retry loop for that batch)."
+  },
+  "status": "DONE"
+}

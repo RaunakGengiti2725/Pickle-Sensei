@@ -545,6 +545,31 @@ describe('FormReviewScreen', () => {
     byTestId(renderer, 'form-review-back');
   });
 
+  it('draws the video as a rounded card at the letterbox rect — the whole portrait body in frame, no black bars painted by the stage', async () => {
+    const renderer = await renderScreen();
+    await layoutStage(renderer); // 360 × 420 stage; the clip is 1080 × 1920.
+    const [stage] = hostByTestId(renderer, 'form-review-stage');
+    // The stage paints no surface of its own: the page shows around the card.
+    expect(flatStyle(stage!).backgroundColor).toBeUndefined();
+    const [card] = hostByTestId(renderer, 'form-review-video-card');
+    expect(card).toBeDefined();
+    const cardStyle = flatStyle(card!);
+    // containRect({360,420}, {1080,1920}) → 236.25 × 420, centered.
+    expect(cardStyle.height).toBeCloseTo(420, 5);
+    expect(cardStyle.width).toBeCloseTo(236.25, 5);
+    expect(cardStyle.left).toBeCloseTo((360 - 236.25) / 2, 5);
+    expect(cardStyle.top).toBeCloseTo(0, 5);
+    expect(cardStyle.overflow).toBe('hidden');
+    expect(cardStyle.borderRadius).toBeGreaterThan(0);
+    // The clip itself is letterboxed inside the card, never cropped: on test
+    // builds the poster stands in for the native player.
+    for (const poster of renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Captured clip poster',
+    )) {
+      expect(poster.props.resizeMode).toBe('contain');
+    }
+  });
+
   it('re-analyze arms the same-intent handoff and opens the guided camera', async () => {
     const renderer = await renderScreen();
     expect(peekTryAgainHandoff()).toBeNull();

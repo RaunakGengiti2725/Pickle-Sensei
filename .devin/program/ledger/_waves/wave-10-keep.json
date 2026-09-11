@@ -1,0 +1,23 @@
+{
+  "base_sha": "6a6e92a9f2b743f7ff3641930f0c3f3753351339",
+  "integration_order": {},
+  "packages": {
+    "W01-05": {
+      "agent_counts": {
+        "completed": 12,
+        "failed": 0,
+        "launched": 12,
+        "requested": 12
+      },
+      "candidate": {
+        "branch": "devin/pp/w01-05/impl-r4-c2",
+        "head_sha": "cbd06aed11a568857e0d57d79becfb8151461df0",
+        "lane": 2,
+        "round": 4
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-10-keep"
+}

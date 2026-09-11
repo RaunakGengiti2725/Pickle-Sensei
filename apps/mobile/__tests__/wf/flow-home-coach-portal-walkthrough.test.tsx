@@ -1,8 +1,9 @@
 /**
  * First-run walkthrough + technique intent picker driven as a user would.
  *
- * Walkthrough: the device-scoped store persists the seen marker BEFORE the
- * overlay shows, shows once, fails closed on KV errors, replays from Settings;
+ * Walkthrough: the account-scoped store persists the seen marker BEFORE the
+ * overlay shows, shows once per account, fails closed on KV errors, replays
+ * from Settings;
  * the overlay's Skip / Next / Got it / backdrop / hardware-back all dismiss or
  * advance, every control is a labeled button, a target that never measures
  * ends the tour instead of leaving a blank scrim, and target registration is
@@ -12,6 +13,7 @@
  * ambiguous text narrowing the grid, unknown text re-prompting, and the
  * submit path — all radio-role controls with selected state.
  */
+import { dispatchHardwareBack } from '../../testSupport/ceremonyNativeLifecycle';
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 
@@ -39,14 +41,20 @@ import {
 } from '../../src/walkthrough/targets';
 import {
   useWalkthroughStore,
-  WALKTHROUGH_KV_KEY,
   WALKTHROUGH_SEEN_VALUE,
+  walkthroughKeyForOwner,
 } from '../../src/walkthrough/walkthroughStore';
 import {
   autoDetectIntent,
   TechniqueIntentPicker,
 } from '../../src/flow/TechniqueIntentPicker';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import type { TechniqueIntent } from '@pickle/shared-types';
+
+const ACCOUNT = '11111111-1111-4111-8111-111111111111';
 
 const RECTS: Record<
   WalkthroughTargetKey,
@@ -54,6 +62,7 @@ const RECTS: Record<
 > = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
+  'home-streak': { x: 313, y: 62, width: 56, height: 32 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },
   'tab-progress': { x: 236, y: 760, width: 70, height: 54 },
 };
@@ -73,17 +82,32 @@ function registerTargets(keys: WalkthroughTargetKey[]) {
   }
 }
 
+const mounted = new Set<TestRenderer.ReactTestRenderer>();
+
+function unmount(renderer: TestRenderer.ReactTestRenderer) {
+  act(() => renderer.unmount());
+  mounted.delete(renderer);
+}
+
 afterEach(() => {
+  for (const renderer of mounted) unmount(renderer);
   for (const cleanup of cleanups) cleanup();
   cleanups = [];
-  useWalkthroughStore.setState({ visible: false });
+  useWalkthroughStore.setState({
+    visible: false,
+    queued: false,
+    request: null,
+  });
   jest.useRealTimers();
 });
 
 beforeEach(() => {
   mockGetKv.mockReset().mockResolvedValue(null);
   mockSetKv.mockReset().mockResolvedValue(undefined);
+  setActiveDataOwner(ACCOUNT);
 });
+
+afterAll(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
 function textOf(renderer: TestRenderer.ReactTestRenderer): string {
   return renderer.root
@@ -114,11 +138,12 @@ async function renderVisible() {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<FirstRunWalkthrough />);
+    mounted.add(renderer);
   });
   return renderer;
 }
 
-describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
+describe('Walkthrough store — account-scoped, shown once, fail closed', () => {
   it('first run: persists the seen marker BEFORE showing, then shows exactly once', async () => {
     const order: string[] = [];
     mockSetKv.mockImplementation(async () => {
@@ -131,10 +156,10 @@ describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
     unsubscribe();
 
     expect(order).toEqual(['setKv', 'visible']);
-    expect(mockGetKv).toHaveBeenCalledWith({}, WALKTHROUGH_KV_KEY);
+    expect(mockGetKv).toHaveBeenCalledWith({}, walkthroughKeyForOwner(ACCOUNT));
     expect(mockSetKv).toHaveBeenCalledWith(
       {},
-      WALKTHROUGH_KV_KEY,
+      walkthroughKeyForOwner(ACCOUNT),
       WALKTHROUGH_SEEN_VALUE,
     );
     expect(useWalkthroughStore.getState().visible).toBe(true);
@@ -143,7 +168,7 @@ describe('Walkthrough store — device-scoped, shown once, fail closed', () => {
     await useWalkthroughStore.getState().maybeShowFirstRun();
     expect(mockSetKv).toHaveBeenCalledTimes(1);
 
-    // Dismissed and the device marker is now present → never shows again.
+    // Dismissed and the account marker is now present → never shows again.
     useWalkthroughStore.getState().dismiss();
     mockGetKv.mockResolvedValue(WALKTHROUGH_SEEN_VALUE);
     await useWalkthroughStore.getState().maybeShowFirstRun();
@@ -188,11 +213,12 @@ describe('Walkthrough overlay — controls', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(<FirstRunWalkthrough />);
+      mounted.add(renderer);
     });
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('step one anchors to the Coach button with labeled Skip and Next buttons', async () => {
@@ -215,13 +241,13 @@ describe('Walkthrough overlay — controls', () => {
     );
     expect(next.props.accessibilityRole).toBe('button');
     expect(next.props.accessibilityLabel).toBe('Next');
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Next walks all four steps in order; the last step offers only "Got it" which dismisses', async () => {
     registerTargets(Object.keys(RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
-    expect(WALKTHROUGH_STEPS).toHaveLength(4);
+    expect(WALKTHROUGH_STEPS).toHaveLength(5);
 
     for (const [index, step] of WALKTHROUGH_STEPS.entries()) {
       const text = textOf(renderer);
@@ -243,7 +269,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('Skip dismisses from any step', async () => {
@@ -257,10 +283,10 @@ describe('Walkthrough overlay — controls', () => {
       deepestPressable(renderer, n => n.props.testID === 'walkthrough-skip'),
     );
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
-  it('tapping the backdrop dismisses; hardware back (onRequestClose) dismisses', async () => {
+  it('tapping the backdrop dismisses; hardware back dismisses', async () => {
     registerTargets(Object.keys(RECTS) as WalkthroughTargetKey[]);
     let renderer = await renderVisible();
     await press(
@@ -270,18 +296,14 @@ describe('Walkthrough overlay — controls', () => {
       ),
     );
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     renderer = await renderVisible();
-    const modal = renderer.root.find(
-      n => typeof n.props.onRequestClose === 'function',
-    );
-    expect(modal.props.visible).toBe(true);
     await act(async () => {
-      modal.props.onRequestClose();
+      expect(dispatchHardwareBack()).toBe(true);
     });
     expect(useWalkthroughStore.getState().visible).toBe(false);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('a registered target that never measures is retried briefly, then skipped — no blank scrim', async () => {
@@ -295,7 +317,12 @@ describe('Walkthrough overlay — controls', () => {
     );
     registerTargets(['rank-banner', 'tab-library', 'tab-progress']);
     const renderer = await renderVisible();
-    expect(textOf(renderer)).toBe('');
+    expect(textOf(renderer)).toContain('Finding this part of the app');
+    expect(textOf(renderer)).toContain('Skip');
+    expect(
+      deepestPressable(renderer, n => n.props.testID === 'walkthrough-skip')
+        .props.disabled,
+    ).toBeFalsy();
     for (let i = 0; i < 6; i++) {
       await act(async () => {
         jest.advanceTimersByTime(120);
@@ -306,7 +333,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(useWalkthroughStore.getState().visible).toBe(true);
     expect(textOf(renderer)).toContain(step(1).headline);
     expect(textOf(renderer)).not.toContain(step(0).headline);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('when NO target can be measured the tour ends itself instead of hanging', async () => {
@@ -315,7 +342,7 @@ describe('Walkthrough overlay — controls', () => {
     expect(
       renderer.root.findAll(n => n.props.testID === 'first-run-walkthrough'),
     ).toHaveLength(0);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('useWalkthroughTarget registers on mount and releases on unmount', () => {
@@ -328,7 +355,7 @@ describe('Walkthrough overlay — controls', () => {
       renderer = TestRenderer.create(<Anchor />);
     });
     expect(hasWalkthroughTarget('tab-progress')).toBe(true);
-    act(() => renderer.unmount());
+    unmount(renderer);
     expect(hasWalkthroughTarget('tab-progress')).toBe(false);
   });
 });
@@ -374,7 +401,7 @@ describe('Technique intent picker', () => {
     expect(
       chips.every(c => c.props.accessibilityState.selected === false),
     ).toBe(true);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('tapping a chip emits a tap intent with confidence 1; the selected chip reports selected', () => {
@@ -392,7 +419,7 @@ describe('Technique intent picker', () => {
       legacySlug: 'dink',
       confidence: 1,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     const selected = renderPicker(intent);
     const states = radios(selected.renderer).map(c => [
@@ -418,7 +445,7 @@ describe('Technique intent picker', () => {
       legacySlug: null,
       confidence: null,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
 
     const auto = renderPicker(autoDetectIntent());
     const autoChip = radios(auto.renderer).at(-1)!;
@@ -439,7 +466,7 @@ describe('Technique intent picker', () => {
       legacySlug: 'dink',
       confidence: 0.9,
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('short text does nothing; ambiguous text narrows the grid and asks to pick; unknown text re-prompts', () => {
@@ -469,7 +496,7 @@ describe('Technique intent picker', () => {
     );
     // The full grid is back so the user is never stranded.
     expect(radios(renderer).length).toBeGreaterThan(5);
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 
   it('submitting "not sure" selects Auto Detect; submitting a resolved phrase selects it', () => {
@@ -486,6 +513,6 @@ describe('Technique intent picker', () => {
       canonical: 'FOREHAND_VOLLEY',
       rawUserText: 'forehand volley',
     });
-    act(() => renderer.unmount());
+    unmount(renderer);
   });
 });

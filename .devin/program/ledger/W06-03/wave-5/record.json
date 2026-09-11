@@ -1,0 +1,218 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W06-03-r1",
+      "phase": "implement",
+      "prompt_sha256": "76c70a54f492479197548dd38cb0d79efe1d545473267dc3573d3a4c3c06788f",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W06-03-r1",
+      "phase": "review",
+      "prompt_sha256": "cdf1df58c725830f7f81c8729c9eaee13f0880d09dab8589c896c52f491e6143",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W06-03-r1",
+      "phase": "adversary",
+      "prompt_sha256": "2d51254fd6279e0cc640b79c2350aa8bb3f78ad70d43fa35bcbd50c307c4bf67",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+  "candidate": {
+    "branch": "devin/pp/w06-03/impl-r1",
+    "head_sha": "0dc89d1cf48dd202f348f26a7df548924ad8257b",
+    "round": 1
+  },
+  "integration_branch": "codex/production-continuation-20260907",
+  "lib_version": "2026-09-08.7",
+  "manifest_sha256": "07ab317e3f2f9831263e88eb257cfc96c4dd57d73f84c6f123d540615bc0a4db",
+  "manifest_version": "2026-09-08.3",
+  "package_id": "W06-03",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/04315f50-1639-4512-a73f-cc7a8b9568f6/ac1_candidate_run_rls_tests.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/84d99d60-8488-4fb7-b434-0debb9cee999/ac2_base_scoring_parity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/13b2750b-bbb1-4413-aa1b-869976d2c677/ac2_head_scoring_parity.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/28e0d50f-1357-41ea-9e92-7d216e01f0dd/deno_attack_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ae756022-b003-460c-b5ca-fa1415f1d5f4/sql_attack_run6.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2002c1c6-86ab-4e22-9712-dbcc8a38e336/race_candidate.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/cbfe8fee-fe32-49d2-9ff6-df1227e8bd8e/race_base.log"
+        ],
+        "attack_branch": "devin/pp/w06-03/attack-0dc89d1c",
+        "attack_branch_sha": "9d6ad709fd015a3f7a1b8d13fe5b1364ad8d996a",
+        "attacked_sha": "0dc89d1cf48dd202f348f26a7df548924ad8257b",
+        "attacks_tried": 9,
+        "breaks": [
+          {
+            "expected": "After both writers commit, the saved row equals the v2 recompute over the committed evidence: rating 6.00 / gold / 2 techniques / 2 scored shots (computePlayerRank gives the same), or at minimum a row labelled rank-form-weighted-v2 must be what rank-form-weighted-v2 computes from the player's rows. Fix direction (not applied): serialize recompute_player_rank per user (e.g. pg_advisory_xact_lock(access_lock_key(user_id)) inside handle_shot_rank_refresh/recompute, or `select ... for update` on the state row before aggregating). Severity P2 not P1: the shipping client path (Edge → apply_synced_shot) already holds the per-user advisory lock so two client syncs serialize (INFERRED from 20260906130000/20260905000000 function bodies); only owner/service-role writers reach this race — but 20260831130000 states the trigger must keep the saved rank current 'whichever path wrote it'.",
+            "observed": "VERIFIED. shots=2 committed; public.player_rank_state = rating 8.00 / tier diamond / technique_count 1 / scored_shot_count 1 / definition_version 'rank-form-weighted-v2'; the live view (player_technique_rating) has 2 technique rows whose v2 aggregate is 6.00. Race script exit 1 on candidate (artifacts/w06-03-attack/race_candidate.log) AND on BASE 5c1859a8 (race_base.log, same numbers without the label). Deno A2: `FAILED | 2 passed | 1 failed`, exit 1 (deno_attack_final.log).",
+            "repro": "docker run -d --name pg -p 55432:5432 -e POSTGRES_PASSWORD=pg postgres:16; apply supabase/tests/shim_auth.sql + every supabase/migrations/*.sql to db `attack`; then EITHER `PSQL=\"docker exec -i pg psql -U postgres -d attack\" ./supabase/tests/w06_03_attack_rank_race.sh` (exit 1 = break) OR `cd supabase/functions/api/__wf__ && PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55432/attack deno test -A --no-check --config deno.json w06_03_attack_sql_parity.test.ts` (test 'W06-03 attack A2' FAILS; A1/A3 pass). Session A: begin; insert dink 4.00 (trigger upserts 4.00, holds row lock). Session B (autocommit): insert serve 8.00 while A is open — B's recompute snapshot cannot see A's uncommitted dink, computes 8.00/1/1 and its ON CONFLICT DO UPDATE waits on A's lock. A commits; B's stale values overwrite.",
+            "severity": "P2",
+            "test_file": "supabase/tests/w06_03_attack_rank_race.sh (psql-only), supabase/functions/api/__wf__/w06_03_attack_sql_parity.test.ts (test A2)",
+            "title": "Overlapping shots writers of one player leave a stale player_rank_state row that the candidate stamps rank-form-weighted-v2 although v2 does not reproduce it (lost update in the AFTER-trigger recompute; pre-existing on BASE, owner/service path)"
+          },
+          {
+            "expected": "A definition label is an identifier; the check should refuse blank/control labels (e.g. `btrim(definition_version) <> ''` and no control characters, or an allow-list regex). Only owner/service writers can reach this (clients have no UPDATE), hence P3.",
+            "observed": "VERIFIED. `update public.player_rank_state set definition_version = ' '` (and the other six labels) succeeds; only NULL and '' are refused. Log: artifacts/w06-03-attack/sql_attack_run6.log.",
+            "repro": "docker exec -i pg psql -U postgres -d attack -v ON_ERROR_STOP=1 -f - < supabase/tests/w06_03_attack_scoring_definition.sql → section L1 (exit 3, summary lists [L1]).",
+            "severity": "P3",
+            "test_file": "supabase/tests/w06_03_attack_scoring_definition.sql (section L)",
+            "title": "player_rank_state_definition_version_nonempty admits whitespace-only and control-character labels (' ', tab, newline, chr(1), 'rank-form-weighted-v2'||chr(1), U+200B)"
+          },
+          {
+            "expected": "The view (and recompute_player_rank) derive the label from the single immutable function so a future forward migration changes one place; or a static test pins that every SQL occurrence of the label is the function.",
+            "observed": "VERIFIED. The view definition contains the literal, not the function call; today both agree (V1 passes), so this is a drift vector for the next definition migration rather than a present miscomputation. Log: artifacts/w06-03-attack/sql_attack_run6.log.",
+            "repro": "docker exec -i pg psql -U postgres -d attack -v ON_ERROR_STOP=1 -f - < supabase/tests/w06_03_attack_scoring_definition.sql → section V2 (`position('scoring_definition_version()' in pg_get_viewdef('public.player_technique_rating'::regclass)) = 0`).",
+            "severity": "P3",
+            "test_file": "supabase/tests/w06_03_attack_scoring_definition.sql (section V)",
+            "title": "player_technique_rating hard-codes the literal 'rank-form-weighted-v2' instead of calling public.scoring_definition_version(): two sources of truth for the label"
+          }
+        ],
+        "package_id": "W06-03",
+        "summary": "ATTACKED 0dc89d1cf48dd202f348f26a7df548924ad8257b (devin/pp/w06-03/impl-r1). Attack branch devin/pp/w06-03/attack-0dc89d1c @ 9d6ad709 (3 new test files only; no candidate/production file touched; no PR).\n\nACCEPTANCE RE-RUN (VERIFIED):\n- W06-03-AC1 `./supabase/tests/run_rls_tests.sh` on candidate: exit 0; 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 5 suites (security_regression, W07 billing, W08 deletion, analysis release policy, W06-03 scoring parity) = 20 suite runs, 20 PASS lines incl. 4x 'W06-03 SCORING PARITY … PASS', 0 failed, 0 skipped (ac1_candidate_run_rls_tests.log). Docker Hub returned 429 for postgres:16; the locally present postgres:16-alpine was tagged postgres:16 (same major).\n- W06-03-AC2: BASE 5c1859a8 + only supabase/tests/scoring_parity.sql → exit 3, fails at section A ('function public.scoring_definition_version() does not exist') (ac2_base_scoring_parity.log); candidate → exit 0, PASS (ac2_head_scoring_parity.log). 1 executed / 0 passed / 1 failed on BASE; 1/1/0 on HEAD.\n\nATTACKS (9 tried, VERIFIED runs; commands in each test header):\n A1 differential fuzz — 1500 seeded in-domain histories (1-30 rows: µs ties with 1-9 fraction digits incl. half-even .5µs cases, >2-decimal score texts, replayed ids incl. upper-case, abstentions, >8-row windows, 8 shot types) inserted in arrival order; SQL state+view vs computePlayerRank projection incl. definition_version → PASS (0 divergences).\n A2 concurrency lost update → BREAK (P2, also on BASE).\n A3 instant boundaries (0.5µs half-even ties, 2099-12-31T23:59:59.9999995Z rounding into the excluded 2100 bound, 2000-01-01 lower bound) → PASS.\n R live role matrix (authenticated with API header: reads own labelled rank/view only, cannot UPDATE/INSERT/DELETE player_rank_state, cannot EXECUTE scoring_definition_version()/recompute_player_rank(own or other); same user without API header sees nothing; anon denied on view/state/function) → PASS (13 checks).\n L label domain → BREAK (P3): NULL/'' refused, whitespace/control labels admitted.\n T tier floors through recompute at 0/3.49/3.50/4.99/5.00/6.49/6.50/7.49/7.50/10 and '3.495'→3.50 silver; two-row weighted averages 7.47 platinum / 7.53 diamond → PASS.\n D delete/update/cascade: one of two rows deleted → recomputed AND restamped from a forged foreign label; score update → restamped; last row demoted to low_confidence → row removed (no stale labelled rank); re-scored → back, stamped; source='sample' impossible (shots_source_check); profile delete cascades → PASS.\n V invariants: view label == function (PASS); view hard-codes literal (BREAK P3); every v2-labelled saved row reproducible from its evidence & ranked-set agreement (PASS on a clean db — it FAILED while the A2 race artefact was still present, which is the same defect).\n Deno file: `FAILED | 2 passed | 1 failed` (A2), exit 1. SQL file: exit 3 with summary listing [L1],[V2] only. Race script: exit 1 on candidate and on BASE.\n\nNOT BROKEN / OBSERVATIONS (INFERRED, no test): supabase/functions/api/index.ts GET /v1/rank still selects neither definition_version column and emits no definitionVersion — the new SQL label is not yet consumed on the Edge plane (outside W06-03 write_paths; note for the Edge package). service_role has TRUNCATE on public.shots; TRUNCATE fires no row triggers so it would orphan labelled rank rows (operator path only; the Edge returns rank:null when the view is empty) — not counted as a break. Network-failure, free-rating and copy attack classes do not apply to this SQL-only package. Scope check: candidate's 3 changed files are all inside write_paths; migration timestamp 20260908140000 is later than every existing migration; no test weakened."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4fa767f5-08a5-4299-a0ee-8606bc5e7804/rls_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 16,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-03-AC1",
+            "note": "VERIFIED on HEAD 0dc89d1c (Docker postgres:16). 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) × 4 suites (security_regression, account_deletion_operations, analysis_release_policy, scoring_parity) = 16 suite runs; log lines: 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' ×4, 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED' ×4, 'Analysis release policy authority: PASS' ×4, 'W06-03 SCORING PARITY (golden fixture through SQL): PASS' ×4. Local log copy: artifacts/w06-03/rls_head.log (artifacts/ is gitignored, hence the uploaded URL). Baseline on BASE_SHA without any change: same command exit 0 (artifacts/w06-03/rls_base.log, https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee9fe5ba-d1de-4987-860e-f47e8a52eaeb/rls_base.log) — no pre-existing failure.",
+            "passed": 16,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/22675029-61ce-4799-bc58-e3cf8627dab8/rls_base_with_new_test.log",
+            "command": "git worktree add --detach /home/ubuntu/w0603-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp supabase/tests/scoring_parity.sql supabase/tests/run_rls_tests.sh /home/ubuntu/w0603-base/supabase/tests/ && (cd /home/ubuntu/w0603-base && ./supabase/tests/run_rls_tests.sh)  # must FAIL; then on HEAD: ./supabase/tests/run_rls_tests.sh  # must PASS",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-03-AC2",
+            "note": "PROOF VERIFIED: new test FAILS on BASE_SHA and PASSES on HEAD. BASE run (BASE_SHA worktree + only the two new/changed test files copied over, no migration): exit 3; the three pre-existing suites of the fresh history passed, then scoring_parity.sql failed at line 214 with 'ERROR: function public.scoring_definition_version() does not exist' (runner is set -e, so 1 scoring_parity execution, 0 passed, 1 failed, remaining histories not reached); log = artifacts/w06-03/rls_base_with_new_test.log (uploaded URL in artifact). HEAD run: exit 0, scoring_parity.sql executed 4× (one per history) and passed 4×, each run reproducing 25 golden cases, 5 replay cases and 20 rejected inputs plus section E (legacy-version row untouched by other players' evidence; rebuilt under the current version only by the player's own new evidence; null/empty version refused; version readable by authenticated, not writable, not visible to anon) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/4fa767f5-08a5-4299-a0ee-8606bc5e7804/rls_head.log lines 640/1280/1920/2560. Discrimination check VERIFIED (ad hoc, not committed): a fixture copy with one expected rating changed by 0.01 makes section B fail with a MISMATCH diff. Also VERIFIED: pnpm format:check exit 0 (https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b155f94-25f5-425b-a900-e93acddb5323/format_check.log; *.sql is prettier-ignored by repo policy), git diff --check 5c1859a8 HEAD exit 0, bash -n run_rls_tests.sh ok.",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression test first (commit 54bdee24): supabase/tests/scoring_parity.sql loads packages/shared-types/fixtures/scoring/player-rank.golden.json via pg_read_file(:golden_fixture), inserts every analysis as the owner into public.shots (the shipping path: shots_player_rank_refresh → public.recompute_player_rank → public.player_rank_state, read back with public.player_technique_rating) and asserts a jsonb projection {definitionVersion, rating, tier, techniqueCount, scoredAnalysisCount, techniques[shotType, score, capturedAt, sampledCount] in GET /v1/rank order} equals the fixture's expected output; replays assert the first storable arrival holds the id and later copies return shots_pkey; rejected inputs assert the exact SQL constraint the fixture names (the embedded-NUL row is fed as the bytes a driver would send, so convert_from refuses it with 22021 exactly as the wire); section E pins that a row stamped with another version is never rewritten except by a recompute from that player's own new evidence. run_rls_tests.sh copies the fixture directory into the container (or resolves it locally) and runs the suite after the three existing suites in all four migration histories. Fix (commit 0dc89d1c): forward migration 20260908140000_scoring_definition_version.sql adds public.scoring_definition_version() ('rank-form-weighted-v2', search_path pinned, EXECUTE revoked from public/anon/authenticated so the K27 RPC allowlist is unchanged), player_rank_state.definition_version text not null check <> '' (existing rows labelled v2 — the only definition that ever wrote them — numbers untouched; default dropped immediately), a trailing definition_version column on the security_invoker view (literal, because clients hold no function EXECUTE), and recompute_player_rank stamping the version on every write (formula/signature/definer unchanged).",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4fa767f5-08a5-4299-a0ee-8606bc5e7804/rls_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/22675029-61ce-4799-bc58-e3cf8627dab8/rls_base_with_new_test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/ee9fe5ba-d1de-4987-860e-f47e8a52eaeb/rls_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b155f94-25f5-425b-a900-e93acddb5323/format_check.log"
+        ],
+        "base_sha": "5c1859a80a024be823d3512e6e7739a0f6f8a9d9",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w06-03/impl-r1",
+        "files_changed": [
+          "supabase/migrations/20260908140000_scoring_definition_version.sql",
+          "supabase/tests/scoring_parity.sql",
+          "supabase/tests/run_rls_tests.sh"
+        ],
+        "head_sha": "0dc89d1cf48dd202f348f26a7df548924ad8257b",
+        "out_of_scope_files": [],
+        "package_id": "W06-03",
+        "regression_tests_added": [
+          "supabase/tests/scoring_parity.sql (sections A–E: definition version pinned to fixture; 25 golden cases; 5 replays; 20 rejected inputs; legacy-version row preservation) — run in all 4 histories by supabase/tests/run_rls_tests.sh"
+        ],
+        "residual_risks": [
+          "The version literal 'rank-form-weighted-v2' appears twice in the migration (function + view) because the security_invoker view cannot call a function clients lack EXECUTE on; scoring_parity.sql pins both to the fixture in every run, so divergence fails the matrix, but a future bump must edit both in one new migration.",
+          "Existing player_rank_state rows are labelled v2 by the migration backfill on the documented basis that recompute_player_rank (v2 since 20260831130000 §3 rebuilt every row) has been the only writer; this is INFERRED from the migration history, not from production data.",
+          "Edge GET /v1/rank (supabase/functions/api/index.ts, serial group edge-index, not held by this package) does not yet select or return definition_version; the SQL column is additive so the Edge path is unaffected, but surfacing the version to the client is a separate package.",
+          "artifacts/ is gitignored, so logs are provided as uploaded attachment URLs rather than repo-relative paths."
+        ],
+        "summary": "Defect on BASE_SHA (INFERRED from code, VERIFIED by the failing test): the SQL rank plane mirrors the rank-form-weighted-v2 formula (supabase/migrations/20260831130000_form_weighted_rank.sql: view lines ~22-46, recompute_player_rank lines ~50-120) but exposes no scoring-definition version anywhere — public.player_rank_state has columns (user_id, rating, tier, technique_count, scored_shot_count, updated_at) and public.player_technique_rating has (user_id, shot_type, score, captured_at, sampled_count, confidence_weight) — while every expectation in packages/shared-types/fixtures/scoring/player-rank.golden.json carries definitionVersion (scoringDefinition.ts SCORING_DEFINITION.version). No SQL test fed the golden fixture through the shipping SQL path in the canonical RLS runner (supabase/tests/run_rls_tests.sh only ran security_regression/account_deletion_operations/analysis_release_policy); the only SQL parity coverage was supabase/functions/api/__wf__/w06_01_golden_parity.test.ts, whose SQL cases are ignored without PICKLE_AUDIT_PG_URL. Result: numbers were computed correctly (all 25 cases/5 replays/20 rejected inputs match on BASE once the version column exists) but nothing in SQL could state which definition a saved or live number was computed under, so historical and current rows were indistinguishable. Fix: definition_version stamped on every recompute and reported by the view, with a forward migration that labels the existing rows v2 (the only definition that ever wrote them) without touching their numbers; a future definition is a new label + new migration, never a rewrite. Commits: 54bdee24 (test + runner wiring, fails on BASE), 0dc89d1c (migration). Branch devin/pp/w06-03/impl-r1 pushed; head 0dc89d1cf48dd202f348f26a7df548924ad8257b. No PR opened. All three changed files are inside write_paths; run_rls_tests.sh edits are additive (fixture dir copy + one extra psql line per history)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/511d294f-7c97-4aef-8491-f08bbf7ff04f/rls_head.log",
+            "command": "PATH=/usr/lib/postgresql/16/bin:$PATH DOCKER_HOST=unix:///nonexistent/docker.sock ./supabase/tests/run_rls_tests.sh",
+            "executed": 16,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-03-AC1",
+            "note": "VERIFIED on HEAD 0dc89d1c with PostgreSQL 16.15 (initdb fallback path of the unmodified runner; Docker Hub 429 on postgres:16). 4 histories (fresh, production_20260906, upstream_20260906, ordered_20260907) x 4 suites = 16 suite runs. Log counts: 'SECURITY REGRESSION MATRIX: ALL CASES PASSED' x4, 'W08 ACCOUNT DELETION MATRIX: ALL CASES PASSED' x4, 'Analysis release policy authority: PASS' x4, 'W06-03 SCORING PARITY (golden fixture through SQL): PASS' x4; each parity run reports 25 golden cases, 5 replays, 20 rejected inputs (log lines 632-636, 1272-1276, 1912-1916, 2552-2556). Migration 20260908140000 applied in the pending phase of all 4 histories (lines 108/748/1388/2028). Zero ERROR lines. Local copy: artifacts/review-w06-03/rls_head.log (artifacts/ gitignored).",
+            "passed": 16,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31b017a8-4db6-45ed-a640-8e63e6c9d6e6/rls_base_with_new_test.log",
+            "command": "git worktree add --detach /home/ubuntu/w0603-review-base 5c1859a80a024be823d3512e6e7739a0f6f8a9d9 && cp supabase/tests/scoring_parity.sql supabase/tests/run_rls_tests.sh /home/ubuntu/w0603-review-base/supabase/tests/ && (cd /home/ubuntu/w0603-review-base && PATH=/usr/lib/postgresql/16/bin:$PATH DOCKER_HOST=unix:///nonexistent/docker.sock ./supabase/tests/run_rls_tests.sh)  # must FAIL; then on HEAD the AC1 command  # must PASS",
+            "executed": 4,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W06-03-AC2",
+            "note": "PROOF VERIFIED: BASE run (BASE_SHA worktree, git status showed only ' M run_rls_tests.sh' and '?? scoring_parity.sql', no migration) exit 3; fresh history's three pre-existing suites passed, then scoring_parity.sql failed at line 214 'ERROR: function public.scoring_definition_version() does not exist' (set -e: 1 scoring_parity execution, 0 passed, 1 failed, other histories not reached). HEAD run: exit 0, scoring_parity executed 4x/passed 4x (AC1 log). Discrimination VERIFIED on HEAD with a fresh migrated cluster: fixture with one expected rating +0.01 -> exit 3, section B MISMATCH (https://la-hacks-rttothemoon.devinenterprise.com/attachments/c6f9e59b-91be-4944-9d3f-bf8d83b99119/mutated.log); fixture definitionVersion changed to v3 -> exit 3 at section A (https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1126cbd-d987-4c95-bec2-c7d2221929e2/badversion.log); a rejected input with its sql check removed -> exit 3 at section D (https://la-hacks-rttothemoon.devinenterprise.com/attachments/89bd418a-8e3d-482b-bc98-930a6ff2e99b/badreject.log).",
+            "passed": 4,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/511d294f-7c97-4aef-8491-f08bbf7ff04f/rls_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/31b017a8-4db6-45ed-a640-8e63e6c9d6e6/rls_base_with_new_test.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c6f9e59b-91be-4944-9d3f-bf8d83b99119/mutated.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d1126cbd-d987-4c95-bec2-c7d2221929e2/badversion.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89bd418a-8e3d-482b-bc98-930a6ff2e99b/badreject.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "Objective says 'rank/progress SQL functions', but the golden fixture (player-rank.golden.json, schema player-rank-golden-v4) only carries rank expectations; no progress_daily/practice_days expectation exists to feed through SQL, so the progress half is untestable with the shared fixture as it stands (not the implementer's drift to fix; note for W06 follow-up).",
+          "The version literal 'rank-form-weighted-v2' is duplicated in supabase/migrations/20260908140000_scoring_definition_version.sql (function line 48 and view line 107); scoring_parity.sql section A + sql_projection pin both to the fixture so divergence fails the matrix, but a future bump must edit both in one new migration.",
+          "Edge GET /v1/rank (supabase/functions/api/index.ts buildPlayerRank) selects explicit columns and does not yet return definition_version; SQL change is additive so it is unaffected, surfacing the version is a separate (edge-index) package.",
+          "run_rls_tests.sh header comment still lists only the two original suites (not modified, consistent with the no-comment-edit rule) — cosmetic.",
+          "Environment note: Docker Hub returned 429 for postgres:16 during review, so re-verification used the runner's own initdb/pg_ctl fallback path with PGDG PostgreSQL 16.15 (glibc, same major as the postgres:16 image) by making Docker unavailable via DOCKER_HOST; the script itself was not modified (bash -n ok, git status clean)."
+        ],
+        "package_id": "W06-03",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "0dc89d1cf48dd202f348f26a7df548924ad8257b",
+        "scope_violation": false,
+        "summary": "APPROVE. Scope VERIFIED clean: `git diff --stat 5c1859a8..0dc89d1c` touches exactly the three write_paths (20260908140000_scoring_definition_version.sql +198, supabase/tests/scoring_parity.sql +454, supabase/tests/run_rls_tests.sh +11/-3); both under the held `sql` serial group; run_rls_tests.sh edits are additive (fixture dir copied/resolved, one extra psql line per history, no reorder/removal of existing suites); no out_of_scope_files needed. Objective met as shipped behaviour (INFERRED from code, VERIFIED by tests): the test drives the shipping path (owner insert into public.shots -> shots_player_rank_refresh -> recompute_player_rank -> player_rank_state, read back via player_technique_rating), and the migration changes shipping SQL (recompute stamps definition_version on every write, view exposes it, existing rows labelled v2 with numbers untouched, default dropped at once, not-null + nonempty check). Formula VERIFIED unchanged: comment-stripped diff of recompute_player_rank and the view vs 20260831130000 shows only the version declare/column/stamp and the appended view column; no later migration on BASE redefined either object. Security VERIFIED: new function EXECUTE revoked from public/anon/authenticated (RPC allowlist unchanged), view re-grant is select-only to authenticated (same as before; 20260905190106 only revoked insert/update/delete), security_invoker kept, player_rank_state stays client-read-only (section E asserts authenticated has no UPDATE on definition_version and anon no SELECT); no RLS/grant widening, no session-check change, no migration history edits (new file has the latest timestamp; all four histories apply it in the pending phase), no existing comments modified, no test weakening (grep of added lines for '|| true', passWithNoTests, ts-ignore, eslint-disable, any: none), git diff --check clean, bash -n ok, static migration pins (supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts) 21 passed/0 failed on HEAD. Edge GET /v1/rank selects explicit columns so the additive column is safe. AC1 re-run: exit 0, 16/16 suite runs passed (25 cases/5 replays/20 rejected inputs per history). AC2 regression proof: on BASE_SHA with only the two test files copied, exit 3 at scoring_parity.sql:214 (function missing); on HEAD passes 4x; plus three mutation checks (rating +0.01, version bump, dropped sql check) each fail with the expected section error, so the test discriminates. Environment caveat: Docker Hub 429 on postgres:16 forced the runner's own initdb fallback (PGDG PostgreSQL 16.15, DOCKER_HOST pointed at a nonexistent socket; script unmodified). Non-blocking: fixture carries no progress expectations so the 'progress' part of the objective has nothing to feed; duplicated version literal in function+view is pinned by the test.",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-5"
+}

@@ -97,14 +97,17 @@ describe('PracticeSetCard', () => {
   it('renders the label, mint headline, ordered pills with the latest ringed, and the insight', () => {
     const renderer = render(<PracticeSetCard summary={improved} />);
     const rendered = texts(renderer);
+    // Every figure prints as estimated DUPR (D-046): the pills at each
+    // attempt's estimate (6.6 → 3.07, 7.0 → 3.33, 7.4 → 3.60), the headline
+    // as the difference of first and latest, the insight's best likewise.
     expect(rendered).toEqual([
       'THIS SET',
-      'FOREHAND DRIVE',
-      '+0.8 in this set',
-      '6.6',
-      '7.0',
-      '7.4',
-      '3 attempts · best 7.4 · contact position improved from 48 to 81',
+      'FOREHAND DRIVE · EST. DUPR',
+      '+0.53 DUPR in this set',
+      '3.07',
+      '3.33',
+      '3.60',
+      '3 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
     ]);
     const headline = hostByTestId(renderer, 'practice-set-headline')!;
     expect(flatStyle(headline.props.style).color).toBe(color.mint);
@@ -123,14 +126,18 @@ describe('PracticeSetCard', () => {
 
     // Without a handler the pills are plain, labelled, 44pt targets.
     const first = hostByTestId(renderer, 'practice-set-attempt-a')!;
-    expect(first.props.accessibilityLabel).toBe('Attempt 1 of 3, score 6.6');
+    expect(first.props.accessibilityLabel).toBe(
+      'Attempt 1 of 3, Estimated DUPR 3.07, technique score 6.6 out of 10',
+    );
     expect(first.props.onPress).toBeUndefined();
     expect(flatStyle(first.props.style).minHeight).toBe(44);
     expect(flatStyle(first.props.style).minWidth).toBe(44);
     expect(
       hostByTestId(renderer, 'practice-set-attempt-c')!.props
         .accessibilityLabel,
-    ).toBe('Attempt 3 of 3, score 7.4, latest');
+    ).toBe(
+      'Attempt 3 of 3, Estimated DUPR 3.60, technique score 7.4 out of 10, latest',
+    );
     act(() => renderer.unmount());
   });
 
@@ -141,7 +148,8 @@ describe('PracticeSetCard', () => {
     );
     const [pressable] = renderer.root.findAll(
       n =>
-        n.props.accessibilityLabel === 'Attempt 2 of 3, score 7.0' &&
+        n.props.accessibilityLabel ===
+          'Attempt 2 of 3, Estimated DUPR 3.33, technique score 7.0 out of 10' &&
         typeof n.props.onPress === 'function',
     );
     expect(pressable).toBeDefined();
@@ -158,7 +166,7 @@ describe('PracticeSetCard', () => {
       SET,
     )!;
     const slippedRenderer = render(<PracticeSetCard summary={slipped} />);
-    expect(texts(slippedRenderer)).toContain('\u22120.3 in this set');
+    expect(texts(slippedRenderer)).toContain('\u22120.20 DUPR in this set');
     expect(
       flatStyle(
         hostByTestId(slippedRenderer, 'practice-set-headline')!.props.style,
@@ -206,7 +214,7 @@ describe('PracticeSetCard', () => {
     const renderer = render(<PracticeSetCard summary={mixed} />);
     const rendered = texts(renderer);
     expect(rendered).toContain(
-      '2 attempts · best 7.4 · 1 attempt on a different scoring model not compared',
+      '2 attempts · best 3.60 DUPR · 1 attempt on a different scoring model not compared',
     );
     // The excluded read never renders as a pill.
     expect(rendered).not.toContain('5.0');

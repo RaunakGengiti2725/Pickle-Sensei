@@ -1,35 +1,29 @@
+import {
+  createCaptureAnalysisDb,
+  captureDbState,
+  fixtureUuid,
+  signInCaptureOwner,
+  closeCaptureHarness,
+  seedCaptureRequest,
+} from '../../testSupport/captureAnalysisHarness';
 /**
- * ADVERSARIAL PASS 3 / mobile-analyze-capture — permit accounting under
- * post-reservation faults in `runCaptureAnalysis`.
- *
- * Attacks (against 4d812e1a):
- *  S1  saveAnalysis (scored promotion) rejects → is the record half-promoted,
- *      and what happens to the reserved permit?
- *  S2  saveAnalysisRecord rejects after a successful analyzeCapture → is the
- *      permit released, and does the caller get an `unavailable` outcome
- *      rather than a thrown exception?
- *  S4  analyzeCapture throws after permits.reserve resolves → is
- *      permits.release called?
- *
- * The real analysis pipeline, the real repository, and the real permit client
- * run; only SQLite (`LocalDb`), the sidecar reader and `fetch` are faked so
- * faults can be injected at exact statements.
- *
- * MAC-01 contract (the pins below assert it): every exit after a successful
- * `permits.reserve` either consumes the permit (scored path fully promoted)
- * or finalizes it exactly once — a throw releases with outcome 'failed'
- * BEFORE the exception escapes runCaptureAnalysis.
+ * Permit accounting under post-reservation faults in runCaptureAnalysis.
+ * The real pipeline, migrated SQLite, repository and permit client run.
+ * Failed writes roll back the entire record/capture/rating/outbox commit and
+ * release once. Lost commit acknowledgement is resolved from the durable
+ * journal; a committed rating must never be refunded.
  */
 import { generateSwingSequence } from '@pickle/evaluation';
 import { serializePoseSequence, sha256Hex } from '@pickle/swing-domain';
 import * as pipeline from '@pickle/analysis-pipeline';
 import type { LocalDb } from '../../src/data/db';
-import {
-  SIGNED_OUT_DATA_OWNER,
-  setActiveDataOwner,
-} from '../../src/data/accountScope';
 import type { CapturedClip } from '../../src/camera/capture';
 import { runCaptureAnalysis } from '../../src/analysis/runCaptureAnalysis';
+import {
+  activeReleaseAuthority,
+  isReleasePolicyRequest,
+} from '../../testSupport/releasePolicyFixture';
+import { finalizeAcknowledgement } from '../../__harness__/analysisPermitRoute';
 
 jest.mock('../../src/camera/capture', () => {
   const actual = jest.requireActual('../../src/camera/capture');
@@ -62,19 +56,11 @@ interface RecordedCall {
  * SQL matches `failWhen` (the injected fault), optionally only the Nth match. */
 function faultDb(
   failWhen: (sql: string, index: number) => boolean,
-  error: Error = new Error('SQLITE_FULL: database or disk is full'),
-): { db: LocalDb; calls: RecordedCall[] } {
-  const calls: RecordedCall[] = [];
-  const db: LocalDb = {
-    async execute(sql, params = []) {
-      const index = calls.length;
-      calls.push({ sql, params });
-      if (failWhen(sql, index)) throw error;
-      return { rows: [] };
-    },
-    close() {},
-  };
-  return { db, calls };
+  error = new Error('SQLITE_FULL: database or disk is full'),
+) {
+  return createCaptureAnalysisDb((sql, index) => {
+    if (failWhen(sql, index)) throw error;
+  });
 }
 
 interface PermitServer {
@@ -95,7 +81,7 @@ function permitServer(): PermitServer {
         server.reserves += 1;
         return jsonResponse({
           permit: {
-            id: `permit-${server.reserves}`,
+            id: fixtureUuid(`permit-${server.reserves}`),
             accessSource: 'free',
             status: 'reserved',
             expiresAt: '2026-09-04T20:00:00.000Z',
@@ -104,12 +90,15 @@ function permitServer(): PermitServer {
       }
       const finalize = /\/v1\/analysis-permits\/([^/]+)\/finalize$/.exec(url);
       if (finalize) {
+        const body: unknown = JSON.parse(String(init?.body));
         server.finalized.push({
           permitId: decodeURIComponent(finalize[1]!),
-          body: JSON.parse(String(init?.body)),
+          body,
         });
-        return jsonResponse({ ok: true });
+        return jsonResponse(finalizeAcknowledgement(url, body));
       }
+      if (isReleasePolicyRequest(url))
+        return jsonResponse(activeReleaseAuthority());
       throw new Error(`Unexpected fetch: ${url}`);
     },
   );
@@ -131,9 +120,9 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
   const clip: CapturedClip = {
     uri: 'file:///captures/attack3-permit.mov',
     durationMs: window.endMs,
-    fps: 60,
-    width: 1080,
-    height: 1080,
+    fps: sequence.video.fps,
+    width: sequence.video.width,
+    height: sequence.video.height,
     capturedAtIso: '2026-09-04T12:00:00.000Z',
     captureMode: 'automatic_pose_trigger',
     recognition: {
@@ -152,13 +141,13 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       schemaVersion: 1,
       window: 'detected_motion',
       poseSource: 'apple_vision_body_pose',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
       triggerAlgorithmVersion: 'temporal-stroke-heuristic-2',
       motionUnit: 'normalized_image_units_per_second',
       analysisInputFrameCount: sequence.frames.length,
       poseFrameCount: sequence.frames.length,
       poseMissingFrameCount: 0,
-      trackedDurationMs: window.endMs,
+      trackedDurationMs: window.endMs - window.startMs,
       meanCanonicalJointVisibility: 0.9,
       meanJointCoverage: 0.9,
       minimumJointCoverage: 0.8,
@@ -185,7 +174,7 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
       frameCount: sequence.frames.length,
       sha256: sha256Hex(sidecarJson),
       coordinateSystem: 'normalized_image_top_left',
-      poseModelVersion: 'apple-vision-bodypose-1',
+      poseModelVersion: sequence.producedBy.modelVersion,
     },
   };
   return { clip, sidecarJson };
@@ -194,9 +183,10 @@ function swingClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
 function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-a3') {
   return {
     db,
-    captureId,
+    ...seedCaptureRequest(db, clip, captureId),
     clip,
     declaredStroke: 'forehand_drive' as const,
+    declaredCanonical: 'FOREHAND_DRIVE' as const,
     handedness: 'right' as const,
     cameraView: 'side' as const,
     apiConfig: { baseUrl: 'https://api.test', token: 'token-1' },
@@ -207,14 +197,14 @@ function request(db: LocalDb, clip: CapturedClip, captureId = 'capture-a3') {
 const sqlOf = (calls: RecordedCall[]) => calls.map(c => c.sql.trim());
 
 const FAILED_RELEASE = {
-  permitId: 'permit-1',
+  permitId: fixtureUuid('permit-1'),
   body: { outcome: 'failed', ratingId: null },
 };
 
 describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+  beforeEach(() => signInCaptureOwner(owner));
   afterEach(() => {
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeCaptureHarness();
     (globalThis as { fetch?: unknown }).fetch = undefined;
     jest.restoreAllMocks();
   });
@@ -236,8 +226,8 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     await expect(run).rejects.toThrow(/SQLITE_FULL/);
 
     const sql = sqlOf(calls);
-    // The immutable analysis record and the capture status were written
-    // BEFORE the promotion — they are durable while the rating is not.
+    // Record and capture updates precede promotion inside the SAME transaction.
+    // Their attempted writes must roll back with the failed rating.
     expect(
       sql.some(s => s.startsWith('INSERT INTO local_analysis_record')),
     ).toBe(true);
@@ -254,6 +244,18 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     // would have consumed it via shot sync does not exist, so the reserve
     // must not sit against the user's allowance until the server sweep.
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
   });
 
   it('outbox insert fails (second statement of the promotion transaction) → rollback removes the local_shot write too; permit released once (failed)', async () => {
@@ -277,32 +279,109 @@ describe('ATTACK S1 — saveAnalysis (scored promotion) rejects', () => {
     expect(
       sql.findIndex(s => s.startsWith('INSERT OR REPLACE INTO local_shot')),
     ).toBeGreaterThan(begin);
-    expect(sql.some(s => s === 'COMMIT')).toBe(false);
+    const faultTransaction = calls.find(c =>
+      c.sql.startsWith('INSERT INTO outbox'),
+    )!.transaction;
+    expect(
+      calls.filter(c => c.transaction === faultTransaction).map(c => c.sql),
+    ).not.toContain('COMMIT');
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+    });
     expect(server.reserves).toBe(1);
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
   });
 
-  it('COMMIT itself fails → ROLLBACK is attempted, exception escapes after the permit is released once (failed); analysis record already durable', async () => {
+  it('the result COMMIT fails before durability → full rollback and one failed release', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
     (globalThis as { fetch?: unknown }).fetch = server.fetchMock;
-    const { db, calls } = faultDb(sql => sql.trim() === 'COMMIT');
+    const { db, calls, failCommitOnce } = faultDb(() => false);
+    failCommitOnce('before');
 
     await expect(runCaptureAnalysis(request(db, clip))).rejects.toThrow(
-      /SQLITE_FULL/,
+      /commit failed before commit/,
     );
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [expect.objectContaining({ state: 'released' })],
+    });
     const sql = sqlOf(calls);
     expect(sql).toContain('ROLLBACK');
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     expect(server.reserves).toBe(1);
+  });
+  it('the result COMMIT succeeds but its acknowledgement is lost → durable score survives without refund or duplicate', async () => {
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const server = permitServer();
+    globalThis.fetch = server.fetchMock as typeof fetch;
+    const { db, failCommitOnce } = faultDb(() => false);
+    failCommitOnce('after');
+    const input = request(db, clip);
+    const outcome = await runCaptureAnalysis(input);
+    expect(outcome.kind).toBe('scored');
+    expect(captureDbState(db)).toMatchObject({
+      shots: 1,
+      records: 1,
+      outbox: 1,
+      captures: [expect.objectContaining({ status: 'analyzed' })],
+      journal: [
+        expect.objectContaining({
+          state: 'committed',
+          permit_id: fixtureUuid('permit-1'),
+        }),
+      ],
+    });
+    const replay = await runCaptureAnalysis(input);
+    expect(replay).toMatchObject({
+      kind: 'scored',
+      analysisId: outcome.kind === 'scored' ? outcome.analysisId : null,
+    });
+    expect(captureDbState(db)).toMatchObject({
+      shots: 1,
+      records: 1,
+      outbox: 1,
+    });
+    expect(server.reserves).toBe(1);
+    expect(server.finalized).toHaveLength(0);
   });
 });
 
 describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCapture', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+  beforeEach(() => signInCaptureOwner(owner));
   afterEach(() => {
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeCaptureHarness();
     (globalThis as { fetch?: unknown }).fetch = undefined;
     jest.restoreAllMocks();
   });
@@ -343,6 +422,18 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
     // 'failed' — the same release an inference failure issues.
     expect(server.reserves).toBe(1);
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     // The release is issued BEFORE the exception escapes: by the time the
     // caller observes the throw, the finalize request has been sent.
     expect(
@@ -352,7 +443,7 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
     ).toHaveLength(1);
   });
 
-  it('markCaptureAnalyzed rejects after the record insert → record durable, capture stays awaiting_model, permit released once (failed), exception escapes', async () => {
+  it('markCaptureAnalyzed rejects after the record insert → record rolled back, capture stays awaiting_model, permit released once (failed)', async () => {
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
@@ -373,6 +464,18 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
     ).toBe(false);
     expect(server.reserves).toBe(1);
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
   });
 
   it('CONTROL: an inference failure (frozen wrists) releases the permit with outcome "failed" and returns `unavailable` — the same contract the persistence faults above now honour', async () => {
@@ -405,7 +508,7 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
     expect(outcome.kind).toBe('unavailable');
     expect(server.finalized).toEqual([
       {
-        permitId: 'permit-1',
+        permitId: fixtureUuid('permit-1'),
         body: { outcome: 'failed', ratingId: null },
       },
     ]);
@@ -413,9 +516,9 @@ describe('ATTACK S2 — saveAnalysisRecord rejects after a successful analyzeCap
 });
 
 describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', () => {
-  beforeEach(() => setActiveDataOwner(owner));
+  beforeEach(() => signInCaptureOwner(owner));
   afterEach(() => {
-    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    closeCaptureHarness();
     (globalThis as { fetch?: unknown }).fetch = undefined;
     jest.restoreAllMocks();
   });
@@ -425,7 +528,7 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     mockReadArtifact = async () => sidecarJson;
     const server = permitServer();
     (globalThis as { fetch?: unknown }).fetch = server.fetchMock;
-    const { db, calls } = faultDb(() => false);
+    const { db } = faultDb(() => false);
 
     const analyzeSpy = jest
       .spyOn(pipeline, 'analyzeCapture')
@@ -442,10 +545,32 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     );
     expect(analyzeSpy).toHaveBeenCalledTimes(1);
     expect(server.reserves).toBe(1);
-    // No durable write of any kind …
-    expect(calls).toHaveLength(0);
+    // No analysis product exists; only the settled accounting journal remains.
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     // … and the reserve is finalized exactly once with 'failed'.
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
     expect(
       server.fetchMock.mock.calls.filter(([url]) =>
         String(url).includes('/finalize'),
@@ -471,6 +596,18 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
     );
     expect(server.reserves).toBe(1);
     expect(server.finalized).toEqual([FAILED_RELEASE]);
+    expect(captureDbState(db)).toMatchObject({
+      shots: 0,
+      records: 0,
+      outbox: 0,
+      captures: [expect.objectContaining({ status: 'awaiting_model' })],
+      journal: [
+        expect.objectContaining({
+          state: 'released',
+          release_outcome: 'failed',
+        }),
+      ],
+    });
   });
 
   it('rapid repeat: five back-to-back runs whose analyzeCapture throws release all five reserved permits (one failed release each)', async () => {
@@ -485,13 +622,19 @@ describe('ATTACK S4 — analyzeCapture throws after permits.reserve resolved', (
 
     for (let i = 0; i < 5; i += 1) {
       await expect(
-        runCaptureAnalysis(request(db, clip, `cap-${i}`)),
+        runCaptureAnalysis(
+          request(
+            db,
+            { ...clip, uri: `file:///captures/repeat-${i}.mov` },
+            `cap-${i}`,
+          ),
+        ),
       ).rejects.toThrow('boom');
     }
     expect(server.reserves).toBe(5);
     expect(server.finalized).toEqual(
       [1, 2, 3, 4, 5].map(n => ({
-        permitId: `permit-${n}`,
+        permitId: fixtureUuid(`permit-${n}`),
         body: { outcome: 'failed', ratingId: null },
       })),
     );

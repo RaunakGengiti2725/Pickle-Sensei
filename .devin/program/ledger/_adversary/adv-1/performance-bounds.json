@@ -1,0 +1,119 @@
+{
+  "area": "performance-bounds",
+  "breaks": [
+    {
+      "expected": "A single corrupt/ancient row must be dropped or clamped; the genuine activities must survive: days[TODAY] defined, totalTrainedDays ≥ 2, currentStreak ≥ 2 (≥1 for the 2-activity store case). Corrupt persisted state must never become fabricated empty history.",
+      "observed": "VERIFIED. With 2 genuine activities (yesterday + today, asOf 2026-09-08T12:00Z) plus ONE activity at 0100-01-01 / 0001-01-01 / -271821-04-20 (kv ledger `completedAtIso`, accepted by parseConsistencyLedger) / a local_shot.captured_at of 0100-01-01: buildConsistencySnapshot()/computeConsistencySnapshot() return totalActivities=3 (or 2) but days[TODAY]=undefined, totalTrainedDays=0, currentStreak=0, Object.keys(days).length=0. Mechanism (verified with a node probe): engine.ts dayForInstant() formats the year with Intl `year:'numeric'` → '100-01-01', '1-01-01', '271822-04-20'; dayOrdinal() = Date.parse(`${day}T00:00:00.000Z`) is NaN for those keys; the NaN ordinal sorts first, firstOrdinal=NaN, and `for (ordinal = firstOrdinal; ordinal <= asOfOrdinal; …)` never iterates, so the whole chronological walk (streaks, shields, XP, achievements, days) is skipped. The only input guard is `Number.isFinite(Date.parse(atIso)) && atMs <= asOfMs`.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfConsistencyAncientActivity.test.ts  (exit 1; Tests: 5 failed, 1 passed, 6 total). Failing cases: 'one corrupt 0100-01-01T00:00:00.000Z activity ordered first does not erase the genuine history', same for 0001-01-01, 'a persisted kv ledger drill completed at the JS Date floor is admitted by the parser and must not erase today from the replay', 'one corrupt local_shot.captured_at row (sorted first by SQL) does not erase today from the store snapshot'",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/perfConsistencyAncientActivity.test.ts",
+      "title": "One corrupt far-past activity timestamp (year < 1000 or the JS Date floor) erases the user's entire consistency history: streak, trained days, XP and per-day buckets all become zero (fabricated empty history from corrupt persisted state)"
+    },
+    {
+      "expected": "Replay cost bounded by the genuine history (< 250 ms budget = ~5x the realistic baseline), e.g. by clamping the walk start or rejecting timestamps before the product's epoch.",
+      "observed": "VERIFIED. Baseline 1095 trained days (3 years × 3 shots/day): 45 ms. Same 31-day genuine history plus ONE activity at 1000-01-01T00:00:00.000Z: 397–404 ms (≈375k-day walk allocating a Date + toISOString per day) in V8; the replay runs on hydrate at app launch and on every refresh. Hermes on device is several times slower (INFERRED, not measured).",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfConsistencyAncientActivity.test.ts -t 'year-1000'  (exit 1; Expected: < 250, Received: 397)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/perfConsistencyAncientActivity.test.ts",
+      "title": "Consistency replay walks every calendar day from the earliest parsable activity: one year-1000 row makes the JS-thread replay ~9x slower than a full three-year history"
+    },
+    {
+      "expected": "last_error truncated to a bounded length (test budget 2,000 chars) so an oversized/hostile 5xx body cannot grow the local DB by tens of MB per drain.",
+      "observed": "VERIFIED. Real SQLite outbox with 600 queued shot.sync rows, real createTransport()+drainOutbox(), fetch mocked to return HTTP 503 with a 1,048,576-char error.message: max last_error = 1,048,583 chars, total persisted error text = 52,429,150 chars across the 50 rows of one batch, attempts stay 0 (transient) so the same write repeats on every drain. Cause: sync/outbox.ts recordRowFailure() stores `String(error)` with no length cap; the transport turns the top-level HTTP error message into that string.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfOutboxBacklogNetworkLoss.test.ts -t '1 MiB'  (exit 1; Expected: <= 2000, Received: 1048583)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/perfOutboxBacklogNetworkLoss.test.ts",
+      "title": "Outbox persists an arbitrarily large server error string verbatim into last_error of EVERY row in the batch (1 MiB error.message × 50 rows = 52 MB written to SQLite per drain)"
+    },
+    {
+      "expected": "Near-linear scaling (growth exponent ≤ 1.5) and the 60 s cap segmented in < 1 s in V8 (Hermes on an entry-level iPhone is several times slower; on-device number is NOT_YET_VERIFIABLE).",
+      "observed": "VERIFIED. Direct segmenter call with the same StrokeEvent shape analyzeCapture.ts builds for the imported full-clip trigger (startMs 0, endMs durationMs, contactMs null): 15 s/890 frames 341–358 ms; 30 s/1790 frames 1272–1424 ms; 60 s/3590 frames 5077–6071 ms; growth exponent 1.88–1.98 (15→30 s) and 1.99–2.08 (30→60 s) — i.e. quadratic. End-to-end imported analysis (real runImportedAnalysis path, synthetic sidecar): 15 s 429–451 ms vs 60 s 6360–6792 ms (ratio 14.8–15.1), both outcome=scored; provider timing probe attributed 6252 of 6271 ms to phase.segmentPhases. Cause (INFERRED from code): vision-geometry phaseSegmenter recomputes `movingAverage(rawSpeeds.map(s => s.value), 5)` inside the per-sample map, i.e. O(n) work per frame.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfPhaseSegmenterQuadratic.test.ts  (exit 1; Expected: < 1000, Received: 5077–6071); cd apps/mobile && npx jest __tests__/adv/perfImportedSidecarPipeline.test.ts -t 'scales linearly'  (exit 1; Expected: < 8, Received: 14.8–15.06)",
+      "severity": "P1",
+      "test_file": "apps/mobile/__tests__/adv/perfPhaseSegmenterQuadratic.test.ts",
+      "title": "GeometricPhaseSegmenter.segmentPhases is quadratic in frame count: a 60 s @ 60 fps import (the supported cap) takes ~5–6 s on the JS thread in V8, and imported-video analysis scales ~15x for 4x the frames"
+    },
+    {
+      "expected": "One hash pass per analysis (or hashing off the JS thread).",
+      "observed": "VERIFIED. 60 s import (2,853,282-byte sidecar): sidecar read 1x, sha256Hex over the sidecar text 2x, 122–141 ms total hashing on the JS thread per analysis.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfImportedSidecarPipeline.test.ts -t 'hashes the multi-megabyte sidecar once'  (exit 1; Expected: 1, Received: 2)",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/perfImportedSidecarPipeline.test.ts",
+      "title": "Imported analysis SHA-256-hashes the multi-megabyte pose sidecar twice on the JS thread"
+    },
+    {
+      "expected": "assertCapturedClip rejects clips beyond the 60 s import cap / MAX_IMPORTED_POSE_FRAMES, and parsePoseSequence rejects frame counts above MAX_IMPORTED_POSE_FRAMES, so corrupt persisted state cannot bypass the native bounds.",
+      "observed": "VERIFIED (JS layer only). assertCapturedClip() accepts durationMs=36,000,000 with a 2,000,000-frame sidecar reference, and a receipt with frameCount = MAX_IMPORTED_POSE_FRAMES+1 (4001); parsePoseSequence() returns ok=true for a 19,000-frame canonical sequence (15,723,778 B) in 282–333 ms. Native limits (maximumDurationSeconds=60, maximumSidecarBytes=16 MiB, MAX_IMPORTED_POSE_FRAMES via assertImportedPoseExtraction) exist in source (INFERRED) but are not re-applied when persisted clip payloads are revalidated through assertCapturedClip during history load, so a corrupt/tampered persisted row reaches analysis unbounded. Native enforcement itself is NOT_YET_VERIFIABLE from Linux.",
+      "repro": "cd apps/mobile && npx jest __tests__/adv/perfClipContractUnboundedFrames.test.ts  (exit 1; Tests: 3 failed, 3 total — 'Received function did not throw' ×2, 'Expected: false Received: true')",
+      "severity": "P2",
+      "test_file": "apps/mobile/__tests__/adv/perfClipContractUnboundedFrames.test.ts",
+      "title": "JS clip contract and pose-sequence parser enforce no upper bound: assertCapturedClip accepts a 10-hour imported clip and a sidecar receipt above MAX_IMPORTED_POSE_FRAMES; parsePoseSequence accepts 19,000 frames / 15.7 MB"
+    }
+  ],
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "label": "int-adversary-performance-bounds-30a40650",
+  "result": {
+    "attachment_urls": [
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7be97445-603d-4574-a35b-b124c57c9d0c/mobile-adv-all.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/112e4239-43c5-4897-8701-a5e31be9c966/adv_perf_bounds.log",
+      "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f66ce469-a576-4a98-8863-f46c23e8ae8d/mobile-tsc.log"
+    ],
+    "attack_branch": "devin/pp/adv/performance-bounds-30a40650",
+    "attack_branch_sha": "54079c5337965a2ef33557c694d0d367ad834da5",
+    "attacked_sha": "30a4065036a917514fb4984fde73f87867f38619",
+    "attacks_tried": 22,
+    "breaks": [
+      {
+        "expected": "A single corrupt/ancient row must be dropped or clamped; the genuine activities must survive: days[TODAY] defined, totalTrainedDays ≥ 2, currentStreak ≥ 2 (≥1 for the 2-activity store case). Corrupt persisted state must never become fabricated empty history.",
+        "observed": "VERIFIED. With 2 genuine activities (yesterday + today, asOf 2026-09-08T12:00Z) plus ONE activity at 0100-01-01 / 0001-01-01 / -271821-04-20 (kv ledger `completedAtIso`, accepted by parseConsistencyLedger) / a local_shot.captured_at of 0100-01-01: buildConsistencySnapshot()/computeConsistencySnapshot() return totalActivities=3 (or 2) but days[TODAY]=undefined, totalTrainedDays=0, currentStreak=0, Object.keys(days).length=0. Mechanism (verified with a node probe): engine.ts dayForInstant() formats the year with Intl `year:'numeric'` → '100-01-01', '1-01-01', '271822-04-20'; dayOrdinal() = Date.parse(`${day}T00:00:00.000Z`) is NaN for those keys; the NaN ordinal sorts first, firstOrdinal=NaN, and `for (ordinal = firstOrdinal; ordinal <= asOfOrdinal; …)` never iterates, so the whole chronological walk (streaks, shields, XP, achievements, days) is skipped. The only input guard is `Number.isFinite(Date.parse(atIso)) && atMs <= asOfMs`.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfConsistencyAncientActivity.test.ts  (exit 1; Tests: 5 failed, 1 passed, 6 total). Failing cases: 'one corrupt 0100-01-01T00:00:00.000Z activity ordered first does not erase the genuine history', same for 0001-01-01, 'a persisted kv ledger drill completed at the JS Date floor is admitted by the parser and must not erase today from the replay', 'one corrupt local_shot.captured_at row (sorted first by SQL) does not erase today from the store snapshot'",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/perfConsistencyAncientActivity.test.ts",
+        "title": "One corrupt far-past activity timestamp (year < 1000 or the JS Date floor) erases the user's entire consistency history: streak, trained days, XP and per-day buckets all become zero (fabricated empty history from corrupt persisted state)"
+      },
+      {
+        "expected": "Replay cost bounded by the genuine history (< 250 ms budget = ~5x the realistic baseline), e.g. by clamping the walk start or rejecting timestamps before the product's epoch.",
+        "observed": "VERIFIED. Baseline 1095 trained days (3 years × 3 shots/day): 45 ms. Same 31-day genuine history plus ONE activity at 1000-01-01T00:00:00.000Z: 397–404 ms (≈375k-day walk allocating a Date + toISOString per day) in V8; the replay runs on hydrate at app launch and on every refresh. Hermes on device is several times slower (INFERRED, not measured).",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfConsistencyAncientActivity.test.ts -t 'year-1000'  (exit 1; Expected: < 250, Received: 397)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/perfConsistencyAncientActivity.test.ts",
+        "title": "Consistency replay walks every calendar day from the earliest parsable activity: one year-1000 row makes the JS-thread replay ~9x slower than a full three-year history"
+      },
+      {
+        "expected": "last_error truncated to a bounded length (test budget 2,000 chars) so an oversized/hostile 5xx body cannot grow the local DB by tens of MB per drain.",
+        "observed": "VERIFIED. Real SQLite outbox with 600 queued shot.sync rows, real createTransport()+drainOutbox(), fetch mocked to return HTTP 503 with a 1,048,576-char error.message: max last_error = 1,048,583 chars, total persisted error text = 52,429,150 chars across the 50 rows of one batch, attempts stay 0 (transient) so the same write repeats on every drain. Cause: sync/outbox.ts recordRowFailure() stores `String(error)` with no length cap; the transport turns the top-level HTTP error message into that string.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfOutboxBacklogNetworkLoss.test.ts -t '1 MiB'  (exit 1; Expected: <= 2000, Received: 1048583)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/perfOutboxBacklogNetworkLoss.test.ts",
+        "title": "Outbox persists an arbitrarily large server error string verbatim into last_error of EVERY row in the batch (1 MiB error.message × 50 rows = 52 MB written to SQLite per drain)"
+      },
+      {
+        "expected": "Near-linear scaling (growth exponent ≤ 1.5) and the 60 s cap segmented in < 1 s in V8 (Hermes on an entry-level iPhone is several times slower; on-device number is NOT_YET_VERIFIABLE).",
+        "observed": "VERIFIED. Direct segmenter call with the same StrokeEvent shape analyzeCapture.ts builds for the imported full-clip trigger (startMs 0, endMs durationMs, contactMs null): 15 s/890 frames 341–358 ms; 30 s/1790 frames 1272–1424 ms; 60 s/3590 frames 5077–6071 ms; growth exponent 1.88–1.98 (15→30 s) and 1.99–2.08 (30→60 s) — i.e. quadratic. End-to-end imported analysis (real runImportedAnalysis path, synthetic sidecar): 15 s 429–451 ms vs 60 s 6360–6792 ms (ratio 14.8–15.1), both outcome=scored; provider timing probe attributed 6252 of 6271 ms to phase.segmentPhases. Cause (INFERRED from code): vision-geometry phaseSegmenter recomputes `movingAverage(rawSpeeds.map(s => s.value), 5)` inside the per-sample map, i.e. O(n) work per frame.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfPhaseSegmenterQuadratic.test.ts  (exit 1; Expected: < 1000, Received: 5077–6071); cd apps/mobile && npx jest __tests__/adv/perfImportedSidecarPipeline.test.ts -t 'scales linearly'  (exit 1; Expected: < 8, Received: 14.8–15.06)",
+        "severity": "P1",
+        "test_file": "apps/mobile/__tests__/adv/perfPhaseSegmenterQuadratic.test.ts",
+        "title": "GeometricPhaseSegmenter.segmentPhases is quadratic in frame count: a 60 s @ 60 fps import (the supported cap) takes ~5–6 s on the JS thread in V8, and imported-video analysis scales ~15x for 4x the frames"
+      },
+      {
+        "expected": "One hash pass per analysis (or hashing off the JS thread).",
+        "observed": "VERIFIED. 60 s import (2,853,282-byte sidecar): sidecar read 1x, sha256Hex over the sidecar text 2x, 122–141 ms total hashing on the JS thread per analysis.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfImportedSidecarPipeline.test.ts -t 'hashes the multi-megabyte sidecar once'  (exit 1; Expected: 1, Received: 2)",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/perfImportedSidecarPipeline.test.ts",
+        "title": "Imported analysis SHA-256-hashes the multi-megabyte pose sidecar twice on the JS thread"
+      },
+      {
+        "expected": "assertCapturedClip rejects clips beyond the 60 s import cap / MAX_IMPORTED_POSE_FRAMES, and parsePoseSequence rejects frame counts above MAX_IMPORTED_POSE_FRAMES, so corrupt persisted state cannot bypass the native bounds.",
+        "observed": "VERIFIED (JS layer only). assertCapturedClip() accepts durationMs=36,000,000 with a 2,000,000-frame sidecar reference, and a receipt with frameCount = MAX_IMPORTED_POSE_FRAMES+1 (4001); parsePoseSequence() returns ok=true for a 19,000-frame canonical sequence (15,723,778 B) in 282–333 ms. Native limits (maximumDurationSeconds=60, maximumSidecarBytes=16 MiB, MAX_IMPORTED_POSE_FRAMES via assertImportedPoseExtraction) exist in source (INFERRED) but are not re-applied when persisted clip payloads are revalidated through assertCapturedClip during history load, so a corrupt/tampered persisted row reaches analysis unbounded. Native enforcement itself is NOT_YET_VERIFIABLE from Linux.",
+        "repro": "cd apps/mobile && npx jest __tests__/adv/perfClipContractUnboundedFrames.test.ts  (exit 1; Tests: 3 failed, 3 total — 'Received function did not throw' ×2, 'Expected: false Received: true')",
+        "severity": "P2",
+        "test_file": "apps/mobile/__tests__/adv/perfClipContractUnboundedFrames.test.ts",
+        "title": "JS clip contract and pose-sequence parser enforce no upper bound: assertCapturedClip accepts a 10-hour imported clip and a sidecar receipt above MAX_IMPORTED_POSE_FRAMES; parsePoseSequence accepts 19,000 frames / 15.7 MB"
+      }
+    ],
+    "package_id": "INT-performance-bounds",
+    "summary": "INT-performance-bounds adversary against 30a4065036a917514fb4984fde73f87867f38619; attack branch devin/pp/adv/performance-bounds-30a40650 @ 54079c5337965a2ef33557c694d0d367ad834da5 (2 commits on top of HEAD_SHA, `git merge-base --is-ancestor` ok; `git diff --name-only HEAD_SHA..HEAD` = 6 new files under apps/mobile/__tests__/adv/ + 1 new file supabase/functions/api/__wf__/adv_perf_bounds.test.ts; NO production code or existing test touched; no PR opened). Adversarial tests assert the EXPECTED behaviour and fail against HEAD where a break is confirmed.\n\nAGGREGATE RUNS (VERIFIED): `cd apps/mobile && npx jest __tests__/adv/` → exit 1, Test Suites: 5 failed, 1 passed, 6 total; Tests: 12 failed, 6 passed, 18 total (every failure is a confirmed break listed in `breaks`; log artifacts/adv/mobile-adv-all.log, uploaded). `deno test -A --no-check --config supabase/functions/api/__wf__/deno.json supabase/functions/api/__wf__/adv_perf_bounds.test.ts` → exit 0, 4 passed, 0 failed (30 s; artifacts/adv/adv_perf_bounds.log, uploaded). Static gates: `cd apps/mobile && npx tsc --noEmit` exit 0 (artifacts/adv/mobile-tsc.log); root `npx eslint apps/mobile/__tests__/adv/ supabase/functions/api/__wf__/adv_perf_bounds.test.ts` exit 0; `cd apps/mobile && npx prettier --check __tests__/adv/*.ts` exit 0; `cd supabase/functions/api && deno fmt --check __wf__/adv_perf_bounds.test.ts && deno lint __wf__/adv_perf_bounds.test.ts && (cd __wf__ && deno check --config deno.json adv_perf_bounds.test.ts)` all exit 0.\n\nATTACKS THAT DID NOT BREAK (VERIFIED, passing evidence):\n1. Large library / quadratic history+Progress: `cd apps/mobile && npx jest __tests__/adv/perfLargeLibraryProgress.test.ts` → exit 0, 1 passed. Real SQLite: 300 guided captures (566,100 B payload) load 11–12 ms + Progress aggregation 17–18 ms, verified 300; 3,000 captures (5,661,000 B) load 74–87 ms + aggregate 23–27 ms, verified 3,000 — linear, inside the 1,500 ms budget, ratio < 12.\n2. Outbox drain under total network loss with a 600-row backlog: perfOutboxBacklogNetworkLoss 'offline drain' case passed — 1 request, 50 rows touched (bounded batch), 64 ms, remaining 600, attempts stay 0 (transient loss does not consume the retry budget).\n3. Outbox permanent per-item rejection over 12 drains: passed — exactly 8 requests (OUTBOX_MAX_ATTEMPTS), max attempts 8, rows parked (remaining 50 every pass) and never deleted; no unbounded retry.\n4. Outbox unacknowledged HTTP 200 (server omits per-item acks) over 12 drains: passed — 12 requests, attempts 0, rows retained, last_error bounded at 113 chars.\n5. Imported analysis cancellation after the sidecar read: passed — AbortSignal → outcome unavailable/cancelled in 1 ms, 0 permit requests (no long-running import without cancellation on this path).\n6. Edge cold start + served bundle: `adv_perf_bounds.test.ts` cold start (import index.ts → 200 /healthz) 78 ms; module graph 21 modules / 452,491 B (18 local files) — passed budget.\n7. Edge slow-loris body: 408 'Request body was not received in time.' after 30,015 ms (BODY_TIMEOUT 30 s); /healthz answered in 1 ms during the stall. Note: the harness logged `upstream cancelled=false` plus a Deno legacy request-abort warning — the timeout is verified, upstream signal propagation is UNKNOWN (not claimed).\n8. Edge 32 concurrent 1 MiB streamed bodies at a 64 KiB route: all 413, heapUsed 90.8 MB → 92.7 MB (+1,876,832 B) — bounded body reader holds.\n9. Edge maximal 200-shot sync batch (4,029,011 B): 200 in 130 ms, 200 accepted, 1 replay SELECT, 200 RPCs (no N+1 replay lookups); fully malformed 200-shot batch (4,029,211 B): 200 in 25 ms, 200 rejected, 0 shot queries.\n10. JS parsePoseSequence throughput: 19,000 frames / 15.7 MB parsed in 282–333 ms (no quadratic parse; the missing bound itself is in `breaks`).\n\nNOT_YET_VERIFIABLE (needs Mac/device; no verdict given): native capture/import bounds (maximumDurationSeconds=60, maximumSidecarBytes=16 MiB, frame-count receipt, low-disk, cancellation and temp-file cleanup of the Swift import/extraction path), memory growth across repeated capture/replay cycles on device, Hermes-thread timing of segmentPhases and the consistency replay, and app cold start. Exact Mac commands: `scripts/mac-full-verify.sh` (local on the M4 runner — NOT `--remote`, per instructions); `cd native && swift test`; `cd apps/mobile/ios && bundle exec pod install && xcodebuild test -workspace PickleSensei.xcworkspace -scheme PickleSensei -destination 'platform=iOS Simulator,name=iPhone 16'`; Instruments Allocations/Leaks template over ≥20 capture→analyze→replay cycles on a physical iPhone; `xcrun xctrace record --template 'App Launch'` for cold start. Load tests in tools/loadtest (k6) were NOT run: they require a disposable Supabase project and were out of bounds here (production ucqnaiwqwjtgvlduiuib must not be targeted).\n\nAttack count: 22 executed test cases (18 Jest + 4 Deno), each a distinct attack; 12 Jest cases fail (confirmed breaks), 6 Jest + 4 Deno pass."
+  },
+  "status": "DONE"
+}

@@ -30,9 +30,9 @@
  *   ADV-8  no trigger bypass for `authenticated`: other-column UPDATEs,
  *          ALTER TABLE … DISABLE TRIGGER, DROP TRIGGER, CREATE OR REPLACE of
  *          the guard, session_replication_role — all refused
- *   ADV-9  third free rating: two swept permits + two fresh scored ratings →
- *          both late syncs are access.paywall_required, no third row, the
- *          swept permits end released/free_limit_exceeded; premium is accepted
+ *   ADV-9  a rating past the allowance: a swept permit + the one fresh scored
+ *          rating → the late sync is access.paywall_required, no second row, the
+ *          swept permit ends released/free_limit_exceeded; premium is accepted
  *   ADV-10 (BREAK, round 7) a settled permit is NOT terminal for the client
  *          role: `authenticated` holds DELETE (policy analysis_permits_delete_own,
  *          20260829140000) and INSERT on id/created_at, so a PostgREST client
@@ -632,57 +632,49 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ADV-9: third free rating — P1+P2 swept, P3+P4 fresh scored (count 2), late syncs of P1/P2 → access.paywall_required, no third row, swept permits end released/free_limit_exceeded; a premium account's late sync is accepted",
+  name: "ADV-9: a rating past the allowance — P1 swept, P2 fresh scored (the one free rating), late sync of P1 → access.paywall_required, no second row, the swept permit ends released/free_limit_exceeded; a premium account's late sync is accepted",
   ignore,
   async fn() {
     const sql = postgres(PG_URL, { max: 4 });
     try {
       await resetUsers(sql, true);
       const p1 = await reserve(sql, U1, "adv10-p1");
-      const p2 = await reserve(sql, U1, "adv10-p2");
       await backdate(sql, p1);
-      await backdate(sql, p2);
-      assertEquals((await sql.unsafe(SWEEP_SQL)).count, 2);
+      assertEquals((await sql.unsafe(SWEEP_SQL)).count, 1);
       assertEquals(await permitState(sql, p1), "released/expired");
 
-      const p3 = await reserve(sql, U1, "adv10-p3");
-      const p4 = await reserve(sql, U1, "adv10-p4");
-      assertEquals(await inTx(sql, U1, (tx) => sync(tx, shotPayload(shotId(), p3))), "accepted");
-      assertEquals(await inTx(sql, U1, (tx) => sync(tx, shotPayload(shotId(), p4))), "accepted");
+      // The swept reservation handed its slot back, so the one free rating is
+      // reserved and scored afresh (public.free_rating_limit() = 1).
+      const p2 = await reserve(sql, U1, "adv10-p2");
+      assertEquals(await inTx(sql, U1, (tx) => sync(tx, shotPayload(shotId(), p2))), "accepted");
       const access = await inTx(
         sql,
         U1,
         async (tx) => (await tx.unsafe(`select * from public.access_state()`))[0],
       );
-      assertEquals(Number(access.scored_count), 2);
+      assertEquals(Number(access.scored_count), 1);
 
       const late1 = shotId();
-      const late2 = shotId();
       assertEquals(
         await inTx(sql, U1, (tx) => sync(tx, shotPayload(late1, p1))),
         "access.paywall_required",
       );
-      assertEquals(
-        await inTx(sql, U1, (tx) => sync(tx, shotPayload(late2, p2))),
-        "access.paywall_required",
-      );
       assertEquals(await permitState(sql, p1), "released/free_limit_exceeded");
-      assertEquals(await permitState(sql, p2), "released/free_limit_exceeded");
       // A retry after the refusal is the same permanent verdict, never a row.
       assertEquals(
         await inTx(sql, U1, (tx) => sync(tx, shotPayload(late1, p1))),
         "access.permit_not_reserved",
       );
-      assertEquals(await shotCount(sql, U1), 2);
-      // A fifth reservation is refused too.
-      const fifth = await inTx(
+      assertEquals(await shotCount(sql, U1), 1);
+      // A further reservation is refused too.
+      const next = await inTx(
         sql,
         U1,
         async (tx) =>
-          (await tx.unsafe(`select result from public.reserve_analysis_permit('adv10-p5')`))[0]
+          (await tx.unsafe(`select result from public.reserve_analysis_permit('adv10-p3')`))[0]
             .result,
       );
-      assertEquals(fifth, "access.paywall_required");
+      assertEquals(next, "access.paywall_required");
 
       // Premium: swept permit, late sync accepted at any count.
       const pp = await reserve(sql, PREMIUM, "adv10-premium");

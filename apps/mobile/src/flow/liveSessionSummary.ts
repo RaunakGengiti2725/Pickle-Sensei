@@ -1,6 +1,24 @@
+import type { CheckpointKey } from '@pickle/shared-types';
 import type { LiveSessionSnapshot } from './session';
 import type { SessionScoreProgression } from './sessionProgress';
-import type { LiveCoachRecap } from './liveSessionCoach';
+
+/** One entry of a Live Court coach's cue log; the summary keeps aggregates only. */
+export interface LiveCoachCue {
+  eventId: string | null;
+  category: string;
+  text: string;
+  targetCheckpoint: CheckpointKey | null;
+  atMs: number;
+  spoken: boolean;
+}
+
+/** What a Live Court voice layer hands over when the session ends. */
+export interface LiveCoachRecap {
+  cues: LiveCoachCue[];
+  spokenCount: number;
+  correctionsByCheckpoint: Partial<Record<CheckpointKey, number>>;
+  topCorrection: CheckpointKey | null;
+}
 
 /**
  * Durable Live Court session summary (local_session.summary payload for

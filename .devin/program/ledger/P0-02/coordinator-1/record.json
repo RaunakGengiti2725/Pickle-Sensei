@@ -1,0 +1,22 @@
+{
+  "package_id": "P0-02",
+  "wave_id": "coordinator-1",
+  "status": "ACCEPTED",
+  "base_sha": "a0045e390c851128e16f7da9ed24e03b3ed11818",
+  "candidate": {
+    "head_sha": "a0045e390c851128e16f7da9ed24e03b3ed11818",
+    "branch": "devin/1788854799-production-program-integration",
+    "integrated": true
+  },
+  "evidence": {
+    "tsc": "exit 0",
+    "jest": "Test Suites: 1 skipped, 321 passed, 321 of 322 total; Tests: 1 skipped, 6401 passed, 6402 total; exit 0",
+    "skipped": "importedRealFootage (documented skip, allowed by owner)",
+    "logs": [
+      "/home/ubuntu/p002_tsc.log",
+      "/home/ubuntu/p002_jest.log"
+    ],
+    "run_at": "2026-09-09T03:45:56.492843+00:00"
+  },
+  "note": "Coordinator-run acceptance on the integration head: `cd apps/mobile && npx tsc --noEmit && npx jest --ci --silent`. Code content identical to 0c6b1c5a (ledger-only commits since)."
+}

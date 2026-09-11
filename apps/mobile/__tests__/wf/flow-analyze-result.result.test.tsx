@@ -414,7 +414,7 @@ describe('opening / missing result', () => {
     await settle();
     expect(spinnerCount(renderer)).toBe(0);
     // The guide opens on its SCORE page — nothing else is on the first screen.
-    expect(textOf(renderer)).toContain('TECHNIQUE SCORE');
+    expect(textOf(renderer)).toContain('ESTIMATED DUPR');
     expect(
       hosts(renderer, n => n.props.testID === 'result-guide-step-score'),
     ).toHaveLength(1);
@@ -601,12 +601,13 @@ describe('scored result controls', () => {
       expect(labels.sort()).toEqual(expected.sort());
     };
     // SCORE: Close + the descriptive Next; no Back on the first page.
-    audit(['Close', 'Continue']);
+    // Plus the ONE "Full breakdown" entry into ResultDetails (W09-02).
+    audit(['Close', 'Continue', 'Full breakdown']);
     await press(renderer, 'Continue');
     // NEXT: Try it again with Back and Done beside it.
     audit(['Close', 'Try it again', 'Back', 'Done']);
     await press(renderer, 'Back');
-    audit(['Close', 'Continue']);
+    audit(['Close', 'Continue', 'Full breakdown']);
     await act(async () => renderer.unmount());
   });
 });
@@ -737,7 +738,7 @@ describe('abstained (result-null) record', () => {
     const renderer = await render();
     await settle();
     const rendered = textOf(renderer);
-    expect(rendered).not.toContain('TECHNIQUE SCORE');
+    expect(rendered).not.toContain('ESTIMATED DUPR');
     expect(rendered).toContain('RESULT · NOT SCORED');
     // The inline sheet's training section is honest about the missing score.
     expect(rendered).toContain('A score is required.');

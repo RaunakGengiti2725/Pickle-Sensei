@@ -27,11 +27,14 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 const mockNavigate = jest.fn();
+let mockFocused = true;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: jest.fn() }),
   useFocusEffect: (callback: () => void | (() => void)) => {
     const ReactModule = require('react') as typeof import('react');
-    ReactModule.useEffect(() => callback(), [callback]);
+    ReactModule.useEffect(() => {
+      if (mockFocused) return callback();
+    }, [callback, mockFocused]);
   },
 }));
 
@@ -56,13 +59,25 @@ jest.mock('../../src/data/repository', () => ({
 }));
 
 let mockLocalOnly = false;
+let mockOwner = '11111111-1111-4111-8111-111111111111';
 jest.mock('../../src/auth/authStore', () => ({
   useAuthStore: (
-    selector: (state: { session: { localOnly: boolean } }) => unknown,
-  ) => selector({ session: { localOnly: mockLocalOnly } }),
+    selector: (state: {
+      session: { localOnly: boolean; canonicalAppUserId: string };
+    }) => unknown,
+  ) =>
+    selector({
+      session: { localOnly: mockLocalOnly, canonicalAppUserId: mockOwner },
+    }),
 }));
 
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
+import { Button } from '../../src/design/components';
+import { getDb } from '../../src/data/db';
+import {
+  setActiveDataOwner,
+  SIGNED_OUT_DATA_OWNER,
+} from '../../src/data/accountScope';
 import { color, type } from '../../src/design/tokens';
 
 /**
@@ -93,6 +108,11 @@ const shotNotRead: LocalShotRow = {
   confidence: 0.2,
   resultKind: 'low_confidence',
 };
+
+/** The scored row's label carries its estimated DUPR and 0–10 score (D-046)
+ * so VoiceOver hears the rating without opening the read. */
+const SCORED_ROW_LABEL =
+  'Open forehand drive result, Estimated DUPR 3.50, technique score 7.3 out of 10';
 
 /** Server rows can arrive with a scored kind but no number; must not throw. */
 const shotScoredWithoutNumber: LocalShotRow = {
@@ -323,10 +343,13 @@ function configureApi(api: TrainingApi) {
   });
 }
 
+const mountedLibraries = new Set<TestRenderer.ReactTestRenderer>();
+
 async function renderLibrary(): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
     renderer = TestRenderer.create(<LibraryScreen />);
+    mountedLibraries.add(renderer);
   });
   await settle();
   return renderer;
@@ -350,7 +373,11 @@ function readyStoreState() {
 
 beforeEach(() => {
   mockNavigate.mockClear();
+  mockFocused = true;
   mockLocalOnly = false;
+  mockOwner = '11111111-1111-4111-8111-111111111111';
+  setActiveDataOwner(mockOwner);
+  jest.mocked(getDb).mockClear();
   mockListShots.mockReset();
   mockListPendingCaptures.mockReset();
   mockListShots.mockResolvedValue([shotScored, shotNotRead]);
@@ -364,8 +391,13 @@ beforeEach(() => {
   readyStoreState();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => {
+    for (const renderer of mountedLibraries) renderer.unmount();
+    mountedLibraries.clear();
+  });
   act(() => clearTrainingStoreConfiguration());
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
 });
 
 describe('LibraryScreen · segmented tabs', () => {
@@ -404,6 +436,121 @@ describe('LibraryScreen · segmented tabs', () => {
 });
 
 describe('LibraryScreen · reads tab', () => {
+  it('discards local work across sign-out and back into the same owner before render', async () => {
+    const oldReads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(oldReads.promise);
+    const renderer = await renderLibrary();
+    const freshReads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(freshReads.promise);
+    await act(async () => {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      setActiveDataOwner(mockOwner);
+      oldReads.resolve([shotScored]);
+    });
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    await act(async () => freshReads.resolve([shotNotRead]));
+    expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('hides already loaded reads until the new sign-in generation finishes loading', async () => {
+    mockListShots.mockResolvedValueOnce([shotScored]);
+    const renderer = await renderLibrary();
+    const reads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(reads.promise);
+    await act(async () => {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      setActiveDataOwner(mockOwner);
+    });
+    expect(allText(renderer)).toContain('Opening your library');
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
+    await act(async () => reads.resolve([shotNotRead]));
+    expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('ignores local reads after blur and loads fresh history on refocus', async () => {
+    const oldReads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(oldReads.promise);
+    const renderer = await renderLibrary();
+    mockFocused = false;
+    await act(async () => renderer.update(<LibraryScreen />));
+    await act(async () => oldReads.resolve([shotScored]));
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
+    mockListShots.mockResolvedValue([shotNotRead]);
+    mockFocused = true;
+    await act(async () => renderer.update(<LibraryScreen />));
+    expect(mockListShots).toHaveBeenCalledTimes(2);
+    expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it.each(['database', 'reads', 'clips'])(
+    'shows an error, not empty history, when %s fails and retries local reads',
+    async failure => {
+      if (failure === 'database') {
+        jest.mocked(getDb).mockImplementationOnce(() => {
+          throw new Error('database closed');
+        });
+      } else if (failure === 'reads') {
+        mockListShots.mockRejectedValueOnce(new Error('read failed'));
+      } else {
+        mockListPendingCaptures.mockRejectedValueOnce(
+          new Error('capture read failed'),
+        );
+      }
+      const renderer = await renderLibrary();
+      expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
+      expect(allText(renderer)).not.toContain(
+        'Your measured reads, in one place.',
+      );
+      expect(findByLabel(renderer, 'Analyze your first stroke')).toBeNull();
+      expect(
+        renderer.root.findAll(node => node.props.accessibilityRole === 'alert')
+          .length,
+      ).toBeGreaterThan(0);
+
+      // Local storage failure does not strand the independently loaded saved tab.
+      await pressTab(renderer, 'Saved drills');
+      expect(findByLabel(renderer, 'Explore the Drill Library')).not.toBeNull();
+      await pressTab(renderer, 'Reads');
+      const retry = deferred<LocalShotRow[]>();
+      mockListShots.mockReturnValueOnce(retry.promise);
+      await pressByLabel(renderer, 'Try again');
+      expect(allText(renderer)).toContain('Opening your library…');
+      expect(findByLabel(renderer, 'Try again')).toBeNull();
+      await act(async () => retry.resolve([shotScored]));
+      expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
+      expect(findByLabel(renderer, SCORED_ROW_LABEL)).not.toBeNull();
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('cannot publish deferred reads into another owner’s library', async () => {
+    const oldReads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(oldReads.promise);
+    const renderer = await renderLibrary();
+    mockOwner = '22222222-2222-4222-8222-222222222222';
+    setActiveDataOwner(mockOwner);
+    mockListShots.mockResolvedValue([shotNotRead]);
+    await act(async () => renderer.update(<LibraryScreen />));
+    await act(async () => oldReads.resolve([shotScored]));
+    expect(findByLabel(renderer, SCORED_ROW_LABEL)).toBeNull();
+    expect(findByLabel(renderer, 'Open dink result')).not.toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('settles a deferred read safely after the library unmounts', async () => {
+    const oldReads = deferred<LocalShotRow[]>();
+    mockListShots.mockReturnValueOnce(oldReads.promise);
+    const renderer = await renderLibrary();
+    act(() => renderer.unmount());
+    await act(async () => oldReads.resolve([shotScored]));
+    expect(renderer.toJSON()).toBeNull();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('shows scope and ordering as a plain caption while keeping the actual reads and scores', async () => {
     const renderer = await renderLibrary();
     try {
@@ -428,16 +575,26 @@ describe('LibraryScreen · reads tab', () => {
         shotScored,
         shotNotRead,
       ]);
+      // D-046: the row prints the estimated DUPR (7.25 → 3.50) in the
+      // card-score role with the "7.3 /10" reading beneath in micro.
       const score = renderer.root
         .findAllByType(Text)
         .find(
-          node => node.props.children === shotScored.overallScore!.toFixed(1),
+          node =>
+            Array.isArray(node.props.children) &&
+            node.props.children[0] === '3.50',
         )!;
       expect(StyleSheet.flatten(score.props.style)).toMatchObject({
         ...type.score,
         color: color.ink,
       });
-      await pressByLabel(renderer, 'Open forehand drive result');
+      const technique = renderer.root
+        .findAllByType(Text)
+        .find(node => node.props.children === '7.3 /10')!;
+      expect(StyleSheet.flatten(technique.props.style)).toMatchObject(
+        type.micro,
+      );
+      await pressByLabel(renderer, SCORED_ROW_LABEL);
       expect(mockNavigate).toHaveBeenCalledWith('Result', {
         analysisId: shotScored.id,
       });
@@ -470,12 +627,12 @@ describe('LibraryScreen · reads tab', () => {
   it('a read row opens its Result with the row id as analysisId', async () => {
     const renderer = await renderLibrary();
 
-    const row = findByLabel(renderer, 'Open forehand drive result');
+    const row = findByLabel(renderer, SCORED_ROW_LABEL);
     expect(row).not.toBeNull();
     expect(pressedStyle(row!).minHeight).toBeGreaterThanOrEqual(44);
     expect(allText(renderer)).toContain('7.3');
 
-    await pressByLabel(renderer, 'Open forehand drive result');
+    await pressByLabel(renderer, SCORED_ROW_LABEL);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: shotScored.id,
@@ -539,7 +696,7 @@ describe('LibraryScreen · reads tab', () => {
     expect(text).toContain('Forehand Drive · auto capture');
     expect(text).toContain('Clip saved — analysis has not run yet');
     expect(text).toContain(
-      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
     );
     // The clip rows are not buttons; the only non-tab control is the
     // always-reachable Analyze CTA so the page is never a dead end.
@@ -551,6 +708,74 @@ describe('LibraryScreen · reads tab', () => {
     ).toEqual(new Set(['Analyze your first stroke']));
     await pressByLabel(renderer, 'Analyze your first stroke');
     expect(mockNavigate).toHaveBeenCalledWith('Analyze');
+
+    act(() => renderer.unmount());
+  });
+
+  it('a clip with a saved analysis is one tappable row that reopens it — never a per-row button', async () => {
+    mockListShots.mockResolvedValue([]);
+    mockListPendingCaptures.mockResolvedValue([
+      { ...pendingCapture, id: 'cap-orig', hasOriginalOperation: true },
+      { ...pendingCapture, id: 'cap-confirm', techniqueConfirmation: 'ready' },
+      pendingCapture,
+    ]);
+    const renderer = await renderLibrary();
+
+    const text = allText(renderer);
+    expect(text).toContain('0 analyzed reads · 3 pending clips');
+    expect(text).toContain('Review saved analysis');
+    expect(text).toContain('Confirm technique');
+    // A row that reopens a saved analysis cannot also claim it never ran.
+    expect(text).toContain('4s · Analysis started — not scored yet');
+    expect(text).toContain('4s · Clip saved — analysis has not run yet');
+
+    // Exactly the two actionable rows are pressable beside the Analyze CTA;
+    // the read-only clip stays a plain row. No Button primitive is spent on
+    // a row: the row itself is the control.
+    const nonTab = pressables(renderer).filter(
+      n => n.props.accessibilityRole !== 'tab',
+    );
+    expect(
+      new Set(nonTab.map(n => n.props.accessibilityLabel ?? n.props.label)),
+    ).toEqual(
+      new Set([
+        'Analyze your first stroke',
+        'Review saved analysis: Forehand Drive · auto capture',
+        'Confirm technique: Forehand Drive · auto capture',
+      ]),
+    );
+    expect(renderer.root.findAllByType(Button).map(b => b.props.label)).toEqual(
+      ['Analyze your first stroke'],
+    );
+
+    const original = findByLabel(
+      renderer,
+      'Review saved analysis: Forehand Drive · auto capture',
+    )!;
+    expect(original.props.testID).toBe('open-saved-original-cap-orig');
+    expect(pressedStyle(original).minHeight).toBeGreaterThanOrEqual(44);
+    await pressByLabel(
+      renderer,
+      'Review saved analysis: Forehand Drive · auto capture',
+    );
+    expect(mockNavigate).toHaveBeenLastCalledWith('Analyze', {
+      captureId: 'cap-orig',
+      mode: 'original',
+    });
+
+    const confirm = findByLabel(
+      renderer,
+      'Confirm technique: Forehand Drive · auto capture',
+    )!;
+    expect(confirm.props.testID).toBe('open-saved-confirmation-cap-confirm');
+    await pressByLabel(
+      renderer,
+      'Confirm technique: Forehand Drive · auto capture',
+    );
+    expect(mockNavigate).toHaveBeenLastCalledWith('Analyze', {
+      captureId: 'cap-confirm',
+    });
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
 
     act(() => renderer.unmount());
   });
@@ -962,7 +1187,7 @@ describe('LibraryScreen · pressable ledger', () => {
       .filter(n => n.props.accessibilityRole !== 'tab')
       .map(n => n.props.accessibilityLabel);
     expect(new Set(labels)).toEqual(
-      new Set(['Open forehand drive result', 'Open dink result']),
+      new Set([SCORED_ROW_LABEL, 'Open dink result']),
     );
     act(() => renderer.unmount());
   });

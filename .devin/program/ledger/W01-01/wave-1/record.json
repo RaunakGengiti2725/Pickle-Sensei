@@ -1,0 +1,242 @@
+{
+  "agent_counts": {
+    "completed": 3,
+    "failed": 0,
+    "launched": 3,
+    "requested": 3
+  },
+  "agents": [
+    {
+      "label": "implement-W01-01-r1",
+      "phase": "implement",
+      "prompt_sha256": "17f6708176a9511221dfeb9de1eea0d17921cf719e3ce29f39d5971783eecc44",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-01-r1",
+      "phase": "review",
+      "prompt_sha256": "292fe613fd0e7ee10fba22c3f94ec3f1887a2094b303e10e632dce3e4eeb7af3",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-01-r1",
+      "phase": "adversary",
+      "prompt_sha256": "a21739148c367cafbfd766b64e270888c059f27ca92aa63641bf73ba2b803443",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+  "candidate": {
+    "branch": "devin/pp/w01-01/impl-r1",
+    "head_sha": "4b785e99e9086ba33f39f635f536ea94e5ec7336",
+    "round": 1
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.3",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W01-01",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/58f9bb69-16c3-41f3-af17-bbe4e2298d3c/atk_candidate_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f8355267-0b52-49ae-a63a-25605e2c8449/atk_base_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/26729951-ee4a-47b7-8c54-089e4c7b4da5/atk_base_edge_with_candidate_denojson.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c5824683-47b9-4da6-bac1-56ac5b662d1b/ac3_attack_branch_deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/89c15fb8-b296-416e-b5d2-05d4153982f2/ac1_candidate_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a6523b59-800d-4907-9d91-982f2f96f79c/ac3_candidate_deno.log"
+        ],
+        "attack_branch": "devin/pp/w01-01/attack-4b785e99",
+        "attack_branch_sha": "2fddd573e76f75c115a0bba4244f87497e394e62",
+        "attacked_sha": "4b785e99e9086ba33f39f635f536ea94e5ec7336",
+        "attacks_tried": 14,
+        "breaks": [
+          {
+            "expected": "A mechanics-only shot reaches shots.result_kind='partial' and the permit lands released/partial without charging (the migration's own objective). Not a candidate defect per the write_paths (SQL/RLS only) and explicitly disclosed in the migration header, but the package objective 'honest PARTIAL terminal outcome' is not delivered end to end until the edge parser is widened.",
+            "observed": "shots:sync {resultKind:'partial', overallScore:null} → HTTP 200 with rejected[0].code='shot.invalid_payload' (\"resultKind must be scored|low_confidence\"), apply_synced_shot RPC never called. finalize {outcome:'partial'} → HTTP 400 validation.analysis_permit_finalize, no PATCH sent. A mechanics-only result from the app therefore still has only the two dishonest paths (relabel as low_confidence or upgrade to scored) or stays in the outbox.",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json attack_w01_01_edge_partial_boundary.test.ts  (W01-EDGE-1..3; passes = the refusal is confirmed). VERIFIED on candidate 4b785e99 (4 passed/0 failed, exit 0) and identical on BASE 42291369 with the candidate deno.json import map copied in (4 passed/0 failed, exit 0) — index.ts is unchanged by the candidate.",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_01_edge_partial_boundary.test.ts",
+            "title": "Partial terminal outcome is unreachable from the shipping app: POST /v1/shots:sync and POST /v1/analysis-permits/:id/finalize still refuse 'partial' on the candidate (SQL layer complete, Edge wiring absent; deferred by the migration's own comment to serial group edge-index)"
+          },
+          {
+            "expected": "Either the edge finalize route must write released/partial for this outcome, or the migration should have admitted the route's existing write shape. Documented so the edge-index follow-up does not ship a 100% failing partial finalize path. Not a data-loss/charge bug: the refusal leaves the permit reserved and nothing is charged.",
+            "observed": "finalized/partial is refused by guard_analysis_permit_lifecycle() and api_private.enforce_permit_transition() on the candidate; the shipping finalize route writes status='finalized' for every releasable outcome.",
+            "repro": "SQL: cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55432/postgres deno test -A --config deno.json xc_pg_w01_01_partial_outcome_adversary.test.ts --filter 'W01-ATK-8'  → update analysis_permits set status='finalized', outcome='partial' where id=… and status='reserved' as the owner (authenticated) → 23514 access.permit_transition_rejected, also from released/expired; released/partial is accepted. Edge: W01-EDGE-4 pins that the route today PATCHes {status:'finalized', outcome} with status=eq.reserved.",
+            "severity": "P2",
+            "test_file": "supabase/functions/api/__wf__/xc_pg_w01_01_partial_outcome_adversary.test.ts (W01-ATK-8) + supabase/functions/api/__wf__/attack_w01_01_edge_partial_boundary.test.ts (W01-EDGE-4)",
+            "title": "Wiring hazard: the finalize route's write shape {status:'finalized', outcome} is the one shape the candidate migration refuses for 'partial' (only released/partial is legal) — naively adding 'partial' to RELEASABLE_OUTCOMES would yield 409/23514 on every partial finalize"
+          }
+        ],
+        "package_id": "W01-01",
+        "summary": "ADVERSARY W01-01 vs candidate 4b785e99 (BASE 42291369). Attack branch devin/pp/w01-01/attack-4b785e99 @ 2fddd573 (one commit, two new test files, no candidate/production files touched, no PR). SQL LAYER — no break found: 10 live-PostgreSQL attacks in xc_pg_w01_01_partial_outcome_adversary.test.ts (1 concurrency partial-vs-scored on one permit both orders + 6-way partial stampede; 2 partial-vs-stale-sweep in both lock orders incl. a late partial over released/expired; 3 replay of a partial id as scored 9.9 / second permit / concurrent duplicate / other user; 4 boundary values score 0,-1,10,11,'NaN','Infinity','' + resultKind PARTIAL/'partial '/''/null + confidence out of range + direct partial-with-score INSERT; 5 roles matrix anon(42501)/other user/owner UPDATE allowed-and-denied/direct client INSERT of partial with live permit(42501 access.permit_not_reserved)/orphan partial/rank+progress exclusion/client UPDATE of shots; 6 free-rating conservation at the limit, ledger floor, late-linked identity inheritance, account delete+recreate, premium, reserve_analysis_permit(); 7 crash between steps — bad checkpoint band rolls back shot+details+permit, pg_terminate_backend mid-sync leaves nothing; 8 finalize write shape finalized/partial refused from reserved and released/expired; 9 tombstone after owner delete — client resurrection refused, byte-identical owner restore only, tombstoned id backs nothing; 10 far-future/past permit created_at, capturedAt bounds 2000≤t<2100, malformed clocks). All 10 hold on the candidate: partial never increments lifetime_scored_count()/access_state().scored_count/free_rating_ledger, released/partial is terminal for the client role, one-permit-one-shot survives every race. VERIFIED runs: candidate `deno test -A --config deno.json xc_pg_w01_01_partial_outcome_adversary.test.ts attack_w01_01_edge_partial_boundary.test.ts` exit 0, 14 passed/0 failed/0 ignored (atk_candidate_final.log). AC2-style base regression: BASE 42291369 checked out in a worktree, ONLY the two new files copied over, fresh base-migrated DB → SQL file 0 passed/10 failed (every case dies on the original defect: shot.write_failed:23514 / finalized|released partial refused 23514) exit 1 (atk_base_regress.log); the edge file cannot load on BASE with base deno.json (pre-existing 'Module not found domain.js' — the candidate's justified deno.json fix) and with the candidate's deno.json copied in passes 4/4 on BASE too, proving edge behaviour is unchanged by the candidate. Full Edge suite on the attack branch with XC_PG_URL+PICKLE_AUDIT_PG_URL against disposable postgres: `deno task test` exit 0, 769 passed (31 steps)/0 failed/0 ignored (ac3_attack_branch_deno.log; 755 on candidate alone). AC1 `./supabase/tests/run_rls_tests.sh` on candidate: exit 0, all four histories ALL CASES PASSED (ac1_candidate_rls.log). Lint/format on the two new files: prettier --check exit 0, eslint exit 0, deno lint exit 0, git diff --check exit 0, deno check (type-check) clean. BREAKS: two P2 findings, both at the SQL↔Edge integration boundary and both already acknowledged in the migration header as deferred to serial group edge-index: (1) 'partial' is unreachable from the shipping app — shots:sync rejects it shot.invalid_payload and finalize rejects it 400, so the package objective is not delivered end to end on 4b785e99; (2) the finalize route's existing write shape finalized/<outcome> is exactly what the migration refuses for partial, so the follow-up must write released/partial or every partial finalize will 409. No P0/P1: no charge, no data loss, no privilege widening, no crash found. UNKNOWN/not exercised: network-failure matrix (timeout/429/5xx/redirect) — no new network surface in this SQL-only package; Apple/M4 plane not applicable. Nothing skipped or ignored was counted as a pass."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/492721a4-94dc-4eda-a3a9-f42a5f54fa72/ac1_rls.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC1",
+            "note": "VERIFIED on HEAD 4b785e99 (Docker postgres:16). executed = 4 migration histories (fresh, production_20260906, upstream_20260906, ordered_20260907) × 3 SQL matrices (security_regression.sql incl. new S1–S7, account_deletion_operations.sql, analysis_release_policy.sql); 0 ERROR lines; 20260908100000_permit_partial_terminal_outcome.sql applied as pending in every history.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1d44bf4-b0a9-4381-91ec-8a70bb8e715e/ac2_base_sql.log",
+            "command": "BASE: git worktree add <dir> 42291369fc4387571ac8821410353e0f99404484 && cp supabase/tests/security_regression.sql supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts (HEAD versions) into it && ./supabase/tests/run_rls_tests.sh && (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts); HEAD: ./supabase/tests/run_rls_tests.sh && (cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test)",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC2",
+            "note": "VERIFIED. BASE run with ONLY the two test files copied over: run_rls_tests.sh exit 3 at security_regression.sql:4114 — `ERROR: S1: a partial (mechanics-only) result must be accepted by the sync RPC (got shot.write_failed:23514)` (shots.result_kind CHECK rejects 'partial'; fresh history, 0 of 3 matrices completed) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1d44bf4-b0a9-4381-91ec-8a70bb8e715e/ac2_base_sql.log; base Deno static pin exit 1, 20 passed / 1 failed (`20260908100000_permit_partial_terminal_outcome.sql must exist in the migration chain`) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a768e44-348b-45ca-aeb1-57a4c424be23/ac2_base_deno.log. HEAD: run_rls_tests.sh exit 0 (12/12 matrix runs, AC1 log) and the static pin passes inside the full Edge run (21/21 in db_migrations_rls_indexes.test.ts; AC3 log). executed/passed here = 12 HEAD SQL matrix runs + 1 HEAD static pin test.",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/020b5404-6876-48e1-875c-fe9aaceb98f7/ac3_edge_ignored0.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 755,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC3",
+            "note": "VERIFIED on HEAD 4b785e99 against a disposable postgres:16 provisioned by ./supabase/functions/api/__wf__/xc_pg_up.sh (shim_auth.sql + every migration incl. 20260908100000): `ok | 755 passed (31 steps) | 0 failed` with 0 ignored. The command exactly as written in the manifest (XC_PG_URL only) gives exit 0, `ok | 747 passed (31 steps) | 0 failed | 8 ignored` — the 8 ignored are be-edge-routes-shots-rank.test.ts, which gates on PICKLE_AUDIT_PG_URL only (no XC_PG_URL alias, pre-existing); setting both variables to the same disposable URL runs them (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/81f31306-d666-4e40-baee-884659eb73f1/ac3_edge.log for the XC_PG_URL-only run). Both runs depend on the out-of-scope __wf__/deno.json import-map fix (see baseline_failures_observed).",
+            "passed": 755,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Tests first (section S in security_regression.sql exercising the real public.apply_synced_shot() path for a free Google identity and an Apple member, plus a static Deno pin on the migration file), proven failing on a BASE_SHA worktree with only the test files copied; then a vocabulary-only forward migration that admits 'partial' beside the free-rating accounting path without redefining any counting or backing function; every acceptance command run against disposable Docker postgres:16.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/492721a4-94dc-4eda-a3a9-f42a5f54fa72/ac1_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f1d44bf4-b0a9-4381-91ec-8a70bb8e715e/ac2_base_sql.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0a768e44-348b-45ca-aeb1-57a4c424be23/ac2_base_deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/81f31306-d666-4e40-baee-884659eb73f1/ac3_edge.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/020b5404-6876-48e1-875c-fe9aaceb98f7/ac3_edge_ignored0.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5c1a579d-94c9-4657-90ec-19de3eef174b/baseline_edge_base.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4823010e-6f28-46eb-be25-f7346c2e03c9/format_check.log"
+        ],
+        "base_sha": "42291369fc4387571ac8821410353e0f99404484",
+        "baseline_failures_observed": [
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55434/postgres deno task test — on BASE_SHA 42291369 (worktree, disposable postgres:16 from xc_pg_up.sh): exit 1, `FAILED | 210 passed (7 steps) | 311 failed | 8 ignored`; 310 × `TypeError: Module not found \"file:///…/packages/shared-types/src/domain.js\"` raised from packages/shared-types/src/analysisReleasePolicy.ts:7 via routesHarness.ts loadHarness → import(\"../index.ts\"); __wf__/deno.json lacks the .js→.ts import-map entries that supabase/functions/api/deno.json has. Log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/5c1a579d-94c9-4657-90ec-19de3eef174b/baseline_edge_base.log. Fixed openly in commit 4b785e99 (listed in out_of_scope_files), not silently.",
+          "cd supabase/functions/api/__wf__ && XC_PG_URL=<url> deno task test — 8 tests in be-edge-routes-shots-rank.test.ts are `ignore`d unless PICKLE_AUDIT_PG_URL is set (they do not read XC_PG_URL). Pre-existing on BASE; not changed (a test edit would be outside write_paths). Ran with both variables set for the ignored==0 evidence."
+        ],
+        "blocked": false,
+        "branch": "devin/pp/w01-01/impl-r1",
+        "files_changed": [
+          "supabase/migrations/20260908100000_permit_partial_terminal_outcome.sql",
+          "supabase/tests/security_regression.sql",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts",
+          "supabase/functions/api/__wf__/deno.json"
+        ],
+        "head_sha": "4b785e99e9086ba33f39f635f536ea94e5ec7336",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/deno.json — AC3 (`deno task test` in __wf__) fails 311 tests on BASE_SHA with `Module not found packages/shared-types/src/domain.js` (routesHarness imports index.ts, which reaches packages/shared-types whose files use .js specifiers that only supabase/functions/api/deno.json maps to .ts); mirrored the same four .js→.ts import-map entries one directory deeper so the suite can load the function under test. Test-config only, no test/dependency change, not under any serial_group_paths prefix (edge-index is index.ts only). Separate commit 4b785e99 so it can be dropped independently."
+        ],
+        "package_id": "W01-01",
+        "regression_tests_added": [
+          "supabase/tests/security_regression.sql section S (S1–S7): S1 resultKind=partial through apply_synced_shot() → shot result_kind='partial'/NULL score, permit released/partial, lifetime_scored_count()=0, access_state().scored_count=0, identity ledger untouched, idempotent replay, second shot on the permit = access.permit_not_reserved, permit_backs_sync('released','partial')=false; S2 partial with a score refused at the table (23514), permit stays reserved; S3 partial accepted and free with both ratings spent, ledger stays 2, third scored = access.paywall_required; S4 released/expired → released/partial late settlement; S5 client role cannot forge scored from partial (released/partial terminal for → finalized/scored, → reserved, → released/expired, → released/low_confidence; reserved → finalized/partial refused; no UPDATE grant to relabel a partial shot; direct scored INSERT backed by released/partial = 42501; RPC scored on released/partial = access.permit_not_reserved, free and member); S6 tombstone: owner DELETE of released/partial leaves a released/partial tombstone, only byte-identical restore, reopen as reserved refused, RPC answers access.permit_not_reserved and writes nothing; S7 anti-reset: after account deletion the identity ledger reads exactly 2 and a re-created account inherits 2 and is refused a reservation.",
+          "supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts 'W01-01: partial is an explicit released terminal outcome…' — static pin on 20260908100000: guard vocabulary admits 'partial' (kept all prior outcomes), partial only ever released, released/expired → released/partial in both guard_analysis_permit_lifecycle and api_private.enforce_permit_transition, permit id/user_id/idempotency_key/created_at immutability retained, revokes retained, trigger not dropped, shots.result_kind widened to exactly scored|low_confidence|partial (NOT VALID + VALIDATE), shots_low_confidence_unscored not altered, none of lifetime_scored_count/identity_scored_count/record_scored_shot_in_ledger/permit_backs_sync/apply_synced_shot/enforce_scored_shot_permit/reserve_analysis_permit/access_state redefined, latest permit_backs_sync still the NULL-safe reserved|released-expired rule, latest ledger/lifetime definitions still scored-only, no grant/policy/RLS statements in the migration."
+        ],
+        "residual_risks": [
+          "End-to-end wiring from the shipping app stops at the edge parser: supabase/functions/api/index.ts (serial group edge-index, NOT held by this package) still narrows resultKind to scored|low_confidence and rejects 'partial' (`resultKind must be scored|low_confidence.`), so a device cannot yet deliver a partial through POST sync. The database contract this migration proves (resultKind='partial', overallScore=null → released/partial, no count) is exactly what that one-line parser widening must pass through; that change was left to the edge-index package per SCOPE POLICY. INFERRED from reading index.ts.",
+          "The AC3 pass depends on the out-of-scope test-config fix to supabase/functions/api/__wf__/deno.json; if the reviewer rejects that commit, AC3 reverts to the BASE state (311 failures from a module-resolution error unrelated to this package).",
+          "8 Edge tests (be-edge-routes-shots-rank.test.ts) only run when PICKLE_AUDIT_PG_URL is set; the manifest command with XC_PG_URL alone leaves them ignored (pre-existing).",
+          "Ledger/tombstone/replay behaviour for released/partial is proven for the RPC and client-role paths; the edge finalize route's outcome enum was not changed and still cannot write 'partial' (it is not in the finalize vocabulary) — the RPC is the only writer of released/partial, which matches the objective (settlement carries the shot)."
+        ],
+        "summary": "Defect on BASE_SHA 42291369 (VERIFIED by the failing S1 case): a mechanics-only result without a validated benchmark had no honest terminal outcome. supabase/migrations/20260829120000_progress_data.sql:~60 `result_kind … check (result_kind in ('scored','low_confidence'))` rejects 'partial', so apply_synced_shot() (20260907100000_permit_settled_no_delete.sql) answered shot.write_failed:23514 — a transient code the outbox retries — and the permit stayed reserved / was swept to released/expired; guard_analysis_permit_lifecycle() (20260906140000_permit_lifecycle_null_safe.sql:122-155) and api_private.enforce_permit_transition() (20260907110000_api_audit_integration.sql:11-18) had no released/partial state and no late released/expired → released/partial move. The only ways to persist it were relabelling as low_confidence or upgrading to scored (a charged, fabricated rating). Fix: forward migration 20260908100000_permit_partial_terminal_outcome.sql (later than every existing file) — shots.result_kind widened to scored|low_confidence|partial (drop/re-add shots_result_kind_check NOT VALID + VALIDATE; shots_low_confidence_unscored untouched so a partial can never carry a score), guard_analysis_permit_lifecycle() admits 'partial' as a settled outcome that may only be released (no finalized/partial), reserved → released/partial and released/expired → released/partial are legal, everything settled stays terminal; api_private.enforce_permit_transition() admits the same late move; revokes re-applied; no grant/policy/RLS change. apply_synced_shot(), permit_backs_sync(), lifetime_scored_count(), identity_scored_count(), record_scored_shot_in_ledger(), reserve_analysis_permit(), access_state() are deliberately NOT redefined: the RPC already settles non-scored kinds as released/<kind> under pg_advisory_xact_lock(access_lock_key(uid)), the scored backstop and ledger fire for result_kind='scored' only, and released/partial is not backing — so a partial releases the permit, is never counted or charged, and lifetime floor / late-linked inheritance / anti-reset / tombstone / replay / permit-identity protections are unchanged (proven live by S1–S7 on all four migration histories). Commits: d8afcc08 tests (fail on BASE), 5044e10f test refinement, 878d6565 migration, 4b785e99 __wf__/deno.json import map (out-of-scope, justified). Verified: AC1 exit 0; AC2 base fails (S1 23514 / static pin missing migration) and HEAD passes; AC3 exit 0, 755 passed / 0 failed / 0 ignored (with PICKLE_AUDIT_PG_URL also set; 747/0/8 ignored with XC_PG_URL only); pnpm format:check exit 0; git diff --check exit 0; eslint on the changed .ts exit 0; deno check on the static test exit 0. No PR opened; pushed only devin/pp/w01-01/impl-r1."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b989cd7-0137-49da-b8bf-df96ba2c7e46/ac1_rls_head.log",
+            "command": "./supabase/tests/run_rls_tests.sh",
+            "executed": 12,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC1",
+            "note": "VERIFIED on HEAD 4b785e99 (Docker postgres:16 = local postgres:16-alpine 16.15 retagged after Docker Hub 429). 4 migration histories x 3 SQL matrices = 12 matrix runs; log contains 16 PASS markers (4x SECURITY REGRESSION MATRIX incl. new S1-S7, 4x W08 ACCOUNT DELETION MATRIX, 4x 'Analysis release policy authority: PASS', plus 4 history-level pass lines), 0 ERROR lines; 20260908100000_permit_partial_terminal_outcome.sql applied in every history.",
+            "passed": 12,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/baafccc5-ad1f-4409-bdf0-5a276d9f0388/ac2_base_rls.log",
+            "command": "BASE: git worktree add /home/ubuntu/w01_base 42291369fc4387571ac8821410353e0f99404484; cp HEAD versions of supabase/tests/security_regression.sql and supabase/functions/api/__wf__/db_migrations_rls_indexes.test.ts into it (ONLY these two files); ./supabase/tests/run_rls_tests.sh; (cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json db_migrations_rls_indexes.test.ts). HEAD: ./supabase/tests/run_rls_tests.sh; (cd supabase/functions/api/__wf__ && XC_PG_URL=... PICKLE_AUDIT_PG_URL=... deno task test)",
+            "executed": 13,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC2",
+            "note": "VERIFIED regression proof holds. BASE SQL: run_rls_tests.sh exit 3, aborted in the first (fresh) history at security_regression.sql:4114 `ERROR: S1: a partial (mechanics-only) result must be accepted by the sync RPC (got shot.write_failed:23514)` (shots_result_kind_check rejects 'partial'); 0 of 12 matrix runs completed — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/baafccc5-ad1f-4409-bdf0-5a276d9f0388/ac2_base_rls.log. BASE static Deno pin: exit 1, `FAILED | 20 passed | 1 failed` (W01-01 test: migration 20260908100000 must exist) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/01d8a8c0-fb57-42a9-85da-a6f9e425ad51/ac2_base_deno.log. HEAD: run_rls_tests.sh exit 0, 12/12 matrix runs pass (AC1 log) and the W01-01 static pin passes inside the full Edge run (AC3 log, db_migrations_rls_indexes.test.ts 21/21). executed/passed = 12 HEAD SQL matrix runs + 1 HEAD static pin test.",
+            "passed": 13,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a25c3630-e41f-41e1-a98b-94f294217037/ac3_edge_ignored0.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres PICKLE_AUDIT_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 755,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-01-AC3",
+            "note": "VERIFIED on HEAD 4b785e99 against disposable postgres provisioned by ./supabase/functions/api/__wf__/xc_pg_up.sh (applied shim_auth.sql + every migration incl. 20260908100000): `ok | 755 passed (31 steps) | 0 failed`, ignored==0. Manifest-literal command (XC_PG_URL only): exit 0, `ok | 747 passed (31 steps) | 0 failed | 8 ignored` (be-edge-routes-shots-rank.test.ts gates on PICKLE_AUDIT_PG_URL, pre-existing) — log https://la-hacks-rttothemoon.devinenterprise.com/attachments/441127e6-13c7-4cc4-8c52-e146b73ae1cc/ac3_edge_xc_only.log. Both runs require the __wf__/deno.json import-map wiring commit.",
+            "passed": 755,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/0b989cd7-0137-49da-b8bf-df96ba2c7e46/ac1_rls_head.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/baafccc5-ad1f-4409-bdf0-5a276d9f0388/ac2_base_rls.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/01d8a8c0-fb57-42a9-85da-a6f9e425ad51/ac2_base_deno.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a25c3630-e41f-41e1-a98b-94f294217037/ac3_edge_ignored0.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/441127e6-13c7-4cc4-8c52-e146b73ae1cc/ac3_edge_xc_only.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/f53a8888-2ee6-40e7-a075-cc700a4e59ee/base_deno_json_check.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "supabase/functions/api/__wf__/deno.json is outside write_paths (declared in out_of_scope_files). Accepted as justified minimal wiring: 4 import-map entries mirroring supabase/functions/api/deno.json (.js -> .ts for packages/shared-types/src), not under any serial_group_paths prefix, test-config only. VERIFIED necessary: on BASE 42291369 with only the two test files copied, `deno task test` in __wf__ gives `FAILED | 180 passed (7 steps) | 312 failed | 38 ignored` from `Module not found .../packages/shared-types/src/domain.js` (log https://la-hacks-rttothemoon.devinenterprise.com/attachments/f53a8888-2ee6-40e7-a075-cc700a4e59ee/base_deno_json_check.log). Separate commit 4b785e99, droppable independently.",
+          "End-to-end delivery from the device is not yet possible: supabase/functions/api/index.ts (serial group edge-index, held by W01-02, not this package) still narrows resultKind to scored|low_confidence. The DB contract this migration ships (apply_synced_shot resultKind='partial', overallScore=null -> shot partial/NULL, permit released/partial, lifetime_scored_count unchanged) is exercised by the SHIPPING RPC the edge fn already calls, so this is not a dead module; W01-02 must widen the parser to complete the path. INFERRED from index.ts.",
+          "Manifest AC3 command with XC_PG_URL alone yields `ok | 747 passed (31 steps) | 0 failed | 8 ignored` (exit 0); the 8 ignored are be-edge-routes-shots-rank.test.ts gated on PICKLE_AUDIT_PG_URL (pre-existing on BASE, not touched). Setting both variables to the disposable URL gives ignored==0 (755/0/0). Recommend the manifest AC3 command be amended to set both variables, or a later package alias XC_PG_URL in that test file.",
+          "Reviewer environment note: Docker Hub returned 429 for postgres:16; the local postgres:16-alpine image (PostgreSQL 16.15) was tagged postgres:16 so run_rls_tests.sh could run unmodified. No repo file was changed for this."
+        ],
+        "package_id": "W01-01",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "4b785e99e9086ba33f39f635f536ea94e5ec7336",
+        "scope_violation": false,
+        "summary": "APPROVE W01-01 candidate 4b785e99 (branch devin/pp/w01-01/impl-r1) against BASE 42291369. Scope: `git diff --stat` shows 4 files — 3 under write_paths plus supabase/functions/api/__wf__/deno.json, accepted as justified minimal wiring (4 import-map entries, not in any serial group, VERIFIED required: BASE Edge suite fails 312 tests with Module not found without it). Diff is purely additive: no existing test deleted/reordered/weakened; no existing code comment edited; no applied migration touched (new file 20260908100000 > 20260908020000, the latest existing); grep of added lines for ts-ignore/eslint-disable/'|| true'/any/passWithNoTests found nothing; prettier --check, eslint on the .ts, and git diff --check all exit 0. Invariants (INFERRED from reading the full migration + all prior definitions): the migration only (a) widens shots.result_kind to scored|low_confidence|partial (drop/re-add NOT VALID + VALIDATE; shots_low_confidence_unscored kept so partial can never carry a score), (b) admits 'partial' as a released-only settled outcome in guard_analysis_permit_lifecycle() (finalized/partial rejected; settled states stay terminal; released/expired -> released/partial late move added) and the same late move in api_private.enforce_permit_transition(), (c) re-applies the existing revokes. It contains no grant/policy/RLS/session-check change and does NOT redefine lifetime_scored_count/identity_scored_count/record_scored_shot_in_ledger/permit_backs_sync/apply_synced_shot/enforce_scored_shot_permit/reserve_analysis_permit/access_state — all SQL that counts or gates keys on result_kind = 'scored' positively, so partial is never counted, charged, or backing, and access_lock_key/lifetime floor/late-linked inheritance/anti-reset/tombstone/replay/owner-isolation behaviour is untouched; partial is not relabelled low_confidence. Live proof: new SQL section S1-S7 exercises the real apply_synced_shot() path (free Google identity + Apple member): partial accepted -> shot partial/NULL, permit released/partial, lifetime_scored_count()=0, access_state uncharged, idempotent replay, permit not reusable, partial+score refused 23514, third scored after 2 spent still paywall_required, late expired->partial, client cannot forge scored from partial (finalized/scored, reopen, relabel, direct scored INSERT 42501), tombstone byte-identical restore only, identity ledger survives deletion (2 inherited). AC1 VERIFIED exit 0 (12/12 matrix runs across 4 histories). AC2 VERIFIED: BASE with only the two test files copied fails — run_rls_tests.sh exit 3 at security_regression.sql:4114 S1 (shot.write_failed:23514), static pin `FAILED | 20 passed | 1 failed`; HEAD passes both. AC3 VERIFIED exit 0 `ok | 755 passed (31 steps) | 0 failed`, ignored==0 with XC_PG_URL+PICKLE_AUDIT_PG_URL (747/0/8 ignored with the manifest-literal XC_PG_URL-only command — pre-existing gate, non-blocking). Non-blocking: end-to-end device delivery of 'partial' still needs the index.ts parser widening owned by W01-02 (edge-index serial group); the shipping RPC path this package changes is already what index.ts calls, so no dead module was added. No PR opened, nothing pushed, no Mac run needed (no Apple files changed).",
+        "verdict": "approve"
+      },
+      "round": 1
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-1"
+}

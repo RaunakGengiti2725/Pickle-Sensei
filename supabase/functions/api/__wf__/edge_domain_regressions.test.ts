@@ -46,16 +46,19 @@ function orderedSlice(
   const limit = url.searchParams.get("limit");
   const range = request.headers.get("range") ?? "0-999";
   const [from, to] =
-    offset !== null && limit !== null
-      ? [Number(offset), Number(offset) + Number(limit) - 1]
+    limit !== null
+      ? [Number(offset ?? 0), Number(offset ?? 0) + Number(limit) - 1]
       : range.split("-").map(Number);
   const order = url.searchParams.get("order") ?? "day.asc";
   const descending = order.startsWith("day.desc");
+  // Keyset cursor of a newest-first read: `or=(day.lt."<last day served>")`.
+  const before = /^\(day\.lt\."(\d{4}-\d{2}-\d{2})"\)$/.exec(url.searchParams.get("or") ?? "");
   const rows: Array<{ day: string }> = [];
-  for (let i = from; i <= Math.min(to, total - 1); i += 1) {
-    rows.push({ day: dayAt(descending ? total - 1 - i : i) });
+  for (let i = 0; i < total; i += 1) {
+    const day = dayAt(descending ? total - 1 - i : i);
+    if (!before || (descending ? day < before[1] : day > before[1])) rows.push({ day });
   }
-  return rows;
+  return rows.slice(from, to + 1);
 }
 
 // ─── EDR-C: GET /v1/progress pages newest-first so MAX_PAGES never drops today ──
@@ -90,8 +93,12 @@ Deno.test(
     };
     assertEquals(body.streak.practicedToday, true, JSON.stringify(body.streak));
     assertEquals(body.streak.lastPracticeDate, dayAt(total - 1));
-    assertEquals(body.streak.currentDays, 20_000, "the 20 fetched pages form the current streak");
-    assertEquals(practiceDayRequests.length, 20, "paging stops at MAX_PAGES");
+    assertEquals(body.streak.currentDays, total, "every practice day forms the current streak");
+    assertEquals(
+      practiceDayRequests.length,
+      22,
+      "20 full keyset pages + the short last page + the empty page that proves the end",
+    );
     for (const order of practiceDayRequests) assertEquals(order, "day.desc");
   },
 );

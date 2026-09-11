@@ -3,10 +3,13 @@
  */
 
 import { AppRegistry } from 'react-native';
-import App from './App';
 import { name as appName } from './app.json';
 import { stabilitySlo } from './src/analysis/stabilityTelemetry';
 import { registerBackgroundNotificationHandler } from './src/notifications/service';
+import {
+  captureGlobalError,
+  initializeDiagnostics,
+} from './src/diagnostics/sentry';
 
 function djb2(text) {
   let hash = 5381;
@@ -33,11 +36,27 @@ function crashFingerprint(error) {
   return djb2(`${name}|${topFrame ?? message}`);
 }
 
+function attemptDiagnostics(operation) {
+  try {
+    return operation();
+  } catch {
+    return false;
+  }
+}
+
 function installGlobalErrorHandler() {
   const errorUtils = global.ErrorUtils;
-  if (!errorUtils || typeof errorUtils.setGlobalHandler !== 'function') return;
+  if (
+    !errorUtils ||
+    typeof errorUtils.setGlobalHandler !== 'function' ||
+    typeof errorUtils.getGlobalHandler !== 'function'
+  )
+    return;
   const previous = errorUtils.getGlobalHandler();
-  errorUtils.setGlobalHandler((error, isFatal) => {
+  const installedKey = Symbol.for('pickle.globalErrorHandler.v1');
+  if (typeof previous !== 'function' || previous[installedKey]) return;
+  const handler = (error, isFatal) => {
+    attemptDiagnostics(() => captureGlobalError(error, isFatal === true));
     try {
       stabilitySlo.record({
         kind: 'crash',
@@ -48,7 +67,9 @@ function installGlobalErrorHandler() {
       // Telemetry must never stand between an error and its handler.
     }
     previous(error, isFatal);
-  });
+  };
+  handler[installedKey] = true;
+  errorUtils.setGlobalHandler(handler);
 }
 
 function toError(rejection) {
@@ -90,8 +111,11 @@ function installPromiseRejectionTracking() {
   });
 }
 
+attemptDiagnostics(initializeDiagnostics);
 installGlobalErrorHandler();
 installPromiseRejectionTracking();
+
+const App = require('./App').default;
 
 // Must be registered outside the component tree: the notification library
 // requires a background event handler even though local reminders do no

@@ -66,6 +66,8 @@ import { AccountDeletionError } from '../../src/account/deletion';
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
+import { establishApiSession } from '../../src/account/apiSession';
+import { setActiveDataOwner } from '../../src/data/accountScope';
 
 const syncedSession: AuthSession = {
   provider: 'apple',
@@ -137,6 +139,13 @@ describe('ManageAccountScreen deletion sheet guards', () => {
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
     mockShowBrandNotice.mockClear();
+    setActiveDataOwner(syncedSession.canonicalAppUserId!);
+    establishApiSession({
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'test-access-token',
+      canonicalAppUserId: syncedSession.canonicalAppUserId!,
+      provider: 'apple',
+    });
     act(() => {
       useAuthStore.setState({
         hydrated: true,

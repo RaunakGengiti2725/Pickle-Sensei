@@ -30,6 +30,7 @@ jest.mock('../../src/data/db', () => ({
 const CANONICAL_OWNER = '44444444-4444-4444-8444-444444444444';
 
 jest.mock('../../src/account/apiSession', () => ({
+  subscribeToApiSession: () => () => {},
   getApiSession: () => ({
     apiBaseUrl: 'https://api.example.test',
     bearerToken: 'token',

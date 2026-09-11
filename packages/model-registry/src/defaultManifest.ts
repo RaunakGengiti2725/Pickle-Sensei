@@ -67,12 +67,12 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedCaptureEnvelope: CAPTURE_ENVELOPE,
       runtimeRequirements: ["mediapipe-tasks-vision"],
       license: "apache-2.0",
-      notes: "MediaPipe Pose Landmarker bundled with the Android build.",
+      notes: "MediaPipe Pose Landmarker; not part of the iOS build.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "trigger.temporal-heuristic",
-      version: "temporal-stroke-heuristic-5",
+      version: "temporal-stroke-heuristic-6",
       task: "stroke_trigger",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -81,7 +81,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedStrokes: "all",
       supportedCaptureEnvelope: CAPTURE_ENVELOPE,
       notes:
-        "Hip-relative single-swing trigger with independent wrist onset and observed settlement. The captured event must fit inside the recorded spool. Synthetic regression coverage is not field accuracy evidence; motion detection never names a stroke.",
+        "Hip-relative single-swing trigger with independent wrist onset and observed settlement. v6 (2026-09-10): a wrist accelerating past 2.5 body-heights/s opens a candidate without a quiet onset (startMs = its latest quiet sample inside the onset horizon, else the trigger interval), a strong candidate that never settles completes at maxStrokeMs instead of being dropped, and STOP & ANALYZE falls back to the window around the fastest deliberate hip-relative wrist movement when no candidate completed. The captured event must fit inside the recorded spool. Synthetic regression coverage is not field accuracy evidence; motion detection never names a stroke.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
@@ -321,12 +321,12 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "AUTO DETECT declared-null profile resolution (strokeAutoResolution.ts). Ships inside FUSION_ENGINE_VERSION and has no independent version constant; resolution ladder is leaf → shared side profile → abstained, never an invented stroke.",
+        "AUTO DETECT and ambiguous legacy declarations require an explicit supported exact technique before scoring. Ships inside FUSION_ENGINE_VERSION with no independent version constant. Preserves original prediction and disagreement evidence; classifier confidence is not scientific release approval.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "phase.geometry",
-      version: "phase-geometry-1",
+      version: "phase-geometry-3",
       task: "phase_segmentation",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -334,7 +334,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "Deterministic wrist-kinematics phase segmentation. Upgrade path: learned temporal segmenter once labeled data exists.",
+        "Deterministic wrist-kinematics phases bounded by actual observations, whole-millisecond boundaries. v3 (2026-09-10): the run-up starts at the paddle-set speed dip, accelerate/contact/prepare are guaranteed for every peak, the peak is the fastest candidate whose run-up carried the wrist a body-relative distance (label swaps and jitter spikes are skipped), context frames around the trigger window supply ready/follow-through, and only stillness abstains. Contact is a motion proxy; return-to-ready is not inferred from the clip endpoint. Upgrade path: learned temporal segmenter once labeled data exists.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,
@@ -352,7 +352,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "biomech.geometry",
-      version: "features-geometry-1",
+      version: "features-geometry-3",
       task: "biomechanics_extraction",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -360,7 +360,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android", "server"],
       supportedStrokes: "all",
       notes:
-        "Measured 2D geometry features from recorded pose. One modality signal for fusion — not 'the model'.",
+        "Measured 2D geometry from observed phase-local poses. v3 (2026-09-10): a missing run-up/contact span falls back to the neighbouring measured phase at reduced confidence, torso and ground fall back to the whole recording, forward direction to the first/last visible run-up wrist — the read degrades instead of refusing. Missing joints still omit their metrics; recovery time stays unavailable without observed return-to-ready evidence. One modality signal for fusion — not 'the model'.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,

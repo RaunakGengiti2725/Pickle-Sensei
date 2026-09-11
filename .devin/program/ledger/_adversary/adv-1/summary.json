@@ -1,0 +1,213 @@
+{
+  "agents": [
+    {
+      "label": "int-adversary-auth-session-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "1206e36bca55319323585ccb490c39b5863f398a86a584fa62636bdd1fbbdc92",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-backend-sql-rls-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "cff4fba328e1dbfb9f7563994a7f9f64fcca30968e83d3f335c8c9168b808ddd",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-billing-entitlement-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "daf9a0ca270422274b69283aa6e482e4364784aa78c6b76e34ec1d43d1b283da",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-sync-outbox-persistence-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "5f6e36b893f5796cd6cf218b9c71261abe3e0771f8e096a6d3d2e998fda8a7ce",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-charging-permits-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "4d19ce4b941f36fef41e7c484deac4d1235be6d2c549b0e25b79608d3e0c864f",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-offline-lease-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "7ace7efc70062d876d1c75baac0e86889c3b28506c8dc3b768367fd7f4ea1977",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-deletion-managed-media-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "d6b4b1730b4f47c941a3c8560cc0167f5706e961d2905f24ab21f64dae32cb99",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-import-media-capture-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "222a450b0fd9a461587db0ae698da365baaf0e9fdfd31b0f57168cb5d913ef07",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-analysis-scoring-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "0ee7151f721feb247f390d69b2b70d09cf3ee234f474165f7e6210e9c2586a5a",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-ui-flows-a11y-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "eae8fd3468de1dc3210463fd718da267276d2b44550b8583937eb65d5f523380",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-networking-recovery-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "bc2629e15a793942955817dd444995539677ca4805ed1d42282c4fa9acb2ab71",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-state-consistency-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "1263fe828e02221f0a8f5ad21cddaf1c35b2feb26fd2e125c4cb9ea2c0804958",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-security-privacy-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "4afb3df9a0dce9c31d85a76b6c43f889e3507acc8d86e469f4f1eb1438e18d66",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-release-config-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "6808dfc8a91a83370e970398f270282912c1fc3dc5abbecf7f261c144473f3d3",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-performance-bounds-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "f810893c72cc48cb0bc35f913b17c18e9f5118117fe0e34c4ab77a7504ad646c",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-native-bridge-contract-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "3f276c7e5d51ec5ef093ac61b950d84367a345f8cb7f9a210f7c7f714254c1d1",
+      "role": "integration-adversary",
+      "status": "completed"
+    },
+    {
+      "label": "int-adversary-e2e-journeys-30a40650",
+      "phase": "attack",
+      "prompt_sha256": "5144f4bda734225022ca05458a394ef8ca54eddeca3fb507fc5e957056b82de7",
+      "role": "integration-adversary",
+      "status": "completed"
+    }
+  ],
+  "areas": {
+    "analysis-scoring": {
+      "blocking": 9,
+      "breaks": 11,
+      "status": "DONE"
+    },
+    "auth-session": {
+      "blocking": 0,
+      "breaks": 4,
+      "status": "DONE"
+    },
+    "backend-sql-rls": {
+      "blocking": 3,
+      "breaks": 5,
+      "status": "DONE"
+    },
+    "billing-entitlement": {
+      "blocking": 1,
+      "breaks": 1,
+      "status": "DONE"
+    },
+    "charging-permits": {
+      "blocking": 4,
+      "breaks": 4,
+      "status": "DONE"
+    },
+    "deletion-managed-media": {
+      "blocking": 4,
+      "breaks": 7,
+      "status": "DONE"
+    },
+    "e2e-journeys": {
+      "blocking": 0,
+      "breaks": 0,
+      "status": "DONE"
+    },
+    "import-media-capture": {
+      "blocking": 1,
+      "breaks": 8,
+      "status": "DONE"
+    },
+    "native-bridge-contract": {
+      "blocking": 0,
+      "breaks": 6,
+      "status": "DONE"
+    },
+    "networking-recovery": {
+      "blocking": 2,
+      "breaks": 7,
+      "status": "DONE"
+    },
+    "offline-lease": {
+      "blocking": 2,
+      "breaks": 4,
+      "status": "DONE"
+    },
+    "performance-bounds": {
+      "blocking": 3,
+      "breaks": 6,
+      "status": "DONE"
+    },
+    "release-config": {
+      "blocking": 4,
+      "breaks": 7,
+      "status": "DONE"
+    },
+    "security-privacy": {
+      "blocking": 1,
+      "breaks": 8,
+      "status": "DONE"
+    },
+    "state-consistency": {
+      "blocking": 0,
+      "breaks": 4,
+      "status": "DONE"
+    },
+    "sync-outbox-persistence": {
+      "blocking": 1,
+      "breaks": 1,
+      "status": "DONE"
+    },
+    "ui-flows-a11y": {
+      "blocking": 4,
+      "breaks": 7,
+      "status": "DONE"
+    }
+  },
+  "fanout_id": "adv-1",
+  "head_sha": "30a4065036a917514fb4984fde73f87867f38619",
+  "lib_version": "2026-09-08.7"
+}

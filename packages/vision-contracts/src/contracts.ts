@@ -66,6 +66,7 @@ export interface IPhaseSegmenter {
     poseFrames: PoseFrame[],
     paddleFrames: PaddleFrame[],
     stroke: StrokeEvent,
+    video?: Pick<VideoClipRef, "width" | "height">,
   ): Promise<Result<PhaseSpan[]>>;
 }
 

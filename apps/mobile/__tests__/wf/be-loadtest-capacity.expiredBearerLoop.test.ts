@@ -32,6 +32,10 @@ import {
   establishApiSession,
   setApiUnauthorizedListener,
 } from '../../src/account/apiSession';
+import {
+  drainRows,
+  executeSyncSql,
+} from '../../test-support/outboxScheduleFake';
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 
@@ -70,16 +74,10 @@ function fakeDb(owner: string) {
       if (sql === 'BEGIN IMMEDIATE' || sql === 'COMMIT' || sql === 'ROLLBACK') {
         return { rows: [] };
       }
+      const handled = executeSyncSql(outbox, sql, params);
+      if (handled) return handled;
       if (sql.startsWith('SELECT id, kind, payload')) {
-        return {
-          rows: outbox
-            .filter(
-              r =>
-                r.owner_key === String(params[0]) &&
-                r.attempts < Number(params[1]),
-            )
-            .map(r => ({ ...r })),
-        };
+        return { rows: drainRows(outbox, params) };
       }
       if (sql.startsWith('UPDATE outbox')) {
         const row = outbox.find(r => r.id === params[2]);

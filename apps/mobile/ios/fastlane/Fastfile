@@ -11,12 +11,26 @@
 #   - App Store Connect API key exported as
 #     APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY (or fastlane's
 #     app_store_connect_api_key file); never committed.
+#
+# RELEASE IDENTITY (W11-08): the version/build that ships is the COMMITTED
+# identity — MARKETING_VERSION / CURRENT_PROJECT_VERSION in project.pbxproj,
+# verified against infra/release/release-manifest.json by
+# apps/mobile/scripts/release-identity.mjs. No lane computes, bumps or
+# overrides a build number. `release_identity` gates the archive (identity
+# coherent, byte-identical to HEAD, greater than the newest build App Store
+# Connect holds) and `verify_archive_identity` re-applies every one of those
+# refusals to the archive that xcodebuild actually produced — against the
+# identity captured BEFORE the build — so what was verified is what uploads.
+# When the committed build cannot ship, the lane refuses and the owner commits
+# a new identity; nothing here picks the next number.
 
 default_platform(:ios)
 
 platform :ios do
-  desc "Build a signed release archive (Mac-only)"
+  desc "Build a signed release archive from the committed release identity (Mac-only)"
   lane :build do |options|
+    identity = release_identity(latest_uploaded: options[:latest_uploaded])
+
     # Keep profile acquisition and export in the same lane context. Fastlane
     # then reads the exact profile returned by sigh and supplies its real name
     # to ExportOptions. Apple may suffix a replacement profile name when an
@@ -40,11 +54,6 @@ platform :ios do
         "-authenticationKeyIssuerID #{ENV.fetch('APP_STORE_CONNECT_API_KEY_ISSUER_ID').shellescape}",
       ]
     end
-    # Build number arrives as a build-settings override so nothing rewrites
-    # project.pbxproj/Info.plist (agvtool would hardcode CFBundleVersion and
-    # break the $(CURRENT_PROJECT_VERSION) sourcing that check:distribution
-    # asserts).
-    xcargs << "CURRENT_PROJECT_VERSION=#{options[:build_number]}" if options[:build_number]
     build_app(
       workspace: "PickleSensei.xcworkspace",
       scheme: "PickleSensei",
@@ -63,6 +72,80 @@ platform :ios do
         signingCertificate: "Apple Distribution",
       },
     )
+    verify_archive_identity(identity: identity, latest_uploaded: options[:latest_uploaded])
+  end
+
+  # Pre-archive gate. Runs scripts/release-identity.mjs against the committed
+  # tree and returns the verified identity (marketingVersion, buildNumber,
+  # gitSha, …) that the archive gate later compares the archive against.
+  # `latest_uploaded` is the newest build App Store Connect already holds;
+  # the script refuses (and this lane aborts) unless the committed build is
+  # greater. Any refusal is final: nothing here picks a replacement number.
+  private_lane :release_identity do |options|
+    args = ["--check", "--require-committed", "--json"]
+    latest_uploaded = options[:latest_uploaded]
+    args += ["--latest-uploaded", latest_uploaded.to_s] unless latest_uploaded.nil?
+    script = File.expand_path("../../scripts/release-identity.mjs", __dir__)
+    output = sh("node", script, *args, log: false)
+    json = output.lines.reverse.find { |line| line.start_with?("{") }
+    UI.user_error!("release-identity.mjs returned no identity JSON:\n#{output}") if json.nil?
+    identity = JSON.parse(json)
+    UI.success(
+      "release identity #{identity['marketingVersion']} (#{identity['buildNumber']}) " \
+      "committed at #{identity['gitSha']}",
+    )
+    identity
+  end
+
+  # Post-archive gate. Reads CFBundleShortVersionString / CFBundleVersion from
+  # the .app inside the archive gym produced and refuses to hand it to either
+  # upload lane unless (a) both equal the identity captured BEFORE build_app
+  # and (b) scripts/release-identity.mjs, run again with that captured sha,
+  # build and newest-uploaded bound, still accepts the tree — so a checkout
+  # that moved during the multi-minute xcodebuild cannot upload a build that
+  # was never verified or that App Store Connect already holds.
+  private_lane :verify_archive_identity do |options|
+    expected = options[:identity]
+    latest_uploaded = options[:latest_uploaded]
+    archive = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+    UI.user_error!("no archive recorded by build_app") if archive.nil? || !File.directory?(archive)
+    apps = Dir.glob(File.join(archive, "Products", "Applications", "*.app"))
+    UI.user_error!("expected exactly one .app in #{archive}, found #{apps.length}") unless apps.length == 1
+    plist = File.join(apps.first, "Info.plist")
+    short_version = plist_value(plist, "CFBundleShortVersionString")
+    bundle_version = plist_value(plist, "CFBundleVersion")
+    UI.message(
+      "archive #{File.basename(archive)}: CFBundleShortVersionString=#{short_version} " \
+      "CFBundleVersion=#{bundle_version}; verified identity " \
+      "#{expected['marketingVersion']} (#{expected['buildNumber']}) at #{expected['gitSha']}",
+    )
+    if expected["buildNumber"].to_s != bundle_version
+      UI.user_error!(
+        "refusing to upload: archive CFBundleVersion #{bundle_version} differs from the verified " \
+        "manifest build #{expected['buildNumber']} captured before the archive",
+      )
+    end
+    if expected["marketingVersion"] != short_version
+      UI.user_error!(
+        "refusing to upload: archive CFBundleShortVersionString #{short_version} differs from the " \
+        "verified manifest version #{expected['marketingVersion']} captured before the archive",
+      )
+    end
+    UI.user_error!("refusing to upload: the pre-build identity carried no git sha") if expected["gitSha"].to_s.empty?
+    args = [
+      "--check",
+      "--require-committed",
+      "--assert-version",
+      short_version,
+      "--assert-build",
+      bundle_version,
+      "--assert-git-sha",
+      expected["gitSha"],
+    ]
+    args += ["--latest-uploaded", latest_uploaded.to_s] unless latest_uploaded.nil?
+    script = File.expand_path("../../scripts/release-identity.mjs", __dir__)
+    sh("node", script, *args, log: false)
+    UI.success("archive identity verified: #{short_version} (#{bundle_version}) at #{expected['gitSha']}")
   end
 
   # Reads the App Store Connect API key from the environment: either the raw
@@ -94,12 +177,13 @@ platform :ios do
     )
   end
 
-  desc "Bump build number, build, and upload to TestFlight internal testing (Mac-only)"
+  desc "Build the committed release identity and upload it to TestFlight internal testing (Mac-only);
+    refuses instead of bumping when that build is not greater than the newest build on App Store Connect"
   lane :beta do
     api_key = asc_api_key
     # initial_build_number 0 → the very first upload becomes build 1.
-    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
-    build(build_number: number)
+    latest_uploaded = latest_testflight_build_number(api_key: api_key, initial_build_number: 0)
+    build(latest_uploaded: latest_uploaded)
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true,
@@ -112,8 +196,8 @@ platform :ios do
     App Review stay deliberate manual steps in App Store Connect."
   lane :release do
     api_key = asc_api_key
-    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
-    build(build_number: number)
+    latest_uploaded = latest_testflight_build_number(api_key: api_key, initial_build_number: 0)
+    build(latest_uploaded: latest_uploaded)
     upload_to_app_store(
       api_key: api_key,
       skip_metadata: true,
@@ -122,4 +206,12 @@ platform :ios do
       submit_for_review: false, # review submission is a human decision
     )
   end
+end
+
+# `PlistBuddy -c "Print :<key>"` on the archived app's Info.plist (a binary
+# plist after the build), trimmed. Aborts the lane when the key is absent.
+def plist_value(plist, key)
+  value = `/usr/libexec/PlistBuddy -c "Print :#{key}" #{plist.shellescape} 2>&1`.strip
+  UI.user_error!("#{plist}: #{key} not readable: #{value}") unless $?.success?
+  value
 end

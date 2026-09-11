@@ -844,6 +844,26 @@ describe('Result guide buttons — Close / Next / Back / Done', () => {
     await unmount(renderer);
   });
 
+  it('Full breakdown (SCORE page only) pushes ResultDetails for this analysis', async () => {
+    const renderer = await render();
+    expect(stepLabel(renderer)).toBe('1 OF 2 · SCORE');
+    const details = byTestID(renderer, 'result-guide-breakdown-link');
+    expect(details.props.accessibilityLabel).toBe('Full breakdown');
+    expect(details.props.accessibilityRole).toBe('button');
+    await press(details);
+    expect(mockNavigation.navigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('ResultDetails', {
+      analysisId: 'a1',
+    });
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    expect(mockNavigation.popToTop).not.toHaveBeenCalled();
+
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('2 OF 2 · NEXT');
+    expect(hasTestID(renderer, 'result-guide-breakdown-link')).toBe(false);
+    await unmount(renderer);
+  });
+
   it('a faulted read walks SCORE → THE PROBLEM → DRILLS → NEXT with descriptive Next labels', async () => {
     mockLoadEvidence.mockResolvedValue(
       evidenceFixture({ analysis: faultedAnalysis() }),
@@ -970,9 +990,11 @@ describe('Result guide buttons — THIS SET attempt pills (score page)', () => {
     expect(textOf(renderer)).toContain('THIS SET');
     const current = byTestID(renderer, 'practice-set-attempt-a1');
     const other = byTestID(renderer, 'practice-set-attempt-a2');
-    expect(current.props.accessibilityLabel).toBe('Attempt 1 of 2, score 7.4');
+    expect(current.props.accessibilityLabel).toBe(
+      'Attempt 1 of 2, Estimated DUPR 3.60, technique score 7.4 out of 10',
+    );
     expect(other.props.accessibilityLabel).toBe(
-      'Attempt 2 of 2, score 8.1, latest',
+      'Attempt 2 of 2, Estimated DUPR 4.07, technique score 8.1 out of 10, latest',
     );
     expect(current.props.accessibilityRole).toBe('button');
     await press(current);
@@ -1644,7 +1666,9 @@ describe('ResultDetails buttons — Use as reassessment', () => {
     await press(reassess);
     expect(api.reassessPlan).toHaveBeenCalledWith('plan-1', 'a9');
     expect(textOf(renderer)).toContain('REASSESSMENT VERIFIED');
-    expect(textOf(renderer)).toContain('+0.6 points');
+    // The server's +0.6 from the 7.4 baseline prints as the DUPR change
+    // 3.60 → 4.00.
+    expect(textOf(renderer)).toContain('+0.40 DUPR');
     await unmount(renderer);
   });
 
@@ -1786,7 +1810,7 @@ describe('Result buttons — ledger', () => {
   it('every rendered pressable on the guide has a button role and a label, page by page', async () => {
     mockGetApiSession.mockReturnValue(session);
     const renderer = await render();
-    expect(ledger(renderer)).toEqual(['Close', 'Continue']);
+    expect(ledger(renderer)).toEqual(['Close', 'Continue', 'Full breakdown']);
     await press(byTestID(renderer, 'result-guide-next'));
     expect(ledger(renderer)).toEqual(['Back', 'Close', 'Done', 'Try it again']);
     await unmount(renderer);

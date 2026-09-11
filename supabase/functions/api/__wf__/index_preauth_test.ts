@@ -10,6 +10,7 @@
 // root package.json is a pnpm workspace, not a Deno node_modules layout.)
 
 import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { peekRateLimit } from "../rateLimit.ts";
 
 type Handler = (request: Request) => Response | Promise<Response>;
 
@@ -74,7 +75,7 @@ Deno.test("an already-expired provider token is refused before any verification"
 });
 
 Deno.test(
-  "repeated auth failures from one IP trip the auth-failure budget with a bucket-bounded Retry-After",
+  "refusals decided at the edge (no bearer, expired bearer) never charge the auth-failure budget: only Supabase Auth's verdicts do",
   async () => {
     const ip = `10.9.1.${Math.floor(Math.random() * 250)}`;
     const limit = 30;
@@ -83,28 +84,31 @@ Deno.test(
       const response = await handle(
         new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": ip } }),
       );
-      assertEquals(response.status, 401, `failure ${i + 1} should still reach auth`);
+      assertEquals(response.status, 401, `bearer-less request ${i + 1} is refused locally`);
       await response.body?.cancel();
     }
-    const blocked = await handle(
-      new Request(`${BASE}/v1/me`, {
-        headers: {
-          "x-forwarded-for": ip,
-          Authorization: `Bearer ${fakeIdToken({ iss: "https://accounts.google.com" })}`,
-        },
-      }),
-    );
-    assertEquals(blocked.status, 429);
-    const retryAfter = Number(blocked.headers.get("Retry-After"));
-    assertEquals(Number.isInteger(retryAfter), true);
-    assertEquals(retryAfter >= 1 && retryAfter <= windowSeconds, true);
-    await blocked.body?.cancel();
+    const expired = fakeIdToken({
+      iss: "https://accounts.google.com",
+      exp: Math.floor(Date.now() / 1_000) - 60,
+    });
+    for (let i = 0; i < limit; i += 1) {
+      const response = await handle(
+        new Request(`${BASE}/v1/me`, {
+          headers: { "x-forwarded-for": ip, Authorization: `Bearer ${expired}` },
+        }),
+      );
+      assertEquals(response.status, 401, `expired bearer ${i + 1} is refused locally, never held`);
+      assertStringIncludes((await errorBody(response)).message, "expired");
+    }
+    const budget = await peekRateLimit("authfail", ip, limit, windowSeconds);
+    assertEquals(budget.allowed, true);
+    assertEquals(budget.remaining, limit, "sixty local refusals charged nothing");
 
-    const other = await handle(
-      new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": "10.9.2.2" } }),
+    const stillLocal = await handle(
+      new Request(`${BASE}/v1/me`, { headers: { "x-forwarded-for": ip } }),
     );
-    assertEquals(other.status, 401);
-    await other.body?.cancel();
+    assertEquals(stillLocal.status, 401, "the address is not held");
+    await stillLocal.body?.cancel();
   },
 );
 
@@ -133,6 +137,37 @@ Deno.test("webhook: wrong shared secret is rejected", async () => {
   );
   assertEquals(response.status, 401);
   await response.body?.cancel();
+});
+
+Deno.test("a large advisory content length does not preallocate the declared body", async () => {
+  const request = new Request(`${BASE}/webhooks/revenuecat`, {
+    method: "POST",
+    headers: {
+      Authorization: "webhook-secret-for-tests",
+      "content-length": "524288",
+      "x-forwarded-for": "10.9.5.6",
+    },
+    body: "{}",
+  });
+  const Original = globalThis.Uint8Array;
+  const allocations: number[] = [];
+  globalThis.Uint8Array = new Proxy(Original, {
+    construct(target, args, newTarget) {
+      if (typeof args[0] === "number") allocations.push(args[0]);
+      return Reflect.construct(target, args, newTarget);
+    },
+  });
+  try {
+    const response = await handle(request);
+    assertEquals(response.status, 400);
+    await response.body?.cancel();
+    assertEquals(
+      allocations.filter((size) => size > 8192),
+      [],
+    );
+  } finally {
+    globalThis.Uint8Array = Original;
+  }
 });
 
 Deno.test("webhook: a chunked body past the cap is cut off with 413, not buffered", async () => {

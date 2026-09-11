@@ -174,6 +174,70 @@ beforeEach(() => {
 });
 
 describe('PlayerRankBanner button ledger', () => {
+  it('keeps the rating compact with progress detail and no invented benchmark in text or accessibility', async () => {
+    mockGetApiSession.mockReturnValue(SESSION);
+    mockFetchPlayerRank.mockResolvedValue({
+      ...SERVER_RANK,
+      rating: 7.02,
+      tier: 'platinum',
+      techniques: [
+        {
+          shotType: 'dink',
+          score: 7.2,
+          capturedAt: '2026-08-20T00:00:00.000Z',
+        },
+      ],
+    });
+    const renderer = await renderBanner({
+      streakDays: 3,
+      onPressStreak: () => {},
+    });
+    try {
+      const texts = renderer.root.findAllByType(Text);
+      // D-046: the headline is the estimated DUPR (7.02 → 3.35) with its
+      // unit, and the 0–10 rating sits beneath as the smaller line.
+      const rating = texts.find(
+        node =>
+          Array.isArray(node.props.children) &&
+          node.props.children[0] === '3.35',
+      );
+      expect(rating).toBeDefined();
+      const ratingText = rating!
+        .findAllByType(Text)
+        .map(node => node.props.children)
+        .flat(3)
+        .filter(child => typeof child === 'string')
+        .join('');
+      expect(ratingText).toBe('3.35 DUPR');
+      expect(rating!.props.numberOfLines).toBeUndefined();
+      expect(rating!.props.adjustsFontSizeToFit).not.toBe(true);
+      expect(
+        texts.find(
+          node => node.props.testID === 'player-rank-banner-technique-rating',
+        )?.props.children,
+      ).toBe('7.02 /10');
+      // The best technique prints in the same unit: 7.2 → 3.47.
+      const detail = texts.find(
+        node =>
+          typeof node.props.children === 'string' &&
+          node.props.children.includes('Best: dink 3.47'),
+      );
+      expect(detail?.props.children).toMatch(/^Best: dink 3\.47/);
+      expect(detail?.props.numberOfLines).toBeUndefined();
+      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).not.toMatch(
+        /≈/,
+      );
+      expect(pressable(renderer, TOGGLE).props.accessibilityLabel).toContain(
+        'estimated DUPR 3.35, technique rating 7.02 out of 10',
+      );
+      expect(pressable(renderer, STREAK).props.accessibilityLabel).toContain(
+        '3 days',
+      );
+    } finally {
+      act(() => renderer.unmount());
+    }
+  });
+
   it('exposes exactly two pressables, each a labelled accessibility button', async () => {
     const renderer = await renderBanner({
       streakDays: 4,
@@ -248,10 +312,11 @@ describe('player-rank-banner-toggle -> toggle()', () => {
       'Player rank Gold II',
     );
     expect(String(toggle.props.accessibilityLabel)).toContain(
-      'rating 5.50 out of 10.',
+      'estimated DUPR 2.85, technique rating 5.50 out of 10.',
     );
+    // 5.5 → 2.85 against Platinum's 6.5 → 3.00: 0.15 DUPR to go.
     expect(String(toggle.props.accessibilityLabel)).toContain(
-      'Best: dink 5.5 · 1.00 to Platinum',
+      'Best: dink 2.85 · 0.15 to Platinum',
     );
     expect(mockMaybeCelebrate).toHaveBeenCalledTimes(1);
     expect(mockMaybeCelebrate.mock.calls[0]![0]).toMatchObject({
@@ -268,9 +333,11 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(copy).toContain('II');
     expect(copy).toContain('dink');
     expect(copy).toContain('Current form');
-    expect(copy).toContain('1.00 to Platinum.');
-    expect(copy).toContain('3.5 – 4.99');
-    expect(copy).toContain('7.5+');
+    expect(copy).toContain('0.15 to Platinum.');
+    // Tier bands print in estimated DUPR (Silver 3.5–4.99 → 2.54 – 2.76).
+    expect(copy).toContain('2.54 – 2.76');
+    expect(copy).toContain('3.67+');
+    expect(copy).toContain('Not an official DUPR rating.');
 
     await press(renderer, TOGGLE);
     await settleFoldAway(renderer);
@@ -322,10 +389,10 @@ describe('player-rank-banner-toggle -> toggle()', () => {
       'Player rank Diamond',
     );
     expect(String(toggle.props.accessibilityLabel)).toContain(
-      'rating 7.80 out of 10.',
+      'estimated DUPR 3.87, technique rating 7.80 out of 10.',
     );
     expect(String(toggle.props.accessibilityLabel)).toContain(
-      'Best: third shot drop 8.1 · Top tier',
+      'Best: third shot drop 4.07 · Top tier',
     );
     expect(mockMaybeCelebrate).toHaveBeenLastCalledWith(
       expect.objectContaining({ tier: 'diamond', rating: 7.8 }),
@@ -333,7 +400,8 @@ describe('player-rank-banner-toggle -> toggle()', () => {
 
     await press(renderer, TOGGLE);
     const copy = allText(renderer);
-    expect(copy).toContain('7.80');
+    expect(copy).toContain('3.87');
+    expect(copy).toContain('7.80 /10');
     expect(copy).toContain('third shot drop');
     expect(copy).toContain('Top tier — every new analysis defends it.');
     act(() => renderer.unmount());
@@ -348,7 +416,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
       String(pressable(renderer, TOGGLE).props.accessibilityLabel),
     ).toContain('Player rank Gold II');
     await press(renderer, TOGGLE);
-    expect(allText(renderer)).toContain('1.00 to Platinum.');
+    expect(allText(renderer)).toContain('0.15 to Platinum.');
     await press(renderer, TOGGLE);
     await settleFoldAway(renderer);
     expect(allText(renderer)).not.toContain('Current form');
@@ -379,7 +447,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     const renderer = await renderBanner();
     expect(
       String(pressable(renderer, TOGGLE).props.accessibilityLabel),
-    ).toContain('Best: — · 0.80 to Gold');
+    ).toContain('Best: — · 0.12 to Gold');
     await press(renderer, TOGGLE);
     expect(allText(renderer)).toContain('YOU ·');
     act(() => renderer.unmount());

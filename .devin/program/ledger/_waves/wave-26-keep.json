@@ -1,0 +1,23 @@
+{
+  "base_sha": "2e09b1547626423b693f82934af2bc68f4c3962b",
+  "integration_order": {},
+  "packages": {
+    "W11-03": {
+      "agent_counts": {
+        "completed": 3,
+        "failed": 0,
+        "launched": 3,
+        "requested": 3
+      },
+      "candidate": {
+        "branch": "devin/pp/w11-03/impl-r1",
+        "head_sha": "577a2ce387f599aad86966be82155b6d81a2143a",
+        "lane": 1,
+        "round": 1
+      },
+      "status": "ACCEPTED"
+    }
+  },
+  "serial_group_limit": 5,
+  "wave_id": "wave-26-keep"
+}

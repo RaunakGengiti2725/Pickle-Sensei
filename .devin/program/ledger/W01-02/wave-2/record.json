@@ -1,0 +1,366 @@
+{
+  "agent_counts": {
+    "completed": 4,
+    "failed": 0,
+    "launched": 4,
+    "requested": 4
+  },
+  "agents": [
+    {
+      "label": "implement-W01-02-r1",
+      "phase": "implement",
+      "prompt_sha256": "c5c2827744e6350d4f4536237d8514fd6eaf98bd2defac13b027faaaee73e13c",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "implement-W01-02-r2",
+      "phase": "implement",
+      "prompt_sha256": "ba05025fcd24fd74d2f83fef536663cfbfb12a3b7eb9b9f2e2211c57413eaec4",
+      "role": "implementer",
+      "status": "completed"
+    },
+    {
+      "label": "review-W01-02-r2",
+      "phase": "review",
+      "prompt_sha256": "695093e71d9dc08330a6126ced4e10a635d96b4482b9710952817c08660b8a91",
+      "role": "reviewer",
+      "status": "completed"
+    },
+    {
+      "label": "adversary-W01-02-r2",
+      "phase": "adversary",
+      "prompt_sha256": "5b85d3866b2271e81f3e71f74c565984f5833e8eb9e986a25dc20e4eeb0e946f",
+      "role": "adversary",
+      "status": "completed"
+    }
+  ],
+  "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+  "candidate": {
+    "branch": "devin/pp/w01-02/impl-r2",
+    "head_sha": "c01576c43b96c4e78e21d211a5c69b9e1b0a099f",
+    "round": 2
+  },
+  "integration_branch": "devin/1788854799-production-program-integration",
+  "lib_version": "2026-09-08.4",
+  "manifest_sha256": "68877e2f414d8b91116c87232cd7e94e883276892c2d913cfb2d7436788c7d11",
+  "manifest_version": "2026-09-08.2",
+  "package_id": "W01-02",
+  "requeued_from": null,
+  "rounds": [
+    {
+      "decision": {
+        "accepted": false,
+        "criteria_examined": [
+          "implementer acceptance coverage"
+        ],
+        "reasons": [
+          "impl: unknown acceptance id 'root-format-check'",
+          "impl: unknown acceptance id 'git-diff-check'"
+        ]
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/925e7364-abf6-4757-8f17-b3b13f5fed9a/ac1_typecheck.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC1",
+            "note": "VERIFIED on HEAD d200623c. Deno prints a warning that lock/nodeModulesDir live in the function-local deno.json (pre-existing on BASE); exit 0. Local copy: artifacts/w01-02/ac1_typecheck.log (gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5e4745f0-a3c5-4203-8b4a-f693136e9f1a/ac2_head_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 796,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC2",
+            "note": "VERIFIED on HEAD: 'ok | 796 passed (31 steps) | 0 failed', ignored == 0 (disposable postgres:16 container pickle-xc-pg on 55433 via __wf__/xc_pg_up.sh). Same command on BASE_SHA in worktree /home/ubuntu/repos/ps-base: 'ok | 782 passed (31 steps) | 0 failed', exit 0, ignored 0 — https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc1a833-9320-48a1-9bfa-84984b75de7b/ac2_base_suite.log. Delta +14 = the new regression file.",
+            "passed": 796,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/81913913-ec9b-4a03-8b3b-d18f20d4b75b/ac3_head_regression.log",
+            "command": "cd <BASE_SHA worktree> && cp <HEAD>/supabase/functions/api/__wf__/release_policy_admission.test.ts supabase/functions/api/__wf__/ && cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json release_policy_admission.test.ts  # must FAIL; then same file on HEAD  # must PASS",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC3",
+            "note": "PROOF VERIFIED: BASE_SHA 55d80326 (worktree /home/ubuntu/repos/ps-base, only the new test file copied over, removed afterwards) → exit 1, 'FAILED | 5 passed | 9 failed' — the 9 failures are behavioural (permit reserved 200 instead of typed 409 for no/withdrawn/expired/mismatched policy and for authority storage failure; scored shot settled without authority; resultKind=partial rejected as invalid_payload; storage failure during sync not a 503) — https://la-hacks-rttothemoon.devinenterprise.com/attachments/288dcb4d-a84b-476e-932d-2a4e4101effa/ac3_base_regression.log. HEAD d200623c → exit 0, 'ok | 14 passed | 0 failed'.",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/191dfecb-853f-410d-a4ff-1a181cb5e370/format_check.log",
+            "command": "pnpm format:check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "root-format-check",
+            "note": "VERIFIED: 'All matched files use Prettier code style!'",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/191dfecb-853f-410d-a4ff-1a181cb5e370/format_check.log",
+            "command": "git diff --check",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "git-diff-check",
+            "note": "VERIFIED exit 0 (run before committing; no whitespace errors).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "Regression first (commit 326c4ae2, black-box through routesHarness against the REAL handler; fixture built in-file so it runs unchanged on BASE). Fix in releasePolicy.ts: ReleasePolicyError now distinguishes `storage` (RPC/transport failure, retryable) from `integrity` (readable but untrusted); new `admitChargeableRelease()` evaluates the shared resolveAnalysisReleaseEligibility for a real, intent-confirmed observation inside the policy's own supported domain (so only lineage/approval/withdrawal/validity can reject) and `readChargeableReleaseAdmission()` returns active | ineligible{reasonCode} | unavailable{error}. index.ts: `chargeableReleaseAdmission()` reads UNCACHED via the service-role client (RPC is EXECUTE-granted to service_role only; withdrawal honoured on the next request). reserveAnalysisPermit(): ineligible → 409 {error:{code:'access.release_not_authorized'}, release:{status:'ineligible',reasonCode}} before reserve_analysis_permit; unavailable → existing serviceUnavailable 503. syncShots(): one authority read per batch only when a non-replayed `scored` shot is present; ineligible → typed per-shot rejection (same code, SYNC_STATUS_MESSAGES copy) and apply_synced_shot is never called for it; unavailable → 503 for the batch (outbox keeps every row — same convention as the replay lookup directly above); low_confidence/partial settle regardless; replays acknowledged without a read. Parser accepts resultKind=partial (already accepted by migration 20260908020000's apply_synced_shot) with overallScore=null enforced. No new console sink (http_test pins index.ts at 18). Harnesses model read_analysis_release_policy with an ACTIVE fixture so the 11 pre-existing permit/scored-sync scenarios keep describing a released production.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/925e7364-abf6-4757-8f17-b3b13f5fed9a/ac1_typecheck.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5e4745f0-a3c5-4203-8b4a-f693136e9f1a/ac2_head_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6cc1a833-9320-48a1-9bfa-84984b75de7b/ac2_base_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/288dcb4d-a84b-476e-932d-2a4e4101effa/ac3_base_regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/81913913-ec9b-4a03-8b3b-d18f20d4b75b/ac3_head_regression.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/191dfecb-853f-410d-a4ff-1a181cb5e370/format_check.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "blocked_reason": "",
+        "branch": "devin/pp/w01-02/impl-r1",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/releasePolicy.ts",
+          "supabase/functions/api/__wf__/release_policy_admission.test.ts",
+          "supabase/functions/api/__wf__/releasePolicyFixture.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts"
+        ],
+        "head_sha": "d200623c0586a0348d6c23d9de66d4d949d41e44",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/releasePolicyFixture.ts — new test-only fixture (ACTIVE, approved, non-withdrawn read_analysis_release_policy row) shared by both harnesses; not under any serial_group_paths prefix",
+          "supabase/functions/api/__wf__/routesHarness.ts — additive: default `rpcs.read_analysis_release_policy` = fixture (initial + reset) so the existing permit/scored-sync scenarios model a released production once admission is gated; no assertion touched",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts — additive: FakeSupabase models rpc/read_analysis_release_policy (service role → fixture, user → 403 42501 mirroring the grant); previously answered PGRST202 'not modelled' which made every permit/scored-sync xc scenario a 503"
+        ],
+        "package_id": "W01-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/release_policy_admission.test.ts (14 tests, commits 326c4ae2 + 0f7d8bb6)"
+        ],
+        "residual_risks": [
+          "Out-of-scope harness edits (routesHarness.ts, xc_concurrency_harness.ts, new releasePolicyFixture.ts) were required for the full Edge suite to pass: with the gate in place the pre-existing permit/scored-sync scenarios otherwise hit PGRST202/404 for read_analysis_release_policy and 503'd (12 failures observed before the harness fix). The edits are additive defaults/models; no existing assertion, count or ordering was changed. Reviewer decides scope justification.",
+          "Behavioural choice: an UNREADABLE authority during shots:sync is a 503 for the whole batch (retryable, outbox keeps every row — same as the existing replay-lookup failure), not a per-shot verdict; adding a per-shot log would have added a console sink that http_test.ts pins (index.ts == 18). Ineligible (non-storage) authority is still the typed, non-5xx per-shot rejection the objective requires.",
+          "Production data-state consequence (INFERRED from migration 20260908020000): the database default has no installed policy and deny_new_authorizations=true, so once deployed, permit reservation and scored settlement return the typed 409 / per-shot rejection until an operator installs+approves an active policy. This is the intended P0 behaviour but it is a release-sequencing dependency for W01/W04.",
+          "Client handling of the new 409 `access.release_not_authorized` (permit) and the new sync rejection code is not part of this package; the mobile app's ApiError reads error.code, and the sync code lands in `rejected` like other terminal verdicts. Existing SYNC_STATUS_MESSAGES copy conventions were followed (no accuracy/superlative claims).",
+          "The parser now accepts resultKind=partial with overallScore=null (matching the applied migration); a `partial` carrying a score is refused as shot.invalid_payload. UNKNOWN whether any in-field build ever sends `partial`; behaviour is additive."
+        ],
+        "summary": "Defect on BASE_SHA 55d80326 (INFERRED from code, then VERIFIED by the regression): supabase/functions/api/index.ts reserveAnalysisPermit() (BASE ~L1514-1545) went straight to admin/authed `reserve_analysis_permit` and syncShots() (BASE ~L2035-2060) went straight to `apply_synced_shot` for every `scored` shot — releasePolicy.ts's readVerifiedReleasePolicy()/eligibilityForVerifiedRelease() and the RPC read_analysis_release_policy() (migration 20260908020000) existed but nothing in the chargeable paths consulted them, so a chargeable scored run was admitted and settled with no installed policy, a withdrawn one, an expired one, or a digest/lineage-mismatched one; the parser also rejected resultKind=partial (BASE L1785) although the migration's apply_synced_shot already accepted it. Fix (HEAD d200623c, branch devin/pp/w01-02/impl-r1, 3 commits: test 326c4ae2, harness/test 0f7d8bb6, impl d200623c): both chargeable paths now require an ACTIVE, approved, non-withdrawn, integrity-verified policy read uncached via service role; missing/withdrawn/denied/expired/unreleased/corrupt → typed `access.release_not_authorized` (409 for permits, per-shot rejection for sync) with the shared reasonCode, never 5xx and never a reserve/settlement; unreadable authority → retryable 503, never authorization; abstentions, mechanics-only partials and replays are unaffected. VERIFIED: AC1 frozen typecheck exit 0; AC2 full Edge suite 796/796, 0 failed, 0 ignored on disposable Postgres (BASE: 782/782); AC3 new test 9 failed/5 passed on BASE, 14/14 on HEAD; pnpm format:check exit 0; git diff --check exit 0. No PR opened; no production touched; no migration edited."
+      },
+      "round": 1
+    },
+    {
+      "adversary": {
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/7f6875b6-e930-497f-94db-960123524a03/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/40980563-8fae-445a-af72-33eb8aa55915/ac2_candidate_full_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a737a4cc-b85c-45a3-b46f-a57610826c0b/candidate_harness_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/c8cbf410-ddc5-4b7c-addc-da230179ebc6/candidate_pg_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/bd6efe8a-1df1-490e-92b7-8c72bec23b01/candidate_mobile_final.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/6fc45882-e468-48ef-9652-daec7d1e3157/base_harness.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/4e987483-5fa2-47ad-9f37-116536920f43/base_pg.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2046237b-81db-4391-bcaf-1d13af38d77c/base_mobile.log"
+        ],
+        "attack_branch": "devin/pp/w01-02/attack-c01576c4",
+        "attack_branch_sha": "067c5f33c0951c93d825e76541e10e89e189fba6",
+        "attacked_sha": "c01576c43b96c4e78e21d211a5c69b9e1b0a099f",
+        "attacks_tried": 80,
+        "breaks": [
+          {
+            "expected": "A release-authority rejection is a server-side, operator-reversible condition (the migration's deny_new_analysis_authorizations is an incident lever). The device holds a valid, uncharged rating and a live permit; once the authority is active again the rating should be re-offered and settled. Either the edge should answer with a code the outbox treats as transient / the batch-level 503 path, or the mobile outbox must classify access.release_not_authorized as transient (out of W01-02 write_paths — needs a follow-up package). No money loss: nothing is charged; the harm is a permanently stranded user rating.",
+            "observed": "isTransientSyncRejection('access.release_not_authorized') === false (src/data/sync.ts classifies only shot.write_failed / evaluation.trial_write_failed / auth.required as transient). With the transport answering the candidate's per-shot rejection, each drain increments attempts; after OUTBOX_MAX_ATTEMPTS (8) the row is parked (drain returns failed=0, syncShots no longer called). When the transport then accepts (policy re-activated), syncShots is still not called: expected 9 calls, received 8; the rating stays in the outbox forever (never charged, but also never delivered/validated). Identical on BASE (the client code is unchanged); the candidate introduces the server code that the client parks on.",
+            "repro": "cd apps/mobile && npx jest __tests__/wf/attack-w01-02-releaseRejection.test.ts  (test 'BREAK(P2): after OUTBOX_MAX_ATTEMPTS drains during a withdrawal ...'); exit 1; Tests: 1 failed, 2 passed, 3 total. Log: artifacts/w01-02-attack/candidate_mobile_final.log (uploaded).",
+            "severity": "P2",
+            "test_file": "apps/mobile/__tests__/wf/attack-w01-02-releaseRejection.test.ts",
+            "title": "Shipping outbox treats the candidate's new access.release_not_authorized as a PERMANENT verdict: a scored rating rejected during a temporary withdrawal (deny switch / no policy yet) is parked after OUTBOX_MAX_ATTEMPTS and never re-offered once the authority is active again"
+          },
+          {
+            "expected": "Fail-closed for new admissions is the W01-02 objective and is met; the residual is that a retry that would be an idempotent REPLAY (same key, permit already live) is indistinguishable from a new admission at the gate, leaving a stranded reservation. Acceptable for W01-02 (no charge, bounded by the sweep); recorded as P3 for the permit-lifecycle owner.",
+            "observed": "First reserve → 200 permit P (reserve_analysis_permit called once). Policy withdrawn (withdrawnAt=now, denyNewAuthorizations=true). Retry with the same idempotency key → 409 {error:{code:'access.release_not_authorized', message:'Validated ratings are not available right now. No rating was counted.'}, release:{status:'ineligible', reasonCode:'withdrawn'}}; reserve_analysis_permit call count stays 1. Permit P stays 'reserved' server-side and occupies a free-rating allowance slot (reserve counts reserved rows) until the 24h sweep. Nothing is charged (fail-closed is correct for a NEW admission).",
+            "repro": "cd supabase/functions/api/__wf__ && deno test -A --no-check --config deno.json attack_w01_02_release_admission.test.ts  (test 'BREAK(P3) ATK-4 permit: reserve succeeded, response lost, policy withdrawn, client retries the SAME key'); exit 1; 68 passed | 1 failed. Log: artifacts/w01-02-attack/candidate_harness_final.log (uploaded).",
+            "severity": "P3",
+            "test_file": "supabase/functions/api/__wf__/attack_w01_02_release_admission.test.ts",
+            "title": "Response-loss + withdrawal window: a reserve that succeeded server-side becomes invisible to the device — the SAME-key retry is refused 409 before reaching the idempotent reserve RPC, so the live permit cannot be learned, settled or cancelled until the pg_cron sweep"
+          }
+        ],
+        "package_id": "W01-02",
+        "summary": "ADVERSARY W01-02 vs c01576c43b96c4e78e21d211a5c69b9e1b0a099f (attack branch devin/pp/w01-02/attack-c01576c4 @ 067c5f33c0951c93d825e76541e10e89e189fba6, pushed, verified via git ls-remote; 3 new test files, no production/migration/candidate-test edits; no PR). RESULT: the release gate itself HOLDS — no P0/P1. 80 attacks tried (69 harness Deno tests + 8 live-Postgres Deno tests + 3 Jest tests), 2 confirmed breaks (1×P2 client-contract, 1×P3 permit-lifecycle), both failing-by-design tests on the branch.\n\nCANDIDATE BASELINE (VERIFIED): AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` exit 0 (ac1_deno_check.log). AC2 `cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` exit 0, `ok | 796 passed (31 steps) | 0 failed`, ignored=0 (no '... ignored' lines, no ignored count in the summary line; ac2_candidate_full_suite.log).\n\nATTACK FILES & RESULTS ON CANDIDATE (VERIFIED):\n1) supabase/functions/api/__wf__/attack_w01_02_release_admission.test.ts — `deno test -A --no-check --config deno.json attack_w01_02_release_admission.test.ts`: exit 1, 68 passed | 1 failed (the failure is the by-design BREAK(P3) ATK-4). Families: ATK-1 authority transport (401/403/404/409/429+Retry-After/500/502/504/307 redirect/non-JSON 200/thrown fetch) → generic 503, reserve/apply never called, no upstream detail leaked; partial-only batch never reads authority. ATK-2 corrupt/partial rows (array/string/number/null/{}; deny switch off but no policy; document w/o approval; version mismatch; deny-flag mismatch; string booleans; ISO timestamps; missing mechanics/benchmark approval; extra approval key; canonical drift/absent; tampered doc; __proto__ key; empty supported domain; uppercase digest; oversize canonical) → 409 ineligible/unverified or expected reason, never active, never 5xx. ATK-3 clocks (future validFrom, validUntil==now, near-future, future approval, withdrawnAt==now/future, max epoch, negative validFrom, fractional timestamps, scored sync at expiry) → expired/unreleased/withdrawn, nothing charged. ATK-4 idempotency/withdrawal. ATK-5 mixed batch (replayed scored, dup scored, partial, low_confidence, malformed) without policy → only non-scored settle, scored rejected access.release_not_authorized, replay acked without settlement; cross-user/policy flips re-read per request (no caching). ATK-6 roles (anon, garbage bearer, malformed bodies, authority read uses service-role bearer while user RPCs use the user session bearer; client-smuggled `release` verdict ignored). ATK-7 copy (message has no accuracy %, superlatives, competitor/Android/guest/Live Court/DUPR terms). ATK-8 GET /v1/analysis/release-policy with no/corrupt row.\n2) supabase/functions/api/__wf__/attack_w01_02_release_authority_pg.test.ts — `XC_PG_URL=... deno test -A --no-check --config deno.json attack_w01_02_release_authority_pg.test.ts`: exit 0, 8 passed | 0 failed. Real SQL authority + the candidate's readChargeableReleaseAdmission: production default row → ineligible/unverified (not unavailable); install→approve×2→activate → active; half-approved cannot activate and a forced activation is still refused (unreleased); withdraw/deny_new take effect on next read, re-activation restores; skewed edge clock → expired/unreleased; role matrix (anon/authenticated cannot read or mutate; service_role reads but cannot mutate); free-rating conservation (partial settles released/partial, lifetime_scored_count stays 0, cannot upgrade to scored, partial-with-score refused, cross-user refused); PG-8 documents that SQL apply_synced_shot settles a scored shot with NO policy installed — the Edge gate is the only release gate (defence-in-depth gap noted, not in W01-02 scope).\n3) apps/mobile/__tests__/wf/attack-w01-02-releaseRejection.test.ts — `cd apps/mobile && npx jest __tests__/wf/attack-w01-02-releaseRejection.test.ts`: exit 1, 1 failed, 2 passed, 3 total (failure = BREAK(P2)).\n\nAC3 REGRESSION (VERIFIED): checked out BASE 55d80326 with ONLY the three attack files copied; harness: exit 1, `FAILED | 10 passed | 59 failed` (BASE reserves permits with no policy and rejects resultKind=partial with shot.invalid_payload — the 10 passes are policy-independent controls: anon/garbage bearer/malformed body/GET route shape); live-PG: exit 1, `0 passed | 1 failed` (SyntaxError: releasePolicy.ts on BASE has no readChargeableReleaseAdmission); mobile: exit 1, identical 1 failed/2 passed (client code is unchanged between BASE and candidate, so this break is a contract gap the candidate's new code exposes rather than a regression). Back on candidate c01576c4 the same files give 68/1, 8/0, 2/1 as above. Logs: artifacts/w01-02-attack/{base_harness,base_pg,base_mobile}.log (uploaded; artifacts/ is gitignored so logs are attachments, not on the branch).\n\nHYGIENE (VERIFIED): `deno fmt --check` + `deno lint` on the two Deno files clean; root `npx prettier --check` + `npx eslint` on the Jest file clean; `cd apps/mobile && npx tsc --noEmit` reports 11 pre-existing errors only in src/diagnostics/{sentry,privacy}*.ts (missing @sentry/* modules in this checkout), none in the new file. INFERRED: those tsc errors are environment (uninstalled optional sentry packages), not candidate-related. Working tree after commit: clean.\n\nVERDICT: W01-02 objective holds under attack — missing/withdrawn/expired/mismatched/corrupt/transport-failed authority never admits or charges a scored run and never yields an informative 5xx; partial/low_confidence/replayed never charge. Two non-blocking findings for follow-up owners: P2 (mobile outbox permanently parks release-rejected ratings; fix belongs in apps/mobile sync classification or by answering scored-shot release refusals at batch level) and P3 (same-key retry after withdrawal cannot recover a live reservation)."
+      },
+      "decision": {
+        "accepted": true,
+        "criteria_examined": [
+          "implementer not blocked",
+          "head_sha is a full sha",
+          "reviewer and adversary examined the same sha",
+          "implementer acceptance coverage",
+          "reviewer independent re-verification",
+          "regression tests fail on base",
+          "reviewer verdict approve with no blocking issues",
+          "no scope violation",
+          "no invariant violations",
+          "no unresolved P0/P1 adversarial break"
+        ],
+        "reasons": []
+      },
+      "implement": {
+        "acceptance_results": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/009f4e0c-48b4-4126-a679-6d5c9ca94114/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC1",
+            "note": "VERIFIED on c01576c4 from the repo root (deno 2.5.6 via npx, frozen deno.lock). Output ends with `Check file:///…/supabase/functions/api/index.ts`, no diagnostics. Local copy: artifacts/w01-02-r2/ac1_deno_check.log (artifacts/ is gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dab8338c-4346-4aff-930f-4b05b62dcf43/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 796,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC2",
+            "note": "VERIFIED on c01576c4: `ok | 796 passed (31 steps) | 0 failed (1m59s)`, no `ignored` count in the summary (ignored == 0). Disposable PostgreSQL prepared with `./xc_pg_up.sh` (postgres:16 container + supabase/tests/shim_auth.sql + every migration through 20260908100000). Environment note: Docker Hub returned 429 for `postgres:16` so the locally cached `postgres:16-alpine` image was tagged as `postgres:16` (same server major) for xc_pg_up.sh and for db_migrations_rls_indexes.audit.test.ts, which spins its own container. A first attempt against a bare, un-migrated postgres (no shim_auth/migrations) failed 39 live-DB tests with `relation \"auth.users\" does not exist` — an environment setup error, not a candidate defect; the recorded run is the prepared-DB run. Deno 2.9.6 executed the suite (deno task test is not version-pinned; AC1 uses the frozen 2.5.6).",
+            "passed": 796,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a9ca4a15-4a28-4f33-a705-ca40b956b4d2/ac3_head_regress.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json release_policy_admission.test.ts  (BASE: git worktree at 55d80326 with ONLY release_policy_admission.test.ts copied in; HEAD: c01576c4)",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC3",
+            "note": "PROOF exit_code 0 = new tests FAIL on BASE and PASS on HEAD. BASE run (worktree /home/ubuntu/w0102-base @ 55d80326, only the new test file copied, `git status` showed exactly that one untracked file): exit 1, `FAILED | 5 passed | 9 failed` — every no-policy/withdrawn/expired/mismatched/storage-failure case on both permit reservation and scored sync fails because BASE reserves the permit (200) / settles the scored shot via apply_synced_shot without consulting read_analysis_release_policy, and BASE rejects resultKind=partial as shot.invalid_payload; the 5 that pass on BASE are the ACTIVE-policy happy paths and the partial+score invalid case (the type-checked run loads on BASE since the test builds its own fixture). Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/d44c3638-c8d1-4065-8238-ee9557805c83/ac3_base_regress.log . HEAD run: exit 0, `ok | 14 passed | 0 failed`.",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "approach": "1) `git fetch` + `git checkout -b devin/pp/w01-02/impl-r2 55d80326bca44a25550855c2be6f755370493e0f`; read AGENTS.md, REVIEW.md, §11 of docs/RELEASE_READINESS_2026-09-07.md, docs/devin/OPERATING_SYSTEM.md, W01-01 ledger, migrations 20260908020000 + 20260908100000 (grant of read_analysis_release_policy to service_role only; partial vocabulary), and the full r1 diff. 2) `git cherry-pick 326c4ae2 0f7d8bb6 d200623c` (test commit first — 1209a2b7 `test(edge): W01-02 regression…`, then 78dbd4cb harness wiring, then c01576c4 fix); `git diff d200623c HEAD` is empty. 3) AC3 base proof: `git worktree add --detach /home/ubuntu/w0102-base 55d80326`, copied ONLY release_policy_admission.test.ts, `deno test -A --config deno.json release_policy_admission.test.ts` → exit 1, 5 passed / 9 failed; same command on HEAD → exit 0, 14 passed. 4) AC1 `npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts` → exit 0. 5) AC2: `docker tag postgres:16-alpine postgres:16` (Docker Hub 429), `./xc_pg_up.sh` (shim_auth + all migrations on 127.0.0.1:55433), `XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test` → exit 0, 796 passed (31 steps), 0 failed, 0 ignored. 6) Extra checks (NOT acceptance ids): root `pnpm format:check` → exit 0 (`All matched files use Prettier code style!`, https://la-hacks-rttothemoon.devinenterprise.com/attachments/2fb867e5-d84a-4793-8fab-39ae09cf510e/format_check.log); `git diff --check 55d80326 HEAD` → exit 0, no output (https://la-hacks-rttothemoon.devinenterprise.com/attachments/aa86607f-a17d-462f-ba2b-f6f3c2024301/git_diff_check.log). 7) `git push -u origin devin/pp/w01-02/impl-r2` (new branch, no force); `git rev-parse HEAD` = c01576c43b96c4e78e21d211a5c69b9e1b0a099f; disposable container removed with `./xc_pg_up.sh down`.",
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/009f4e0c-48b4-4126-a679-6d5c9ca94114/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/dab8338c-4346-4aff-930f-4b05b62dcf43/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/d44c3638-c8d1-4065-8238-ee9557805c83/ac3_base_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/a9ca4a15-4a28-4f33-a705-ca40b956b4d2/ac3_head_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/2fb867e5-d84a-4793-8fab-39ae09cf510e/format_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aa86607f-a17d-462f-ba2b-f6f3c2024301/git_diff_check.log"
+        ],
+        "base_sha": "55d80326bca44a25550855c2be6f755370493e0f",
+        "baseline_failures_observed": [],
+        "blocked": false,
+        "branch": "devin/pp/w01-02/impl-r2",
+        "files_changed": [
+          "supabase/functions/api/index.ts",
+          "supabase/functions/api/releasePolicy.ts",
+          "supabase/functions/api/__wf__/release_policy_admission.test.ts",
+          "supabase/functions/api/__wf__/releasePolicyFixture.ts",
+          "supabase/functions/api/__wf__/routesHarness.ts",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts"
+        ],
+        "head_sha": "c01576c43b96c4e78e21d211a5c69b9e1b0a099f",
+        "out_of_scope_files": [
+          "supabase/functions/api/__wf__/releasePolicyFixture.ts — new test-only fixture (the RPC row of an ACTIVE, approved, non-withdrawn harness policy) shared by the two harnesses below; not under any serial_group_paths prefix; nothing in the shipping function imports it.",
+          "supabase/functions/api/__wf__/routesHarness.ts — minimum wiring: the fetch-stub harness now serves `read_analysis_release_policy` = active policy row by default (and on reset) so the ~30 pre-existing route tests that reserve permits / sync scored shots keep exercising the charge path once index.ts gates it on the authority; the new regression test overrides it per case. Not under any serial_group_paths prefix.",
+          "supabase/functions/api/__wf__/xc_concurrency_harness.ts — minimum wiring: the modelled-Supabase concurrency harness answers `rpc/read_analysis_release_policy` (200 + active row for the service-role bearer, 403 42501 otherwise, counted as rpc.read_analysis_release_policy) so the existing edge concurrency matrix keeps reaching reserve/apply. Not under any serial_group_paths prefix."
+        ],
+        "package_id": "W01-02",
+        "regression_tests_added": [
+          "supabase/functions/api/__wf__/release_policy_admission.test.ts (14 tests: permit ×6 — no policy / withdrawn / expired / digest-mismatched → typed 409 access.release_not_authorized with reserve_analysis_permit never called, storage failure → 503 uncharged, ACTIVE → 200 reserved; sync ×8 — scored without policy / withdrawn → typed per-shot rejection with apply_synced_shot never called while low_confidence in the same batch settles, mechanics-only partial settles without a policy, partial+score refused invalid, storage failure → 503 batch-retryable, no-scored batch never consults the authority, replayed scored ack'd without policy, ACTIVE → settles)"
+        ],
+        "residual_risks": [
+          "INFERRED: apps/mobile/src/data/api.ts (mobile-data serial group, not this package) has no handling for the new 409 `access.release_not_authorized` on POST /v1/analysis-permits — the client will surface it as a generic ApiError(409) and abort the run without a permit (safe: nothing reserved or charged). A mobile package should map error.code/`release.reasonCode` to the shared AnalysisReleaseEligibility UI (mechanics-only / abstain path) and treat the per-shot sync rejection as terminal-uncharged (keep the shot on device, do not retry the same id forever).",
+          "INFERRED: a same-idempotency-key retry of an already-reserved permit made after the policy was withdrawn now answers 409 instead of replaying the existing reserved row (the gate runs before the idempotent RPC). The orphaned reserved permit is released/expired by the existing pg_cron stale sweep; no charge results, but the client does not learn the permit id on that retry.",
+          "INFERRED: in production no policy is installed/approved yet (docs §11), so with this candidate deployed every permit reservation and every scored settlement answers the typed 409 / per-shot rejection until W04's authority install + approvals land — intended by the objective (fail closed, never charge), but it means scored ratings are unavailable in production until the policy is installed. Sequence the edge deploy with the authority activation.",
+          "UNKNOWN: AC2 ran under Deno 2.9.6 (the `deno task test` task is not version-pinned; only AC1 is frozen at 2.5.6) and the disposable database used the postgres:16-alpine image retagged as postgres:16 because Docker Hub rate-limited the pull; same server major, but not the exact image CI pulls.",
+          "Finalize route (POST /v1/analysis-permits/:id/finalize) still does not accept outcome=partial (W01-01 adversary P2 note); not part of this objective (permit reservation + apply_synced_shot scored settlement) and left unchanged."
+        ],
+        "summary": "W01-02 r2 = the r1 candidate (three commits, cherry-picked onto BASE 55d80326 — content byte-identical to d200623c, `git diff d200623c HEAD` empty) re-verified end to end and re-reported with ONLY the three manifest acceptance ids (the r1 rejection was solely the extra `root-format-check` / `git-diff-check` acceptance ids; those checks were run and are reported in `approach`, not as acceptance objects).\n\nDEFECT ON BASE_SHA (VERIFIED by the failing regression run): supabase/functions/api/index.ts reserveAnalysisPermit (BASE lines 1497–1561) calls `authed.db.rpc(\"reserve_analysis_permit\")` (line 1521) with no read of the release authority, so a permit — the admission of a chargeable scored run — is reserved with no installed/approved policy (production default: `document=null, approval=null, denyNewAuthorizations=true`), or with a withdrawn, expired or digest-mismatched one. syncShots (BASE lines 1990+) loops straight into `authed.db.rpc(\"apply_synced_shot\")` for every non-replayed shot, so `resultKind=scored` settles finalized/scored (the charge / spent free rating) without any authority check; parseSyncShot (BASE lines 1785–1786) still rejects `resultKind=partial` with `shot.invalid_payload`, so the non-chargeable partial path that migration 20260908100000 added at the SQL layer (and its header defers to serial group edge-index) is unreachable from the app. releasePolicy.ts on BASE only offers readVerifiedReleasePolicy (used by GET /v1/analysis/release-policy) and collapses transport failure and integrity failure into one untyped ReleasePolicyError.\n\nFIX (write_paths only for shipping code): releasePolicy.ts — ReleasePolicyError gains `failure: \"storage\" | \"integrity\"` (+ cause); new `ChargeableReleaseAdmission` = active | ineligible{reasonCode} | unavailable{error}; `admitChargeableRelease(policy, now)` evaluates the SHARED eligibility rules (resolveAnalysisReleaseEligibility via eligibilityForVerifiedRelease) for a real, intent-confirmed observation inside the policy's own supported domain so only lineage/approval/withdrawal/deny-switch/validity can reject; `readChargeableReleaseAdmission(read, now)` = uncached read + admission, mapping integrity failure → ineligible/unverified and storage failure → unavailable. index.ts — `chargeableReleaseAdmission()` reads through the service-role client (`read_analysis_release_policy()` is EXECUTE-granted to service_role only; missing SUPABASE_SERVICE_ROLE_KEY ⇒ unavailable, never authorization); reserveAnalysisPermit gates BEFORE the reserve RPC: ineligible ⇒ typed 409 `{error:{code:\"access.release_not_authorized\",message}, release:{status:\"ineligible\",reasonCode}}` (non-5xx, nothing reserved, nothing counted), unavailable ⇒ generic 503 (retryable, nothing reserved); syncShots takes ONE uncached authority read per batch only when a non-replayed scored shot is present — unavailable ⇒ 503 for the batch (outbox keeps every row, apply never called), ineligible ⇒ per-shot typed rejection `access.release_not_authorized` for scored shots while low_confidence/partial shots in the same batch settle normally; parseSyncShot admits `resultKind=partial` with `overallScore=null` (a partial carrying a score is still invalid), matching the SQL vocabulary. Copy follows APP_STORE_SUBMISSION.md (no accuracy/superlative/competitor claims).\n\nSCOPE: three test-harness files outside write_paths were the minimum wiring so the pre-existing route/concurrency suites keep exercising the now-gated charge paths (listed in out_of_scope_files, none under a serial_group_paths prefix). No migration, RLS/grant, mobile, secrets or production change. No PR opened; branch devin/pp/w01-02/impl-r2 pushed (head c01576c43b96c4e78e21d211a5c69b9e1b0a099f, verified with `git ls-remote`)."
+      },
+      "review": {
+        "acceptance_reverified": [
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/07a1e719-43a1-4904-8a38-297031e50c0c/ac1_deno_check.log",
+            "command": "npx --yes deno@2.5.6 check --node-modules-dir=none --frozen --lock=deno.lock supabase/functions/api/index.ts",
+            "executed": 0,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC1",
+            "note": "VERIFIED on c01576c4 from the repo root. Output ends `Check file:///home/ubuntu/repos/Pickle-Sensei/supabase/functions/api/index.ts`, no diagnostics, EXIT=0. Local copy artifacts/review-w01-02/ac1_deno_check.log (gitignored).",
+            "passed": 0,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aba750e3-819f-4230-8d91-11db9230eac4/ac2_edge_suite.log",
+            "command": "cd supabase/functions/api/__wf__ && ./xc_pg_up.sh && XC_PG_URL=postgres://postgres:pg@127.0.0.1:55433/postgres deno task test",
+            "executed": 796,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC2",
+            "note": "VERIFIED on c01576c4: `ok | 796 passed (31 steps) | 0 failed (1m38s)`, EXIT=0; no `ignored` in the summary and `grep -c '... ignored'` = 0. Sum of `running N tests from` across 45 files = 796. Live-DB files ran (be-edge-routes-shots-rank 12, xc_pg_rpc_concurrency 8, db_migrations_rls_indexes.audit 1, release_policy_admission 14). Disposable DB: genuine `docker pull postgres:16` (pull succeeded here) + xc_pg_up.sh (shim_auth.sql + every migration through 20260908100000). Runner: deno 2.9.6 (task not version-pinned). Container removed afterwards.",
+            "passed": 796,
+            "skipped": 0,
+            "status": "PASS"
+          },
+          {
+            "artifact": "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f4d286c-6d84-4b99-9346-2e2c26918c12/ac3_head_regress.log",
+            "command": "cd supabase/functions/api/__wf__ && deno test -A --config deno.json release_policy_admission.test.ts  (BASE: `git worktree add --detach /home/ubuntu/w0102-base 55d80326` with ONLY release_policy_admission.test.ts copied in, `git status` = exactly that one untracked file; HEAD: c01576c4)",
+            "executed": 14,
+            "exit_code": 0,
+            "failed": 0,
+            "id": "W01-02-AC3",
+            "note": "PROOF exit 0: BASE run exit 1, `FAILED | 5 passed | 9 failed` — all 4 permit no-policy/withdrawn/expired/mismatched cases + permit storage-failure + sync scored-without-policy / withdrawn-batch / mechanics-only-partial / storage-failure FAIL on BASE (permit reserved 200 without consulting the authority; scored settled through apply_synced_shot; `partial` rejected as shot.invalid_payload). The 5 passing on BASE are the ACTIVE-policy happy paths, partial+score invalid, no-scored batch, and replayed scored — each true on BASE by construction. Base log: https://la-hacks-rttothemoon.devinenterprise.com/attachments/5e340f69-fb67-4f5b-b222-3f9a1e5e7cd8/ac3_base_regress.log . HEAD run exit 0, `ok | 14 passed | 0 failed`. Type-checked run (no --no-check).",
+            "passed": 14,
+            "skipped": 0,
+            "status": "PASS"
+          }
+        ],
+        "attachment_urls": [
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/07a1e719-43a1-4904-8a38-297031e50c0c/ac1_deno_check.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/aba750e3-819f-4230-8d91-11db9230eac4/ac2_edge_suite.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5e340f69-fb67-4f5b-b222-3f9a1e5e7cd8/ac3_base_regress.log",
+          "https://la-hacks-rttothemoon.devinenterprise.com/attachments/5f4d286c-6d84-4b99-9346-2e2c26918c12/ac3_head_regress.log"
+        ],
+        "blocking_issues": [],
+        "invariant_violations": [],
+        "non_blocking_issues": [
+          "INFERRED (not a candidate defect, mobile-data serial group): apps/mobile/src/data/api.ts has no mapping for the new 409 `access.release_not_authorized` on POST /v1/analysis-permits; the client surfaces a generic ApiError(409) and aborts before anything is reserved or charged. apps/mobile/src/data/sync.ts treats the new per-shot rejection code as a non-transient contract verdict (TRANSIENT_SYNC_REJECTION_CODES does not include it), so the shot stays on device and consumes its attempt budget rather than retrying forever — safe, but a mobile package should present the AnalysisReleaseEligibility (mechanics-only) UI for both.",
+          "INFERRED: a same-idempotency-key retry of an already-reserved permit after the policy is withdrawn now answers 409 instead of replaying the reserved row (gate runs before the idempotent RPC at index.ts:1551-1557); the orphaned reserved permit is left to the existing stale-permit sweep. No charge results.",
+          "INFERRED: with no policy installed/approved in production (docs §11), every permit reservation and every scored settlement will answer the typed 409 / per-shot rejection until the authority is installed — this is the fail-closed intent of the objective, but the edge deploy must be sequenced with the authority activation (W04).",
+          "UNKNOWN: AC2 executed under Deno 2.9.6 (the `deno task test` task is not version-pinned); only AC1 is frozen at 2.5.6. AC2 used a freshly pulled `postgres:16` image (not the retagged alpine the implementer used)."
+        ],
+        "package_id": "W01-02",
+        "regression_fails_on_base": true,
+        "reviewed_sha": "c01576c43b96c4e78e21d211a5c69b9e1b0a099f",
+        "scope_violation": false,
+        "summary": "APPROVE W01-02 candidate c01576c43b96c4e78e21d211a5c69b9e1b0a099f (branch devin/pp/w01-02/impl-r2, 3 commits on BASE 55d80326).\n\nSCOPE (VERIFIED, `git diff --stat 55d80326..c01576c4`): 6 files. index.ts, releasePolicy.ts, __wf__/release_policy_admission.test.ts are write_paths. __wf__/releasePolicyFixture.ts (new, test-only), __wf__/routesHarness.ts (+5/-2: default rpcs include an ACTIVE read_analysis_release_policy row), __wf__/xc_concurrency_harness.ts (+7: answers the RPC 200 for service role, 403 42501 otherwise) are listed in out_of_scope_files, are not under any serial_group_paths prefix, and are the minimum wiring so ~30 pre-existing permit/sync route tests and the concurrency matrix keep reaching the now-gated charge paths. No migration, supabase/tests, mobile, scripts or workflow change. scope_violation=false. Objective is met as shipped behaviour: reserveAnalysisPermit (index.ts:1551-1557) and syncShots (index.ts:2093-2109) call chargeableReleaseAdmission() → readChargeableReleaseAdmission(); nothing is a dead module.\n\nACCEPTANCE (all re-executed by me): AC1 exit 0; AC2 exit 0, 796 passed / 0 failed / 0 ignored on a real postgres:16 disposable DB with every migration; AC3 base 5 passed / 9 failed (exit 1) with only the new test file over BASE, HEAD 14/14 (exit 0) → regression_fails_on_base=true.\n\nDIFF AUDIT vs REVIEW.md / hard rules (VERIFIED by reading the whole diff + grep of added lines): no `any` (one occurrence is prose in a doc comment), no ts-ignore/eslint-disable/`|| true`/ignore/sanitize flags; no removed or edited existing comments (only removed lines are code: import, resultKind union, two validation branches/messages, ReleasePolicyError ctor, harness rpcs default); no test weakened; no migration touched; no grant/RLS change (read_analysis_release_policy stays EXECUTE service_role only per 20260908020000:181, and the edge reads it through billingAdminDb(), never the user bearer — the new test asserts the service-role Authorization header); 5xx bodies stay generic via serviceUnavailable(); missing SUPABASE_SERVICE_ROLE_KEY ⇒ unavailable/503, never authorization; storage failure ⇒ 503 retryable with reserve/apply never called; integrity/digest/lineage failure ⇒ typed 409 unverified (never 5xx, never a charge); withdrawn/deny switch ⇒ withdrawn; expired ⇒ expired. admitChargeableRelease evaluates the SHARED resolveAnalysisReleaseEligibility with a real, intent-confirmed observation drawn from the policy's own supportedInputs[0], so only lineage/approval/withdrawal/validity can reject — no duplicated eligibility logic. `partial` admitted only with overallScore=null, matching migration 20260908100000's vocabulary (a partial with a score is still shot.invalid_payload). Free-rating counting untouched (still lifetime_scored_count() inside the RPCs). Copy (\"Validated ratings are not available right now. No rating was counted.\" / \"This rating could not be validated for release. It stays on this device and was not counted.\") uses only validated/estimate language, no forbidden terms. Prettier --check on the 6 files: clean; `git diff --check`: clean.\n\nNon-blocking notes are listed in non_blocking_issues (mobile 409/rejection mapping belongs to a mobile package; same-key retry after withdrawal returns 409 rather than the reserved row; production fails closed until the authority is installed; AC2 ran on Deno 2.9.6).",
+        "verdict": "approve"
+      },
+      "round": 2
+    }
+  ],
+  "start_round": 1,
+  "status": "ACCEPTED",
+  "wave_id": "wave-2"
+}

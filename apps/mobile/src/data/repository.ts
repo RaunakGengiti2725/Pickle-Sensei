@@ -5,10 +5,20 @@ import {
   type ShotTypeSlug,
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
+import {
+  isConfirmationTargetSelection,
+  parseNeedsTechniqueConfirmationRecord,
+} from '@pickle/analysis-pipeline';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
-import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
-import { OUTBOX_MAX_ATTEMPTS } from './sync';
+import {
+  assertDataOwnerContext,
+  getActiveDataOwner,
+  requireWritableDataOwner,
+  type DataOwnerContext,
+} from './accountScope';
+import { forDataOwner, withTransaction } from './transactions';
+import { OUTBOX_MAX_ATTEMPTS, offlineOutputSha256 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -66,6 +76,8 @@ export interface PendingCapture {
   /** Full native result when this app version recorded valid provenance. */
   clip: CapturedClip | null;
   evidenceStatus: 'valid' | 'legacy' | 'corrupt' | 'metadata_mismatch';
+  techniqueConfirmation?: 'ready' | 'release_pending' | 'blocked';
+  hasOriginalOperation?: boolean;
 }
 
 export interface CaptureHistoryEntry extends PendingCapture {
@@ -73,33 +85,36 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
+function writeOwner(db: LocalDb): string {
+  if (!db.ownerContext) return requireWritableDataOwner();
+  assertDataOwnerContext(db.ownerContext);
+  return db.ownerContext.ownerKey;
+}
+
 async function inTransaction(
   db: LocalDb,
-  operation: () => Promise<void>,
+  operation: (transaction: LocalDb) => Promise<void>,
 ): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
+  // Preserve the original persistence error.
+  await withTransaction(db, operation);
 }
 
 /** Every owner-partitioned local table. Kept in one place so account
  * deletion can never silently miss a store added later. */
 const OWNER_SCOPED_TABLES = [
+  'analysis_execution_attempts',
+  'analysis_logical_operations',
   'local_shot',
   'local_session',
   'local_capture',
   'local_analysis_record',
+  'analysis_run_journal',
   'outbox',
   'sync_receipt',
+  'offline_wallet_journal',
+  'offline_receipt',
+  'offline_ticket',
+  'offline_grant',
 ] as const;
 
 /** Every owner-scoped kv namespace (`<namespace>:<owner>`). Must stay in
@@ -109,6 +124,7 @@ const OWNER_SCOPED_TABLES = [
  *   notifications     → notifications/types.ts notificationPrefsKeyForOwner
  *   consistency       → consistency/store.ts consistencyKeyForOwner
  *   practice.set      → analysis/practiceSet.ts practiceSetKeyForOwner
+ *   walkthrough.complete → walkthrough/walkthroughKey.ts walkthroughKeyForOwner
  * (pinned by repositoryAccountScope tests). */
 export const OWNER_SCOPED_KV_NAMESPACES = [
   'profile',
@@ -116,6 +132,9 @@ export const OWNER_SCOPED_KV_NAMESPACES = [
   'notifications',
   'consistency',
   'practice.set',
+  'billing.pending-fulfilment',
+  'analysis.release-policy',
+  'walkthrough.complete',
 ] as const;
 
 /**
@@ -128,7 +147,7 @@ export async function purgeOwnerData(
   db: LocalDb,
   owner: string,
 ): Promise<void> {
-  await inTransaction(db, async () => {
+  await inTransaction(db, async db => {
     for (const table of OWNER_SCOPED_TABLES) {
       await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
     }
@@ -153,8 +172,8 @@ export async function saveAnalysis(
       'A server-reserved analysis permit is required before persisting a rating.',
     );
   }
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
        (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -181,6 +200,135 @@ export async function saveAnalysis(
 }
 
 /**
+ * Persists a scored analysis rated on the court without a live permit. The
+ * local allocation the run consumed has already queued `receiptId` for this
+ * exact result (offline_receipt, same owner, same result id, hash of this
+ * exact payload); that receipt — not a `shot.sync` outbox row — carries the
+ * output to the server, so nothing is queued here. The parent session row
+ * still syncs through its own outbox entry.
+ */
+export async function saveOfflineAnalysis(
+  db: LocalDb,
+  analysis: ShotAnalysis,
+  receiptId: string,
+): Promise<void> {
+  if (analysis.source !== 'real') {
+    throw new Error('Only real analyses may be persisted by the app runtime.');
+  }
+  if (analysis.resultKind !== 'scored') {
+    throw new Error(
+      'Only a scored analysis spends an offline allocation; abstentions are persisted via saveLocalOnlyAnalysis.',
+    );
+  }
+  if (!receiptId.trim()) {
+    throw new Error(
+      'A queued offline consumption receipt is required before persisting an offline rating.',
+    );
+  }
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
+    const { rows } = await db.execute(
+      `SELECT receipt FROM offline_receipt
+       WHERE owner_key = ? AND receipt_id = ?`,
+      [owner, receiptId],
+    );
+    const receipt = parseOfflineReceiptIdentity(rows[0]?.['receipt']);
+    if (receipt === null || receipt.resultId !== analysis.id) {
+      throw new Error(
+        'The offline receipt does not name this analysis; the rating is not persisted.',
+      );
+    }
+    if (receipt.fullOutputSha256 !== offlineOutputSha256(analysis)) {
+      throw new Error(
+        'The offline receipt paid for a different output than this analysis; the rating is not persisted.',
+      );
+    }
+    await db.execute(
+      `INSERT OR REPLACE INTO local_shot
+       (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        owner,
+        analysis.id,
+        analysis.sessionId,
+        analysis.shotType,
+        analysis.capturedAtIso,
+        analysis.overallScore,
+        analysis.analysisConfidence,
+        analysis.resultKind,
+        analysis.source,
+        JSON.stringify(analysis),
+      ],
+    );
+  });
+}
+
+/** The result and output digest a durable offline receipt commits to; null
+ * when the stored receipt is missing, unreadable or not a receipt. */
+function parseOfflineReceiptIdentity(
+  raw: unknown,
+): { resultId: string; fullOutputSha256: string } | null {
+  if (typeof raw !== 'string') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null;
+  const { resultId, fullOutputSha256 } = parsed as Record<string, unknown>;
+  return typeof resultId === 'string' && typeof fullOutputSha256 === 'string'
+    ? { resultId, fullOutputSha256 }
+    : null;
+}
+
+/** One of this owner's persisted real scored ratings, or null when the
+ * device no longer holds it or holds a payload it can no longer read. */
+export async function readScoredShotAnalysis(
+  db: LocalDb,
+  shotId: string,
+): Promise<ShotAnalysis | null> {
+  const owner = writeOwner(db);
+  const { rows } = await db.execute(
+    `SELECT payload FROM local_shot
+     WHERE owner_key = ? AND id = ? AND source = 'real' AND result_kind = 'scored'`,
+    [owner, shotId],
+  );
+  const payload = rows[0]?.['payload'];
+  if (typeof payload !== 'string') return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null;
+  const analysis = parsed as ShotAnalysis;
+  return analysis.id === shotId &&
+    analysis.source === 'real' &&
+    analysis.resultKind === 'scored'
+    ? analysis
+    : null;
+}
+
+/** Mark a shot delivered to the server outside the `shot.sync` outbox — an
+ * offline receipt the server accepted (`result_recorded`) — exactly as a
+ * successful shot.sync marks it. */
+export async function recordShotSyncReceipt(
+  db: LocalDb,
+  shotId: string,
+): Promise<void> {
+  const owner = writeOwner(db);
+  await db.execute(
+    `INSERT OR REPLACE INTO sync_receipt (owner_key, kind, entity_id)
+     VALUES (?, 'shot.sync', ?)`,
+    [owner, shotId],
+  );
+}
+
+/**
  * Persists a low-confidence (unscored) analysis for local display only. It
  * never enters the sync outbox: abstentions are not ratings, consume no
  * permit, and must not masquerade as scored shots anywhere downstream.
@@ -197,7 +345,7 @@ export async function saveLocalOnlyAnalysis(
       'Scored analyses must be persisted with their analysis permit via saveAnalysis.',
     );
   }
-  const owner = requireWritableDataOwner();
+  const owner = writeOwner(db);
   await db.execute(
     `INSERT OR REPLACE INTO local_shot
      (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
@@ -437,7 +585,7 @@ export async function savePendingCapture(
   clip: CapturedClip,
   declaredStroke: ShotTypeSlug | null = null,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writeOwner(db);
   await db.execute(
     `INSERT INTO local_capture
       (owner_key, id, uri, shot_type, declared_stroke, captured_at, duration_ms, fps, width, height, status, payload)
@@ -472,6 +620,97 @@ export async function getPendingCapture(
   return row ? parseCaptureRow(row) : null;
 }
 
+// Exactly one finalized new attempt may own an immutable record. Pending and
+// released technical attempts do not become additional library result rows.
+const RECORD_JOURNALS_SQL = `(SELECT owner_key, analysis_id, operation_id, api_origin, state, permit_id, result_id, release_outcome FROM analysis_run_journal
+  UNION ALL SELECT a.owner_key, a.analysis_id, a.operation_id, a.api_origin, a.state, a.permit_id, a.result_id, a.release_outcome
+  FROM analysis_execution_attempts a JOIN analysis_logical_operations p
+    ON p.owner_key = a.owner_key AND p.winning_attempt_id = a.operation_id AND p.final_record_id = a.analysis_id)`;
+
+export interface StoredCaptureAnalysisSnapshot {
+  capture: PendingCapture;
+  status: unknown;
+  declaredStrokeRaw: unknown;
+  rawTargetSeed: unknown;
+  newestRecordId: unknown;
+  recordRow: Record<string, unknown> | null;
+  journalOperationId: unknown;
+  journalApiOrigin: unknown;
+  resultId: unknown;
+  resultKind: unknown;
+  resultSource: unknown;
+  resultPayload: unknown;
+  resultMetadata: {
+    capturedAtIso: unknown;
+    shotType: unknown;
+    sessionId: unknown;
+    overallScore: unknown;
+    analysisConfidence: unknown;
+  };
+}
+
+export async function readCaptureAnalysisSnapshot(
+  rawDb: LocalDb,
+  owner: DataOwnerContext,
+  captureId: string,
+  recordId?: string,
+): Promise<StoredCaptureAnalysisSnapshot | null> {
+  const db = forDataOwner(rawDb, owner);
+  const { rows } = await db.execute(
+    `SELECT c.*, r.id AS record_id, r.capture_id AS record_capture_id,
+       r.created_at AS record_created_at, r.engine_version AS record_engine_version,
+       r.scoring_model_version AS record_scoring_model_version, r.record,
+       newest.id AS newest_record_id, j.operation_id, j.api_origin,
+       s.id AS result_id, s.result_kind, s.source AS result_source, s.payload AS result_payload,
+       s.captured_at AS result_captured_at, s.shot_type AS result_shot_type,
+       s.session_id AS result_session_id, s.overall_score AS result_score, s.confidence AS result_confidence
+     FROM local_capture c
+     LEFT JOIN local_analysis_record newest ON newest.owner_key = c.owner_key AND newest.id = (
+       SELECT id FROM local_analysis_record WHERE owner_key = c.owner_key AND capture_id = c.id
+       ORDER BY created_at DESC, id DESC LIMIT 1)
+     LEFT JOIN local_analysis_record r ON r.owner_key = c.owner_key AND r.capture_id = c.id
+       AND r.id = ${recordId === undefined ? 'newest.id' : '?'}
+     LEFT JOIN ${RECORD_JOURNALS_SQL} j ON j.owner_key = r.owner_key AND j.analysis_id = r.id
+     LEFT JOIN local_shot s ON s.owner_key = r.owner_key AND s.id = r.id
+     WHERE c.owner_key = ? AND c.id = ?`,
+    [...(recordId === undefined ? [] : [recordId]), owner.ownerKey, captureId],
+  );
+  assertDataOwnerContext(owner);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    capture: parseCaptureRow(row),
+    status: row.status,
+    declaredStrokeRaw: row.declared_stroke,
+    rawTargetSeed: row.target_seed,
+    newestRecordId: row.newest_record_id,
+    recordRow:
+      row.record_id === null
+        ? null
+        : {
+            id: row.record_id,
+            captureId: row.record_capture_id,
+            createdAtIso: row.record_created_at,
+            engineVersion: row.record_engine_version,
+            scoringModelVersion: row.record_scoring_model_version,
+            record: row.record,
+          },
+    journalOperationId: row.operation_id,
+    journalApiOrigin: row.api_origin,
+    resultId: row.result_id,
+    resultKind: row.result_kind,
+    resultSource: row.result_source,
+    resultPayload: row.result_payload,
+    resultMetadata: {
+      capturedAtIso: row.result_captured_at,
+      shotType: row.result_shot_type,
+      sessionId: row.result_session_id,
+      overallScore: row.result_score,
+      analysisConfidence: row.result_confidence,
+    },
+  };
+}
+
 /**
  * Appends an immutable, versioned analysis record for a capture. A capture
  * accumulates one record per (engine, model set) that ever processed it;
@@ -481,7 +720,7 @@ export async function saveAnalysisRecord(
   db: LocalDb,
   record: AnalysisRecord,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writeOwner(db);
   await db.execute(
     `INSERT INTO local_analysis_record
       (owner_key, id, capture_id, created_at, engine_version, scoring_model_version, record)
@@ -530,7 +769,7 @@ export async function setDeclaredStroke(
   captureId: string,
   declaredStroke: ShotTypeSlug,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writeOwner(db);
   await db.execute(
     `UPDATE local_capture SET declared_stroke = ?
      WHERE owner_key = ? AND id = ?`,
@@ -549,21 +788,28 @@ export interface CaptureTargetSeed {
   selectedAtIso: string;
 }
 
-function isCaptureTargetSeed(value: unknown): value is CaptureTargetSeed {
-  if (typeof value !== 'object' || value === null) return false;
-  const seed = value as {
-    point?: { x?: unknown; y?: unknown };
-    selectedAtIso?: unknown;
-  };
-  return (
-    typeof seed.point === 'object' &&
-    seed.point !== null &&
-    typeof seed.point.x === 'number' &&
-    Number.isFinite(seed.point.x) &&
-    typeof seed.point.y === 'number' &&
-    Number.isFinite(seed.point.y) &&
-    typeof seed.selectedAtIso === 'string'
-  );
+export type CaptureTargetSeedRead =
+  | { kind: 'absent' }
+  | { kind: 'valid'; seed: CaptureTargetSeed }
+  | { kind: 'corrupt' };
+
+export function parseCaptureTargetSeed(raw: unknown): CaptureTargetSeedRead {
+  if (raw === null || raw === undefined) return { kind: 'absent' };
+  if (typeof raw !== 'string') return { kind: 'corrupt' };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isConfirmationTargetSelection(parsed)
+      ? {
+          kind: 'valid',
+          seed: {
+            point: { ...parsed.point },
+            selectedAtIso: parsed.selectedAtIso,
+          },
+        }
+      : { kind: 'corrupt' };
+  } catch {
+    return { kind: 'corrupt' };
+  }
 }
 
 export async function setCaptureTargetSeed(
@@ -571,7 +817,9 @@ export async function setCaptureTargetSeed(
   captureId: string,
   seed: CaptureTargetSeed,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  if (!isConfirmationTargetSelection(seed))
+    throw new Error('The capture target selection is invalid.');
+  const owner = writeOwner(db);
   await db.execute(
     `UPDATE local_capture SET target_seed = ?
      WHERE owner_key = ? AND id = ?`,
@@ -593,7 +841,7 @@ export async function updateCaptureClipPayload(
   captureId: string,
   clip: CapturedClip,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
+  const owner = writeOwner(db);
   await db.execute(
     `UPDATE local_capture SET payload = ?
      WHERE owner_key = ? AND id = ?`,
@@ -611,27 +859,27 @@ export async function getCaptureTargetSeed(
      WHERE owner_key = ? AND id = ?`,
     [owner, captureId],
   );
-  const raw = rows[0]?.['target_seed'];
-  if (typeof raw !== 'string' || raw.length === 0) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return isCaptureTargetSeed(parsed) ? parsed : null;
-  } catch {
-    // A corrupt seed row reads as absent, never as a reconstructed tap.
-    return null;
+  const parsed = parseCaptureTargetSeed(rows[0]?.['target_seed']);
+  if (parsed.kind === 'corrupt') {
+    // A corrupt seed stays distinct from absence, never a reconstructed tap.
+    throw new Error('The saved capture target selection is corrupt.');
   }
+  return parsed.kind === 'valid' ? parsed.seed : null;
 }
 
 export async function markCaptureAnalyzed(
   db: LocalDb,
   captureId: string,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
-  await db.execute(
+  const owner = writeOwner(db);
+  const result = await db.execute(
     `UPDATE local_capture SET status = 'analyzed'
      WHERE owner_key = ? AND id = ?`,
     [owner, captureId],
   );
+  if (result.rowsAffected === 0) {
+    throw new Error('The capture is no longer available in this account.');
+  }
 }
 
 export async function listPendingCaptures(
@@ -643,13 +891,56 @@ export async function listPendingCaptures(
     throw new Error('Pending capture limit must be a positive integer.');
   }
   const { rows } = await db.execute(
-    `SELECT id, uri, shot_type, declared_stroke, captured_at, duration_ms, fps, width, height, payload
-     FROM local_capture
-     WHERE owner_key = ? AND status = 'awaiting_model'
-     ORDER BY captured_at DESC${limit === null ? '' : ' LIMIT ?'}`,
+    `SELECT c.*, r.id AS record_id, r.capture_id AS record_capture_id,
+       r.created_at AS record_created_at, r.engine_version AS record_engine_version,
+       r.scoring_model_version AS record_scoring_model_version, r.record,
+       j.state AS journal_state, j.permit_id, j.result_id, j.release_outcome,
+       EXISTS (SELECT 1 FROM analysis_logical_operations p
+         WHERE p.owner_key = c.owner_key AND p.capture_id = c.id) AS has_original_operation
+     FROM local_capture c
+     LEFT JOIN local_analysis_record r ON r.owner_key = c.owner_key AND r.id = (
+       SELECT id FROM local_analysis_record WHERE owner_key = c.owner_key AND capture_id = c.id
+       ORDER BY created_at DESC, id DESC LIMIT 1)
+     LEFT JOIN ${RECORD_JOURNALS_SQL} j ON j.owner_key = r.owner_key AND j.analysis_id = r.id
+     WHERE c.owner_key = ? AND c.status = 'awaiting_model'
+     ORDER BY c.captured_at DESC${limit === null ? '' : ' LIMIT ?'}`,
     limit === null ? [owner] : [owner, limit],
   );
-  return rows.map(parseCaptureRow);
+  return rows.map(row => {
+    const capture = parseCaptureRow(row);
+    if (row.has_original_operation === 1) capture.hasOriginalOperation = true;
+    if (typeof row.record !== 'string') return capture;
+    try {
+      const value: unknown = JSON.parse(row.record);
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !('kind' in value) ||
+        value.kind !== 'needs_technique_confirmation'
+      )
+        return capture;
+      const parsed = parseNeedsTechniqueConfirmationRecord(value, {
+        id: row.record_id,
+        captureId: row.record_capture_id,
+        createdAtIso: row.record_created_at,
+        engineVersion: row.record_engine_version,
+        scoringModelVersion: row.record_scoring_model_version,
+      });
+      capture.techniqueConfirmation =
+        parsed.ok &&
+        row.result_id === null &&
+        row.release_outcome === 'low_confidence'
+          ? row.journal_state === 'released' && row.permit_id !== null
+            ? 'ready'
+            : row.journal_state === 'release_pending'
+              ? 'release_pending'
+              : 'blocked'
+          : 'blocked';
+    } catch {
+      capture.techniqueConfirmation = 'blocked';
+    }
+    return capture;
+  });
 }
 
 /**
@@ -745,8 +1036,8 @@ export async function saveSession(
     startedAt: string;
   },
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `INSERT OR REPLACE INTO local_session
        (owner_key, id, mode, shot_type, focus_checkpoint, started_at)
@@ -773,8 +1064,8 @@ export async function finishSession(
   id: string,
   summary: Record<string, unknown>,
 ): Promise<void> {
-  const owner = requireWritableDataOwner();
-  await inTransaction(db, async () => {
+  const owner = writeOwner(db);
+  await inTransaction(db, async db => {
     await db.execute(
       `UPDATE local_session
        SET ended_at = datetime('now'), completed = 1, summary = ?
@@ -841,7 +1132,7 @@ export async function hasShotSyncReceipt(
 export type ShotOutboxStatus =
   | { state: 'absent' }
   | {
-      state: 'queued' | 'rejected' | 'exhausted';
+      state: 'queued' | 'rejected' | 'exhausted' | 'needs_repair';
       attempts: number;
       lastError: string | null;
     };
@@ -857,9 +1148,9 @@ export async function getShotOutboxStatus(
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
   const { rows } = await db.execute(
-    `SELECT attempts, last_error FROM outbox
+    `SELECT attempts, last_error, repair_reason FROM outbox
      WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
+       AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?
      ORDER BY id DESC LIMIT 1`,
     [owner, shotId],
   );
@@ -870,6 +1161,9 @@ export async function getShotOutboxStatus(
     typeof row['last_error'] === 'string' && row['last_error'].length > 0
       ? row['last_error']
       : null;
+  if (row['repair_reason'] != null) {
+    return { state: 'needs_repair', attempts, lastError };
+  }
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
   }
@@ -877,11 +1171,56 @@ export async function getShotOutboxStatus(
   return { state: 'queued', attempts, lastError };
 }
 
-export async function getKv(db: LocalDb, key: string): Promise<string | null> {
+/** Explicitly retry a held or exhausted read and its parent, without changing
+ * saved evidence. Exhausted rows re-enter the budget ONLY through this
+ * explicit action (the drain never retries them on its own), so a read the
+ * server refused under an older rule can be presented again once the service
+ * changes; the server re-validates it exactly as a first presentation.
+ * The caller retains the owner generation from the screen that offered retry. */
+export async function retryShotSync(
+  db: LocalDb,
+  shotId: string,
+  context: DataOwnerContext,
+): Promise<boolean> {
+  return withTransaction(forDataOwner(db, context), async transaction => {
+    const { rows } = await transaction.execute(
+      `SELECT id, CASE WHEN json_valid(payload) THEN json_extract(payload, '$.sessionId') END AS session_id FROM outbox
+       WHERE owner_key = ? AND kind = 'shot.sync'
+         AND (repair_reason IS NOT NULL OR attempts >= ?)
+         AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?`,
+      [context.ownerKey, OUTBOX_MAX_ATTEMPTS, shotId],
+    );
+    for (const row of rows) {
+      await transaction.execute(
+        `UPDATE outbox SET repair_reason = NULL, last_error = NULL,
+         attempts = 0, last_attempt_order = 0 WHERE owner_key = ? AND id = ?`,
+        [context.ownerKey, row['id']],
+      );
+      if (typeof row['session_id'] === 'string') {
+        await transaction.execute(
+          `UPDATE outbox SET repair_reason = NULL, last_error = NULL,
+           attempts = 0, last_attempt_order = 0
+           WHERE owner_key = ? AND kind IN ('session.create', 'session.finalize')
+             AND CASE WHEN json_valid(payload) THEN json_extract(payload, '$.id') END = ?`,
+          [context.ownerKey, row['session_id']],
+        );
+      }
+    }
+    return rows.length > 0;
+  });
+}
+
+export async function getKv(
+  db: LocalDb,
+  key: string,
+  options: { preserveEmpty?: boolean } = {},
+): Promise<string | null> {
   const { rows } = await db.execute(`SELECT value FROM kv WHERE key = ?`, [
     key,
   ]);
-  return rows[0]?.['value'] ? String(rows[0]['value']) : null;
+  const value = rows[0]?.['value'];
+  if (options.preserveEmpty && value === '') return '';
+  return value ? String(value) : null;
 }
 
 export async function setKv(

@@ -1,5 +1,8 @@
 import {
   BillingError,
+  parseBillingTransaction,
+  type BillingFulfilmentRequest,
+  type BillingFulfilmentVerdict,
   type CanonicalAccessClient,
   type CanonicalAccessState,
   type CanonicalBillingState,
@@ -18,6 +21,8 @@ export interface CanonicalAccessApiConfig {
   fetchFn?: BillingFetch;
 }
 
+export const BILLING_REQUEST_TIMEOUT_MS = 10_000;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -35,13 +40,18 @@ function parseAccess(value: unknown): CanonicalAccessState {
     throw invalidResponse();
   }
   const freeRatings = value.freeRatings;
+  // The allowance is the server's to declare (one since 2026-09-10, two
+  // before): any positive integer is accepted and every counter is checked
+  // against IT, so a build and a deployment that disagree for a moment render
+  // honest copy from `limit` instead of refusing the whole response.
   if (
     typeof value.premium !== 'boolean' ||
     !Array.isArray(value.entitlements) ||
     !value.entitlements.every(item => typeof item === 'string') ||
     typeof value.canStartRating !== 'boolean' ||
     typeof value.paywallRequired !== 'boolean' ||
-    freeRatings.limit !== 2 ||
+    !isInteger(freeRatings.limit) ||
+    freeRatings.limit < 1 ||
     !isInteger(freeRatings.used) ||
     !isInteger(freeRatings.reserved) ||
     !isInteger(freeRatings.remaining) ||
@@ -49,6 +59,7 @@ function parseAccess(value: unknown): CanonicalAccessState {
   ) {
     throw invalidResponse();
   }
+  const limit = freeRatings.limit;
   const used = freeRatings.used;
   const reserved = freeRatings.reserved;
   const remaining = freeRatings.remaining;
@@ -57,9 +68,9 @@ function parseAccess(value: unknown): CanonicalAccessState {
   const expectedCanStart = value.premium || availableToReserve > 0;
   if (
     used < 0 ||
-    used > 2 ||
+    used > limit ||
     reserved < 0 ||
-    remaining !== 2 - used ||
+    remaining !== limit - used ||
     reserved > remaining ||
     availableToReserve !== remaining - reserved ||
     value.premium !== premiumEntitlement ||
@@ -72,7 +83,7 @@ function parseAccess(value: unknown): CanonicalAccessState {
     premium: value.premium,
     entitlements: [...value.entitlements],
     freeRatings: {
-      limit: 2,
+      limit,
       used,
       reserved,
       remaining,
@@ -127,8 +138,8 @@ function configuredValues(config: CanonicalAccessApiConfig): {
   if (!token) {
     throw new BillingError(
       'billing.backend_unconfigured',
-      'Sign in before checking membership access.',
-      false,
+      'Membership verification is waiting for your account connection. Please try again.',
+      true,
       'missing_api_token',
     );
   }
@@ -155,51 +166,120 @@ async function responseBody(response: Response): Promise<unknown> {
 export function createCanonicalAccessClient(
   config: CanonicalAccessApiConfig,
 ): CanonicalAccessClient {
-  const request = async (path: string, method: 'GET' | 'POST') => {
+  const request = async (
+    path: string,
+    method: 'GET' | 'POST',
+    body?: unknown,
+  ) => {
     const values = configuredValues(config);
-    let response: Response;
-    try {
-      response = await values.fetchFn(`${values.baseUrl}${path}`, {
+    const controller = new AbortController();
+    let timedOut = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        reject(
+          new BillingError(
+            'billing.backend_unavailable',
+            'Membership verification took too long. Please try again.',
+            true,
+          ),
+        );
+        controller.abort();
+      }, BILLING_REQUEST_TIMEOUT_MS);
+    });
+    const fetchAndRead = async () => {
+      const response = await values.fetchFn(`${values.baseUrl}${path}`, {
         method,
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${values.token}`,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+        signal: controller.signal,
       });
-    } catch {
+      if (timedOut) return undefined;
+      if (response.status === 401) {
+        reportApiUnauthorized(values.token);
+        throw new BillingError(
+          'billing.backend_unavailable',
+          'Your account connection needs to refresh. Please try verification again.',
+          true,
+        );
+      }
+      if (!response.ok) {
+        throw new BillingError(
+          'billing.backend_unavailable',
+          'Membership verification is temporarily unavailable.',
+          response.status >= 500 ||
+            response.status === 408 ||
+            response.status === 429,
+        );
+      }
+      return responseBody(response);
+    };
+    try {
+      return await Promise.race([fetchAndRead(), deadline]);
+    } catch (cause) {
+      if (cause instanceof BillingError) throw cause;
       throw new BillingError(
         'billing.backend_unavailable',
         'Membership verification is temporarily unavailable.',
         true,
       );
+    } finally {
+      clearTimeout(timeout);
     }
-    if (response.status === 401) {
-      reportApiUnauthorized(values.token);
-      throw new BillingError(
-        'billing.backend_unavailable',
-        'Your sign-in has expired. Sign in again to check membership access.',
-        false,
-      );
-    }
-    if (!response.ok) {
-      throw new BillingError(
-        'billing.backend_unavailable',
-        'Membership verification is temporarily unavailable.',
-        response.status >= 500 || response.status === 429,
-      );
-    }
-    return responseBody(response);
   };
 
   return {
     getAccess: async () => parseAccess(await request('/v1/me/access', 'GET')),
-    syncBilling: async () => {
-      const value = await request('/v1/billing/sync', 'POST');
+    syncBilling: async fulfilmentRequest => {
+      const value = await request(
+        '/v1/billing/sync',
+        'POST',
+        fulfilmentRequest ? { fulfilment: fulfilmentRequest } : undefined,
+      );
       if (!isRecord(value)) throw invalidResponse();
       const billing = parseBilling(value.billing);
       const access = parseAccess(value.access);
       if (billing.premium !== access.premium) throw invalidResponse();
-      return { billing, access } satisfies CanonicalBillingSync;
+      const fulfilment =
+        value.fulfilment === undefined
+          ? undefined
+          : parseFulfilment(value.fulfilment, fulfilmentRequest);
+      return {
+        billing,
+        access,
+        ...(fulfilment ? { fulfilment } : {}),
+      } satisfies CanonicalBillingSync;
     },
+  };
+}
+
+function parseFulfilment(
+  value: unknown,
+  request?: BillingFulfilmentRequest,
+): BillingFulfilmentVerdict {
+  if (!request || !isRecord(value)) throw invalidResponse();
+  const transaction = parseBillingTransaction(value.transaction);
+  if (
+    !transaction ||
+    value.pendingId !== request.pendingId ||
+    value.attemptId !== request.attemptId ||
+    JSON.stringify(transaction) !== JSON.stringify(request.transaction) ||
+    typeof value.outcome !== 'string' ||
+    !['pending', 'fulfilled', 'expired', 'refunded'].includes(value.outcome) ||
+    !isIsoDate(value.verifiedAt) ||
+    (value.outcome !== 'pending' &&
+      Date.parse(value.verifiedAt) < Date.parse(transaction.purchasedAt))
+  )
+    throw invalidResponse();
+  return {
+    ...request,
+    transaction,
+    outcome: value.outcome as BillingFulfilmentVerdict['outcome'],
+    verifiedAt: value.verifiedAt,
   };
 }
