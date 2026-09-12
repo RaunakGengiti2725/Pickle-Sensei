@@ -17,7 +17,8 @@ if ffprobe -v error -select_streams a -show_entries stream=codec_type -of csv=p=
 else
   ffmpeg -v error -y -f lavfi -i anullsrc=r=48000:cl=stereo -t 3.8 swing_audio.wav
 fi
-for i in 1 2 3 4 5 6 7; do ffmpeg -v error -y -i vo/vo$i.mp3 -ac 2 -ar 48000 vo/vo$i.wav; done
+# Voice lines are re-timed 8% faster (pitch preserved) to keep the reel brisk.
+for i in 1 2 3 4 5 6 7 8 9 10; do ffmpeg -v error -y -i vo/vo$i.mp3 -af "atempo=1.08" -ac 2 -ar 48000 vo/vo$i.wav; done
 python3 audio.py
 echo "swing $(ls vid/swing | wc -l | tr -d ' ') frames, audio.wav written."
 echo "Render: node render.js --mode=pipe --out=v_noaudio.mp4 && ffmpeg -i v_noaudio.mp4 -i audio.wav -c:v copy -c:a aac -b:a 192k -shortest PickleSensei_showcase.mp4"
