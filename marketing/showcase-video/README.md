@@ -1,23 +1,25 @@
 # Pickle Sensei — app showcase reel
 
-A 27 s, 1080×1920, 30 fps vertical showcase (Reels / TikTok / App Store preview). Everything
+A 24 s, 1080×1920, 30 fps vertical showcase (Reels / TikTok / App Store preview). Everything
 is rendered from `timeline.html`, one deterministic motion timeline: `window.__setTime(t)`
 positions every element for time `t`, and `render.js` drives headless Chromium through it
 frame by frame, piping PNGs into ffmpeg.
 
 ## Story (seconds)
 
-| Time    | Beat                                                                   | Voice line                            |
-| ------- | ---------------------------------------------------------------------- | ------------------------------------- |
-| 0–2.6   | App icon and wordmark                                                  | "This is Pickle Sensei."              |
-| 2.6–4.5 | Real Welcome screen, tap "Start your first read"                       | "One tap to start."                   |
-| 4.5–5.9 | Real Home, tap the Coach button                                        | "Tap Coach."                          |
-| 5.9–7.5 | Real Coach menu, tap Import Video                                      | "Import your swing."                  |
-| 7.5–11  | The owner's swing clip with a scan line sweeping top to bottom         | "It reads every frame."               |
-| 11–13.9 | Score page (1 of 4): estimated DUPR ring, note, insight, THIS SET      | "Then your estimated DUPR."           |
-| 13.9–17 | The problem (2 of 4): replay card frozen at contact, PRIORITY FIX card | "The one thing to fix first."         |
-| 17–19.5 | Drills (3 of 4): three matched drills, one saved                       | "Then drills that fix it."            |
-| 19.5–26 | App icon, wordmark, "Try it free today" App Store bar                  | "Every swing, seen." / "Try it free…" |
+One continuous narration drives everything: captions appear word by word on the spoken
+timestamps, and scenes cut on phrase starts.
+
+| Time      | Beat                                                         | Narration                                                |
+| --------- | ------------------------------------------------------------ | -------------------------------------------------------- |
+| 0–2       | App icon and wordmark                                        | "This is Pickle Sensei."                                 |
+| 2–3.9     | Real Welcome screen, tap on the word "tap"                   | "It starts with a single tap."                           |
+| 3.9–6.3   | Real Home, Coach tap on "Coach"; Coach menu, tap on "import" | "Tap Coach, import a swing,"                             |
+| 6.3–10.1  | The owner's swing clip with the scan line                    | "and it reads every frame."                              |
+| 10.1–12.8 | Score page (1 of 4), ring sweeps on "estimated DUPR"         | "Then it gives you an estimated DUPR,"                   |
+| 12.8–15.4 | The problem (2 of 4), replay card frozen at contact          | "finds the one thing to fix first,"                      |
+| 15.4–18.7 | Drill Library cards large on the canvas, one gets saved      | "and matches the drills that fix it."                    |
+| 18.7–24.4 | App icon, wordmark, "Try it free today" App Store bar        | "Every swing, seen. Try it free today on the App Store." |
 
 ## What is real and what is illustrative
 
@@ -34,8 +36,10 @@ frame by frame, piping PNGs into ffmpeg.
 
 ## Provenance
 
-- Voiceover: ten lines generated with ElevenLabs (voice "Ainsley") through the Higgsfield
-  MCP, committed as `vo/vo1.mp3` … `vo/vo10.mp3`. Every other sound is synthesized in
+- Voiceover: one continuous ElevenLabs take (voice "Petra") through the Higgsfield MCP,
+  committed as `narration/petra.mp3`. Word timestamps came from faster-whisper (`base.en`) and
+  are hard-coded in the `CAPS` table; `audio.py` inserts four short silences at sentence
+  boundaries (after "frame.", "DUPR,", "first," and "it.") so the UI has time. Every other sound is synthesized in
   `audio.py`. There is no licensed music track; add one when posting.
 - Fonts (Manrope, OFL) and the app icon are copied from the app by `prepare.sh`.
 
@@ -60,7 +64,8 @@ node render.js --times=1.8,12.4,17.8 --out=keyf
 
 ## Editing
 
-Timing lives in `setTime(t)` and the `CAPS` table (captions and voice cues) in
-`timeline.html`; the same cue times are used by `audio.py` (`VO` dict). To replace the swing
+Timing lives in `setTime(t)` and the `CAPS` table (word timestamps) in `timeline.html`;
+the pause insertions live in `audio.py` (`pad_at`). Re-recording the narration means
+re-aligning the words (faster-whisper with `word_timestamps=True`) and updating both. To replace the swing
 footage, overwrite `clips/swing.mp4` (portrait, about 3.7 s) and re-run `prepare.sh`; the
 `SWING_N` constant in `timeline.html` must match the extracted frame count.

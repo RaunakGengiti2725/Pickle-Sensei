@@ -3,7 +3,7 @@ fonts/
 assets/icon.png
 assets/icon520.png
 vid/
-vo/*.wav
+narration/*.wav
 swing_audio.wav
 audio.wav
 preview/

@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import butter, sosfilt
 from scipy.io import wavfile
-SR=48000; DUR=26.6; N=int(SR*DUR); buf=np.zeros((N,2)); rng=np.random.default_rng(3)
+SR=48000; DUR=24.4; N=int(SR*DUR); buf=np.zeros((N,2)); rng=np.random.default_rng(3)
 def sos(kind,lo,hi=None,order=4):
     if kind=='bp': return butter(order,[lo,hi],btype='band',fs=SR,output='sos')
     if kind=='lp': return butter(order,lo,btype='low',fs=SR,output='sos')
@@ -50,33 +50,39 @@ pad=(sine(55,DUR)*0.9+sine(82.41,DUR)*0.5+sine(110,DUR)*0.45+sine(164.8,DUR)*0.2
 pad=sosfilt(sos('lp',260,2),pad)*env_swell(n,2.0,1.5); place(0.0,pad,0.05)
 air=sosfilt(sos('lp',500,2),noise(DUR))*env_swell(n,2.5,1.5); place(0.0,air,0.010)
 # ---- intro icon
-place(0.10,whoosh(0.7,200,1800,0.2,1.0,'up'),0.14); place(0.40,pop(330,1.0,0.14),0.26)
+place(0.05,whoosh(0.7,200,1800,0.2,1.0,'up'),0.14); place(0.35,pop(330,1.0,0.14),0.26)
 # phone rise + taps + transitions
-place(2.6,whoosh(0.8,150,900,0.3,1.0),0.16)
-for tt in (4.5,6.1,7.9,14.3,17.1,19.3): place(tt,click(),0.42)
-for tt in (4.9,6.4,8.3,14.65): place(tt,whoosh(0.3,1200,7000,0.03,1.0,'up'),0.12)
-# scan 8.6-11.0, completion chime 11.15
-sw=sine(320,2.4,1150)*env_swell(int(SR*2.4),0.5,0.5); place(8.6,sosfilt(sos('lp',2500),sw),0.05)
-sh=sosfilt(sos('bp',3000,9000),noise(2.4))*env_swell(int(SR*2.4),0.6,0.4); place(8.6,sh,0.035)
-place(11.15,tone(880,0.5,0.22,0.008,0.4)); place(11.27,tone(1318.5,0.7,0.2,0.008,0.55))
+place(1.95,whoosh(0.8,150,900,0.3,1.0),0.16)
+for tt in (3.45,4.72,5.9,12.45,15.15,17.3): place(tt,click(),0.42)
+for tt in (3.85,5.02,6.35,12.75): place(tt,whoosh(0.3,1200,7000,0.03,1.0,'up'),0.12)
+# scan 7.15-9.55, completion chime 9.7
+sw=sine(320,2.4,1150)*env_swell(int(SR*2.4),0.5,0.5); place(7.15,sosfilt(sos('lp',2500),sw),0.05)
+sh=sosfilt(sos('bp',3000,9000),noise(2.4))*env_swell(int(SR*2.4),0.6,0.4); place(7.15,sh,0.035)
+place(9.7,tone(880,0.5,0.22,0.008,0.4)); place(9.82,tone(1318.5,0.7,0.2,0.008,0.55))
 # score: transition + ring riser + chord
-place(11.85,whoosh(0.5,300,2500,0.06,1.0,'down'),0.12)
-for k,f in enumerate((523.25,659.25,783.99,1046.5)): place(12.1+k*0.22,tone(f,0.5,0.15,0.006,0.4),pan=-0.2+0.13*k)
-for f in (523.25,659.25,783.99,1046.5): place(13.05,tone(f,1.4,0.10,0.02,1.2))
+place(10.1,whoosh(0.5,300,2500,0.06,1.0,'down'),0.12)
+for k,f in enumerate((523.25,659.25,783.99,1046.5)): place(10.95+k*0.22,tone(f,0.5,0.15,0.006,0.4),pan=-0.2+0.13*k)
+for f in (523.25,659.25,783.99,1046.5): place(11.9,tone(f,1.4,0.10,0.02,1.2))
 # problem card rise; drills: phone out, chips, card pops, save
-place(14.9,pop(300,1.0,0.12),0.22)
-place(17.45,whoosh(0.5,600,4000,0.06,1.0,'down'),0.12)
-for k,f in enumerate((520,600,690)): place(17.7+k*0.2,pop(f),0.24,pan=0.15)
-place(19.55,tone(1318.5,0.3,0.12,0.005,0.25))
+place(12.95,pop(300,1.0,0.12),0.22)
+place(15.4,whoosh(0.5,600,4000,0.06,1.0,'down'),0.12)
+for k,f in enumerate((520,600,690)): place(15.75+k*0.2,pop(f),0.24,pan=0.15)
+place(17.55,tone(1318.5,0.3,0.12,0.005,0.25))
 # outro
-place(20.4,whoosh(0.6,1500,6000,0.05,1.0,'down'),0.12); place(20.75,pop(300,1.0,0.16),0.24)
-place(23.0,pop(420,1.0,0.12),0.2); place(23.1,tone(1760,0.5,0.05,0.02,0.4))
+place(18.6,whoosh(0.6,1500,6000,0.05,1.0,'down'),0.12); place(18.95,pop(300,1.0,0.16),0.24)
+place(20.95,pop(420,1.0,0.12),0.2); place(21.05,tone(1760,0.5,0.05,0.02,0.4))
 # swing ambience under the scan (very low)
-amb=load('swing_audio.wav'); amb=amb*env_swell(len(amb),0.4,0.6)[:,None]; place(8.4,amb,9.0)
-# voiceover
-VO={1:0.5,2:3.3,3:5.3,4:6.8,5:8.9,6:12.3,8:15.0,9:18.1,7:21.1,10:23.2}
-for i,at in VO.items():
-    v=load(f'vo/vo{i}.wav'); peak=np.abs(v).max(); place(at,v/peak,0.62)
+amb=load('swing_audio.wav'); amb=amb*env_swell(len(amb),0.4,0.6)[:,None]; place(6.45,amb,9.0)
+# narration: one continuous take, with four silences inserted at sentence boundaries so the UI has time
+narr=load('narration/petra.wav')
+def pad_at(sig, cuts):  # cuts: [(original_time_s, pad_s)] ascending
+    out=[]; pos=0
+    for tcut,dur in cuts:
+        i=int(tcut*SR); out.append(sig[pos:i]); out.append(np.zeros((int(dur*SR),2))); pos=i
+    out.append(sig[pos:]); return np.concatenate(out)
+narr=pad_at(narr,[(8.70,1.20),(11.05,0.50),(13.30,0.30),(15.55,0.90)])
+peak=np.abs(narr).max(); place(0.0,narr/peak,0.66)
+print('narration padded length', round(len(narr)/SR,2))
 buf=np.tanh(buf*1.15)/np.tanh(1.15); peak=np.abs(buf).max(); buf*=0.92/peak
 fade=int(SR*0.5); buf[-fade:]*=np.linspace(1,0,fade)[:,None]
 wavfile.write('audio.wav',SR,(buf*32767).astype(np.int16))

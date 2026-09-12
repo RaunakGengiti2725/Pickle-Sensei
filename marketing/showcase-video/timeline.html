@@ -1192,31 +1192,126 @@
         }
         return idx;
       }
-      // ---- cues (seconds). VO starts at cap.at
+      // ---- captions: one continuous narration; each word appears at its spoken time (whisper-aligned, padded).
       const CAPS = [
-        { at: 0.5, out: 2.4, words: [["This is"], ["Pickle Sensei.", "g"]] },
-        { at: 3.3, out: 4.75, words: [["One tap"], ["to start."]] },
-        { at: 5.3, out: 6.65, words: [["Tap"], ["Coach.", "g"]] },
-        { at: 6.8, out: 8.2, words: [["Import"], ["your swing.", "g"]] },
-        { at: 8.9, out: 11.7, words: [["It reads"], ["every frame.", "g"]] },
-        { at: 12.3, out: 14.5, words: [["Then your"], ["estimated DUPR.", "g"]] },
-        { at: 15.0, out: 17.3, words: [["The one thing"], ["to fix first.", "g"]] },
-        { at: 18.1, out: 20.3, words: [["Then drills"], ["that fix it.", "g"]] },
-        { at: 21.1, out: 22.95, words: [["Every swing,"], ["seen.", "g"]] },
-        { at: 23.2, out: 99, words: [["Try it free today"], ["on the App Store.", "g"]] },
+        {
+          out: 1.95,
+          w: [
+            ["This", 0.0],
+            ["is", 0.24],
+            ["Pickle", 0.48, 1],
+            ["Sensei.", 0.94, 1],
+          ],
+        },
+        {
+          out: 3.85,
+          w: [
+            ["It", 2.18],
+            ["starts", 2.38],
+            ["with", 2.66],
+            ["a", 3.02],
+            ["single", 3.14],
+            ["tap.", 3.38],
+          ],
+        },
+        {
+          out: 5.62,
+          w: [
+            ["Tap", 4.58],
+            ["Coach,", 4.86, 1],
+          ],
+        },
+        {
+          out: 6.9,
+          w: [
+            ["import", 5.74],
+            ["a", 5.94],
+            ["swing,", 6.22, 1],
+          ],
+        },
+        {
+          out: 10.1,
+          w: [
+            ["and", 6.98],
+            ["it", 7.08],
+            ["reads", 7.2, 1],
+            ["every", 7.4, 1],
+            ["frame.", 7.82, 1],
+          ],
+        },
+        {
+          out: 12.7,
+          w: [
+            ["Then", 10.3],
+            ["it", 10.5],
+            ["gives", 10.68],
+            ["you", 10.82],
+            ["an", 11.04, 0, 1],
+            ["estimated", 11.14, 1],
+            ["DUPR,", 11.56, 1],
+          ],
+        },
+        {
+          out: 15.3,
+          w: [
+            ["finds", 12.94],
+            ["the", 13.26],
+            ["one", 13.54, 1],
+            ["thing", 13.74, 1],
+            ["to", 14.0, 1],
+            ["fix", 14.18, 1],
+            ["first,", 14.34, 1],
+          ],
+        },
+        {
+          out: 18.55,
+          w: [
+            ["and", 15.66],
+            ["matches", 15.74],
+            ["the", 16.04, 0, 1],
+            ["drills", 16.28, 1],
+            ["that", 16.52, 1],
+            ["fix", 16.8, 1],
+            ["it.", 16.96, 1],
+          ],
+        },
+        {
+          out: 20.9,
+          w: [
+            ["Every", 18.84],
+            ["swing,", 19.04],
+            ["seen.", 19.85, 1],
+          ],
+        },
+        {
+          out: 99,
+          w: [
+            ["Try", 21.12],
+            ["it", 21.32],
+            ["free", 21.52],
+            ["today", 21.68],
+            ["on", 22.02, 1, 1],
+            ["the", 22.26, 1],
+            ["App", 22.38, 1],
+            ["Store.", 22.52, 1],
+          ],
+        },
       ];
       function caption(t) {
-        const c = CAPS.find((c) => t >= c.at && t < c.out + 0.35);
+        const c = CAPS.find((c) => t >= c.w[0][1] - 0.05 && t < c.out + 0.3);
         const el = $("cap");
         if (!c) {
           vis(el, false);
           return;
         }
         vis(el, true);
-        el.innerHTML = c.words
-          .map(([w, g], i) => {
-            const p = P(t, c.at + i * 0.2, 0.28);
-            return `<span class="${g || ""}" style="opacity:${p};transform:translateY(${lerp(16, 0, p)}px) scale(${lerp(0.96, 1, p)})">${w}</span>`;
+        el.innerHTML = c.w
+          .map(([w, at, g, br]) => {
+            const p = P(t, at - 0.05, 0.26);
+            return (
+              (br ? "<br>" : "") +
+              `<span class="${g ? "g" : ""}" style="opacity:${p};transform:translateY(${lerp(14, 0, p)}px) scale(${lerp(0.97, 1, p)})">${w}</span>`
+            );
           })
           .join("");
         op(el, 1 - P(t, c.out, 0.28, E.inCubic));
@@ -1263,86 +1358,86 @@
           el.style.transform = "";
           el.style.filter = "";
         });
-        // ===== S0 icon 0-2.85
-        if (t < 2.9) {
-          const ip = P(t, 0.1, 0.8, E.outBack);
-          const np = P(t, 0.7, 0.5);
-          const fo = P(t, 2.45, 0.4, E.inCubic);
+        // ===== S0 icon 0-2.2
+        if (t < 2.0) {
+          const ip = P(t, 0.05, 0.8, E.outBack);
+          const np = P(t, 0.5, 0.5);
+          const fo = P(t, 1.55, 0.38, E.inCubic);
           lockup(t, lerp(0.72, 1, ip), 1 - fo);
           op($("icon"), Math.min(1, ip * 1.6));
           op($("iconName"), np);
           tf($("iconName"), `translateY(${lerp(18, 0, np)}px)`);
           if (fo > 0) $("lockup").style.filter = `blur(${fo * 10}px)`;
         }
-        // ===== phone segments 2.6-17.9
-        if (t >= 2.6 && t < 17.95) {
+        // ===== phone segments 1.85-15.9
+        if (t >= 1.95 && t < 15.95) {
           let px = PX0,
-            py = lerp(2000, PY0, P(t, 2.6, 0.95, E.outExpo)),
+            py = lerp(2000, PY0, P(t, 1.95, 0.9, E.outExpo)),
             s = 1;
-          const fo = P(t, 17.45, 0.45, E.inCubic);
+          const fo = P(t, 15.4, 0.45, E.inCubic);
           phone(px, py, lerp(1, 0.97, fo), 1 - fo);
           if (fo > 0) $("phone").style.filter = `blur(${fo * 12}px)`;
           let scr = "shWelcome";
-          if (t >= 4.9) scr = "shHome";
-          if (t >= 6.4) scr = "shCoach";
-          if (t >= 8.3) scr = "scrCap";
-          if (t >= 11.9) scr = "scrRes";
-          if (t >= 14.65) scr = "scrProb";
+          if (t >= 3.85) scr = "shHome";
+          if (t >= 5.02) scr = "shCoach";
+          if (t >= 6.35) scr = "scrCap";
+          if (t >= 10.15) scr = "scrRes";
+          if (t >= 12.75) scr = "scrProb";
           show(scr);
-          const toHome = P(t, 4.9, 0.4, E.inOutCubic);
+          const toHome = P(t, 3.85, 0.4, E.inOutCubic);
           if (scr === "shHome" && toHome < 1) {
             vis($("shWelcome"), true);
             tf($("shWelcome"), `translateX(${lerp(0, -140, toHome)}px)`);
             op($("shWelcome"), 1 - toHome);
             tf($("shHome"), `translateX(${lerp(568, 0, toHome)}px)`);
           }
-          const toCoach = P(t, 6.4, 0.3);
+          const toCoach = P(t, 5.02, 0.3);
           if (scr === "shCoach" && toCoach < 1) {
             vis($("shHome"), true);
             op($("shCoach"), toCoach);
           }
-          const toCap = P(t, 8.3, 0.35);
+          const toCap = P(t, 6.35, 0.35);
           if (scr === "scrCap" && toCap < 1) {
             op($("scrCap"), toCap);
           }
-          const toRes = P(t, 11.9, 0.4);
+          const toRes = P(t, 10.15, 0.4);
           if (scr === "scrRes" && toRes < 1) {
             vis($("scrCap"), true);
             op($("scrRes"), toRes);
           }
-          const toProb = P(t, 14.65, 0.35, E.inOutCubic);
+          const toProb = P(t, 12.75, 0.35, E.inOutCubic);
           if (scr === "scrProb" && toProb < 1) {
             vis($("scrRes"), true);
             tf($("scrRes"), `translateX(${lerp(0, -100, toProb)}px) scale(1.41294)`);
             op($("scrRes"), 1 - toProb);
             tf($("scrProb"), `translateX(${lerp(568, 0, toProb)}px) scale(1.41294)`);
           }
-          // taps
+          // taps land on the spoken word
           {
             const [x, y] = pt(201, 720, px, py, s);
-            tapAt(t, 4.5, x, y);
+            tapAt(t, 3.45, x, y);
           }
           {
             const [x, y] = pt(201, 795, px, py, s);
-            tapAt(t, 6.1, x, y);
+            tapAt(t, 4.72, x, y);
           }
           {
             const [x, y] = pt(201, 640, px, py, s);
-            tapAt(t, 7.9, x, y);
+            tapAt(t, 5.9, x, y);
           }
           {
             const [x, y] = pt(201, 874 - 34 - 28, px, py, s);
-            tapAt(t, 14.3, x, y);
-            tapAt(t, 17.1, x, y);
+            tapAt(t, 12.45, x, y);
+            tapAt(t, 15.15, x, y);
           }
           // ---- scan scene
           if (scr === "scrCap" || (scr === "scrRes" && toRes < 1)) {
-            const lt = t - 8.4;
+            const lt = t - 6.45;
             const idx = lt * 30 + 1;
             curSwing = frameImg($("swing"), "vid/swing", SWING_N, idx, curSwing);
-            const sp = P(t, 8.6, 2.4, E.inOutCubic);
+            const sp = P(t, 7.15, 2.4, E.inOutCubic);
             const y = lerp(60, 814, sp);
-            const done = t >= 11.15;
+            const done = t >= 9.7;
             vis($("scanLine"), !done);
             vis($("scanBand"), !done);
             vis($("scanTint"), true);
@@ -1357,24 +1452,24 @@
             $("capSpin").style.transform = `rotate(${(t * 420) % 360}deg)`;
             document.querySelectorAll(".corner").forEach((c) => {
               c.style.borderColor = done ? "#53D99B" : "#D7FA45";
-              c.style.opacity = done ? String(0.9 - 0.4 * P(t, 11.15, 0.8)) : "0.7";
+              c.style.opacity = done ? String(0.9 - 0.4 * P(t, 9.7, 0.8)) : "0.7";
             });
           }
-          // ---- score page
+          // ---- score page: ring sweeps on "estimated DUPR"
           if (scr === "scrRes" || (scr === "scrProb" && toProb < 1)) {
-            const sw = P(t, 12.05, 1.0);
+            const sw = P(t, 10.9, 1.0);
             const C = 2 * Math.PI * 102.5;
             const frac = (3.62 - 2) / (6 - 2);
             $("arc").style.strokeDasharray = C;
             $("arc").style.strokeDashoffset = C * (1 - frac * sw);
             $("ringNum").textContent = (2 + (3.62 - 2) * sw).toFixed(2);
           }
-          // ---- problem page: markers + card rise
+          // ---- problem page
           if (scr === "scrProb") {
-            const cp = P(t, 14.9, 0.5, E.outBack);
+            const cp = P(t, 12.95, 0.5, E.outBack);
             $("stopCard").style.transform = `translateY(${lerp(40, 0, cp)}px)`;
             $("stopCard").style.opacity = cp;
-            const pulse = 0.5 + 0.5 * Math.sin((t - 14.8) * 5);
+            const pulse = 0.5 + 0.5 * Math.sin((t - 12.9) * 5);
             $("mk1").style.left = "222px";
             $("mk1").style.top = "226px";
             $("mk1").style.boxShadow = `0 0 0 ${4 + 4 * pulse}px rgba(215,250,69,.28)`;
@@ -1382,34 +1477,34 @@
             $("mk2").style.top = "262px";
           }
         }
-        // ===== S6 drill library cards 17.6-20.9
-        if (t >= 17.6 && t < 21.0) {
+        // ===== drill library cards 15.55-18.8
+        if (t >= 15.55 && t < 18.85) {
           const el = $("drills");
           vis(el, true);
-          const fo = P(t, 20.4, 0.45, E.inCubic);
+          const fo = P(t, 18.3, 0.45, E.inCubic);
           op(el, 1 - fo);
           if (fo > 0) el.style.filter = `blur(${fo * 10}px)`;
-          const cp = P(t, 17.55, 0.5);
+          const cp = P(t, 15.6, 0.5);
           $("chips").style.opacity = cp;
           $("chips").style.transform = `translateY(${lerp(20, 0, cp)}px)`;
           [1, 2, 3].forEach((i, k) => {
-            const p = P(t, 17.7 + k * 0.2, 0.5, E.outBack);
+            const p = P(t, 15.75 + k * 0.2, 0.5, E.outBack);
             const c = $("bc" + i);
             c.style.opacity = Math.min(1, p * 1.3);
             c.style.transform = `translateY(${lerp(50, 0, p)}px) scale(${lerp(0.97, 1, p)})`;
           });
-          tapAt(t, 19.3, 90 + 900 - 43 - 39.5, 358 + 43 + 39.5);
-          $("bm1").classList.toggle("on", t >= 19.55);
+          tapAt(t, 17.3, 90 + 900 - 43 - 39.5, 358 + 43 + 39.5);
+          $("bm1").classList.toggle("on", t >= 17.55);
         }
-        // ===== outro 20.6-26.6
-        if (t >= 20.55) {
-          const ip = P(t, 20.6, 0.8, E.outBack);
-          const np = P(t, 21.1, 0.5);
+        // ===== outro 18.75-24.4
+        if (t >= 18.7) {
+          const ip = P(t, 18.75, 0.8, E.outBack);
+          const np = P(t, 19.15, 0.5);
           lockup(t, lerp(0.78, 1, ip), 1);
           op($("icon"), Math.min(1, ip * 1.6));
           op($("iconName"), np);
           tf($("iconName"), `translateY(${lerp(16, 0, np)}px)`);
-          const sp = P(t, 23.0, 0.55, E.outBack);
+          const sp = P(t, 20.95, 0.55, E.outBack);
           if (sp > 0) {
             vis($("store"), true);
             op($("store"), Math.min(1, sp * 1.5));
