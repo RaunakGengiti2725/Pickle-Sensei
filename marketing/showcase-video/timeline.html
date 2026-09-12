@@ -84,10 +84,10 @@
       #icon {
         position: absolute;
         left: 50%;
-        top: 50%;
+        top: 500px;
         width: 440px;
         height: 440px;
-        margin: -300px 0 0 -220px;
+        margin: 0 0 0 -220px;
         border-radius: 99px;
         background: #fff;
         box-shadow:
@@ -105,7 +105,7 @@
         position: absolute;
         left: 0;
         right: 0;
-        top: 1120px;
+        top: 962px;
         text-align: center;
         font-weight: 600;
         font-size: 76px;
@@ -627,84 +627,124 @@
         line-height: 23px;
         color: var(--onDark);
       }
-      #scrDrills {
-        background: var(--dark);
-        color: var(--onDark);
-      }
-      .dcard {
+      /* drill library cards, 1.8x the app's points */
+      #drills {
         position: absolute;
-        left: 20px;
-        right: 20px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid var(--lineD);
-        padding: 14px 16px;
+        left: 0;
+        top: 0;
+        width: 1080px;
+        height: 1920px;
       }
-      .dcard .row {
+      #chips {
+        position: absolute;
+        left: 90px;
+        top: 280px;
         display: flex;
-        justify-content: space-between;
+        gap: 14px;
+      }
+      #chips span {
+        height: 54px;
+        padding: 0 24px;
+        border-radius: 27px;
+        background: #fff;
+        border: 1px solid var(--line);
+        display: inline-flex;
+        align-items: center;
+        font-weight: 600;
+        font-size: 22px;
+        color: var(--inkS);
+      }
+      #chips span.on {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--onDark);
+      }
+      .bigcard {
+        position: absolute;
+        left: 90px;
+        width: 900px;
+        border-radius: 47px;
+        background: #fff;
+        border: 1px solid var(--line);
+        padding: 43px;
+        box-shadow: 0 18px 44px rgba(8, 18, 14, 0.07);
+      }
+      .bigcard .hd {
+        display: flex;
         align-items: flex-start;
-        gap: 10px;
+        gap: 14px;
       }
-      .dcard .t {
+      .bigcard .head {
+        flex: 1;
+        min-width: 0;
+      }
+      .bigcard .t {
         font-weight: 600;
-        font-size: 17px;
-        line-height: 22px;
-        letter-spacing: -0.15px;
+        font-size: 31px;
+        line-height: 40px;
+        letter-spacing: -0.3px;
+        color: var(--ink);
       }
-      .dcard .c {
-        margin-top: 2px;
+      .bigcard .m {
+        margin-top: 7px;
         font-weight: 500;
-        font-size: 13px;
-        line-height: 18px;
-        color: var(--onDarkM);
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .dcard .cue {
-        margin-top: 8px;
-        font-weight: 400;
-        font-size: 15px;
-        line-height: 21px;
-        color: var(--onDark);
-      }
-      .dcard .meta {
-        display: flex;
-        gap: 8px;
-        margin-top: 10px;
-      }
-      .dcard .meta span {
-        height: 24px;
-        padding: 0 9px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.08);
-        font-weight: 600;
-        font-size: 11px;
-        display: inline-flex;
-        align-items: center;
-        color: var(--onDark);
-      }
-      .save {
+      .bm {
         flex: none;
-        height: 32px;
-        padding: 0 12px;
-        border-radius: 16px;
-        border: 1px solid var(--lineD);
-        display: inline-flex;
+        width: 79px;
+        height: 79px;
+        border-radius: 40px;
+        background: #ebefe8;
+        display: flex;
         align-items: center;
-        gap: 6px;
-        font-weight: 600;
-        font-size: 13px;
-        color: var(--onDark);
+        justify-content: center;
+        color: var(--inkS);
       }
-      .save.on {
-        background: var(--volt);
-        border-color: var(--volt);
-        color: var(--onVolt);
+      .bm.on {
+        background: #d8eee4;
+        color: var(--court);
+      }
+      .bigcard .d {
+        margin-top: 14px;
+        font-weight: 500;
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+      }
+      .bigcard .c {
+        margin-top: 14px;
+        font-weight: 500;
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+      }
+      .bigcard .cta {
+        margin-top: 29px;
+        padding-top: 7px;
+        border-top: 1px solid var(--line);
+        min-height: 86px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .bigcard .cta span {
+        flex: 1;
+        font-weight: 600;
+        font-size: 29px;
+        line-height: 40px;
+        color: var(--court);
       }
       /* app store bar */
       #store {
         position: absolute;
         left: 50%;
-        top: 1232px;
+        top: 1070px;
         width: 560px;
         height: 108px;
         margin-left: -280px;
@@ -732,7 +772,7 @@
         position: absolute;
         left: 60px;
         right: 60px;
-        top: 1630px;
+        top: 1610px;
         text-align: center;
         font-weight: 600;
         font-size: 66px;
@@ -982,133 +1022,128 @@
               <div class="done">Done</div>
             </div>
           </div>
-          <div id="scrDrills" class="screen">
-            <div class="statusbar">
-              <span class="time">9:41</span><span class="island"></span
-              ><span class="sig"
-                ><i style="height: 4px"></i><i style="height: 6px"></i><i style="height: 9px"></i
-                ><i style="height: 12px"></i><span class="batt"></span
-              ></span>
+        </div>
+      </div>
+      <div id="drills">
+        <div id="chips">
+          <span>All</span><span>Dinks</span><span>Volleys</span><span class="on">Drives</span
+          ><span>Serves</span>
+        </div>
+        <div class="bigcard" id="bc1" style="top: 358px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Out-front contact drops</div>
+              <div class="m">Drives · 3.0–4.0 · Paddle, ball</div>
             </div>
-            <div class="top">
-              <div class="close">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#F8FAF5"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                >
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </div>
-              <div class="segs"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
-              <div class="micro" style="color: var(--onDarkM)">3 of 4 · Drills</div>
+            <div class="bm" id="bm1">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
             </div>
-            <div class="kick micro" style="text-align: left; top: 122px">Drills</div>
-            <div
-              class="cap"
-              style="position: absolute; left: 20px; right: 20px; top: 142px; color: var(--onDarkM)"
+          </div>
+          <div class="d">Freeze the paddle level with your lead knee.</div>
+          <div class="c">Coach Priya Nair</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
             >
-              Matched to the priority fix — contact.
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+        <div class="bigcard" id="bc2" style="top: 759px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Wall drive &amp; freeze</div>
+              <div class="m">Drives · 3.0–4.5 · Wall, ball</div>
             </div>
-            <div class="dcard" id="dc1" style="top: 190px">
-              <div class="row">
-                <div>
-                  <div class="t">Out-front contact drops</div>
-                  <div class="c">Coach Priya Nair · 3.0–4.0</div>
-                </div>
-                <div class="save" id="save1">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M6 3h12v18l-6-4-6 4z" /></svg
-                  ><span id="save1t">Save</span>
-                </div>
-              </div>
-              <div class="cue">
-                Toss, step, and freeze the paddle level with your lead knee before the swing.
-              </div>
-              <div class="meta">
-                <span>3 × 10 reps</span><span>Paddle · ball</span><span>4 min</span>
-              </div>
+            <div class="bm" id="bm2">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
             </div>
-            <div class="dcard" id="dc2" style="top: 366px">
-              <div class="row">
-                <div>
-                  <div class="t">Wall drive &amp; freeze</div>
-                  <div class="c">Coach Marcus Lee · 3.0–4.5</div>
-                </div>
-                <div class="save">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M6 3h12v18l-6-4-6 4z" /></svg
-                  ><span>Save</span>
-                </div>
-              </div>
-              <div class="cue">
-                Drive into the wall and hold the finish for a one-count. Contact stays in front.
-              </div>
-              <div class="meta"><span>5 min</span><span>Wall · ball</span></div>
+          </div>
+          <div class="d">Drive into the wall, hold the finish one count.</div>
+          <div class="c">Coach Marcus Lee</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+        <div class="bigcard" id="bc3" style="top: 1160px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Shadow swing finish</div>
+              <div class="m">Drives · 3.0–4.0 · Paddle only</div>
             </div>
-            <div class="dcard" id="dc3" style="top: 526px">
-              <div class="row">
-                <div>
-                  <div class="t">Shadow swing finish</div>
-                  <div class="c">Coach Priya Nair · 3.0–4.0</div>
-                </div>
-                <div class="save">
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.2"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M6 3h12v18l-6-4-6 4z" /></svg
-                  ><span>Save</span>
-                </div>
-              </div>
-              <div class="cue">
-                Full forehand, no ball. Freeze with the paddle over the opposite shoulder.
-              </div>
-              <div class="meta"><span>3 × 10 reps</span><span>Paddle only</span></div>
+            <div class="bm" id="bm3">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
             </div>
-            <div class="footer">
-              <div class="primary">
-                Continue
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#142014"
-                  stroke-width="2.4"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                >
-                  <path d="M5 12h14M13 6l6 6-6 6" />
-                </svg>
-              </div>
-              <div class="done">Done</div>
-            </div>
+          </div>
+          <div class="d">Full forehand, no ball. Finish over the shoulder.</div>
+          <div class="c">Coach Priya Nair</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
           </div>
         </div>
       </div>
@@ -1159,16 +1194,16 @@
       }
       // ---- cues (seconds). VO starts at cap.at
       const CAPS = [
-        { at: 0.45, out: 2.3, words: [["This is"], ["Pickle Sensei.", "g"]] },
-        { at: 3.15, out: 4.4, words: [["One tap"], ["to start."]] },
-        { at: 4.95, out: 6.1, words: [["Tap"], ["Coach.", "g"]] },
-        { at: 6.25, out: 7.35, words: [["Import"], ["your swing.", "g"]] },
-        { at: 7.95, out: 10.9, words: [["It reads"], ["every frame.", "g"]] },
-        { at: 11.45, out: 13.7, words: [["Then your"], ["estimated DUPR.", "g"]] },
-        { at: 14.2, out: 16.8, words: [["The one thing"], ["to fix first.", "g"]] },
-        { at: 17.3, out: 19.3, words: [["Then drills"], ["that fix it.", "g"]] },
-        { at: 20.0, out: 21.85, words: [["Every swing,"], ["seen.", "g"]] },
-        { at: 22.1, out: 99, words: [["Try it free today"], ["on the App Store.", "g"]] },
+        { at: 0.5, out: 2.4, words: [["This is"], ["Pickle Sensei.", "g"]] },
+        { at: 3.3, out: 4.75, words: [["One tap"], ["to start."]] },
+        { at: 5.3, out: 6.65, words: [["Tap"], ["Coach.", "g"]] },
+        { at: 6.8, out: 8.2, words: [["Import"], ["your swing.", "g"]] },
+        { at: 8.9, out: 11.7, words: [["It reads"], ["every frame.", "g"]] },
+        { at: 12.3, out: 14.5, words: [["Then your"], ["estimated DUPR.", "g"]] },
+        { at: 15.0, out: 17.3, words: [["The one thing"], ["to fix first.", "g"]] },
+        { at: 18.1, out: 20.3, words: [["Then drills"], ["that fix it.", "g"]] },
+        { at: 21.1, out: 22.95, words: [["Every swing,"], ["seen.", "g"]] },
+        { at: 23.2, out: 99, words: [["Try it free today"], ["on the App Store.", "g"]] },
       ];
       function caption(t) {
         const c = CAPS.find((c) => t >= c.at && t < c.out + 0.35);
@@ -1197,7 +1232,7 @@
         op(el, (1 - p) * 0.9 + 0.1 * (p < 0.5 ? 1 : 0));
       }
       const PX0 = 240,
-        PY0 = 300;
+        PY0 = 250;
       function phone(x, y, s, o = 1) {
         const el = $("phone");
         vis(el, true);
@@ -1205,15 +1240,7 @@
         op(el, o);
       }
       const pt = (x, y, px, py, s) => [px + (16 + x * 1.41294) * s, py + (16 + y * 1.41294) * s];
-      const SCREENS = [
-        "shWelcome",
-        "shHome",
-        "shCoach",
-        "scrCap",
-        "scrRes",
-        "scrProb",
-        "scrDrills",
-      ];
+      const SCREENS = ["shWelcome", "shHome", "shCoach", "scrCap", "scrRes", "scrProb"];
       function show(id) {
         SCREENS.forEach((k) => {
           const el = $(k);
@@ -1229,105 +1256,93 @@
         tf($("icon"), `scale(${s0})`);
       }
       function setTime(t) {
-        ["lockup", "phone", "cap", "tap", "store"].forEach((k) => {
+        ["lockup", "phone", "cap", "tap", "store", "drills"].forEach((k) => {
           const el = $(k);
           vis(el, false);
           el.style.opacity = "";
           el.style.transform = "";
           el.style.filter = "";
         });
-        // ===== S0 icon 0-2.75
-        if (t < 2.8) {
+        // ===== S0 icon 0-2.85
+        if (t < 2.9) {
           const ip = P(t, 0.1, 0.8, E.outBack);
           const np = P(t, 0.7, 0.5);
-          const fo = P(t, 2.35, 0.4, E.inCubic);
+          const fo = P(t, 2.45, 0.4, E.inCubic);
           lockup(t, lerp(0.72, 1, ip), 1 - fo);
           op($("icon"), Math.min(1, ip * 1.6));
           op($("iconName"), np);
           tf($("iconName"), `translateY(${lerp(18, 0, np)}px)`);
           if (fo > 0) $("lockup").style.filter = `blur(${fo * 10}px)`;
         }
-        // ===== phone segments 2.5-19.8
-        if (t >= 2.5 && t < 19.9) {
+        // ===== phone segments 2.6-17.9
+        if (t >= 2.6 && t < 17.95) {
           let px = PX0,
-            py = lerp(2000, PY0, P(t, 2.5, 0.95, E.outExpo)),
+            py = lerp(2000, PY0, P(t, 2.6, 0.95, E.outExpo)),
             s = 1;
-          const fo = P(t, 19.3, 0.5, E.inCubic);
-          phone(px, py, s, 1 - fo);
+          const fo = P(t, 17.45, 0.45, E.inCubic);
+          phone(px, py, lerp(1, 0.97, fo), 1 - fo);
           if (fo > 0) $("phone").style.filter = `blur(${fo * 12}px)`;
           let scr = "shWelcome";
-          if (t >= 4.55) scr = "shHome";
-          if (t >= 5.85) scr = "shCoach";
-          if (t >= 7.45) scr = "scrCap";
-          if (t >= 11.05) scr = "scrRes";
-          if (t >= 13.85) scr = "scrProb";
-          if (t >= 16.95) scr = "scrDrills";
+          if (t >= 4.9) scr = "shHome";
+          if (t >= 6.4) scr = "shCoach";
+          if (t >= 8.3) scr = "scrCap";
+          if (t >= 11.9) scr = "scrRes";
+          if (t >= 14.65) scr = "scrProb";
           show(scr);
-          const toHome = P(t, 4.55, 0.4, E.inOutCubic);
+          const toHome = P(t, 4.9, 0.4, E.inOutCubic);
           if (scr === "shHome" && toHome < 1) {
             vis($("shWelcome"), true);
             tf($("shWelcome"), `translateX(${lerp(0, -140, toHome)}px)`);
             op($("shWelcome"), 1 - toHome);
             tf($("shHome"), `translateX(${lerp(568, 0, toHome)}px)`);
           }
-          const toCoach = P(t, 5.85, 0.3);
+          const toCoach = P(t, 6.4, 0.3);
           if (scr === "shCoach" && toCoach < 1) {
             vis($("shHome"), true);
             op($("shCoach"), toCoach);
           }
-          const toCap = P(t, 7.45, 0.35);
+          const toCap = P(t, 8.3, 0.35);
           if (scr === "scrCap" && toCap < 1) {
             op($("scrCap"), toCap);
           }
-          const toRes = P(t, 11.05, 0.4);
+          const toRes = P(t, 11.9, 0.4);
           if (scr === "scrRes" && toRes < 1) {
             vis($("scrCap"), true);
             op($("scrRes"), toRes);
           }
-          const toProb = P(t, 13.85, 0.35, E.inOutCubic);
+          const toProb = P(t, 14.65, 0.35, E.inOutCubic);
           if (scr === "scrProb" && toProb < 1) {
             vis($("scrRes"), true);
             tf($("scrRes"), `translateX(${lerp(0, -100, toProb)}px) scale(1.41294)`);
             op($("scrRes"), 1 - toProb);
             tf($("scrProb"), `translateX(${lerp(568, 0, toProb)}px) scale(1.41294)`);
           }
-          const toDr = P(t, 16.95, 0.35, E.inOutCubic);
-          if (scr === "scrDrills" && toDr < 1) {
-            vis($("scrProb"), true);
-            tf($("scrProb"), `translateX(${lerp(0, -100, toDr)}px) scale(1.41294)`);
-            op($("scrProb"), 1 - toDr);
-            tf($("scrDrills"), `translateX(${lerp(568, 0, toDr)}px) scale(1.41294)`);
-          }
           // taps
           {
             const [x, y] = pt(201, 720, px, py, s);
-            tapAt(t, 4.15, x, y);
+            tapAt(t, 4.5, x, y);
           }
           {
             const [x, y] = pt(201, 795, px, py, s);
-            tapAt(t, 5.55, x, y);
+            tapAt(t, 6.1, x, y);
           }
           {
             const [x, y] = pt(201, 640, px, py, s);
-            tapAt(t, 7.05, x, y);
+            tapAt(t, 7.9, x, y);
           }
           {
             const [x, y] = pt(201, 874 - 34 - 28, px, py, s);
-            tapAt(t, 13.5, x, y);
-            tapAt(t, 16.6, x, y);
-          }
-          {
-            const [x, y] = pt(330, 190 + 16 + 16, px, py, s);
-            tapAt(t, 18.35, x, y);
+            tapAt(t, 14.3, x, y);
+            tapAt(t, 17.1, x, y);
           }
           // ---- scan scene
           if (scr === "scrCap" || (scr === "scrRes" && toRes < 1)) {
-            const lt = t - 7.55;
+            const lt = t - 8.4;
             const idx = lt * 30 + 1;
             curSwing = frameImg($("swing"), "vid/swing", SWING_N, idx, curSwing);
-            const sp = P(t, 7.75, 2.4, E.inOutCubic);
+            const sp = P(t, 8.6, 2.4, E.inOutCubic);
             const y = lerp(60, 814, sp);
-            const done = t >= 10.3;
+            const done = t >= 11.15;
             vis($("scanLine"), !done);
             vis($("scanBand"), !done);
             vis($("scanTint"), true);
@@ -1342,12 +1357,12 @@
             $("capSpin").style.transform = `rotate(${(t * 420) % 360}deg)`;
             document.querySelectorAll(".corner").forEach((c) => {
               c.style.borderColor = done ? "#53D99B" : "#D7FA45";
-              c.style.opacity = done ? String(0.9 - 0.4 * P(t, 10.3, 0.8)) : "0.7";
+              c.style.opacity = done ? String(0.9 - 0.4 * P(t, 11.15, 0.8)) : "0.7";
             });
           }
           // ---- score page
           if (scr === "scrRes" || (scr === "scrProb" && toProb < 1)) {
-            const sw = P(t, 11.6, 1.0);
+            const sw = P(t, 12.05, 1.0);
             const C = 2 * Math.PI * 102.5;
             const frac = (3.62 - 2) / (6 - 2);
             $("arc").style.strokeDasharray = C;
@@ -1356,38 +1371,45 @@
           }
           // ---- problem page: markers + card rise
           if (scr === "scrProb") {
-            const cp = P(t, 14.1, 0.5, E.outBack);
+            const cp = P(t, 14.9, 0.5, E.outBack);
             $("stopCard").style.transform = `translateY(${lerp(40, 0, cp)}px)`;
             $("stopCard").style.opacity = cp;
-            const pulse = 0.5 + 0.5 * Math.sin((t - 14) * 5);
+            const pulse = 0.5 + 0.5 * Math.sin((t - 14.8) * 5);
             $("mk1").style.left = "222px";
             $("mk1").style.top = "226px";
             $("mk1").style.boxShadow = `0 0 0 ${4 + 4 * pulse}px rgba(215,250,69,.28)`;
             $("mk2").style.left = "150px";
             $("mk2").style.top = "262px";
           }
-          // ---- drills page: stagger + save
-          if (scr === "scrDrills") {
-            [1, 2, 3].forEach((i, k) => {
-              const p = P(t, 17.05 + k * 0.18, 0.45, E.outBack);
-              const el = $("dc" + i);
-              el.style.opacity = p;
-              el.style.transform = `translateY(${lerp(28, 0, p)}px)`;
-            });
-            const saved = t >= 18.55;
-            $("save1").classList.toggle("on", saved);
-            $("save1t").textContent = saved ? "Saved" : "Save";
-          }
         }
-        // ===== outro 19.5-25.5
-        if (t >= 19.5) {
-          const ip = P(t, 19.6, 0.8, E.outBack);
-          const np = P(t, 20.05, 0.5);
+        // ===== S6 drill library cards 17.6-20.9
+        if (t >= 17.6 && t < 21.0) {
+          const el = $("drills");
+          vis(el, true);
+          const fo = P(t, 20.4, 0.45, E.inCubic);
+          op(el, 1 - fo);
+          if (fo > 0) el.style.filter = `blur(${fo * 10}px)`;
+          const cp = P(t, 17.55, 0.5);
+          $("chips").style.opacity = cp;
+          $("chips").style.transform = `translateY(${lerp(20, 0, cp)}px)`;
+          [1, 2, 3].forEach((i, k) => {
+            const p = P(t, 17.7 + k * 0.2, 0.5, E.outBack);
+            const c = $("bc" + i);
+            c.style.opacity = Math.min(1, p * 1.3);
+            c.style.transform = `translateY(${lerp(50, 0, p)}px) scale(${lerp(0.97, 1, p)})`;
+          });
+          tapAt(t, 19.3, 90 + 900 - 43 - 39.5, 358 + 43 + 39.5);
+          $("bm1").classList.toggle("on", t >= 19.55);
+        }
+        // ===== outro 20.6-26.6
+        if (t >= 20.55) {
+          const ip = P(t, 20.6, 0.8, E.outBack);
+          const np = P(t, 21.1, 0.5);
           lockup(t, lerp(0.78, 1, ip), 1);
           op($("icon"), Math.min(1, ip * 1.6));
           op($("iconName"), np);
           tf($("iconName"), `translateY(${lerp(16, 0, np)}px)`);
-          const sp = P(t, 21.9, 0.55, E.outBack);
+          const sp = P(t, 23.0, 0.55, E.outBack);
           if (sp > 0) {
             vis($("store"), true);
             op($("store"), Math.min(1, sp * 1.5));

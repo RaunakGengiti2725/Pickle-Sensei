@@ -1,6 +1,6 @@
 # Pickle Sensei — app showcase reel
 
-A 26 s, 1080×1920, 30 fps vertical showcase (Reels / TikTok / App Store preview). Everything
+A 27 s, 1080×1920, 30 fps vertical showcase (Reels / TikTok / App Store preview). Everything
 is rendered from `timeline.html`, one deterministic motion timeline: `window.__setTime(t)`
 positions every element for time `t`, and `render.js` drives headless Chromium through it
 frame by frame, piping PNGs into ffmpeg.
@@ -25,17 +25,17 @@ frame by frame, piping PNGs into ffmpeg.
   iPhone 16 Pro simulator (guest mode, onboarding completed as "Raunak").
 - `clips/swing.mp4` is the owner's own clip, downscaled to 1080p. The scan line is a
   motion-graphics effect: the clip was not run through the analysis pipeline.
-- The Score, The problem and Drills pages are laid out from the app's own guide-shell contract in `AGENTS.md`
+- The Score and The problem pages are laid out from the app's own guide-shell contract in `AGENTS.md`
   (dark shell, segmented progress, `ESTIMATED DUPR · <STROKE>` kicker, `ScoreRing` 220 with
   the ESTIMATED eyebrow and DUPR unit inside the arc, `DUPR_ESTIMATE_NOTE`, one insight
-  sentence, THIS SET card, pinned footer) using the app's tokens and copy. Their numbers, fault, and drills
+  sentence, THIS SET card, pinned footer) using the app's tokens and copy. The drill cards reproduce `DrillLibraryScreen`'s card (title, meta line, description, coach, "Form guide & videos", bookmark) at 1.8× the app's points. Their numbers, fault, and drills
   are illustrative: the shipping app abstains until a validated model is
   released, and ratings require a connected account.
 
 ## Provenance
 
-- Voiceover: ten lines generated with ElevenLabs (voice "Holden") through the Higgsfield
-  MCP, committed as `vo/vo1.mp3` … `vo/vo10.mp3` and re-timed 8% faster by `prepare.sh`. Every other sound is synthesized in
+- Voiceover: ten lines generated with ElevenLabs (voice "Ainsley") through the Higgsfield
+  MCP, committed as `vo/vo1.mp3` … `vo/vo10.mp3`. Every other sound is synthesized in
   `audio.py`. There is no licensed music track; add one when posting.
 - Fonts (Manrope, OFL) and the app icon are copied from the app by `prepare.sh`.
 

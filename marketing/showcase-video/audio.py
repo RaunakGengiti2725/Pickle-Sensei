@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import butter, sosfilt
 from scipy.io import wavfile
-SR=48000; DUR=25.6; N=int(SR*DUR); buf=np.zeros((N,2)); rng=np.random.default_rng(3)
+SR=48000; DUR=26.6; N=int(SR*DUR); buf=np.zeros((N,2)); rng=np.random.default_rng(3)
 def sos(kind,lo,hi=None,order=4):
     if kind=='bp': return butter(order,[lo,hi],btype='band',fs=SR,output='sos')
     if kind=='lp': return butter(order,lo,btype='low',fs=SR,output='sos')
@@ -52,28 +52,29 @@ air=sosfilt(sos('lp',500,2),noise(DUR))*env_swell(n,2.5,1.5); place(0.0,air,0.01
 # ---- intro icon
 place(0.10,whoosh(0.7,200,1800,0.2,1.0,'up'),0.14); place(0.40,pop(330,1.0,0.14),0.26)
 # phone rise + taps + transitions
-place(2.5,whoosh(0.8,150,900,0.3,1.0),0.16)
-for tt in (4.15,5.55,7.05,13.5,16.6,18.35): place(tt,click(),0.42)
-for tt in (4.55,5.85,7.45,13.85,16.95): place(tt,whoosh(0.3,1200,7000,0.03,1.0,'up'),0.12)
-# scan 7.75-10.15, completion chime 10.3
-sw=sine(320,2.4,1150)*env_swell(int(SR*2.4),0.5,0.5); place(7.75,sosfilt(sos('lp',2500),sw),0.05)
-sh=sosfilt(sos('bp',3000,9000),noise(2.4))*env_swell(int(SR*2.4),0.6,0.4); place(7.75,sh,0.035)
-place(10.3,tone(880,0.5,0.22,0.008,0.4)); place(10.42,tone(1318.5,0.7,0.2,0.008,0.55))
+place(2.6,whoosh(0.8,150,900,0.3,1.0),0.16)
+for tt in (4.5,6.1,7.9,14.3,17.1,19.3): place(tt,click(),0.42)
+for tt in (4.9,6.4,8.3,14.65): place(tt,whoosh(0.3,1200,7000,0.03,1.0,'up'),0.12)
+# scan 8.6-11.0, completion chime 11.15
+sw=sine(320,2.4,1150)*env_swell(int(SR*2.4),0.5,0.5); place(8.6,sosfilt(sos('lp',2500),sw),0.05)
+sh=sosfilt(sos('bp',3000,9000),noise(2.4))*env_swell(int(SR*2.4),0.6,0.4); place(8.6,sh,0.035)
+place(11.15,tone(880,0.5,0.22,0.008,0.4)); place(11.27,tone(1318.5,0.7,0.2,0.008,0.55))
 # score: transition + ring riser + chord
-place(11.0,whoosh(0.5,300,2500,0.06,1.0,'down'),0.12)
-for k,f in enumerate((523.25,659.25,783.99,1046.5)): place(11.65+k*0.22,tone(f,0.5,0.15,0.006,0.4),pan=-0.2+0.13*k)
-for f in (523.25,659.25,783.99,1046.5): place(12.6,tone(f,1.4,0.10,0.02,1.2))
-# problem card rise, drills stagger pops, save
-place(14.1,pop(300,1.0,0.12),0.22)
-for k,f in enumerate((520,600,690)): place(17.05+k*0.18,pop(f),0.24,pan=0.2)
-place(18.55,tone(1318.5,0.3,0.12,0.005,0.25))
+place(11.85,whoosh(0.5,300,2500,0.06,1.0,'down'),0.12)
+for k,f in enumerate((523.25,659.25,783.99,1046.5)): place(12.1+k*0.22,tone(f,0.5,0.15,0.006,0.4),pan=-0.2+0.13*k)
+for f in (523.25,659.25,783.99,1046.5): place(13.05,tone(f,1.4,0.10,0.02,1.2))
+# problem card rise; drills: phone out, chips, card pops, save
+place(14.9,pop(300,1.0,0.12),0.22)
+place(17.45,whoosh(0.5,600,4000,0.06,1.0,'down'),0.12)
+for k,f in enumerate((520,600,690)): place(17.7+k*0.2,pop(f),0.24,pan=0.15)
+place(19.55,tone(1318.5,0.3,0.12,0.005,0.25))
 # outro
-place(19.4,whoosh(0.6,1500,6000,0.05,1.0,'down'),0.12); place(19.75,pop(300,1.0,0.16),0.24)
-place(21.9,pop(420,1.0,0.12),0.2); place(22.0,tone(1760,0.5,0.05,0.02,0.4))
+place(20.4,whoosh(0.6,1500,6000,0.05,1.0,'down'),0.12); place(20.75,pop(300,1.0,0.16),0.24)
+place(23.0,pop(420,1.0,0.12),0.2); place(23.1,tone(1760,0.5,0.05,0.02,0.4))
 # swing ambience under the scan (very low)
-amb=load('swing_audio.wav'); amb=amb*env_swell(len(amb),0.4,0.6)[:,None]; place(7.55,amb,9.0)
+amb=load('swing_audio.wav'); amb=amb*env_swell(len(amb),0.4,0.6)[:,None]; place(8.4,amb,9.0)
 # voiceover
-VO={1:0.45,2:3.15,3:4.95,4:6.25,5:7.95,6:11.45,8:14.2,9:17.3,7:20.0,10:22.1}
+VO={1:0.5,2:3.3,3:5.3,4:6.8,5:8.9,6:12.3,8:15.0,9:18.1,7:21.1,10:23.2}
 for i,at in VO.items():
     v=load(f'vo/vo{i}.wav'); peak=np.abs(v).max(); place(at,v/peak,0.62)
 buf=np.tanh(buf*1.15)/np.tanh(1.15); peak=np.abs(buf).max(); buf*=0.92/peak
