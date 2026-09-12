@@ -17,6 +17,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { peekAuthFailureBudget, peekRateLimit } from "../rateLimit.ts";
 import { loadHarness, SUPABASE_URL, TEST_USER_ID } from "./routesHarness.ts";
+import { withFrozenClock } from "./sessionHarness.ts";
 
 /** Mirrors AUTH_FAILURE_LIMIT in index.ts. */
 const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
@@ -25,7 +26,9 @@ const b64url = (value: string): string =>
   btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 /** A Supabase-shaped access token (iss ends in /auth/v1) that Auth will
- * judge; `salt` keeps every bearer distinct so the auth cache never answers. */
+ * judge; `salt` keeps every bearer distinct so the auth cache never answers.
+ * `exp` is taken from Date.now(): a test that replays a bearer must freeze the
+ * clock so the replay is the SAME credential byte for byte. */
 function supabaseBearer(salt: string): string {
   const header = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = b64url(
@@ -124,40 +127,42 @@ Deno.test(
     const statuses: number[] = [];
     const replays: number[] = [];
     let judged = 0;
-    await withAuthUpstream(
-      onUserEndpoint(() => {
-        judged += 1;
-        return jsonResponse(401, {
-          code: 401,
-          msg: "invalid JWT: unable to parse or verify signature",
-        });
-      }),
-      async () => {
-        for (let i = 0; i < 31; i += 1) {
-          statuses.push((await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`))).status);
-        }
-        assertEquals(judged, 31, "every distinct credential is judged by Auth exactly once");
-        for (let i = 0; i < 31; i += 1) {
-          const response = await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`));
-          replays.push(response.status);
-          const retryAfter = Number(response.headers.get("Retry-After"));
-          assert(
-            Number.isInteger(retryAfter) &&
-              retryAfter >= 1 &&
-              retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
-            `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
-          );
-        }
-        assertEquals(judged, 31, "replays of refused credentials never reach Auth again");
-      },
-    );
-    assertEquals(statuses, new Array(31).fill(401));
-    assertEquals(replays, new Array(31).fill(429), "every stuffed bearer is locked out");
-    assertEquals(
-      await chargedFailures(ip),
-      AUTH_FAILURE_LIMIT.limit,
-      "the egress stuffing signal is saturated (remaining floors at 0)",
-    );
+    await withFrozenClock(async () => {
+      await withAuthUpstream(
+        onUserEndpoint(() => {
+          judged += 1;
+          return jsonResponse(401, {
+            code: 401,
+            msg: "invalid JWT: unable to parse or verify signature",
+          });
+        }),
+        async () => {
+          for (let i = 0; i < 31; i += 1) {
+            statuses.push((await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`))).status);
+          }
+          assertEquals(judged, 31, "every distinct credential is judged by Auth exactly once");
+          for (let i = 0; i < 31; i += 1) {
+            const response = await getMe(h.handler, ip, supabaseBearer(`stuffed-${i}`));
+            replays.push(response.status);
+            const retryAfter = Number(response.headers.get("Retry-After"));
+            assert(
+              Number.isInteger(retryAfter) &&
+                retryAfter >= 1 &&
+                retryAfter <= AUTH_FAILURE_LIMIT.windowSeconds,
+              `429 must carry a bucket-bounded Retry-After, got ${retryAfter}`,
+            );
+          }
+          assertEquals(judged, 31, "replays of refused credentials never reach Auth again");
+        },
+      );
+      assertEquals(statuses, new Array(31).fill(401));
+      assertEquals(replays, new Array(31).fill(429), "every stuffed bearer is locked out");
+      assertEquals(
+        await chargedFailures(ip),
+        AUTH_FAILURE_LIMIT.limit,
+        "the egress stuffing signal is saturated (remaining floors at 0)",
+      );
+    });
   },
 );
 
