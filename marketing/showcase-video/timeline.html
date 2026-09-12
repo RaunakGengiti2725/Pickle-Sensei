@@ -1274,7 +1274,7 @@
             ["the", 13.26],
             ["one", 13.54, 1],
             ["thing", 13.74, 1],
-            ["to", 14.0, 1],
+            ["to", 14.0, 1, 2],
             ["fix", 14.18, 1],
             ["first,", 14.34, 1],
           ],
@@ -1325,7 +1325,7 @@
           .map(([w, at, g, br]) => {
             const p = P(t, at - 0.05, 0.26);
             return (
-              (br ? "<br>" : "") +
+              (br === 1 || (br === 2 && STAGE_W === 886) ? "<br>" : "") +
               `<span class="${g ? "g" : ""}" style="opacity:${p};transform:translateY(${lerp(14, 0, p)}px) scale(${lerp(0.97, 1, p)})">${w}</span>`
             );
           })
