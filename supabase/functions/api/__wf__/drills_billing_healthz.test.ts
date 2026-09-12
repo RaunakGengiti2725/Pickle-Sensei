@@ -19,6 +19,7 @@ import {
   userRequest,
   webhookRequest,
 } from "./routesHarness.ts";
+import { withFrozenClock } from "./sessionHarness.ts";
 import { simulate } from "./webhookSim.ts";
 
 const ACCESS_ROW = [{ premium: false, scored_count: 0, reserved_count: 0 }];
@@ -350,14 +351,19 @@ Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-
   h.subscriber = activeSubscriber();
   h.rpcs["access_state"] = ACCESS_ROW;
   const token = fakeGoogleIdToken(OTHER_USER_ID);
-  let last: Response | null = null;
-  for (let i = 0; i < 11; i += 1) {
-    last = await h.handler(userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.10", token }));
-    if (i < 10) assertEquals(last.status, 200, `call ${i + 1}`);
-    await last.text();
-  }
-  assertEquals(last!.status, 429);
-  assert(Number(last!.headers.get("retry-after")) > 0);
+  const last = await withFrozenClock(async () => {
+    let response: Response | null = null;
+    for (let i = 0; i < 11; i += 1) {
+      response = await h.handler(
+        userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.10", token }),
+      );
+      if (i < 10) assertEquals(response.status, 200, `call ${i + 1}`);
+      await response.text();
+    }
+    return response!;
+  });
+  assertEquals(last.status, 429);
+  assert(Number(last.headers.get("retry-after")) > 0);
   assertEquals(h.callsTo(RC_URL).length, 10);
   assertEquals(h.callsTo("/rest/v1/rpc/is_api_session_active").length, 10);
 });
@@ -663,17 +669,20 @@ Deno.test(
 
 Deno.test("healthz: 60/min per IP, then 429 + Retry-After", async () => {
   const h = await loadHarness();
-  let last: Response | null = null;
-  for (let i = 0; i < 61; i += 1) {
-    last = await h.handler(
-      new Request("http://edge.test/functions/v1/api/healthz", {
-        headers: { "x-forwarded-for": "198.51.100.12" },
-      }),
-    );
-    await last.text();
-  }
-  assertEquals(last!.status, 429);
-  assert(Number(last!.headers.get("retry-after")) > 0);
+  const last = await withFrozenClock(async () => {
+    let response: Response | null = null;
+    for (let i = 0; i < 61; i += 1) {
+      response = await h.handler(
+        new Request("http://edge.test/functions/v1/api/healthz", {
+          headers: { "x-forwarded-for": "198.51.100.12" },
+        }),
+      );
+      await response.text();
+    }
+    return response!;
+  });
+  assertEquals(last.status, 429);
+  assert(Number(last.headers.get("retry-after")) > 0);
 });
 
 Deno.test(
