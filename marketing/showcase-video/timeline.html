@@ -767,6 +767,22 @@
         height: 38px;
         display: block;
       }
+      /* 886x1920 App Store preview canvas */
+      .w886,
+      .w886 body,
+      .w886 #stage {
+        width: 886px;
+      }
+      .w886 #cap {
+        left: 40px;
+        right: 40px;
+        font-size: 58px;
+        letter-spacing: -1.5px;
+      }
+      .w886 #drills {
+        transform-origin: 90px 280px;
+        transform: translate(-30px, 0) scale(0.851);
+      }
       /* caption + tap */
       #cap {
         position: absolute;
@@ -1326,7 +1342,12 @@
         tf(el, `scale(${lerp(0.35, 1.15, p)})`);
         op(el, (1 - p) * 0.9 + 0.1 * (p < 0.5 ? 1 : 0));
       }
-      const PX0 = 240,
+      const STAGE_W = (() => {
+        const w = +(new URLSearchParams(location.search).get("w") || 1080);
+        if (w === 886) document.documentElement.classList.add("w886");
+        return w;
+      })();
+      const PX0 = (STAGE_W - 600) / 2,
         PY0 = 250;
       function phone(x, y, s, o = 1) {
         const el = $("phone");
@@ -1481,6 +1502,7 @@
         if (t >= 15.55 && t < 18.85) {
           const el = $("drills");
           vis(el, true);
+          el.style.transform = "";
           const fo = P(t, 18.3, 0.45, E.inCubic);
           op(el, 1 - fo);
           if (fo > 0) el.style.filter = `blur(${fo * 10}px)`;

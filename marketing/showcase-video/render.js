@@ -26,13 +26,16 @@ const fps = +(args.fps || 30),
   every = +(args.every || 1);
 const mode = args.mode || "png";
 const out = args.out || "frames";
+const W = +(args.w || 1080);
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({
-    viewport: { width: 1080, height: 1920 },
+    viewport: { width: W, height: 1920 },
     deviceScaleFactor: 1,
   });
-  await page.goto("file://" + path.resolve(__dirname, "timeline.html"));
+  await page.goto(
+    "file://" + path.resolve(__dirname, "timeline.html") + (W !== 1080 ? "?w=" + W : ""),
+  );
   await page.evaluate(() => window.__ready);
   const times = args.times ? String(args.times).split(",").map(Number) : null;
   const n = times ? times.length : Math.round((end - start) * fps);

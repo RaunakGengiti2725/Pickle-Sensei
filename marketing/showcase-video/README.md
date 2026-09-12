@@ -55,6 +55,14 @@ node render.js --mode=pipe --out=v_noaudio.mp4
 ffmpeg -i v_noaudio.mp4 -i audio.wav -c:v copy -c:a aac -b:a 192k -shortest PickleSensei_showcase.mp4
 ```
 
+App Store preview size (886×1920): the same timeline re-laid for the narrower canvas
+(phone recentred, captions and drill cards fitted). Pass `--w=886` to the renderer:
+
+```bash
+node render.js --w=886 --mode=pipe --out=v_noaudio_886.mp4
+ffmpeg -i v_noaudio_886.mp4 -i audio.wav -c:v copy -c:a aac -b:a 192k -shortest PickleSensei_showcase_886x1920.mp4
+```
+
 Preview one frame per second as PNGs, or specific moments:
 
 ```bash
