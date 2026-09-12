@@ -60,7 +60,7 @@ App Store preview size (886×1920): the same timeline re-laid for the narrower c
 
 ```bash
 node render.js --w=886 --mode=pipe --out=v_noaudio_886.mp4
-ffmpeg -i v_noaudio_886.mp4 -i audio.wav -c:v copy -c:a aac -b:a 192k -shortest PickleSensei_showcase_886x1920.mp4
+ffmpeg -i v_noaudio_886.mp4 -i audio.wav -c:v libx264 -profile:v high -level 4.0 -pix_fmt yuv420p -r 30 -crf 17 -c:a aac -b:a 256k -ar 48000 -ac 2 -shortest -movflags +faststart PickleSensei_AppStorePreview_886x1920.mp4
 ```
 
 Preview one frame per second as PNGs, or specific moments:
