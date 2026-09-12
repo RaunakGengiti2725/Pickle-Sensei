@@ -12,7 +12,7 @@
     },
     {
       "path": "ios/Podfile.lock",
-      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f"
+      "sha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9"
     },
     {
       "path": "ios/PickleSensei.xcworkspace/xcshareddata/swiftpm/Package.resolved",
@@ -9854,7 +9854,7 @@
         "text": "Internal"
       },
       "generatedAcknowledgementHeading": true,
-      "specChecksum": "01c35ae8202ef7fa7afb56dd484af2f9cef5119c",
+      "specChecksum": "71e1a49821e0d95e90f70191cd0375a8547a7506",
       "roleEvidence": "Local app source. No third-party license or ownership certification is inferred from the empty generated acknowledgement."
     },
     {
@@ -20677,7 +20677,7 @@
     },
     {
       "path": "ios/Pods/Local Podspecs/PickleNative.podspec.json",
-      "sha256": "c90ebf2cdb93da8a2c4f2e6cbc9388937d1a288808ba8f050fd13fbc2d4a0dc2",
+      "sha256": "81275c9166882a3f4cc2a3aa60ce750be0d46071042a602c6f09914f171888a0",
       "purpose": "podspec-source-selection"
     },
     {
@@ -21162,7 +21162,7 @@
     },
     {
       "path": "ios/Pods/Manifest.lock",
-      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f",
+      "sha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9",
       "purpose": "installed-pods-lock"
     },
     {
@@ -35916,5 +35916,25 @@
       "evidenceSha256": "f9ff1bfba451f9cec416608e7346b5f194dc26a116bc199781c1481641b88d8e"
     }
   ],
-  "noticeMembershipArtifactId": "hermes:14c8d6b14ae52e5e1619aab176dba45241ab7aae3993e770c7eb2ff85c8284f1:map:35a80b409aa76aacc6eb4964d1d8da4ef475fed08315dd3d63a3956887522cc1"
+  "noticeMembershipArtifactId": "hermes:14c8d6b14ae52e5e1619aab176dba45241ab7aae3993e770c7eb2ff85c8284f1:map:35a80b409aa76aacc6eb4964d1d8da4ef475fed08315dd3d63a3956887522cc1",
+  "historicalFirstPartyPod": {
+    "kind": "historical-first-party-pod-maintenance",
+    "scope": "Commit 6851450b added Sources/Core/OfflineWallet.swift to the first-party PickleNative pod. The installed podspec differs only by that source entry, and Podfile.lock differs only by its checksum. Every third-party installed source and guard was verified unchanged. This exact transition preserves the original historical JS map lock binding; it is not current-build or native delivery evidence.",
+    "input": {
+      "path": "ios/Podfile.lock",
+      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f",
+      "updatedInputSha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9"
+    },
+    "podspec": {
+      "path": "ios/Pods/Local Podspecs/PickleNative.podspec.json",
+      "sha256": "c90ebf2cdb93da8a2c4f2e6cbc9388937d1a288808ba8f050fd13fbc2d4a0dc2",
+      "updatedInputSha256": "81275c9166882a3f4cc2a3aa60ce750be0d46071042a602c6f09914f171888a0"
+    },
+    "pod": {
+      "id": "pod:PickleNative",
+      "version": "0.1.0",
+      "before": "01c35ae8202ef7fa7afb56dd484af2f9cef5119c",
+      "after": "71e1a49821e0d95e90f70191cd0375a8547a7506"
+    }
+  }
 }

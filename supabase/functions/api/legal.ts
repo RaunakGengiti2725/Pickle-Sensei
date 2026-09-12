@@ -16,7 +16,7 @@
 // not the retired services/api implementation. Keep them synchronized with
 // actual data flows, App Store Connect privacy answers, and purchase screens.
 
-const LAST_UPDATED = "September 3, 2026";
+const LAST_UPDATED = "September 11, 2026";
 const SUPPORT_EMAIL = "picklesenseidev@gmail.com";
 const LEGAL_OWNER = "Raunak Gengiti";
 const CONTACT_ADDRESS = "6737 Elegante Way, San Diego, California 92130, United States";
@@ -250,6 +250,15 @@ We do not receive or store your full payment-card number, bank-account
 details, or store-account password. Apple handles the payment.
 
 H. Network, app, and security information
+
+For offline ratings, the app creates a random installation identifier in the
+device's protected Keychain or Keystore and registers it with our server.
+We associate that identifier and a server-issued device identifier with your
+account, offline rating allocations, grant expiration times, and settlement
+receipts. We use these records to enable offline ratings, reconcile results
+when you reconnect, and prevent an allocation from being spent twice. These
+identifiers are not advertising identifiers and are not used for cross-app
+tracking. Retention after account deletion is described in Sections 7 and 8.
 
 When the app communicates with our API, servers necessarily process request
 information such as IP address, request time and route, app version, platform,

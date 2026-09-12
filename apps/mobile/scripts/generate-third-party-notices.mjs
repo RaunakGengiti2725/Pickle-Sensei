@@ -91,6 +91,29 @@ const HOST_TOOL_PATCHES = [
   { lockPath: 'node_modules/qs', before: '6.15.3', after: '6.16.0' },
   { lockPath: 'node_modules/uuid', before: '7.0.3', after: '11.1.1' },
 ];
+// The local app pod added OfflineWallet.swift in 6851450b. CocoaPods changed
+// only its spec checksum; all third-party versions and source texts match.
+// Preserve the old map's original inputs, never certify a new native binary.
+const FIRST_PARTY_POD_PATCH = {
+  input: {
+    path: 'ios/Podfile.lock',
+    sha256: '0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f',
+    updatedInputSha256:
+      '414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9',
+  },
+  podspec: {
+    path: 'ios/Pods/Local Podspecs/PickleNative.podspec.json',
+    sha256: 'c90ebf2cdb93da8a2c4f2e6cbc9388937d1a288808ba8f050fd13fbc2d4a0dc2',
+    updatedInputSha256:
+      '81275c9166882a3f4cc2a3aa60ce750be0d46071042a602c6f09914f171888a0',
+  },
+  pod: {
+    id: 'pod:PickleNative',
+    version: '0.1.0',
+    before: '01c35ae8202ef7fa7afb56dd484af2f9cef5119c',
+    after: '71e1a49821e0d95e90f70191cd0375a8547a7506',
+  },
+};
 const LOCK_INPUTS = [
   'package.json',
   'package-lock.json',
@@ -1794,6 +1817,29 @@ function isReviewedHostToolPatch(history) {
   );
 }
 
+function isReviewedFirstPartyPodPatch(history, receipt) {
+  const pod = receipt.components.find(item => item.id === history?.pod?.id);
+  return (
+    history?.kind === 'historical-first-party-pod-maintenance' &&
+    json(history.input) === json(FIRST_PARTY_POD_PATCH.input) &&
+    json(history.podspec) === json(FIRST_PARTY_POD_PATCH.podspec) &&
+    json(history.pod) === json(FIRST_PARTY_POD_PATCH.pod) &&
+    pod?.role === 'first-party-outside-third-party-notices' &&
+    pod.version === history.pod.version &&
+    pod.specChecksum === history.pod.after &&
+    receipt.guards.some(
+      guard =>
+        guard.path === history.podspec.path &&
+        guard.sha256 === history.podspec.updatedInputSha256,
+    ) &&
+    receipt.guards.some(
+      guard =>
+        guard.path === 'ios/Pods/Manifest.lock' &&
+        guard.sha256 === history.input.updatedInputSha256,
+    )
+  );
+}
+
 function artifactLockedInputs(receipt, artifact) {
   if (
     artifact.kind !== 'historical-reference' ||
@@ -1804,6 +1850,7 @@ function artifactLockedInputs(receipt, artifact) {
 
   const swift = receipt.historicalSwiftPM;
   const host = receipt.historicalHostTools;
+  const localPod = receipt.historicalFirstPartyPod;
   const hostOnly =
     isReviewedHostToolPatch(host) &&
     host.packages.every(
@@ -1813,6 +1860,12 @@ function artifactLockedInputs(receipt, artifact) {
   // Reconstruct only the exact historical inputs. New/future artifact bindings
   // still use current inputs, and newly observed host tools require notices.
   return receipt.inputs.map(input => {
+    if (
+      isReviewedFirstPartyPodPatch(localPod, receipt) &&
+      input.path === localPod.input.path &&
+      input.sha256 === localPod.input.updatedInputSha256
+    )
+      return { path: input.path, sha256: localPod.input.sha256 };
     if (
       isReviewedSwiftUnlink(swift) &&
       !receipt.components.some(item => item.id.startsWith('swiftpm:')) &&
@@ -2198,6 +2251,12 @@ export function validateReceipt(
   const hostHistory = receipt.historicalHostTools;
   if (hostHistory && !isReviewedHostToolPatch(hostHistory))
     errors.push('Historical host-tool maintenance receipt is invalid');
+  const localPodHistory = receipt.historicalFirstPartyPod;
+  if (
+    localPodHistory &&
+    !isReviewedFirstPartyPodPatch(localPodHistory, receipt)
+  )
+    errors.push('Historical first-party pod maintenance receipt is invalid');
   for (const item of historicalComponents) {
     if (
       !item.id.startsWith('swiftpm:') ||
@@ -2502,6 +2561,12 @@ export function renderNotices(
           ? [
               'Reviewed host-tool-only maintenance after the reference: qs 6.15.3 -> 6.16.0; xcode-scoped uuid 7.0.3 -> 11.1.1.',
               'Original reference hashes are retained. These updates are not exclusions from any future artifact.',
+            ]
+          : []),
+        ...(receipt.historicalFirstPartyPod
+          ? [
+              'Reviewed first-party PickleNative pod checksum update after adding OfflineWallet.swift; third-party sources are unchanged.',
+              'Original reference hashes are retained. This maintenance does not certify a current native binary.',
             ]
           : []),
         ...receipt.inputs.map(

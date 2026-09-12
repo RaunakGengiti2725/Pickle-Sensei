@@ -88,13 +88,15 @@ function parseCollectedDataTypes(xml: string): CollectedDataType[] {
 /**
  * legal.ts §1 → data collected by Pickle Sensei and the embedded video
  * surface. Linked SDKs publish their own manifests, so their additional
- * categories (for example Google Sign-In's phone number and device ID) do
- * not belong in this app-target manifest.
+ * categories (for example Google Sign-In's phone number) do not belong in
+ * this app-target manifest. The offline installation identifier is collected
+ * by the app itself and requires its own Device ID disclosure.
  */
 const APP_TARGET_DISCLOSURES = [
   'NSPrivacyCollectedDataTypeEmailAddress',
   'NSPrivacyCollectedDataTypeName',
   'NSPrivacyCollectedDataTypeUserID',
+  'NSPrivacyCollectedDataTypeDeviceID',
   'NSPrivacyCollectedDataTypeFitness',
   'NSPrivacyCollectedDataTypeOtherDataTypes',
   'NSPrivacyCollectedDataTypeOtherUserContent',
@@ -158,6 +160,7 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
         personalization,
       ]),
       NSPrivacyCollectedDataTypeUserID: new Set([appFunctionality, analytics]),
+      NSPrivacyCollectedDataTypeDeviceID: new Set([appFunctionality]),
       NSPrivacyCollectedDataTypeFitness: new Set([
         appFunctionality,
         personalization,

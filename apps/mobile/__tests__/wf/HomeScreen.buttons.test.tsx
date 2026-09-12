@@ -363,14 +363,14 @@ describe('HomeScreen button ledger', () => {
     mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
     const renderer = await renderHome();
     // D-046: the latest-technique card and the recent-read row both print
-    // the estimated DUPR (6.4 → 2.98) in the card-score role with the
+    // the estimated DUPR (6.4 → 3.48) in the card-score role with the
     // " DUPR" unit nested, and "6.4 /10" as the smaller micro line.
     const duprNumerals = renderer.root
       .findAllByType(Text)
       .filter(
         node =>
           Array.isArray(node.props.children) &&
-          node.props.children[0] === '2.98',
+          node.props.children[0] === '3.48',
       );
     // The rank banner prints the same estimate in its own bodyBold role; the
     // two card scores are the ones in the shared card-score role.
@@ -506,14 +506,14 @@ describe('HomeScreen button ledger', () => {
           expect(text.props.allowFontScaling).not.toBe(false);
         }
         expect(allText(renderer)).toContain('Platinum III');
-        // D-046: the estimated DUPR (6.81 → 3.21) headlines with its unit;
+        // D-046: the estimated DUPR (6.81 → 3.81) headlines with its unit;
         // the 0–10 rating is the smaller "/10" line beneath.
-        expect(allText(renderer)).toContain('3.21 DUPR');
+        expect(allText(renderer)).toContain('3.81 DUPR');
         expect(allText(renderer)).toContain('6.81 /10');
         expect(allText(renderer)).not.toMatch(/≈/);
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(toggle.props.accessibilityLabel).toContain(
-          'estimated DUPR 3.21, technique rating 6.81 out of 10.',
+          'estimated DUPR 3.81, technique rating 6.81 out of 10.',
         );
         await press(badge);
         expect(mockNavigate).toHaveBeenCalledTimes(1);
@@ -798,8 +798,8 @@ describe('HomeScreen button ledger', () => {
       const renderer = await renderHome();
       const text = allText(renderer);
       expect(text).toContain('third shot drop');
-      // Estimated DUPR first (6.4 → 2.98), the score beneath.
-      expect(text).toContain('2.98');
+      // Estimated DUPR first (6.4 → 3.48), the score beneath.
+      expect(text).toContain('3.48');
       expect(text).toContain('6.4 /10');
       expect(text).toContain('Latest validated scored stroke on this device');
       act(() => renderer.unmount());
@@ -867,7 +867,7 @@ describe('HomeScreen button ledger', () => {
       expect(text.match(/3\.7/g)?.length).toBeGreaterThanOrEqual(2);
       // Default lens is the dot plot, summarized for screen readers.
       expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
+        'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.85, technique score 3.7 out of 10.',
       );
       expect(chartLabel(renderer, 'practice-volume-chart')).toBeUndefined();
       act(() => renderer.unmount());
@@ -911,7 +911,7 @@ describe('HomeScreen button ledger', () => {
         'scores',
       );
       expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day estimated DUPR: 2 scored reads across 2 days, latest Estimated DUPR 2.94, technique score 6.1 out of 10.',
+        'Seven day estimated DUPR: 2 scored reads across 2 days, latest Estimated DUPR 3.41, technique score 6.1 out of 10.',
       );
       act(() => renderer.unmount());
     });
@@ -1318,7 +1318,7 @@ describe('HomeScreen button ledger', () => {
       expect(labels).toEqual([
         '2 days training streak. Opens the consistency calendar.',
         expect.stringContaining(
-          'Player rank Gold I, estimated DUPR 2.98, technique rating 6.40 out of 10.',
+          'Player rank Gold I, estimated DUPR 3.48, technique rating 6.40 out of 10.',
         ),
         '2 days training streak. Opens the consistency calendar.',
         'Turn on practice reminders',

@@ -13,9 +13,11 @@ Current SwiftPM pin candidates: 0.
 Historical SwiftPM source receipts are excluded from this candidate; no past or current native delivery is inferred.
 Reviewed host-tool-only maintenance after the reference: qs 6.15.3 -> 6.16.0; xcode-scoped uuid 7.0.3 -> 11.1.1.
 Original reference hashes are retained. These updates are not exclusions from any future artifact.
+Reviewed first-party PickleNative pod checksum update after adding OfflineWallet.swift; third-party sources are unchanged.
+Original reference hashes are retained. This maintenance does not certify a current native binary.
 Input: package.json SHA-256 155c0b018bfa451c6beb358e1827168c44b6b399d0c57bada40a2f0f175aa716
 Input: package-lock.json SHA-256 2294bb3f0c0a6d4794d28bce12863b8ca36b1371121ff2f1b6309fb1a194db58
-Input: ios/Podfile.lock SHA-256 0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f
+Input: ios/Podfile.lock SHA-256 414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9
 Input: ios/PickleSensei.xcworkspace/xcshareddata/swiftpm/Package.resolved SHA-256 c5ccefcb6a0670f9b299d9e9635d09da2df8744315f8cd5e826b0c8e491703ed
 
 

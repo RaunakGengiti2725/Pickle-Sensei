@@ -1236,7 +1236,7 @@ function ScorePage(props: {
         ESTIMATED DUPR · {props.shotLabel.toUpperCase()}
       </Text>
       <View style={styles.ringWrap}>
-        <ScoreRing score={analysis.overallScore} size={190} dark />
+        <ScoreRing score={analysis.overallScore} size={220} dark />
       </View>
       {/* The big number is an estimate rescaled from this swing's technique
           score (D-046); the page says so under the ring, every time. */}

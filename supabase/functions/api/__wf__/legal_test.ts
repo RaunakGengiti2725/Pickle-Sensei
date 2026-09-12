@@ -133,13 +133,13 @@ Deno.test(
 );
 
 Deno.test(
-  "submission name disclosures describe current collection as an unpublished draft",
+  "submission name disclosures describe the checked public policy and required onboarding name",
   async () => {
     const text = flat(
       await Deno.readTextFile(new URL("../../../../docs/APP_STORE_SUBMISSION.md", import.meta.url)),
     );
     for (const needle of [
-      "local draft; it has not been published to the legal pages or App Store Connect",
+      "The public privacy page was checked on 2026-09-11",
       "Onboarding requires a name for account personalization",
       "A preferred name or nickname is accepted, without legal-name verification",
       "Older stored profiles may lack the onboarding name",
@@ -153,10 +153,10 @@ Deno.test(
 );
 
 Deno.test(
-  "the copy clarification retains legal dates, individual ownership, and age and international scope",
+  "the build 4 disclosure records its update date and retains ownership, age, and international scope",
   () => {
     for (const text of [SUPPORT_TEXT, PRIVACY_POLICY_TEXT, TERMS_TEXT]) {
-      assertStringIncludes(text, "Last updated: September 3, 2026");
+      assertStringIncludes(text, "Last updated: September 11, 2026");
     }
     const privacy = flat(PRIVACY_POLICY_TEXT);
     assertStringIncludes(privacy, `${LEGAL_OWNER}, an individual`);
@@ -164,6 +164,9 @@ Deno.test(
     assertStringIncludes(privacy, "countries other than the one where you live");
     assertStringIncludes(privacy, "honor mandatory local rights");
     assertStringIncludes(privacy, "not directed to children under 13");
+    assertStringIncludes(privacy, "random installation identifier");
+    assertStringIncludes(privacy, "server-issued device identifier");
+    assertStringIncludes(privacy, "prevent an allocation from being spent twice");
     assertStringIncludes(flat(TERMS_TEXT), "You must be at least 13 years old");
   },
 );

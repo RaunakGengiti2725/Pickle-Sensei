@@ -31,11 +31,11 @@ import Reanimated, {
 import { bandColor, color, radius, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
 import {
-  DUPR_ESTIMATE_LABEL,
+  DUPR_ESTIMATED_EYEBROW,
+  DUPR_LABEL,
   duprAccessibilityLabel,
   duprFraction,
   formatDupr,
-  formatTechniqueScore,
 } from '../progress/duprEstimate';
 
 const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
@@ -632,29 +632,37 @@ export function SectionTitle(props: {
 const SCORE_RING_SWEEP_MS = 240;
 
 /** The rating ring. `score` is the 0–10 technique score; the big numeral is
- * its estimated DUPR (D-046) under the `label` (default "EST. DUPR"), with
- * the "/10" reading as the smaller line beneath, and the arc is the DUPR's
- * position between the app's lowest and highest estimate (2.00–6.00) so the
- * picture agrees with the printed number — color and label are never
- * color-only. The arc sweeps in and the number counts up once on mount (the
- * score-reveal moment); reduced motion renders the final state immediately. */
+ * its estimated DUPR (D-046), and the arc is the DUPR's position between the
+ * app's lowest and highest estimate (2.00–8.00) so the picture agrees with
+ * the printed number — color and label are never color-only. Inside the
+ * ring (owner, 2026-09-11): the numeral, the unit `DUPR` beneath it in the
+ * `h2` role and a micro `ESTIMATED` eyebrow under that, ALL white on the
+ * dark surface (ink on chalk) — the unit must be read at a glance, so it is
+ * large and bright rather than a caption. The "/10" line is NOT in the ring;
+ * the page's note says the figure derives from the technique score, and
+ * VoiceOver still hears both figures. The arc sweeps in and the number
+ * counts up once on mount (the score-reveal moment); reduced motion renders
+ * the final state immediately. With enlarged text, the same readout flows
+ * at full width above a progress bar: a fixed circle cannot contain the
+ * scaled labels. Text keeps the system's scaling and is never truncated. */
 export function ScoreRing(props: {
   score: number | null;
   size?: number;
-  label?: string;
   dark?: boolean;
   accent?: string;
 }) {
   const size = props.size ?? 154;
+  const expanded = useWindowDimensions().fontScale > 1.2;
   const stroke = Math.max(8, size * 0.065);
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
   const fraction = props.score === null ? 0 : duprFraction(props.score);
   const accent = props.accent ?? color.volt;
   const fg = props.dark ? color.onDark : color.ink;
+  const eyebrowColor = props.dark ? color.onDark : color.inkSoft;
   const track = props.dark ? color.lineDark : color.line;
   const reduced = useReducedMotion();
-  const animate = !reduced && props.score !== null;
+  const animate = !reduced && !expanded && props.score !== null;
 
   const sweep = useSharedValue(animate ? 0 : fraction);
   useEffect(() => {
@@ -697,74 +705,92 @@ export function ScoreRing(props: {
 
   return (
     <View
+      testID="score-ring"
       accessibilityLabel={
         props.score === null
           ? 'No rating yet'
           : duprAccessibilityLabel(props.score)
       }
       style={{
-        width: size,
-        height: size,
+        width: expanded ? '100%' : size,
+        height: expanded ? undefined : size,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={track}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={accent}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference}`}
-          animatedProps={sweepProps}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
+      {!expanded ? (
+        <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={track}
+            strokeWidth={stroke}
+            fill="none"
+          />
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={accent}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${circumference}`}
+            animatedProps={sweepProps}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        </Svg>
+      ) : null}
       <Text
         style={[
           type.display,
-          { color: fg, fontSize: size * 0.29, lineHeight: size * 0.33 },
+          expanded
+            ? type.h1
+            : { fontSize: size * 0.3, lineHeight: size * 0.33 },
+          { color: fg, textAlign: 'center', maxWidth: '100%' },
         ]}
+        testID="score-ring-dupr"
       >
         {scoreText}
       </Text>
       <Text
-        style={[
-          type.caption,
-          {
-            color: props.dark ? color.onDarkSubtle : color.inkSoft,
-            textAlign: 'center',
-          },
-        ]}
+        style={[type.h2, { color: fg, textAlign: 'center' }]}
+        testID="score-ring-unit"
       >
-        {props.label ?? DUPR_ESTIMATE_LABEL}
+        {DUPR_LABEL}
       </Text>
-      {props.score !== null ? (
-        <Text
-          style={[
-            type.micro,
-            {
-              color: props.dark ? color.onDarkFaint : color.inkSoft,
-              textAlign: 'center',
-              marginTop: 2,
-              fontVariant: ['tabular-nums'],
-            },
-          ]}
-          testID="score-ring-technique-score"
+      <Text
+        style={[
+          type.micro,
+          { color: eyebrowColor, textAlign: 'center', marginTop: 2 },
+        ]}
+        testID="score-ring-eyebrow"
+      >
+        {DUPR_ESTIMATED_EYEBROW}
+      </Text>
+      {expanded ? (
+        <View
+          testID="score-ring-progress"
+          accessible={false}
+          style={{
+            width: '100%',
+            height: 8,
+            marginTop: space.md,
+            borderRadius: radius.pill,
+            backgroundColor: track,
+            overflow: 'hidden',
+          }}
         >
-          {formatTechniqueScore(props.score)}
-        </Text>
+          <View
+            testID="score-ring-progress-fill"
+            style={{
+              width: `${fraction * 100}%`,
+              height: '100%',
+              backgroundColor: accent,
+            }}
+          />
+        </View>
       ) : null}
     </View>
   );

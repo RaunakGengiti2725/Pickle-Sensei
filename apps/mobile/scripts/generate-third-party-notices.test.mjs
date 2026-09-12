@@ -915,6 +915,66 @@ test('host-tool maintenance cannot cover arbitrary lock changes, borrowed integr
   }
 });
 
+test('first-party pod maintenance changes only the reviewed checksum and retains historical artifact binding', () => {
+  const history = receipt.historicalFirstPartyPod;
+  assert.equal(history.kind, 'historical-first-party-pod-maintenance');
+  const lock = readFileSync(join(ROOT, history.input.path), 'utf8');
+  assert.equal(sha256(Buffer.from(lock)), history.input.updatedInputSha256);
+  assert.equal(
+    sha256(Buffer.from(lock.replace(history.pod.after, history.pod.before))),
+    history.input.sha256,
+  );
+  assert.equal(byID(receipt, history.pod.id).specChecksum, history.pod.after);
+  assert.deepEqual(artifactProblems(receipt, candidateArtifact(receipt)), []);
+  const { observed } = syntheticPair(['node_modules/react/index.js']);
+  const fresh = makeArtifactEvidence(receipt, observed, {
+    kind: 'current-build',
+    label: 'synthetic-after-local-pod-maintenance',
+  });
+  assert.equal(
+    fresh.lockedInputsSha256,
+    sha256(Buffer.from(`${JSON.stringify(receipt.inputs, null, 2)}\n`)),
+  );
+});
+
+test('first-party maintenance cannot cover unreviewed locks, podspecs or third-party components', () => {
+  for (const mutate of [
+    data => {
+      delete data.historicalFirstPartyPod;
+    },
+    data => {
+      data.historicalFirstPartyPod.input.updatedInputSha256 = 'a'.repeat(64);
+    },
+    data => {
+      data.historicalFirstPartyPod.pod.id = 'pod:GoogleSignIn';
+    },
+    data => {
+      byID(data, 'pod:PickleNative').specChecksum = 'b'.repeat(40);
+    },
+    data => {
+      data.guards.find(
+        item => item.path === data.historicalFirstPartyPod.podspec.path,
+      ).sha256 = 'c'.repeat(64);
+    },
+    data => {
+      data.guards.find(item => item.path === 'ios/Pods/Manifest.lock').sha256 =
+        'd'.repeat(64);
+    },
+    data => {
+      data.inputs.find(item => item.path === 'ios/Podfile.lock').sha256 =
+        'e'.repeat(64);
+    },
+  ]) {
+    const changed = clone();
+    mutate(changed);
+    assert.ok(
+      artifactProblems(changed, candidateArtifact(changed)).includes(
+        'Artifact dependency lock binding changed',
+      ),
+    );
+  }
+});
+
 test('historical membership cannot be promoted or reused as current-binary evidence', () => {
   const old = candidateArtifact(receipt);
   assert.ok(
