@@ -465,10 +465,10 @@ describe('Home — controls', () => {
     expect(copy).toMatch(/5\s+latest/);
 
     // A scored row's label carries the estimated DUPR and the 0–10 score so
-    // VoiceOver hears the rating without opening it (row 0: 6.0 → 2.92).
+    // VoiceOver hears the rating without opening it (row 0: 6.0 → 3.38).
     const first = pressableByLabel(
       renderer,
-      'Open backhand dink result, Estimated DUPR 2.92, technique score 6.0 out of 10',
+      'Open backhand dink result, Estimated DUPR 3.38, technique score 6.0 out of 10',
     );
     expect(first.props.accessibilityRole).toBe('button');
     await press(first);

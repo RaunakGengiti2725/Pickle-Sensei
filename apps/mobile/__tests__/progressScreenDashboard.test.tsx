@@ -759,7 +759,7 @@ describe('ProgressScreen dashboard', () => {
     );
     const best = findByTestId(renderer, 'technique-stat-best')!;
     expect(best.props.accessibilityLabel).toBe(
-      'BEST DUPR: 4.13 (8.2 /10). Prior period 4.07, trending up',
+      'BEST DUPR: 5.20 (8.2 /10). Prior period 5.10, trending up',
     );
 
     // The 8.2 read strictly beats the pre-window best of 8.1.
@@ -769,14 +769,14 @@ describe('ProgressScreen dashboard', () => {
         findByTestId(renderer, 'personal-best-card')!.props.style,
       ),
     ).toMatchObject({ borderColor: color.lineDark });
-    // Every 8.2 prints as its estimated DUPR 4.13 in the host's numeral role,
+    // Every 8.2 prints as its estimated DUPR 5.20 in the host's numeral role,
     // with the " DUPR" unit nested and "8.2 /10" as the smaller line.
     const duprLabels = renderer.root
       .findAllByType(Text)
       .filter(
         node =>
           Array.isArray(node.props.children) &&
-          node.props.children[0] === '4.13',
+          node.props.children[0] === '5.20',
       );
     expect(
       duprLabels.filter(
@@ -799,11 +799,11 @@ describe('ProgressScreen dashboard', () => {
         .filter(node => node.props.children === '8.2 /10').length,
     ).toBeGreaterThanOrEqual(3);
     expect(text).toContain('NEW PERSONAL BEST');
-    expect(text).toMatch(/Beats your previous best\s+4\.07\s+DUPR/);
+    expect(text).toMatch(/Beats your previous best\s+5\.10\s+DUPR/);
 
     // Insight states the window arithmetic, nothing more — as the change in
-    // estimated DUPR (7.7 → 3.80 vs 8.1 → 4.07).
-    expect(text).toContain('Average DUPR \u22120.27 vs the prior 4 weeks.');
+    // estimated DUPR (7.7 → 4.70 vs 8.1 → 5.10).
+    expect(text).toContain('Average DUPR \u22120.40 vs the prior 4 weeks.');
     act(() => renderer.unmount());
   });
 
@@ -996,9 +996,9 @@ describe('ProgressScreen dashboard', () => {
     expect(
       findByTestId(renderer, 'technique-stat-reps')!.props.accessibilityLabel,
     ).toBe('SCORED REPS: 2. Prior period 1, trending up');
-    // 5.0 → 2.77 in the prior window, 6.5 → 3.00 now.
+    // 5.0 → 3.15 in the prior window, 6.5 → 3.50 now.
     expect(renderedText(renderer)).toContain(
-      'Average DUPR +0.23 vs the prior 4 weeks.',
+      'Average DUPR +0.35 vs the prior 4 weeks.',
     );
     act(() => renderer.unmount());
   });
@@ -1032,9 +1032,9 @@ describe('ProgressScreen dashboard', () => {
 
     expect(findByTestId(renderer, 'practice-set-card')).not.toBeNull();
     expect(text).toContain('THIS SET');
-    expect(text).toContain('+0.53 DUPR in this set');
+    expect(text).toContain('+0.80 DUPR in this set');
     expect(text).toContain(
-      '2 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
+      '2 attempts · best 4.40 DUPR · contact position improved from 48 to 81',
     );
     // Both attempts render as pills, in order, the latest ringed.
     expect(findByTestId(renderer, 'practice-set-attempt-set-1')).not.toBeNull();
@@ -1043,7 +1043,7 @@ describe('ProgressScreen dashboard', () => {
 
     await pressByLabel(
       renderer,
-      'Attempt 1 of 2, Estimated DUPR 3.07, technique score 6.6 out of 10',
+      'Attempt 1 of 2, Estimated DUPR 3.60, technique score 6.6 out of 10',
     );
     expect(mockNavigate).toHaveBeenCalledWith('Result', {
       analysisId: 'set-1',

@@ -396,36 +396,41 @@ files under `Sources/` need `bundle exec pod install` to enter the pod
 target. The OS sheet never appears in TestFlight builds by design; dev
 builds always show it.
 
-## Ratings display: ESTIMATED DUPR first, the /10 beneath (D-046, 2026-09-10)
+## Ratings display: ESTIMATED DUPR first, the /10 beneath (D-046, 2026-09-10; scale ends fixed 2026-09-11)
 
 Every rating a player reads — the analysis `overallScore`, the rank
 `rating`, their averages, bests, deltas and tier bands — is printed as an
-ESTIMATED DUPR. The map is NOT linear (DUPR is bunched in the 3s; 5.0+ is
-the top ~0.7% of rated players, 6.0+ ≈ 190 people): `DUPR_ANCHORS` in
+ESTIMATED DUPR. THE ESTIMATE SPANS DUPR'S FULL 2.0–8.0 SCALE: 0/10 is 2.00
+and a perfect 10/10 is 8.00 (owner, 2026-09-11 — the earlier 6.00 ceiling
+was withdrawn; `DUPR_CEILING === DUPR_SCALE_MAX`). The map is still NOT
+linear (DUPR is bunched in the 3s and sparse at the top): `DUPR_ANCHORS` in
 `src/progress/duprEstimate.ts` tie the scoring engine's band boundaries to
-DUPR's published bands — score 0 → 2.00, 6.5 (checkpoints average the
-red/yellow line) → 3.00, 8.0 (the green line) → 4.00, 9.5 → 5.00, 10 → 6.00
-(the ceiling; never higher) — linear between anchors, two decimals
-(`formatDupr`; 5.8 → 2.89, 7.0 → 3.33, 7.8 → 3.87, 9.0 → 4.67). Differences
+evenly spaced 1.5-DUPR steps — score 0 → 2.00, 6.5 (checkpoints average the
+red/yellow line) → 3.50, 8.0 (the green line) → 5.00, 9.5 → 6.50, 10 → 8.00
+(never higher) — linear between anchors, two decimals (`formatDupr`;
+5.8 → 3.34, 7.0 → 4.00, 7.8 → 4.80, 9.0 → 6.00). Differences
 are ALWAYS `duprDelta(from, to)` / `formatDuprDelta` / `formatDuprDistance`
 = the difference of the two converted endpoints — never a rescaled score
 gap, the map is not linear. `duprFraction` is the fill of a ring/bar (the
-DUPR's position between 2.00 and 6.00); `formatTechniqueScore` prints the
+DUPR's position between 2.00 and 8.00); `formatTechniqueScore` prints the
 "6.4 /10" line; `duprAccessibilityLabel` is VoiceOver's phrase;
 `DUPR_ESTIMATE_NOTE` the disclaimer. `src/progress/DuprReadout.tsx` renders
 the canonical pair — big DUPR + ` DUPR` unit, micro `x.x /10` beneath — in
-the host's numeral role; `ScoreRing` does the same inside the ring (its arc
-is `duprFraction`). Rules: the big number is
+the host's numeral role; `ScoreRing` (its arc is `duprFraction`) is the ONE
+exception to the `/10` line: inside the ring it stacks the numeral, the
+`DUPR` unit (`h2`) and a micro `ESTIMATED` eyebrow, all white, with no
+`/10` (owner, 2026-09-11 — the page's note beneath names the technique
+score and VoiceOver hears both figures). Rules: the big number is
 ALWAYS the DUPR and ALWAYS says DUPR (unit, caption or kicker); the 0–10
-figure is ALWAYS the smaller secondary; surfaces with room carry the
+figure is ALWAYS the smaller secondary wherever it is shown; surfaces with room carry the
 disclaimer (Result score page, rank banner fold-out, rank card, Progress
 footer, Settings); never print a bare `toFixed(1)` score or a "/10"-only
 number again. The DATA never changes — SQLite, sync payloads, the server,
 `computePlayerRank` and the tier thresholds stay on 0–10; convert at render
 only. Checkpoint scores (0–100) are a different quantity and stay as they
 are. The rank tiers keep their 0–10 thresholds, so their DUPR bands read
-Bronze 2.00–2.53 · Silver 2.54–2.76 · Gold 2.77–2.99 · Platinum 3.00–3.66 ·
-Diamond 3.67+ (re-anchoring the ladder to DUPR bands is a separate
+Bronze 2.00–2.80 · Silver 2.81–3.14 · Gold 3.15–3.49 · Platinum 3.50–4.49 ·
+Diamond 4.50+ (re-anchoring the ladder to DUPR bands is a separate
 shared-types + migration + edge decision). DUPR is a third-party trademark:
 the H06 scan bans it in App Store metadata + Info.plist
 (`STORE_ONLY_RULES`) and allows it in-app; if Apple
@@ -914,8 +919,11 @@ nothing flashes light), top row close · segmented progress · "N OF M ·
 LABEL", pinned footer (primary Next with a descriptive label, Back/Done
 links). `GuideShell scroll={false}` gives a page a fixed flex column. Pages,
 each evidence-gated and SKIPPED when its evidence is absent: **Score** (kicker
-`ESTIMATED DUPR · <STROKE>`, the `ScoreRing` — big estimated DUPR, `EST.
-DUPR` caption, `6.4 /10` micro line — then `DUPR_ESTIMATE_NOTE`
+`ESTIMATED DUPR · <STROKE>`, the `ScoreRing` at 220 — the estimated DUPR
+numeral, the unit `DUPR` in the `h2` role and a micro `ESTIMATED` eyebrow
+stacked inside the arc, ALL white, and NO `/10` line in the ring (owner,
+2026-09-11; VoiceOver still hears both figures, the note beneath still
+names the technique score) — then `DUPR_ESTIMATE_NOTE`
 (`result-dupr-note`), ONE `selectInsight` sentence, THIS SET card) → **The problem**
 (with replay evidence the page IS `FormReviewPlayer fill` and NOTHING else —
 no kicker, no h1, no sub line, no "Full screen" link (2026-09-02: the page

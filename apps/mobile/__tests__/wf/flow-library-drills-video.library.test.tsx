@@ -366,10 +366,10 @@ describe('Library flow · Reads tab', () => {
     // The empty state never coexists with rows.
     expect(text).not.toContain('Your measured reads, in one place.');
 
-    // A scored row's label carries its estimated DUPR (7.4 → 3.60) and the
+    // A scored row's label carries its estimated DUPR (7.4 → 4.40) and the
     // 0–10 score; an unread row's label stays the bare stroke.
     const dropLabel =
-      'Open third shot drop result, Estimated DUPR 3.60, technique score 7.4 out of 10';
+      'Open third shot drop result, Estimated DUPR 4.40, technique score 7.4 out of 10';
     const dropRow = oneByLabel(renderer, dropLabel);
     expect(dropRow.props.accessibilityRole).toBe('button');
     await pressByLabel(renderer, dropLabel);
