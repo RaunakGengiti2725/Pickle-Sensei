@@ -642,7 +642,9 @@ const SCORE_RING_SWEEP_MS = 240;
  * the page's note says the figure derives from the technique score, and
  * VoiceOver still hears both figures. The arc sweeps in and the number
  * counts up once on mount (the score-reveal moment); reduced motion renders
- * the final state immediately. */
+ * the final state immediately. With enlarged text, the same readout flows
+ * at full width above a progress bar: a fixed circle cannot contain the
+ * scaled labels. Text keeps the system's scaling and is never truncated. */
 export function ScoreRing(props: {
   score: number | null;
   size?: number;
@@ -650,6 +652,7 @@ export function ScoreRing(props: {
   accent?: string;
 }) {
   const size = props.size ?? 154;
+  const expanded = useWindowDimensions().fontScale > 1.2;
   const stroke = Math.max(8, size * 0.065);
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
@@ -659,7 +662,7 @@ export function ScoreRing(props: {
   const eyebrowColor = props.dark ? color.onDark : color.inkSoft;
   const track = props.dark ? color.lineDark : color.line;
   const reduced = useReducedMotion();
-  const animate = !reduced && props.score !== null;
+  const animate = !reduced && !expanded && props.score !== null;
 
   const sweep = useSharedValue(animate ? 0 : fraction);
   useEffect(() => {
@@ -702,44 +705,50 @@ export function ScoreRing(props: {
 
   return (
     <View
+      testID="score-ring"
       accessibilityLabel={
         props.score === null
           ? 'No rating yet'
           : duprAccessibilityLabel(props.score)
       }
       style={{
-        width: size,
-        height: size,
+        width: expanded ? '100%' : size,
+        height: expanded ? undefined : size,
         alignItems: 'center',
         justifyContent: 'center',
       }}
     >
-      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={track}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <AnimatedCircle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          stroke={accent}
-          strokeWidth={stroke}
-          fill="none"
-          strokeLinecap="round"
-          strokeDasharray={`${circumference}`}
-          animatedProps={sweepProps}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
+      {!expanded ? (
+        <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={track}
+            strokeWidth={stroke}
+            fill="none"
+          />
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={accent}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${circumference}`}
+            animatedProps={sweepProps}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+        </Svg>
+      ) : null}
       <Text
         style={[
           type.display,
-          { color: fg, fontSize: size * 0.3, lineHeight: size * 0.33 },
+          expanded
+            ? type.h1
+            : { fontSize: size * 0.3, lineHeight: size * 0.33 },
+          { color: fg, textAlign: 'center', maxWidth: '100%' },
         ]}
         testID="score-ring-dupr"
       >
@@ -760,6 +769,29 @@ export function ScoreRing(props: {
       >
         {DUPR_ESTIMATED_EYEBROW}
       </Text>
+      {expanded ? (
+        <View
+          testID="score-ring-progress"
+          accessible={false}
+          style={{
+            width: '100%',
+            height: 8,
+            marginTop: space.md,
+            borderRadius: radius.pill,
+            backgroundColor: track,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            testID="score-ring-progress-fill"
+            style={{
+              width: `${fraction * 100}%`,
+              height: '100%',
+              backgroundColor: accent,
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

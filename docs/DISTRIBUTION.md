@@ -86,14 +86,14 @@ When a refusal fires, the owner commits a new coherent identity (manifest +
 the gates from the start against that commit. No lane, script or check
 increments, bumps or picks a version or build number.
 
-App Store Connect was inspected again on 2026-09-11: builds 1, 2 and 3 of
-version 1.0 are valid uploads, build 3 is the newest, and no further page of
-builds was found. The owner selected **1.0 (4)**, greater than 3, for the next candidate. The
-manifest, iOS project and Android version code now agree on build 4; fastlane
-uploads that committed identity only after its verification gates pass. It
-does not assign or increment build numbers. Build 4 has not been uploaded by
-the preparation change. Re-read App Store Connect immediately before upload
-so a concurrent upload cannot reuse the selected number.
+App Store Connect was inspected again on 2026-09-12: builds 1 through 4 of
+version 1.0 are valid uploads, build 4 is selected, and no further page of
+builds was found. The owner authorized fixing the large-text score readout
+and replacing the build. The next candidate is **1.0 (5)**. The manifest,
+iOS project and Android version code agree on build 5; fastlane uploads
+that committed identity only after verification. It does not assign or
+increment build numbers. Re-read App Store Connect immediately before
+upload so a concurrent upload cannot reuse the selected number.
 
 ## Signing model
 

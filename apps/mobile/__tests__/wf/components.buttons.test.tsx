@@ -963,6 +963,9 @@ describe('Restrained visual primitives', () => {
   });
 
   it('uses a solid score arc and stacks the estimated DUPR, its unit and ESTIMATED in white', () => {
+    jest
+      .spyOn(require('react-native'), 'useWindowDimensions')
+      .mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 1 });
     const renderer = render(<ScoreRing score={7.1} dark />);
     expect(
       renderer.root.findAll(node => node.props.id === 'scoreGradient'),
@@ -1016,6 +1019,156 @@ describe('Restrained visual primitives', () => {
     expect(sizeOf(unit)).toBeGreaterThan(type.caption.fontSize);
     expect(sizeOf(unit)).toBeLessThan(sizeOf(numeral) / 2);
     expect(sizeOf(eyebrow)).toBeLessThan(sizeOf(unit));
+    act(() => renderer.unmount());
+  });
+
+  it.each([154, 220])('keeps the normal score ring at size %s', size => {
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1.2,
+    });
+    const renderer = render(<ScoreRing score={10} size={size} />);
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({ testID: 'score-ring' }).props.style,
+      ),
+    ).toMatchObject({ width: size, height: size });
+    expect(
+      renderer.root.findAllByProps({ testID: 'score-ring-progress' }),
+    ).toHaveLength(0);
+    act(() => renderer.unmount());
+  });
+
+  it.each([1.21, 1.3, 2, 3.571])(
+    'lets the full rating flow without a fixed height at font scale %s',
+    fontScale => {
+      jest
+        .spyOn(require('react-native'), 'useWindowDimensions')
+        .mockReturnValue({
+          width: 320,
+          height: 568,
+          scale: 2,
+          fontScale,
+        });
+      const renderer = render(
+        <View style={{ width: 272 }}>
+          <ScoreRing score={10} size={220} dark />
+        </View>,
+      );
+      const frame = StyleSheet.flatten(
+        renderer.root.findByProps({ testID: 'score-ring' }).props.style,
+      );
+      expect(frame.width).toBe('100%');
+      expect(frame.height).toBeUndefined();
+      expect(frame.maxHeight).toBeUndefined();
+      expect(frame.overflow).not.toBe('hidden');
+      expect(
+        renderer.root.findAllByType(Text).map(node => node.props.children),
+      ).toEqual(['8.00', 'DUPR', 'ESTIMATED']);
+      for (const text of renderer.root.findAllByType(Text)) {
+        expect(text.props.allowFontScaling).not.toBe(false);
+        expect(text.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(text.props.numberOfLines).toBeUndefined();
+        expect(text.props.adjustsFontSizeToFit).not.toBe(true);
+      }
+      expect(
+        StyleSheet.flatten(
+          renderer.root.findByProps({ testID: 'score-ring-dupr' }).props.style,
+        ),
+      ).toMatchObject({ ...type.h1, color: color.onDark });
+      expect(
+        StyleSheet.flatten(
+          renderer.root.findByProps({ testID: 'score-ring-progress-fill' })
+            .props.style,
+        ).width,
+      ).toBe('100%');
+      expect(
+        renderer.root.findByProps({ testID: 'score-ring' }).props
+          .accessibilityLabel,
+      ).toBe('Estimated DUPR 8.00, technique score 10.0 out of 10');
+      act(() => renderer.unmount());
+    },
+  );
+
+  it.each([null, 0, 6.5])(
+    'preserves empty and partial rating semantics in the expanded readout: %s',
+    score => {
+      jest
+        .spyOn(require('react-native'), 'useWindowDimensions')
+        .mockReturnValue({
+          width: 375,
+          height: 667,
+          scale: 2,
+          fontScale: 3.571,
+        });
+      const renderer = render(<ScoreRing score={score} />);
+      expect(
+        renderer.root.findByProps({ testID: 'score-ring-dupr' }).props.children,
+      ).toBe(score === null ? '—' : score === 0 ? '2.00' : '3.50');
+      expect(
+        StyleSheet.flatten(
+          renderer.root.findByProps({ testID: 'score-ring-progress-fill' })
+            .props.style,
+        ).width,
+      ).toBe(score === 6.5 ? '25%' : '0%');
+      expect(
+        StyleSheet.flatten(
+          renderer.root.findByProps({ testID: 'score-ring-unit' }).props.style,
+        ).color,
+      ).toBe(color.ink);
+      if (score === null)
+        expect(
+          renderer.root.findByProps({ testID: 'score-ring' }).props
+            .accessibilityLabel,
+        ).toBe('No rating yet');
+      act(() => renderer.unmount());
+    },
+  );
+
+  it('responds when system text size changes while the rating is mounted', () => {
+    const dimensions = jest.spyOn(
+      require('react-native'),
+      'useWindowDimensions',
+    );
+    dimensions.mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1,
+    });
+    const renderer = render(<ScoreRing score={10} size={220} dark />);
+    dimensions.mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 3.571,
+    });
+    act(() => renderer.update(<ScoreRing score={10} size={220} dark />));
+    expect(
+      renderer.root.findByProps({ testID: 'score-ring-dupr' }).props.children,
+    ).toBe('8.00');
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({ testID: 'score-ring' }).props.style,
+      ).height,
+    ).toBeUndefined();
+    dimensions.mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 1,
+    });
+    act(() => renderer.update(<ScoreRing score={10} size={220} dark />));
+    expect(
+      renderer.root.findAllByProps({ testID: 'score-ring-progress' }),
+    ).toHaveLength(0);
+    expect(
+      StyleSheet.flatten(
+        renderer.root.findByProps({ testID: 'score-ring' }).props.style,
+      ).height,
+    ).toBe(220);
     act(() => renderer.unmount());
   });
 

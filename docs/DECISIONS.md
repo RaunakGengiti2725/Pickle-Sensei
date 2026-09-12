@@ -211,3 +211,18 @@ Why. Owner decision: the number is printed on DUPR's scale, and that scale ends 
 Decision. `ScoreRing` (`apps/mobile/src/design/components.tsx`, rendered at 220 on the Result guide's SCORE page) stacks three white lines inside the arc: the estimated-DUPR numeral (`type.display` at `size × 0.30`), the unit `DUPR` in the `type.h2` role directly beneath it, and a `type.micro` `ESTIMATED` eyebrow (`DUPR_ESTIMATED_EYEBROW`) under that. The `/10` technique-score line is no longer drawn inside the ring; the `DUPR_ESTIMATE_NOTE` under the ring still states that the figure derives from the technique score, and `duprAccessibilityLabel` still reads both figures to VoiceOver. Every other D-046 surface keeps its `/10` secondary line. Pinned by `__tests__/wf/components.buttons.test.tsx` and `__tests__/resultGuide.test.tsx`.
 
 Why. Owner direction, iterated the same day: the first pass (a larger volt numeral) was too loud; the owner wants the number white and somewhat smaller, the word DUPR clearly readable beneath it — larger than a caption, smaller than the number — and a small "estimated" qualifier, with the `/10` gone from the ring so a single figure is read. Reversal is the previous `ScoreRing` body in git history.
+
+## 2026-09-12 — Build 5: readable score results at accessibility text sizes
+
+The owner authorized correcting the large-text score-ring issue and replacing
+build 4 in App Store Connect. Build 5 preserves the circle and its three-line
+readout at normal text sizes. Above font scale 1.2, the numeral uses the canonical
+h1 role, the DUPR unit keeps h2 and ESTIMATED keeps micro, all with system text
+scaling. The readout flows at full available width and natural height above a
+progress bar using the same estimate fraction. No text is truncated or capped;
+the technique-score accessibility label and estimate disclaimer stay intact.
+The expanded readout shows its final value immediately. This supersedes the
+fixed-circle requirement only for enlarged text. No scoring, billing, privacy
+or backend behavior changes. The authorized release action is uploading and
+selecting the verified successor build; screenshots and App Review submission
+remain outside this change.
