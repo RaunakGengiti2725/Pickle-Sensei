@@ -3,6 +3,9 @@ name: Mac Smoke Test
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   mac-test:
     runs-on: [self-hosted, macOS, ARM64]
