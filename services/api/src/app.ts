@@ -21,6 +21,11 @@ import {
   DEFAULT_RATE_LIMIT,
   type RateLimitConfig,
 } from "./plugins/rateLimitPlugin.js";
+import {
+  acceptableRequestId,
+  registerSecurityHeaders,
+  REQUEST_ID_HEADER,
+} from "./plugins/securityHeadersPlugin.js";
 import { buildObjectStore, type IObjectStore } from "./modules/media/objectStore.js";
 import { registerCatalogRoutes } from "./modules/catalog/routes.js";
 import { registerCatalogExtraRoutes } from "./modules/catalog/extraRoutes.js";
@@ -158,8 +163,13 @@ export interface BuildAppOptions {
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: config.env !== "test",
-    genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
+    genReqId: (req) => {
+      const incoming = req.headers[REQUEST_ID_HEADER];
+      return acceptableRequestId(incoming) ? incoming : randomUUID();
+    },
   });
+
+  registerSecurityHeaders(app);
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
   const queue =
@@ -249,7 +259,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   });
 
   app.addHook("onSend", async (request, reply) => {
-    reply.header("x-request-id", request.id);
+    reply.header(REQUEST_ID_HEADER, request.id);
   });
   app.addHook("onClose", async () => {
     await pool?.end();
