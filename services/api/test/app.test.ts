@@ -71,4 +71,49 @@ describe("API skeleton (no database)", () => {
     });
     expect(res.headers["x-request-id"]).toBe("req-abc-123");
   });
+
+  it("replaces a malformed client x-request-id instead of echoing it", async () => {
+    for (const forged of [
+      "short",
+      "x".repeat(65),
+      'evil"<script>alert(1)</script>',
+      "bearer token-like=",
+      "has space",
+    ]) {
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/health",
+        headers: { "x-request-id": forged },
+      });
+      expect(res.statusCode).toBe(200);
+      const echoed = res.headers["x-request-id"];
+      expect(echoed).not.toBe(forged);
+      expect(echoed).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    }
+  });
+
+  it("hardens every response for browsers (success, 4xx and 5xx alike)", async () => {
+    const expected = {
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+      "cache-control": "no-store",
+      "strict-transport-security": "max-age=63072000; includeSubDomains",
+    };
+    const responses = await Promise.all([
+      app.inject({ method: "GET", url: "/v1/health" }),
+      app.inject({ method: "GET", url: "/v1/openapi.json" }),
+      app.inject({ method: "GET", url: "/v1/me" }),
+      app.inject({ method: "GET", url: "/v1/catalog/shot-types" }),
+      app.inject({ method: "GET", url: "/v1/does-not-exist" }),
+      app.inject({ method: "GET", url: "/v1/shots/not-a-uuid" }),
+    ]);
+    expect(responses.map((res) => res.statusCode)).toEqual([200, 200, 401, 503, 404, 400]);
+    for (const res of responses) {
+      for (const [name, value] of Object.entries(expected)) {
+        expect(res.headers[name], `${res.statusCode} ${name}`).toBe(value);
+      }
+    }
+  });
 });
