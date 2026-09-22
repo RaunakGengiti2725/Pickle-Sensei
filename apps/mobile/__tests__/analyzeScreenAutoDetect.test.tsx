@@ -573,7 +573,9 @@ describe('W03 same-capture confirmation screen', () => {
       expect(renderer.root.findAllByType(TechniqueIntentPicker)).toHaveLength(
         1,
       );
-      expect(JSON.stringify(renderer.toJSON())).toContain('same saved capture');
+      expect(JSON.stringify(renderer.toJSON())).toContain(
+        'This saved capture must be verified',
+      );
       expect(
         renderer.root
           .findAllByType(Button)
@@ -673,7 +675,7 @@ describe('strokeIntentPresentation', () => {
     );
     expect(presentation?.title).toBe('Auto-detected: OVERHEAD');
     expect(presentation?.showResult).toBe(true);
-    expect(presentation?.body).toContain('stored as a prediction');
+    expect(presentation?.body).toContain('full technique analysis ran');
   });
 
   it('surfaces a declared-vs-predicted disagreement without overriding the declaration', () => {

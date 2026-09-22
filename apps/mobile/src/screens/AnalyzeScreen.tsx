@@ -14,7 +14,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -26,11 +25,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, PressableScale, ScreenHeader } from '../design/components';
 import { Icon, type IconName } from '../design/icons';
-import {
-  MascotMoment,
-  MascotStage,
-  type MascotPose,
-} from '../design/MascotMoment';
+import { MascotStage, type MascotPose } from '../design/MascotMoment';
 import { color, radius, space, type } from '../design/tokens';
 import {
   cancelCameraOperation,
@@ -250,7 +245,7 @@ export const READINESS_COPY: Record<CameraReadinessState, string> = {
 
 const UNKNOWN_REASON_COPY: Record<string, string> = {
   validated_classifier_unavailable:
-    'A validated pickleball stroke classifier is not installed in this build. The real clip is saved, but no stroke name or score was invented.',
+    'No validated stroke classifier is installed in this build. The clip is saved; no stroke name or score was invented.',
   no_stroke_detected:
     'The camera did not find a complete stroke window. This did not use a rating.',
   unsupported_stroke:
@@ -408,22 +403,21 @@ export const ANALYZE_STEPS: ReadonlyArray<{
     index: '02',
     icon: 'camera',
     title: 'Tap record to start',
-    detail:
-      'Tap the record button, then walk out and line your body up with the outline — the skeleton locks on as soon as you are in view.',
+    detail: 'Tap record, then walk out and line up with the outline.',
   },
   {
     index: '03',
     icon: 'stroke',
     title: 'Set up until it reads Ready',
     detail:
-      'Big on-screen copy tells you to step in, move closer or set your feet — readable from the court. A swing counts even before it says Ready.',
+      'On-screen cues tell you to step in, move closer or set your feet. A swing counts even before it says Ready.',
   },
   {
     index: '04',
     icon: 'court',
     title: 'Make one natural stroke',
     detail:
-      'Your swing is captured automatically and ends the recording by itself — two seconds before, 1.5 after. Missed? Tap stop and the strongest swing in the last 15 seconds is analyzed.',
+      'The swing ends the recording by itself. Missed? Tap stop to analyze the strongest swing in the last 15 seconds.',
   },
 ];
 
@@ -572,8 +566,8 @@ export function strokeIntentPresentation(
           : 'Confirm the technique for this capture.',
       body:
         record.confirmationReason === 'family_only'
-          ? 'A swing family cannot choose between a dink, drive, or volley. Choose the exact technique for this same saved capture. No score was created and this did not use a rating.'
-          : 'An exact technique could not be established for scoring. Choose the technique you intended for this same saved capture. The original prediction stays recorded separately; this did not use a rating.',
+          ? 'Only the swing family was detected. Choose the exact technique for this saved capture. No score was created and this did not use a rating.'
+          : 'No exact technique could be established. Choose the technique you intended for this saved capture. No score was created and this did not use a rating.',
       showResult: false,
     };
   }
@@ -584,10 +578,9 @@ export function strokeIntentPresentation(
         tone: 'warn',
         title: 'We couldn’t identify this stroke — result withheld.',
         body:
-          'The classifier read the motion but would not commit to a stroke, ' +
-          'so no label or score was invented and this did not use a rating. ' +
-          'Re-record with your full body and paddle side clearly in frame, ' +
-          'or declare the technique to analyze this capture.',
+          'The classifier would not commit to a stroke, so no label or score ' +
+          'was invented and this did not use a rating. Re-record with your ' +
+          'full body and paddle side in frame, or declare the technique.',
         showResult: hasResult,
       };
     case 'predicted_family': {
@@ -597,11 +590,10 @@ export function strokeIntentPresentation(
         tone: 'good',
         title: `Auto-detected: ${side} (family)`,
         body:
-          `The camera committed to the ${side.toLowerCase()} swing family, ` +
-          'not to an exact stroke — but this attempt couldn’t be measured ' +
-          'cleanly enough to score, so no score was invented and this did ' +
-          'not use a rating. Re-record with your full body in frame, or ' +
-          'declare the technique for a stroke-specific read.',
+          `Only the ${side.toLowerCase()} swing family was read, not an ` +
+          'exact stroke, so no score was created and this did not use a ' +
+          'rating. Re-record with your full body in frame, or declare the ' +
+          'technique.',
         showResult: hasResult,
       };
     }
@@ -614,10 +606,7 @@ export function strokeIntentPresentation(
         eyebrow: 'AUTO-DETECTED',
         tone: 'good',
         title: `Auto-detected: ${label}`,
-        body:
-          'The classifier committed to this exact stroke, and the full ' +
-          'technique analysis ran on it. The prediction is stored as a ' +
-          'prediction — separate from anything you declare, never rewritten.',
+        body: 'The full technique analysis ran on this stroke.',
         showResult: hasResult,
       };
     }
@@ -629,9 +618,8 @@ export function strokeIntentPresentation(
         tone: 'warn',
         title: `You declared ${declared} — the camera read ${intent.disagreement.predictedLabel}.`,
         body:
-          `Your declaration was kept: scoring and coaching targets ran on ` +
-          `${declared}. The classifier’s different read is recorded beside ` +
-          'it — neither ever silently overwrites the other.',
+          `Your declaration was kept: scoring and coaching ran on ${declared}. ` +
+          'The camera’s read is recorded beside it.',
         showResult: hasResult,
       };
     }
@@ -651,8 +639,8 @@ export function importedPoseExtractionFailureMessage(error: unknown): string {
       : '';
   if (code === 'camera.import_too_long') {
     return (
-      'This video is too long to analyze. Trim it to the single stroke — ' +
-      'a few seconds around the swing — and import it again.'
+      'This video is too long to analyze. Trim it to a few seconds around ' +
+      'one swing and import it again.'
     );
   }
   if (code === 'camera.import_no_person') {
@@ -700,10 +688,7 @@ function clipTitle(clip: CapturedClip) {
 
 function clipExplanation(clip: CapturedClip) {
   if (clip.recognition.status === 'recognized') {
-    return (
-      'Recognized by the on-device camera. Get your score to see the full ' +
-      'technique read.'
-    );
+    return 'Recognized by the on-device camera.';
   }
   return (
     UNKNOWN_REASON_COPY[clip.recognition.reason] ??
@@ -742,7 +727,6 @@ export function AnalyzeScreen({
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const route = useRoute<RouteProp<RootStackParams, 'Analyze'>>();
-  const accessibleLayout = useWindowDimensions().fontScale > 1.3;
   const source = savedOriginalAnalysis
     ? savedOriginalAnalysis.clip.captureMode === 'imported_video'
       ? 'library'
@@ -838,7 +822,7 @@ export function AnalyzeScreen({
         original,
         canStartAnotherClip: false,
         message:
-          'Your original clip and analysis settings are saved. Check the saved analysis before choosing whether to retry. Opening this screen does not start a rating.',
+          'Your original clip and analysis settings are saved. Check the saved analysis before retrying; opening this screen does not start a rating.',
       };
     }
     if (!savedTechniqueConfirmation)
@@ -847,8 +831,7 @@ export function AnalyzeScreen({
             kind: 'error',
             stage: 'analysis',
             recovery: 'review_saved',
-            message:
-              'Open this saved capture through its verified library loader.',
+            message: 'Open this saved capture from Library.',
           }
         : { kind: 'ready' };
     const saved = savedTechniqueConfirmation;
@@ -1452,17 +1435,17 @@ export function AnalyzeScreen({
           kind: 'error',
           stage: 'analysis',
           recovery: 'retry',
-          message: `${verdict} This clip could not be measured, so nothing was rated and no rating was used. Record another clip with your whole body in frame and swing once.`,
+          message: `${verdict} This clip could not be measured and no rating was used. Record another clip with your whole body in frame.`,
         });
         return;
       }
       const recoveryCopy = paywallRequired
-        ? 'The rating service requires an upgrade before another rating can start. This saved analysis has not been replaced.'
+        ? 'An upgrade is required before another rating can start. This saved analysis has not been replaced.'
         : recovery === 'retry_saved'
-          ? 'The clip and original analysis settings are saved. Retry this saved analysis without recording or importing again.'
+          ? 'The clip and original analysis settings are saved; no new recording is needed.'
           : recovery === 'review_saved'
-            ? 'This saved analysis has no complete original file or model proof. Keep the clip in Library; its missing proof will not be recreated from current settings.'
-            : 'The saved analysis or its rating hold is still uncertain. Check only reconciles this original analysis; it does not start another rating.';
+            ? 'This saved analysis has no complete original file or model proof, so it cannot be retried. The clip stays in Library.'
+            : 'Whether this saved analysis used a rating is still uncertain. Checking does not start another rating.';
       const cause = paywallRequired ? null : reason?.trim() || null;
       setPhase({
         kind: 'error',
@@ -1611,7 +1594,7 @@ export function AnalyzeScreen({
             recovery: 'reconcile_saved',
             canStartAnotherClip: false,
             message:
-              'This saved analysis could not be verified. Check the original again when its storage and rating service are available.',
+              'This saved analysis could not be verified right now. Check it again later.',
           });
       } finally {
         const wasCurrent = current();
@@ -1987,7 +1970,7 @@ export function AnalyzeScreen({
             recovery: 'reconcile_saved',
             original,
             message:
-              'This saved analysis could not be verified. Check the original again when its storage and rating service are available.',
+              'This saved analysis could not be verified right now. Check it again later.',
           });
           return;
         }
@@ -2291,8 +2274,8 @@ export function AnalyzeScreen({
         />
         <View style={styles.stateBody}>
           <Text accessibilityRole="alert" style={[type.body, styles.stateCopy]}>
-            This capture is no longer open in its bound account and service.
-            Reopen it from Library. The saved clip has not been changed.
+            This capture is no longer open in this account. Reopen it from
+            Library; the saved clip is unchanged.
           </Text>
         </View>
       </SafeAreaView>
@@ -2340,11 +2323,11 @@ export function AnalyzeScreen({
             <Text style={[type.h2, styles.workingTitle]}>{phase.message}</Text>
             <Text style={[type.body, styles.workingCopy]}>
               {source === 'library'
-                ? 'The selected file is copied into protected app storage before anything else happens.'
+                ? 'The file is copied into protected app storage first.'
                 : cameraRun.current?.stage === 'captured' ||
                     cameraRun.current?.stage === 'saving'
-                  ? 'Your swing is captured. Keep the app open while your private clip is prepared.'
-                  : 'Tap record, take your spot, and swing once. The camera saves the swing automatically.'}
+                  ? 'Keep the app open while your clip is saved.'
+                  : 'Tap record, take your spot, and swing once.'}
             </Text>
             {source !== 'library' ? (
               <CaptureGuidancePanel envelope={captureEnvelope} />
@@ -2508,14 +2491,15 @@ export function AnalyzeScreen({
           </Text>
           <Text style={[type.body, styles.stateCopy]}>
             {held
-              ? 'The existing operation and original selection for this same saved capture must be verified before continuing. Your clip is retained; no replacement operation will be started while its outcome or rating hold is uncertain.'
+              ? 'This saved capture must be verified before continuing. Your clip is kept; no new rating starts while its rating hold is uncertain.'
               : presentation.body}
           </Text>
-          <Text style={[type.caption, styles.scoreCopy]}>
-            {readOnly
-              ? 'This saved proof is read-only. Its release or original selection could not be established safely.'
-              : 'The original rating hold must be confirmed released before the selected technique can start its own rating.'}
-          </Text>
+          {readOnly ? (
+            <Text style={[type.caption, styles.scoreCopy]}>
+              This saved proof is read-only; its rating hold could not be
+              established.
+            </Text>
+          ) : null}
           <CaptureEvidenceCard clip={phase.clip} />
           <View style={styles.scoreSection}>
             <Text style={[type.h3, { color: color.ink }]}>
@@ -2715,8 +2699,8 @@ export function AnalyzeScreen({
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
                 Your score is saved. You’ve used{' '}
-                {freeAnalysesPhrase(freeRatingsLimit)} — upgrade to Pickle
-                Sensei Pro to keep rating every swing.
+                {freeAnalysesPhrase(freeRatingsLimit)}. Upgrade to Pro to keep
+                rating swings.
               </Text>
               <View style={styles.freeLimitActions}>
                 <Button
@@ -2811,16 +2795,6 @@ export function AnalyzeScreen({
             {clipExplanation(clip)}
           </Text>
 
-          <MascotMoment
-            pose={ANALYSIS_MASCOT_POSES.outcome}
-            tone={clip.recognition.status === 'recognized' ? 'court' : 'warn'}
-            eyebrow="CAPTURE IN HAND"
-            caption="Review the evidence, then choose how you want this swing analyzed."
-            accessibilityLabel="Capture review guidance"
-            testID="analysis-mascot-saved"
-            style={styles.savedMascot}
-          />
-
           <CaptureEvidenceCard clip={clip} />
 
           {clipSupportsScoring(clip) ? (
@@ -2829,9 +2803,8 @@ export function AnalyzeScreen({
                 Which stroke was this?
               </Text>
               <Text style={[type.caption, styles.scoreCopy]}>
-                Your declaration selects the coaching targets. It is stored as
-                your statement — separate from any model prediction — and the
-                analyzer will say if what it measured disagrees.
+                Your declaration sets the coaching targets; the analyzer will
+                say if what it measured disagrees.
               </Text>
               <StrokeDeclaration
                 value={declaredStroke}
@@ -2848,10 +2821,8 @@ export function AnalyzeScreen({
               {declaredStroke === null &&
               canAutoScoreWithoutDeclaration(clip, techniqueIntent) ? (
                 <Text style={[type.caption, styles.scoreCopy]}>
-                  Auto Detect is armed: analyze without declaring and the
-                  classifier commits only to what it can defend — usually the
-                  swing family, with an honest “couldn’t classify” otherwise.
-                  Declaring a technique instead runs its exact coaching targets.
+                  Auto Detect is armed: the read may stop at the swing family.
+                  Declare a technique for its exact coaching targets.
                 </Text>
               ) : null}
               {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (
@@ -2974,28 +2945,9 @@ export function AnalyzeScreen({
         showsVerticalScrollIndicator={false}
         testID="analyze-setup-content"
       >
-        <Text style={[type.micro, { color: color.volt }]}>
-          AUTOMATIC CAPTURE
-        </Text>
         <Text style={[type.hero, styles.hero]}>
           Tap record.{`\n`}Swing once.
         </Text>
-        <Text style={[type.body, styles.heroCopy]}>
-          Prop the phone side-on at waist height. Tap record, match the outline
-          and swing naturally — your stroke is captured by itself, or tap stop
-          to analyze what you have.
-        </Text>
-
-        <MascotMoment
-          dark
-          pose={ANALYSIS_MASCOT_POSES.ready}
-          tone="volt"
-          eyebrow="YOUR COURT-SIDE COACH"
-          caption="Choose a technique, frame one natural swing, and Sensei handles the read."
-          accessibilityLabel="Camera setup guidance"
-          testID="analysis-mascot-ready"
-          style={styles.readyMascot}
-        />
 
         <Text style={[type.micro, styles.declareEyebrow]}>
           WHAT ARE YOU WORKING ON?
@@ -3049,15 +3001,8 @@ export function AnalyzeScreen({
           <View style={styles.noteRow}>
             <Icon name="shield" color={color.onDarkMuted} size={18} />
             <Text style={[type.caption, styles.noteCopy]}>
-              Camera processing and clip storage stay on this device unless you
-              explicitly enable cloud video sync.
-            </Text>
-          </View>
-          <View style={styles.noteRow}>
-            <Icon name="stroke" color={color.onDarkMuted} size={18} />
-            <Text style={[type.caption, styles.noteCopy]}>
-              You’ll see your exoskeleton and a light motion heat map live, then
-              a frame-by-frame form review after the swing.
+              Camera processing and clips stay on this device unless you enable
+              cloud video sync.
             </Text>
           </View>
         </View>
@@ -3068,18 +3013,8 @@ export function AnalyzeScreen({
             style={styles.offlineCard}
           />
         ) : null}
-        {accessibleLayout ? (
-          <Text style={[type.caption, styles.footerHint]}>
-            Camera opens first. You control record.
-          </Text>
-        ) : null}
       </ScrollView>
       <View style={styles.footer} testID="analyze-camera-actions">
-        {accessibleLayout ? null : (
-          <Text style={[type.caption, styles.footerHint]}>
-            Camera opens first. You control record.
-          </Text>
-        )}
         <Button
           label="Open automatic camera"
           largeTextLabel="Open camera"
@@ -3159,9 +3094,7 @@ const styles = StyleSheet.create({
     paddingTop: space.lg,
     paddingBottom: space.xl,
   },
-  hero: { color: color.onDark, marginTop: space.sm },
-  heroCopy: { color: color.onDarkSubtle, marginTop: space.sm, maxWidth: 340 },
-  readyMascot: { marginTop: space.xl },
+  hero: { color: color.onDark },
   preview: {
     height: PREVIEW_HEIGHT,
     marginTop: space.xl,
@@ -3268,7 +3201,6 @@ const styles = StyleSheet.create({
     borderTopColor: color.lineDark,
     backgroundColor: color.surfaceDark,
   },
-  footerHint: { color: color.onDarkSubtle, textAlign: 'center' },
   workingBody: {
     flex: 1,
     alignItems: 'center',
@@ -3325,6 +3257,5 @@ const styles = StyleSheet.create({
   },
   savedTitle: { color: color.ink, marginTop: space.lg },
   savedCopy: { color: color.inkSoft, marginTop: space.md, maxWidth: 370 },
-  savedMascot: { marginTop: space.lg },
   savedActions: { gap: 10, marginTop: space.xl },
 });

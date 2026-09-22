@@ -485,7 +485,7 @@ describe('capture feedback stays on the first completed swing', () => {
     emit(readinessEvent('ready', 0.93));
     emit(strokeDetectedEvent(0.86));
     emit(processingEvent());
-    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE');
+    expect(textOf(renderer)).toContain('Tap record.');
     expect(textOf(renderer)).not.toContain('Saving the private clip');
     act(() => renderer.unmount());
   });
@@ -576,7 +576,7 @@ describe('first attempt — tap-declared full flow to a real Result', () => {
   it('launch → tap declare → permission → guidance → lock → Ready → stroke → auto trigger → clip → analysis → Result with real scored content', async () => {
     const renderer = await renderScreen();
     // Launch surface is the ready phase with the declaration picker.
-    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE');
+    expect(textOf(renderer)).toContain('Tap record.');
 
     // TAP path: the player declares the technique on the real chip grid.
     pressByLabel(renderer, 'Forehand Drive');
@@ -808,7 +808,7 @@ describe('interrupted and cancelled attempts', () => {
     emit(readinessEvent('no_person', 0));
     capture.reject(userCancel());
     await flush();
-    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE'); // back to ready
+    expect(textOf(renderer)).toContain('Tap record.'); // back to ready
     expect(activeDb.calls).toHaveLength(0);
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     await act(async () => renderer.unmount());
@@ -916,7 +916,7 @@ describe('interrupted and cancelled attempts', () => {
       setActiveDataOwner('33333333-3333-4333-8333-333333333333'),
     );
     // The reactive epoch guard hides the old capture before its await settles.
-    expect(textOf(renderer)).toContain('no longer open in its bound account');
+    expect(textOf(renderer)).toContain('no longer open in this account');
     capture.resolve(guidedClip('previous-owner').clip);
     await flush();
 
@@ -1094,7 +1094,7 @@ describe('camera interruption, permission denial, low storage, network loss', ()
     expect(copy).toContain(
       'The rating service could not be reached. Your capture is saved and can be scored later.',
     );
-    expect(copy).toContain('Check only reconciles this original analysis');
+    expect(copy).toContain('Checking does not start another rating');
     expect(copy).not.toMatch(/Nothing was rated|Upgrade to Pro/);
     // Only the policy read was attempted: no permit was reserved on a
     // service that cannot authorize the run, and nothing was scored.
