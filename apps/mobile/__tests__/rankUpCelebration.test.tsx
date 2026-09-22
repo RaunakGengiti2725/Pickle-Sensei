@@ -273,10 +273,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
       );
       // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
       expect(
-        texts.some(
-          node =>
-            node.props.children === '0.32 to Diamond. Every analysis moves it.',
-        ),
+        texts.some(node => node.props.children === '0.32 to Diamond.'),
       ).toBe(true);
     } finally {
       if (renderer) act(() => renderer.unmount());

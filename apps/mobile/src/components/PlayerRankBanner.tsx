@@ -12,11 +12,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import {
-  PLAYER_RANK_TIERS,
-  RANK_CONFIDENCE_CAP,
-  RANK_FORM_WINDOW,
-} from '@pickle/shared-types';
+import { PLAYER_RANK_TIERS, RANK_FORM_WINDOW } from '@pickle/shared-types';
 import { useReducedMotion } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
@@ -390,15 +386,8 @@ export function PlayerRankBanner(props: {
                 ))}
               </View>
               <Text style={[type.caption, styles.formulaNote]}>
-                Current form: your last {RANK_FORM_WINDOW} swings of each stroke
-                set its score — newest count most. Strokes with more evidence
-                weigh more (up to {RANK_CONFIDENCE_CAP} analyses each).{' '}
-                {summary.nextTier
-                  ? `${formatDuprDistance(
-                      summary.rating,
-                      summary.nextTier.minRating,
-                    )} to ${summary.nextTier.label}.`
-                  : 'Top tier — every new analysis defends it.'}
+                Current form: your last {RANK_FORM_WINDOW} swings of each
+                stroke, newest counting most.
               </Text>
               <Text
                 style={[type.caption, styles.formulaNote]}
@@ -409,9 +398,8 @@ export function PlayerRankBanner(props: {
             </>
           ) : (
             <Text style={[type.caption, styles.formulaNote]}>
-              Complete one scored stroke analysis and your placement appears
-              here — the ladder runs Bronze → Silver → Gold → Platinum →
-              Diamond, each with divisions III → I.
+              The ladder runs Bronze → Silver → Gold → Platinum → Diamond, each
+              with divisions III → I.
             </Text>
           )}
         </Animated.View>

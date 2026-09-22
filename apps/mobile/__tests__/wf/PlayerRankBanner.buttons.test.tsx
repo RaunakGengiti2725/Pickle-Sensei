@@ -283,14 +283,13 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(before.props.accessibilityHint).toBe(
       'Opens the rank details in place.',
     );
-    expect(allText(renderer)).not.toContain('Complete one scored stroke');
+    expect(allText(renderer)).not.toContain('Bronze → Silver → Gold');
 
     await press(renderer, TOGGLE);
     const open = pressable(renderer, TOGGLE);
     expect(open.props.accessibilityState).toEqual({ expanded: true });
     expect(open.props.accessibilityHint).toBe('Collapses the rank details.');
     const openCopy = allText(renderer);
-    expect(openCopy).toContain('Complete one scored stroke analysis');
     expect(openCopy).toContain('Bronze → Silver → Gold → Platinum → Diamond');
     // Unranked: no ladder row, no YOU pill, no formula note.
     expect(openCopy).not.toContain('YOU');
@@ -301,7 +300,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
       expanded: false,
     });
     await settleFoldAway(renderer);
-    expect(allText(renderer)).not.toContain('Complete one scored stroke');
+    expect(allText(renderer)).not.toContain('Bronze → Silver → Gold');
     act(() => renderer.unmount());
   });
 
@@ -333,7 +332,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(copy).toContain('II');
     expect(copy).toContain('dink');
     expect(copy).toContain('Current form');
-    expect(copy).toContain('0.15 to Platinum.');
+    expect(copy).toContain('0.15 to Platinum');
     // Tier bands print in estimated DUPR (Silver 3.5–4.99 → 2.54 – 2.76).
     expect(copy).toContain('2.54 – 2.76');
     expect(copy).toContain('3.67+');
@@ -403,7 +402,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(copy).toContain('3.87');
     expect(copy).toContain('7.80 /10');
     expect(copy).toContain('third shot drop');
-    expect(copy).toContain('Top tier — every new analysis defends it.');
+    expect(copy).toContain('Top tier');
     act(() => renderer.unmount());
   });
 
@@ -416,7 +415,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
       String(pressable(renderer, TOGGLE).props.accessibilityLabel),
     ).toContain('Player rank Gold II');
     await press(renderer, TOGGLE);
-    expect(allText(renderer)).toContain('0.15 to Platinum.');
+    expect(allText(renderer)).toContain('0.15 to Platinum');
     await press(renderer, TOGGLE);
     await settleFoldAway(renderer);
     expect(allText(renderer)).not.toContain('Current form');
@@ -430,7 +429,9 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(mockMaybeCelebrate).not.toHaveBeenCalled();
     expect(allText(renderer)).toContain('Unranked');
     await press(renderer, TOGGLE);
-    expect(allText(renderer)).toContain('Complete one scored stroke analysis');
+    expect(allText(renderer)).toContain(
+      'Bronze → Silver → Gold → Platinum → Diamond',
+    );
     act(() => renderer.unmount());
   });
 

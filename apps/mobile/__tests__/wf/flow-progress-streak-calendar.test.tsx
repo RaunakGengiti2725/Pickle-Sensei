@@ -268,7 +268,7 @@ describe('flow: streak calendar', () => {
       pressable(renderer, shieldedLabel).props.onPress();
     });
     expect(allText(renderer)).toContain(
-      'A Streak Shield protected this day. No training logged — the run survived.',
+      'A Streak Shield protected this day — no training logged.',
     );
 
     // Future days are neither "not trained" nor pressable.
@@ -319,7 +319,7 @@ describe('flow: streak calendar', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     expect(copy).toContain('0 DAY STREAK');
-    expect(copy).toContain('Your first analysis lights the flame.');
+    expect(copy).toContain('Your first analysis starts your streak.');
     expect(copy).toContain('MOMENTUM LEVEL 1');
     expect(copy).toContain('Next reward: First Spark — 1 day away');
     expect(dayDetail(renderer)).toHaveLength(0);

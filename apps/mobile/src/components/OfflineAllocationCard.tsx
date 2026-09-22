@@ -87,31 +87,29 @@ const RECONCILE_REASON_COPY: Record<ReconcileReason, string> = {
 };
 
 const NOT_PHONE_CLOCK =
-  'The pass end is measured by time confirmed with the server, not this ' +
-  'phone’s clock.';
+  'Pass end follows time confirmed with the server, not this phone’s clock.';
 
 const SPEND_RULE =
   'An analysis is only spent once a validated result is saved on this ' +
   'phone.';
 
 const HOLD_RULE =
-  'A result was sent, but this phone has no confirmed answer for it. The ' +
+  'A result was sent but this phone has no confirmed answer for it; the ' +
   'same receipt is presented again on the next sync, so nothing is charged ' +
   'twice.';
 
 const SERVER_HOLD_RULE =
-  'The server received a result and is still confirming it. The same ' +
-  'receipt is presented again on the next sync, so nothing is charged ' +
-  'twice.';
+  'The server is still confirming a result; the same receipt is presented ' +
+  'again on the next sync, so nothing is charged twice.';
 
 const UNIDENTIFIED_HOLD_RULE =
-  'A result submission is on record, but it names no receipt that is still ' +
-  'waiting on this phone, so its outcome cannot be read here. The next ' +
-  'online sync closes it; nothing is charged twice.';
+  'A result submission is on record but names no receipt that is still ' +
+  'waiting on this phone; the next online sync closes it, and nothing is ' +
+  'charged twice.';
 
 const ALLOCATION_STAYS =
-  'stay allocated to this phone until they sync with the server — an ' +
-  'unused pass is never taken back automatically.';
+  'stay allocated to this phone until they sync — an unused pass is never ' +
+  'taken back.';
 
 /** Tickets hosted by a generation that is not live under the current
  * reading: allocated (the ledger never reclaims them) but not spendable
@@ -121,10 +119,9 @@ function strandedCopy(stranded: number): string {
   return (
     `${plural(stranded, 'held analysis', 'held analyses')} ` +
     `${one ? 'belongs' : 'belong'} to a pass that is not live on this ` +
-    `phone, so ${one ? 'it needs' : 'they need'} an online check before ` +
-    `${one ? 'it' : 'they'} can be rated. ${one ? 'It stays' : 'They stay'} ` +
-    `allocated to this phone until ${one ? 'it syncs' : 'they sync'} with ` +
-    'the server — an unused pass is never taken back automatically.'
+    `phone, so ${one ? 'it needs' : 'they need'} an online check; ` +
+    `${one ? 'it stays' : 'they stay'} allocated until ` +
+    `${one ? 'it syncs' : 'they sync'}.`
   );
 }
 
@@ -239,8 +236,8 @@ export function presentOfflineJourney(
       title: 'Offline pass could not be read',
       rows: [],
       notes: [
-        'This phone’s offline records could not be read right now, so ' +
-          'nothing is shown about them. Nothing was changed.',
+        'This phone’s offline records could not be read right now; nothing ' +
+          'was changed.',
       ],
     };
   }
@@ -334,8 +331,7 @@ export function presentOfflineJourney(
     const pendingCount = wallet.pending.length;
     if (!hold) {
       notes.push(
-        'Offline analyses are issued while you are online and signed in; ' +
-          'the ones this phone holds appear here.',
+        'Offline analyses are issued while you are online and signed in.',
       );
     } else if (pendingCount === 1) {
       notes.push(

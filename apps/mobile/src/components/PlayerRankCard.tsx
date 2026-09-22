@@ -92,8 +92,7 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           <View style={styles.flex}>
             <Text style={[type.h3, { color: color.onDark }]}>Unranked</Text>
             <Text style={[type.caption, styles.unrankedCopy]}>
-              Your first scored analysis places you. Your rank tracks your
-              current form — recent swings count most.
+              Your first scored analysis places you.
             </Text>
           </View>
         </View>
@@ -152,7 +151,7 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
                   summary.rating,
                   summary.nextTier.minRating,
                 )} to ${summary.nextTier.label}`
-              : 'Top tier — every new analysis defends it.'}
+              : 'Top tier'}
           </Text>
         </View>
       </View>
@@ -194,8 +193,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       </View>
 
       <Text style={[type.caption, styles.formulaNote]}>
-        Current form across {summary.techniqueCount} {techniqueNoun} — your
-        newest swings count most, and proven strokes weigh more. {sourceNote}
+        Current form across {summary.techniqueCount} {techniqueNoun}, newest
+        swings counting most. {sourceNote}
       </Text>
       <Text
         style={[type.caption, styles.duprNote]}

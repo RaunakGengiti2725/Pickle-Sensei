@@ -462,9 +462,7 @@ describe('RankUpCelebration button ledger', () => {
       const renderer = await render();
       expect(rendered(renderer)).toContain('You’re on the board.');
       expect(rendered(renderer)).toContain('PLAYER RANK · PLACED');
-      expect(rendered(renderer)).toContain(
-        'Your current form across 1 technique — recent swings count most.',
-      );
+      expect(rendered(renderer)).toContain('Current form across 1 technique.');
       await act(async () => {
         continueButton(renderer).props.onPress();
       });

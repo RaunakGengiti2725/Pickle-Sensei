@@ -171,7 +171,7 @@ describe('StreakCalendarScreen buttons (wf ledger)', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Couldn’t load your training history');
     expect(copy).not.toContain('DAY STREAK');
-    expect(copy).not.toContain('Your first analysis lights the flame.');
+    expect(copy).not.toContain('Your first analysis starts your streak.');
     const retry = findByLabel(renderer, 'Try again');
     expect(retry.props.accessibilityState.disabled).toBeFalsy();
     await act(async () => {
@@ -191,7 +191,7 @@ describe('StreakCalendarScreen buttons (wf ledger)', () => {
     setMockState({ snapshot: null, loadError: false });
     const renderer = renderScreen();
     const copy = allText(renderer);
-    expect(copy).toContain('Your first analysis lights the flame.');
+    expect(copy).toContain('Your first analysis starts your streak.');
     expect(copy).not.toContain('Couldn’t load');
     expect(
       findByLabel(renderer, 'Next month').props.accessibilityState,

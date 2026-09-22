@@ -327,8 +327,7 @@ function CenturyAdvert(props: { snapshot: ConsistencySnapshot }) {
           Century Club
         </Text>
         <Text style={[type.caption, styles.centuryCopy]}>
-          100 straight days. Permanent badge — it never expires, and almost
-          nobody has it.
+          100 straight days. Permanent badge.
         </Text>
       </View>
     </View>
@@ -406,11 +405,11 @@ export function StreakCalendarScreen() {
 
   const statusLine =
     !snapshot || snapshot.totalActivities === 0
-      ? 'Your first analysis lights the flame.'
+      ? 'Your first analysis starts your streak.'
       : snapshot.atRisk
-        ? 'No training yet today — one analysis keeps the flame alive.'
+        ? 'No training yet today.'
         : snapshot.trainedToday
-          ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
+          ? `Day ${streak} secured · ${snapshot.trainedLast7} of the last 7 days`
           : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
 
   // At accessibility sizes, let whole words wrap across the card rather than
@@ -460,7 +459,7 @@ export function StreakCalendarScreen() {
               </Text>
               <Text style={[type.caption, styles.loadErrorCopy]}>
                 Your streak and calendar are stored on this device and could not
-                be read just now. Your streak is not shown until it can be.
+                be read just now.
               </Text>
             </View>
             <View style={{ marginTop: space.md }}>
@@ -677,8 +676,7 @@ export function StreakCalendarScreen() {
                   <Text
                     style={[type.caption, { color: color.inkSoft, flex: 1 }]}
                   >
-                    A Streak Shield protected this day. No training logged — the
-                    run survived.
+                    A Streak Shield protected this day — no training logged.
                   </Text>
                 </View>
               ) : (
