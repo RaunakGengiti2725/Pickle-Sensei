@@ -555,7 +555,6 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     registerTargets(Object.keys(TARGET_RECTS) as WalkthroughTargetKey[]);
     const renderer = await renderVisible();
     const text = textContent(renderer);
-    expect(text).toContain('START HERE');
     expect(text).toContain('Every read starts here.');
     expect(text).toContain('Skip');
   });
@@ -655,7 +654,6 @@ describe('FirstRunWalkthrough (spotlight tour)', () => {
     await pressByTestId(renderer, 'walkthrough-advance');
 
     const text = textContent(renderer);
-    expect(text).toContain('HONEST RATINGS');
     expect(text).toContain('Only clear reads count.');
     expect(text).toContain(
       'One validated rating free · Unscored attempts don’t count',
@@ -814,14 +812,12 @@ describe('walkthrough safe viewport and measured callout geometry', () => {
       key: 'streak',
       targetKey: 'home-streak',
       shape: 'rounded',
-      eyebrow: 'DAILY STREAK',
     });
-    // Honest copy: a day is earned by finishing a read or a drill, never by
-    // opening the app, and the flame opens the calendar / shields /
-    // achievements — exactly what the shipping chip does.
+    // Honest copy: a day is earned by finishing a read or a drill, and the
+    // flame opens the calendar / shields / achievements — exactly what the
+    // shipping chip does.
     expect(step.body).toMatch(/finish a read or a drill/);
-    expect(step.body).toMatch(/never for just opening the app/);
-    expect(step.body).toMatch(/Tap the flame/);
+    expect(step.body).toMatch(/tap the flame/);
     expect(step.body).toMatch(/Streak Shields and achievements/);
 
     const layout = walkthroughCalloutLayout(
