@@ -120,7 +120,7 @@ export function FormReviewScreen() {
     return (
       <ErrorState
         title="Review unavailable"
-        detail="This stroke has no scored analysis on this device, so there is nothing to replay."
+        detail="This stroke has no scored analysis on this device."
         onRetry={() => navigation.goBack()}
         dark
       />
@@ -204,8 +204,7 @@ function FormReviewBody(props: {
           testID="form-review-back"
         />
         <Text style={[type.caption, styles.disclosure]}>
-          Replay, pose and scoring stay on this device — the clip is never
-          uploaded.
+          Clip, pose and scoring stay on this device — never uploaded.
         </Text>
       </View>
     </SafeAreaView>

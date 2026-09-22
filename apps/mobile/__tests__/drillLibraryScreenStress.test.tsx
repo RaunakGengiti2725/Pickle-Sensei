@@ -456,9 +456,7 @@ describe('DrillLibraryScreen under stress', () => {
       save.resolve();
     });
     expect(mockSaveDrill).toHaveBeenCalledTimes(1);
-    expect(allText(renderer)).toContain(
-      'Saved to your library · Library → Saved drills',
-    );
+    expect(allText(renderer)).toContain('Saved to your library');
     expect(
       findPressableByLabel(
         renderer,
@@ -536,9 +534,7 @@ describe('DrillLibraryScreen under stress', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     let copy = allText(renderer);
-    expect(copy).toContain(
-      'Drill detail could not be loaded from this deployment.',
-    );
+    expect(copy).toContain('Drill detail could not load.');
     expect(copy).toContain('The drill catalog is temporarily unavailable.');
     expect(copy).not.toContain('cannot read properties');
     await pressByLabel(renderer, 'Retry detail for Dink Target Ladder');

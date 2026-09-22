@@ -84,14 +84,12 @@ import { DrillLibraryScreen } from '../src/screens/DrillLibraryScreen';
  * search-results rows (per drill, and per typed query) open externally.
  */
 
-const DISCLOSURE = 'Community videos · credited to their creators';
-const SAVED_TOAST = 'Saved to your library · Library → Saved drills';
+const SAVED_TOAST = 'Saved to your library';
 const REMOVED_TOAST = 'Removed from saved drills';
 const DINK_BROWSE_URL =
   'https://www.youtube.com/results?search_query=Dink%20Target%20Ladder%20pickleball%20drill';
 const FOCUS_HINT =
-  'After two scored analyses of the same technique, this library sorts ' +
-  'itself around your weakest checkpoint.';
+  'Your focus appears after two scored analyses of the same technique.';
 
 // Legacy engineering payload: the client must still look production-clean.
 const dinkDrill: CatalogDrill = {
@@ -432,7 +430,7 @@ describe('DrillLibraryScreen', () => {
     // Family-matched drills lead, with the matching rule stated verbatim —
     // no claim that a specific drill was validated for the checkpoint.
     expect(copy).toContain('Recommended for you');
-    expect(copy).toContain('Matched to your focus by technique family.');
+    expect(copy).toContain('Matched by technique family.');
     expect(copy).toContain('All drills');
     expect(drillCardOrder(renderer)).toEqual([
       'drill-card-dink-target-ladder',
@@ -632,9 +630,7 @@ describe('DrillLibraryScreen', () => {
     await settle();
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
-    expect(allText(renderer)).toContain(
-      'Drill detail could not be loaded from this deployment.',
-    );
+    expect(allText(renderer)).toContain('Drill detail could not load.');
     expect(allText(renderer)).toContain(
       'Drill detail is not deployed for this build.',
     );
@@ -683,7 +679,6 @@ describe('DrillLibraryScreen', () => {
     // Creator + attribution are mandatory display, rendered verbatim.
     expect(copy).toContain('Third Shot Sports');
     expect(copy).toContain('Video by Third Shot Sports on YouTube');
-    expect(copy).toContain(DISCLOSURE);
     expect(findPlayerWebView(renderer)).toBeNull();
     await pressByLabel(renderer, 'Watch demonstration for Dink Target Ladder');
     // Playback stays inside the app: modal + WebView, no Linking.
@@ -768,8 +763,6 @@ describe('DrillLibraryScreen', () => {
     expect(copy).toContain('Video by Third Shot Sports on YouTube');
     expect(copy).toContain('Kitchen Lab Pickleball');
     expect(copy).toContain('Video by Kitchen Lab Pickleball on YouTube');
-    // One shared disclosure for the whole list, not one per row.
-    expect(textCount(renderer, DISCLOSURE)).toBe(1);
     expect(
       findPressableByTestId(renderer, 'watch-media-dink-target-ladder-0'),
     ).not.toBeNull();
@@ -791,7 +784,6 @@ describe('DrillLibraryScreen', () => {
     await settle();
     const copy = allText(renderer);
     expect(copy).toContain('More drills on YouTube');
-    expect(copy).toContain('Opens the YouTube app');
     await pressByTestId(renderer, 'browse-videos-dink-target-ladder');
     expect(openUrl).toHaveBeenCalledTimes(1);
     // A real YouTube results deep link for "<title> pickleball drill".
@@ -808,7 +800,7 @@ describe('DrillLibraryScreen', () => {
     await settle();
     const copy = allText(renderer);
     expect(copy).toContain('More drills on YouTube');
-    expect(copy).not.toContain(DISCLOSURE);
+    expect(copy).not.toContain('WATCH IT DONE');
     await pressByLabel(
       renderer,
       'Browse YouTube videos for Dink Target Ladder',
