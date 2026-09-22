@@ -34,22 +34,18 @@ export const UNCERTAINTY_KINDS = [
 export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
 
 export const UNCERTAINTY_COPY: Record<UncertaintyKind, string> = {
-  contact:
-    'Contact wasn’t located on this attempt, so no contact marker is shown.',
+  contact: 'Contact wasn’t located, so no contact marker is shown.',
   contact_estimate:
-    'Contact is estimated from your wrist-speed peak — the paddle and ball ' +
-    'are not tracked, so the exact strike frame may differ by a frame or two.',
-  stroke_identity:
-    'This stroke couldn’t be identified, so no label was applied.',
-  phase_timing:
-    'We couldn’t measure the phase timing of this swing, so no timeline is ' +
-    'shown.',
+    'Contact is estimated from your wrist-speed peak, so the exact strike ' +
+    'frame may differ by a frame or two.',
+  stroke_identity: 'This stroke couldn’t be identified, so no label is shown.',
+  phase_timing: 'Phase timing couldn’t be measured, so no timeline is shown.',
   technique_score:
-    'A technique score wasn’t established for this attempt — scoring stays ' +
-    'withheld rather than estimated.',
+    'No technique score was established, so scoring is withheld rather than ' +
+    'estimated.',
   capture_quality:
-    'The measured capture quality was below the supported range on this ' +
-    'attempt, which can limit what the analysis could establish.',
+    'Capture quality was below the supported range, which limits what could ' +
+    'be established.',
 };
 
 export interface UncertaintyNoteView {

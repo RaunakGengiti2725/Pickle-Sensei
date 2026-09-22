@@ -147,9 +147,7 @@ describe('AnalysisFeedbackPrompt button ledger', () => {
         null,
       );
       expect(has(renderer, 'feedback-thanks')).toBe(true);
-      expect(textOf(renderer)).toContain(
-        'Thanks — your feedback helps us find hard cases to review.',
-      );
+      expect(textOf(renderer)).toContain('Thanks for your feedback.');
       // One submission per analysis: no button survives the done state.
       expect(pressables(renderer)).toHaveLength(0);
     });

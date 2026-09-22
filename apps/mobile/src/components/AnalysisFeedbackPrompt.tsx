@@ -66,7 +66,7 @@ export function AnalysisFeedbackPrompt({ analysisId }: { analysisId: string }) {
     return (
       <View style={styles.row} testID="feedback-thanks">
         <Text style={[type.caption, styles.muted]}>
-          Thanks — your feedback helps us find hard cases to review.
+          Thanks for your feedback.
         </Text>
       </View>
     );

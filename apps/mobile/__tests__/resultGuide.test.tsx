@@ -753,12 +753,11 @@ describe('Result guide — scored analysis', () => {
     expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
     copy = allText(renderer);
     expect(copy).toContain('Drills to fix it');
-    // The header is two lines: the fault in the recap's words and the one
-    // instruction. No "where saved drills land" paragraph, no second
-    // section title, no per-card catalog byline.
-    expect(copy).toContain(
-      'Contact position — contact came late. Pick one drill and run it before your next forehand drive.',
-    );
+    // The header is the title and the fault in the recap's words. No "where
+    // saved drills land" paragraph, no second section title, no per-card
+    // catalog byline.
+    expect(copy).toContain('Contact position — contact came late.');
+    expect(copy).not.toContain('Pick one drill');
     expect(copy).not.toContain('Saved drills');
     expect(copy).not.toContain('Drills for this stroke');
     expect(copy).not.toContain('PICKLE SENSEI TRAINING LIBRARY');
@@ -779,7 +778,6 @@ describe('Result guide — scored analysis', () => {
     expect(hostByTestId(renderer, 'result-guide-step-next')).toHaveLength(1);
     expect(stepLabel(renderer)).toBe('4 OF 4 · NEXT');
     copy = allText(renderer);
-    expect(copy).toContain('NEXT');
     expect(copy).toContain('Ready for another swing?');
     // The recap tiles count the record's own bands: 6 green checkpoints
     // held, 3 (one yellow, two red) are to fix — the inapplicable and the
@@ -817,7 +815,7 @@ describe('Result guide — scored analysis', () => {
     expect(
       hostByTestId(renderer, 'result-guide-note-next')[0]!.props.children,
     ).toBe(
-      'Work one drill, then film another forehand drive and see whether contact position moves.',
+      'Film another forehand drive and see whether contact position moves.',
     );
     expect(copy).not.toContain('Drills');
     // No full-breakdown link (product decision 2026-09-02) and NOTHING of the
@@ -904,7 +902,7 @@ describe('Result guide — scored analysis', () => {
     expect(
       hostByTestId(renderer, 'result-guide-note-next')[0]!.props.children,
     ).toBe(
-      'Film another forehand drive and see whether every checkpoint holds again.',
+      'Film another forehand drive and see whether every checkpoint holds.',
     );
   });
 
