@@ -156,8 +156,8 @@ export function SignInScreen(props: {
           </Text>
           <Text style={styles.sub}>
             {returning
-              ? `Use ${previousAccount} to check for a saved coaching profile and synced progress.`
-              : 'A connected account is required for free ratings, membership, and server-verified coaching. Synced progress stays with that account.'}
+              ? `Use ${previousAccount} to restore your profile and progress.`
+              : 'An account is required for ratings, membership, and synced progress.'}
           </Text>
 
           {active && returning?.noticePending ? (
@@ -238,8 +238,8 @@ export function SignInScreen(props: {
             <Icon name="shield" color={color.court} size={17} />
             <Text style={styles.trustCopy}>
               {returning
-                ? 'Any saved profile stays private until the matching account is verified.'
-                : 'Your existing on-device reads stay here when you connect.'}
+                ? 'Your saved profile stays private until the account is verified.'
+                : 'Reads on this device stay here.'}
             </Text>
           </View>
         </View>

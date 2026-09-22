@@ -152,8 +152,7 @@ export function WelcomeScreen(props: {
             See the stroke.{`\n`}Know the fix.
           </Text>
           <Text style={styles.tagline}>
-            A private technique coach that guides each capture and turns
-            validated reads into one clear next step.
+            Record a stroke. Get a validated read and one next step.
           </Text>
         </View>
 

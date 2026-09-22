@@ -60,13 +60,10 @@ type LibraryTab = 'reads' | 'saved';
 /** Pending-clips group header + pill, exported so tests pin the copy. */
 export const PENDING_SECTION_LABEL = 'SAVED CLIPS · NOT ANALYZED';
 export const PENDING_SECTION_PILL = 'NOT SCORED';
-export const PENDING_SECTION_NOTE =
-  'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
 /** Reads-tab copy when the local repository could not be read. */
 export const READS_LOAD_ERROR_TITLE = 'Your reads couldn’t be opened.';
-export const READS_LOAD_ERROR_BODY =
-  'Your saved reads and clips couldn’t be read from this device right now. Try again to reload them.';
+export const READS_LOAD_ERROR_BODY = 'Try again to reload them.';
 
 /**
  * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
@@ -321,9 +318,6 @@ export function LibraryScreen() {
   const header = (
     <View style={styles.pageHeader}>
       <Text style={[type.hero, styles.pageTitle]}>Library</Text>
-      <Text style={[type.body, styles.pageSubtitle]}>
-        Your measured reads and the reviewed work you chose to keep.
-      </Text>
       <View accessibilityRole="tablist" style={styles.segmentedControl}>
         {(
           [
@@ -440,12 +434,6 @@ export function LibraryScreen() {
               <Text numberOfLines={2} style={[type.h3, { color: color.ink }]}>
                 Explore the Drill Library
               </Text>
-              <Text
-                numberOfLines={2}
-                style={[type.caption, styles.exploreCopy]}
-              >
-                Form cues, video demos, and picks based on your scored analyses.
-              </Text>
             </View>
             <Icon name="arrow" size={18} color={color.inkSoft} />
           </PressableScale>
@@ -460,12 +448,13 @@ export function LibraryScreen() {
                 <Icon name="shield" size={22} color={color.court} />
               </View>
               <Text style={[type.h2, styles.messageTitle]}>
-                Saved training needs a synced account.
+                Saved drills need a connected account.
               </Text>
-              <Text style={[type.body, styles.messageBody]}>
-                {savedError?.message ??
-                  'The app has no authenticated training API connection in this build. Nothing local is being presented as server-backed coaching.'}
-              </Text>
+              {savedError?.message ? (
+                <Text style={[type.body, styles.messageBody]}>
+                  {savedError.message}
+                </Text>
+              ) : null}
               {localOnly ? (
                 <View style={styles.retryWrap}>
                   <Button
@@ -494,10 +483,7 @@ export function LibraryScreen() {
             </Card>
           ) : savedDrills.length === 0 ? (
             <View style={styles.emptySaved}>
-              <EmptyState
-                title="No saved drills yet."
-                body="When the server can match a synced score to published, reviewed work, save those drills here for later."
-              />
+              <EmptyState title="No saved drills yet." />
             </View>
           ) : verifiedSavedDrills.length === 0 ? (
             <Card tone="soft" style={styles.messageCard}>
@@ -509,11 +495,7 @@ export function LibraryScreen() {
               </Text>
               <Text style={[type.body, styles.messageBody]}>
                 {savedDrills.length} saved{' '}
-                {savedDrills.length === 1 ? 'entry is' : 'entries are'} hidden
-                because {savedDrills.length === 1 ? 'its' : 'their'} server
-                catalog {savedDrills.length === 1 ? 'entry' : 'entries'} could
-                not be loaded. Nothing is shown from guesses and no generic
-                drill is substituted.
+                {plural(savedDrills.length, 'drill')} could not be loaded.
               </Text>
               <View style={styles.retryWrap}>
                 <Button
@@ -550,11 +532,8 @@ export function LibraryScreen() {
                 <View style={styles.heldNotice}>
                   <Icon name="shield" size={17} color={color.inkSoft} />
                   <Text style={[type.caption, styles.heldNoticeCopy]}>
-                    {heldSavedCount} additional saved{' '}
-                    {heldSavedCount === 1 ? 'entry is' : 'entries are'} hidden
-                    because {heldSavedCount === 1 ? 'its' : 'their'} server
-                    catalog {heldSavedCount === 1 ? 'entry' : 'entries'} could
-                    not be loaded.
+                    {heldSavedCount} more saved{' '}
+                    {plural(heldSavedCount, 'drill')} could not be loaded.
                   </Text>
                 </View>
               ) : null}
@@ -744,9 +723,6 @@ export function LibraryScreen() {
                           </PressableScale>
                         );
                       })}
-                      <Text style={[type.caption, styles.pendingNote]}>
-                        {PENDING_SECTION_NOTE}
-                      </Text>
                     </View>
                   ) : null}
                   <Text
@@ -761,8 +737,7 @@ export function LibraryScreen() {
           }
           ListEmptyComponent={
             <EmptyState
-              title="Your measured reads, in one place."
-              body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
+              title="No reads yet."
               action={
                 <Button
                   label="Analyze your first stroke"

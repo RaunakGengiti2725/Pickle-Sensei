@@ -459,9 +459,6 @@ export function HomeScreen() {
           <View style={styles.practiceCardTop}>
             <View style={{ flex: 1 }}>
               <Text style={[type.micro, { color: color.volt }]}>THIS WEEK</Text>
-              <Text style={[type.caption, styles.practiceCardSource]}>
-                Scored technique reads on this device
-              </Text>
             </View>
             <View accessibilityRole="tablist" style={styles.chartToggle}>
               {WEEK_CHART_OPTIONS.map(option => {
@@ -503,12 +500,7 @@ export function HomeScreen() {
                 <Text style={[type.h3, styles.practiceZeroTitle]}>
                   {weekHasHistory
                     ? 'Quiet week so far.'
-                    : 'Your court is ready.'}
-                </Text>
-                <Text style={[type.caption, styles.practiceZeroCopy]}>
-                  {weekHasHistory
-                    ? 'Your next scored read lands here.'
-                    : 'Your first scored read starts this record.'}
+                    : 'No scored reads yet.'}
                 </Text>
               </View>
             </View>
@@ -573,13 +565,6 @@ export function HomeScreen() {
             <Text style={[type.bodyBold, styles.techniqueSummaryTitle]}>
               {displayedStroke ?? 'No scored technique yet'}
             </Text>
-            <Text style={[type.caption, styles.techniqueSummaryCopy]}>
-              {displayedScore === null
-                ? 'Camera practice still counts. Scores appear only after validated analysis.'
-                : latestScored
-                  ? 'Latest validated scored stroke on this device'
-                  : 'Latest synced daily average'}
-            </Text>
           </View>
           <View style={styles.techniqueSummaryScoreWrap}>
             {displayedScore === null ? (
@@ -613,15 +598,6 @@ export function HomeScreen() {
                 >
                   {focus}
                 </Text>
-                <Text
-                  style={[
-                    type.caption,
-                    { color: color.onDarkMuted, marginTop: 5 },
-                  ]}
-                >
-                  Your onboarding choice. A reviewed plan can replace it after a
-                  validated scored read.
-                </Text>
               </View>
               <View style={styles.focusStatus}>
                 <Text style={[type.micro, { color: color.onVolt }]}>
@@ -649,12 +625,7 @@ export function HomeScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[type.bodyBold, { color: color.ink }]}>
-                Your first read starts here
-              </Text>
-              <Text
-                style={[type.caption, { color: color.graphite, marginTop: 3 }]}
-              >
-                Set the phone once. Pickle Sensei guides the rest.
+                No reads yet
               </Text>
             </View>
           </Card>

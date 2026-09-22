@@ -192,8 +192,7 @@ function SignOutSheet(props: {
               },
             ]}
           >
-            Your on-device reads remain private and intact. Synced progress will
-            be available after you sign in again.
+            Your reads stay on this device.
           </Text>
           <View style={{ gap: 10, marginTop: space.xl }}>
             <Button
@@ -304,14 +303,6 @@ export function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
-        <Text
-          style={[
-            type.body,
-            { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
-          ]}
-        >
-          Your player profile, coaching preferences, and privacy controls.
-        </Text>
 
         <Card tone="soft" style={styles.accountCard}>
           <View style={styles.accountTop}>
@@ -458,11 +449,6 @@ export function SettingsScreen() {
               <Text style={[type.h3, { color: color.ink }]}>
                 Private by default
               </Text>
-              <Text
-                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
-              >
-                Current capture behavior, reported without assumptions.
-              </Text>
             </View>
           </View>
           <View style={styles.privacyRows}>
@@ -553,8 +539,7 @@ export function SettingsScreen() {
             style={[type.caption, { color: color.inkSoft, flex: 1 }]}
             testID="settings-dupr-note"
           >
-            {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
-            describes stroke form.
+            {DUPR_ESTIMATE_NOTE}
           </Text>
         </View>
 

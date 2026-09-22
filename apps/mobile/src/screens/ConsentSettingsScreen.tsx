@@ -57,11 +57,6 @@ export function ConsentSettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[type.body, { color: color.inkSoft }]}>
-          Two separate choices. Analyzing your video never opts you into
-          anything else.
-        </Text>
-
         <SectionTitle title="Analyze my video" />
         <Card style={styles.card}>
           <View style={styles.cardHeader}>
@@ -73,9 +68,8 @@ export function ConsentSettingsScreen() {
             </Text>
           </View>
           <Text style={[type.body, styles.bodyText]}>
-            Your clips are analyzed to show you your own results. They stay in
-            app-private storage and are never used to train models under this
-            setting.
+            Your clips are analyzed to show you your results. They stay in
+            app-private storage and are not used to train models.
           </Text>
         </Card>
 
@@ -96,11 +90,10 @@ export function ConsentSettingsScreen() {
             />
           </View>
           <Text style={[type.body, styles.bodyText]}>
-            You choose whether feedback you submit and its linked, structured
-            analysis results may be reviewed to improve scoring. Raw video,
-            audio, frames, and pose landmarks still never leave this device. Off
-            unless you turn it on; you can turn it off at any time. A record of
-            your choice is kept for accountability.
+            Feedback you submit and its structured analysis results may be
+            reviewed to improve scoring. Raw video, audio, frames, and pose
+            landmarks never leave this device. Off by default; a record of your
+            choice is kept.
           </Text>
           {signedOut ? (
             <>

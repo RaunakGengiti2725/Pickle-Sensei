@@ -149,11 +149,6 @@ export function NotificationSettingsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[type.body, { color: color.inkSoft }]}>
-          Reminders are scheduled on this phone. Nothing about your play leaves
-          the device to send one.
-        </Text>
-
         {permissionDenied ? (
           <Card style={styles.deniedCard}>
             <View style={styles.deniedHeader}>
@@ -236,18 +231,9 @@ export function NotificationSettingsScreen() {
             <View style={styles.enableIcon}>
               <Icon name="bell" size={24} color={color.volt} />
             </View>
-            <Text style={[type.h2, styles.enableTitle]}>Stay match-ready.</Text>
-            <View style={styles.enableBenefits}>
-              <Text style={[type.body, styles.enableBenefit]}>
-                · A daily nudge at a time you pick
-              </Text>
-              <Text style={[type.body, styles.enableBenefit]}>
-                · A heads-up before an active streak slips
-              </Text>
-              <Text style={[type.body, styles.enableBenefit]}>
-                · A Sunday recap of your week on court
-              </Text>
-            </View>
+            <Text style={[type.h2, styles.enableTitle]}>
+              Practice reminders
+            </Text>
             <View style={styles.enableAction}>
               <Button
                 label="Turn on reminders"
@@ -283,9 +269,6 @@ export function NotificationSettingsScreen() {
                 ) : null}
               </>
             ) : null}
-            <Text style={[type.caption, styles.enableFootnote]}>
-              Off by default. You can change or disable any of it here, anytime.
-            </Text>
           </Card>
         ) : prefs.enabled ? (
           <>
@@ -410,13 +393,6 @@ export function NotificationSettingsScreen() {
           </>
         ) : null}
 
-        <View style={styles.privacyNote}>
-          <Icon name="shield" size={16} color={color.inkSoft} />
-          <Text style={[type.caption, styles.privacyNoteCopy]}>
-            Reminder copy never includes your name, scores, or clips — it is
-            written for a lock screen.
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

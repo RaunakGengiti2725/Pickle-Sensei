@@ -525,10 +525,6 @@ export function ProgressScreen() {
       >
         <View style={styles.pageHeader}>
           <Text style={[type.hero, styles.pageTitle]}>Progress</Text>
-          <Text style={[type.body, styles.pageSubtitle]}>
-            Practice activity and technique scores stay separate, so every
-            number has a clear source.
-          </Text>
         </View>
 
         <View accessibilityRole="tablist" style={styles.sectionBar}>
@@ -608,12 +604,6 @@ export function ProgressScreen() {
                   <Text style={[type.micro, styles.heroEyebrow]}>
                     VERIFIED PRACTICE
                   </Text>
-                  <Text
-                    numberOfLines={2}
-                    style={[type.caption, styles.heroSource]}
-                  >
-                    On this device · camera captures and measured imports
-                  </Text>
                 </View>
               </View>
 
@@ -625,13 +615,8 @@ export function ProgressScreen() {
                   <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
                       {practice.longestStreak > 0
-                        ? 'No verified captures in this range.'
-                        : 'This chart is waiting on you.'}
-                    </Text>
-                    <Text style={[type.caption, styles.captureZeroDetail]}>
-                      {practice.longestStreak > 0
-                        ? 'Your verified captures fall outside the selected dates. Check Recent captures below.'
-                        : 'Step into frame or import a clip — every measured swing lands here.'}
+                        ? 'No captures in this range.'
+                        : 'No captures yet.'}
                     </Text>
                   </View>
                 </View>
@@ -774,16 +759,6 @@ export function ProgressScreen() {
                 detail="key joints per pose frame"
               />
             </View>
-            <View style={styles.evidenceDisclosure}>
-              <Icon name="shield" color={color.mint} size={18} />
-              <Text style={[type.caption, styles.evidenceDisclosureCopy]}>
-                These are camera-read measurements, not form scores. Pose
-                tracking and coverage come from guided captures only; imported
-                clips count toward captures and days once their pose sequence
-                has been measured. Corrupt evidence and unverified legacy clips
-                never enter the chart.
-              </Text>
-            </View>
 
             <DashSectionHeader
               title="RECENT CAPTURES"
@@ -800,11 +775,7 @@ export function ProgressScreen() {
                 </View>
                 <View style={styles.flex}>
                   <Text style={[type.bodyBold, { color: color.onDark }]}>
-                    No measured captures yet
-                  </Text>
-                  <Text style={[type.caption, styles.emptyPracticeCopy]}>
-                    Open Coach and record with the guided camera or import a
-                    clip. Every swing with a measured pose sequence lands here.
+                    No captures yet
                   </Text>
                 </View>
               </Card>
@@ -869,11 +840,7 @@ export function ProgressScreen() {
                   </View>
                   <View style={styles.flex}>
                     <Text style={[type.h3, { color: color.onDark }]}>
-                      No score is being estimated.
-                    </Text>
-                    <Text style={[type.caption, styles.techniqueEmptyCopy]}>
-                      Your camera captures still count toward Practice. A score
-                      appears only after validated analysis completes.
+                      No score yet.
                     </Text>
                   </View>
                 </View>
@@ -981,8 +948,7 @@ export function ProgressScreen() {
               {reps.current === 0 ? (
                 <View style={styles.trendEmpty}>
                   <Text style={[type.caption, styles.trendEmptyCopy]}>
-                    No comparable scored reads in this window yet. Your next
-                    validated analysis starts this chart.
+                    No scored reads in this window yet.
                   </Text>
                 </View>
               ) : (
@@ -1032,11 +998,7 @@ export function ProgressScreen() {
                 <Icon name="progress" size={22} color={color.mint} />
                 <View style={styles.flex}>
                   <Text style={[type.bodyBold, { color: color.onDark }]}>
-                    Comparable trends start after scoring
-                  </Text>
-                  <Text style={[type.caption, styles.strokeEmptyCopy]}>
-                    Reads are compared only within the same stroke and model
-                    version.
+                    No scored strokes yet
                   </Text>
                 </View>
               </Card>
@@ -1158,10 +1120,6 @@ export function ProgressScreen() {
                       </Text>
                     </View>
                   ))}
-                  <Text style={[type.caption, styles.signalDisclosure]}>
-                    Server observations compare accepted scored reads from the
-                    last 30 days. They are not a player rating.
-                  </Text>
                 </Card>
               </>
             ) : null}
@@ -1192,8 +1150,7 @@ export function ProgressScreen() {
               </View>
             </View>
             <Text style={styles.ratingDisclosure} testID="progress-dupr-note">
-              {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
-              describes stroke form.
+              {DUPR_ESTIMATE_NOTE}
             </Text>
           </>
         )}
