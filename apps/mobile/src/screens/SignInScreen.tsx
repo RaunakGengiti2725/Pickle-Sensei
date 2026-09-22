@@ -156,7 +156,7 @@ export function SignInScreen(props: {
           </Text>
           <Text style={styles.sub}>
             {returning
-              ? `Use ${previousAccount} to restore your profile and progress.`
+              ? `Use ${previousAccount} to check for a saved profile and synced progress.`
               : 'An account is required for ratings, membership, and synced progress.'}
           </Text>
 

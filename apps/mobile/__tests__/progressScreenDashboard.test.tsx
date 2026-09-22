@@ -618,7 +618,7 @@ describe('ProgressScreen dashboard', () => {
     const text = renderedText(renderer);
 
     expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('No captures yet.');
+    expect(text).not.toContain('No verified captures yet.');
     expect(text).toMatch(/1\s+captured/);
     expect(text).toContain('· 1 imported');
     expect(text).toContain('First measured period on this device.');
@@ -641,7 +641,7 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain('forehand drive');
     expect(text).toContain('3.9s imported clip · pose sequence measured');
     expect(text).toContain('ANALYZED');
-    expect(text).not.toContain('No captures yet');
+    expect(text).not.toContain('No measured captures yet');
     expect(findByTestId(renderer, 'practice-excluded-note')).toBeNull();
     act(() => renderer.unmount());
   });
@@ -662,8 +662,8 @@ describe('ProgressScreen dashboard', () => {
       await pressByLabel(renderer, '7 days range');
       const text = renderedText(renderer);
 
-      expect(text).toContain('No captures in this range.');
-      expect(text).not.toContain('No captures yet.');
+      expect(text).toContain('No verified captures in this range.');
+      expect(text).not.toContain('No verified captures yet.');
       expect(text).toContain('forehand drive');
       expect(text).toContain(
         '1 saved clip without measured pose evidence is not counted.',
@@ -679,7 +679,7 @@ describe('ProgressScreen dashboard', () => {
       if (days === 8) {
         await pressByLabel(renderer, '4 weeks range');
         expect(renderedText(renderer)).not.toContain(
-          'No captures in this range.',
+          'No verified captures in this range.',
         );
         expect(
           findByTestId(renderer, 'practice-stat-captures')!.props
@@ -702,7 +702,7 @@ describe('ProgressScreen dashboard', () => {
     ]);
     const renderer = await renderScreen();
     await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('No captures yet.');
+    expect(renderedText(renderer)).toContain('No verified captures yet.');
     act(() => renderer.unmount());
   });
 
@@ -715,7 +715,7 @@ describe('ProgressScreen dashboard', () => {
     await pressByLabel(renderer, 'practice progress');
     const text = renderedText(renderer);
 
-    expect(text).toContain('No captures yet.');
+    expect(text).toContain('No verified captures yet.');
     expect(
       findByTestId(renderer, 'practice-stat-captures')!.props
         .accessibilityLabel,
@@ -723,7 +723,7 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain(
       '1 saved clip without measured pose evidence is not counted.',
     );
-    expect(text).toContain('No captures yet');
+    expect(text).toContain('No measured captures yet');
     act(() => renderer.unmount());
   });
 

@@ -291,12 +291,16 @@ All text styles come from `src/design/tokens.ts type` — never invent ad-hoc
 fontSize/fontFamily near a token. Title roles:
 
 - Top-level pages (Progress, Library, Settings): `type.hero` title at
-  content paddingTop `space.xl`, `type.body` subtitle `marginTop: space.sm`,
-  `maxWidth: 340`.
+  content paddingTop `space.xl`, no subtitle (the descriptive subtitles
+  were cut as filler, 2026-09-22; if one ever returns it is `type.body`,
+  `marginTop: space.sm`, `maxWidth: 340`, and states a fact the page needs).
 - Pre-auth landings (Welcome, SignIn, Analyze camera landing) and every
   onboarding step: optional `type.micro` kicker → `type.hero` title
-  (`marginTop: space.sm` after a kicker) → `type.body` sub
-  (`marginTop: space.sm`, `maxWidth: 340`).
+  (`marginTop: space.sm` after a kicker) → optional `type.body` sub
+  (`marginTop: space.sm`, `maxWidth: 340`) carrying a required fact only
+  (Welcome's product line, SignIn's account requirement, onboarding data-use
+  notes); the Analyze landing has none — its setup instruction lives in the
+  tips list.
 - Sub-page headers: `ScreenHeader` (`type.h3`). Section headers:
   `SectionTitle` (`type.h3`); Progress's dark dashboard uses
   DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere). With

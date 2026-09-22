@@ -615,8 +615,8 @@ export function ProgressScreen() {
                   <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
                       {practice.longestStreak > 0
-                        ? 'No captures in this range.'
-                        : 'No captures yet.'}
+                        ? 'No verified captures in this range.'
+                        : 'No verified captures yet.'}
                     </Text>
                   </View>
                 </View>
@@ -775,7 +775,7 @@ export function ProgressScreen() {
                 </View>
                 <View style={styles.flex}>
                   <Text style={[type.bodyBold, { color: color.onDark }]}>
-                    No captures yet
+                    No measured captures yet
                   </Text>
                 </View>
               </Card>

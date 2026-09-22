@@ -801,7 +801,7 @@ describe('SignInScreen button ledger', () => {
         expect(allText(renderer)).toContain('Sign in again.');
         expect(allText(renderer)).toContain(explanation);
         expect(allText(renderer)).toContain(
-          'Use the same Apple account to restore your profile and progress.',
+          'Use the same Apple account to check for a saved profile and synced progress.',
         );
         expect(allText(renderer)).toContain(
           'Your saved profile stays private until the account is verified.',
@@ -829,7 +829,7 @@ describe('SignInScreen button ledger', () => {
         const renderer = renderScreen();
         expect(allText(renderer)).toContain(copy);
         expect(allText(renderer)).toContain(
-          'restore your profile and progress',
+          'check for a saved profile and synced progress',
         );
         expect(useAuthStore.getState().session).toBeNull();
       },
@@ -977,7 +977,9 @@ describe('SignInScreen button ledger', () => {
         noticePending: true,
       });
       expect(allText(renderer)).toContain('Sign-in could not be verified.');
-      expect(allText(renderer)).toContain('restore your profile and progress');
+      expect(allText(renderer)).toContain(
+        'check for a saved profile and synced progress',
+      );
     });
 
     it('keeps notices, provider buttons and long errors inside a scalable scroll area with Back outside it', () => {
