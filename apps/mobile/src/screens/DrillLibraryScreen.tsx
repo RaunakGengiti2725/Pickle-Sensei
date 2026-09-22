@@ -344,8 +344,7 @@ const DrillCard = React.memo(function DrillCard(props: {
                 <View style={styles.detailErrorRow}>
                   <Icon name="close" size={16} color={color.bad} />
                   <Text style={[type.caption, styles.detailErrorText]}>
-                    Drill detail could not be loaded from this deployment.{' '}
-                    {detail.message}
+                    Drill detail could not load. {detail.message}
                   </Text>
                 </View>
                 <Pressable
@@ -428,11 +427,6 @@ const DrillCard = React.memo(function DrillCard(props: {
                     <Icon name="chevron" size={16} color={color.inkSoft} />
                   </PressableScale>
                 ))}
-                {mediaList.length > 0 ? (
-                  <Text style={[type.micro, styles.mediaDisclosure]}>
-                    Community videos · credited to their creators
-                  </Text>
-                ) : null}
                 {/* Honest discovery: a real YouTube search-results page for
                     this drill, so it opens externally by design. */}
                 <PressableScale
@@ -447,9 +441,6 @@ const DrillCard = React.memo(function DrillCard(props: {
                   <View style={styles.mediaCopy}>
                     <Text style={[type.bodyBold, styles.mediaTitle]}>
                       More drills on YouTube
-                    </Text>
-                    <Text style={[type.caption, styles.mediaCreator]}>
-                      Opens the YouTube app
                     </Text>
                   </View>
                   <Icon name="arrow" size={18} color={color.inkSoft} />
@@ -620,9 +611,7 @@ export function DrillLibraryScreen() {
         if (nextSaved) await api.saveDrill(drill.slug);
         else await api.unsaveDrill(drill.slug);
         showToast(
-          nextSaved
-            ? 'Saved to your library · Library → Saved drills'
-            : 'Removed from saved drills',
+          nextSaved ? 'Saved to your library' : 'Removed from saved drills',
         );
       } catch (error) {
         applySaved(drill.saved);
@@ -748,7 +737,7 @@ export function DrillLibraryScreen() {
       <View style={styles.flex} testID="drill-library-unconfigured">
         <EmptyState
           title="The drill catalog needs a synced account."
-          body="Sign in with Apple or Google to browse the catalog and save drills to your library."
+          body="Sign in with Apple or Google to browse and save drills."
           action={
             <Button
               label="Connect account"
@@ -822,8 +811,8 @@ export function DrillLibraryScreen() {
           <View style={styles.focusHint} testID="library-focus-hint">
             <Icon name="stroke" size={17} color={color.court} />
             <Text style={[type.caption, styles.focusHintText]}>
-              After two scored analyses of the same technique, this library
-              sorts itself around your weakest checkpoint.
+              Your focus appears after two scored analyses of the same
+              technique.
             </Text>
           </View>
         ) : null}
@@ -833,7 +822,7 @@ export function DrillLibraryScreen() {
               Recommended for you
             </Text>
             <Text style={[type.caption, styles.sectionCaption]}>
-              Matched to your focus by technique family.
+              Matched by technique family.
             </Text>
             {recommended.map(renderDrill)}
             {catalogDrills.length > 0 ? (
@@ -844,7 +833,7 @@ export function DrillLibraryScreen() {
         {catalogEmpty ? (
           <EmptyState
             title="No drills published yet"
-            body="Drills will appear here as they are published. Pull down to refresh, or go back to your Library."
+            body="Pull down to refresh."
           />
         ) : visibleDrills.length === 0 ? (
           <EmptyState
@@ -943,9 +932,6 @@ export function DrillLibraryScreen() {
                 style={[type.bodyBold, styles.mediaTitle]}
               >
                 {`Search YouTube: "${youtubeQuery}" pickleball drills`}
-              </Text>
-              <Text style={[type.caption, styles.mediaCreator]}>
-                Search results on YouTube · community videos
               </Text>
             </View>
             <Icon name="arrow" size={18} color={color.inkSoft} />
@@ -1186,7 +1172,6 @@ const styles = StyleSheet.create({
   mediaTitle: { color: color.ink },
   mediaCreator: { color: color.inkSoft, marginTop: 2 },
   mediaAttribution: { color: color.inkSoft, marginTop: 1 },
-  mediaDisclosure: { color: color.inkSoft },
   toast: {
     ...shadow.floating,
     position: 'absolute',
