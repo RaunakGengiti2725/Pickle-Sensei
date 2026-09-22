@@ -147,9 +147,7 @@ describe('ConsistencyCard button ledger', () => {
     expect(atRiskSnapshot.atRisk).toBe(true);
 
     const copy = allText(renderer);
-    expect(copy).toContain(
-      'No training yet today — one analysis keeps it alive.',
-    );
+    expect(copy).toContain('No training yet today.');
 
     act(() => {
       findCard(renderer).props.onPress();
@@ -169,7 +167,7 @@ describe('ConsistencyCard button ledger', () => {
     );
 
     const copy = allText(renderer);
-    expect(copy).toContain('Your first analysis lights the flame.');
+    expect(copy).toContain('Your first analysis starts your streak.');
     expect(copy).toContain('MOMENTUM LV 1');
     expect(copy).toContain('0 XP');
     expect(copy).not.toContain('NEXT:');
@@ -191,7 +189,7 @@ describe('ConsistencyCard button ledger', () => {
     const onPress = jest.fn();
     const renderer = renderCard(emptySnapshot, onPress);
     const copy = allText(renderer);
-    expect(copy).toContain('Your first analysis lights the flame.');
+    expect(copy).toContain('Your first analysis starts your streak.');
     // The engine advertises the first milestone even before any training.
     expect(copy).toContain('NEXT: FIRST SPARK · 1 DAY AWAY');
 
