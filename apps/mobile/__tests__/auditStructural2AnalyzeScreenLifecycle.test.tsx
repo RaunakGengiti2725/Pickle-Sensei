@@ -319,7 +319,7 @@ describe('capture failure vs user cancellation', () => {
     await capture.reject(
       nativeRejection('camera.cancelled', 'Camera capture was canceled.'),
     );
-    expect(textOf(renderer)).toContain('AUTOMATIC CAPTURE');
+    expect(textOf(renderer)).toContain('Tap record.');
     expect(textOf(renderer)).not.toContain('Try again');
   });
 

@@ -377,7 +377,7 @@ describe('AnalyzeScreen button ledger', () => {
       { width: 375, height: 667, top: 20, bottom: 0 },
       { width: 393, height: 852, top: 59, bottom: 34 },
     ])(
-      'keeps only the short camera CTA pinned and scrolls the full record hint at $width × $height / 3.571x',
+      'keeps only the short camera CTA pinned at $width × $height / 3.571x',
       async dimensions => {
         jest.spyOn(Dimensions, 'get').mockReturnValue({
           width: dimensions.width,
@@ -401,28 +401,20 @@ describe('AnalyzeScreen button ledger', () => {
         expect(
           footer.findAllByType(Text).map(text => text.props.children),
         ).toEqual(['Open camera']);
-        const hint = scroll
-          .findAllByType(Text)
-          .filter(
-            text =>
-              text.props.children === 'Camera opens first. You control record.',
-          );
-        expect(hint).toHaveLength(1);
         const button = footer.findByType(Button);
         expect(button.findAllByType(Icon)).toHaveLength(0);
         expect(button.findByType(PressableScale).props.accessibilityLabel).toBe(
           'Open automatic camera',
         );
         expect(scroll.findAllByType(Button)).not.toContain(button);
-        for (const text of [hint[0]!, button.findByType(Text)]) {
-          expect(text.props.numberOfLines).toBeUndefined();
-          expect(text.props.maxFontSizeMultiplier).toBeUndefined();
-          expect(text.props.adjustsFontSizeToFit).not.toBe(true);
-          expect(text.props.allowFontScaling).not.toBe(false);
-          expect(StyleSheet.flatten(text.props.style).fontSize).toBeGreaterThan(
-            0,
-          );
-        }
+        const label = button.findByType(Text);
+        expect(label.props.numberOfLines).toBeUndefined();
+        expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+        expect(label.props.adjustsFontSizeToFit).not.toBe(true);
+        expect(label.props.allowFontScaling).not.toBe(false);
+        expect(StyleSheet.flatten(label.props.style).fontSize).toBeGreaterThan(
+          0,
+        );
         for (const step of ANALYZE_STEPS) {
           expect(rendered(renderer)).toContain(step.title);
           expect(rendered(renderer)).toContain(step.detail);
@@ -446,26 +438,13 @@ describe('AnalyzeScreen button ledger', () => {
         });
         expect(
           footer.findAllByType(Text).map(text => text.props.children),
-        ).toEqual([
-          'Camera opens first. You control record.',
-          'Open automatic camera',
-        ]);
+        ).toEqual(['Open automatic camera']);
         expect(
           footer
             .findByType(Button)
             .findAllByType(Icon)
             .map(icon => icon.props.name),
         ).toEqual(['camera', 'arrow']);
-        expect(
-          renderer.root
-            .findByType(ScrollView)
-            .findAllByType(Text)
-            .some(
-              text =>
-                text.props.children ===
-                'Camera opens first. You control record.',
-            ),
-        ).toBe(false);
         await unmount(renderer);
       },
     );
