@@ -542,7 +542,7 @@ describe('PaywallScreen buttons — plan podium', () => {
     ).toBe(false);
     let copy = allText(renderer);
     expect(copy).toContain(
-      'Monthly · $7.99 per month, auto-renews. Cancel anytime.',
+      '$7.99 per month, automatically renewing until canceled.',
     );
     expect(copy).toContain('Continue · $7.99/mo');
     expect(
@@ -554,9 +554,6 @@ describe('PaywallScreen buttons — plan podium', () => {
     });
     expect(useAccessStore.getState().selectedPeriod).toBe('lifetime');
     copy = allText(renderer);
-    expect(copy).toContain(
-      'Lifetime · $159.99 one-time payment. No renewal, no subscription.',
-    );
     expect(copy).toContain('Continue · $159.99 once');
     expect(copy).toContain(
       '$159.99 one-time purchase. Not a subscription — no renewal.',

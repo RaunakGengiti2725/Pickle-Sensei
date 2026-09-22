@@ -424,7 +424,7 @@ describe('PaywallScreen podium', () => {
     });
     expect(useAccessStore.getState().selectedPeriod).toBe('lifetime');
     expect(allText(renderer)).toContain(
-      'Lifetime · CA$ 1,299.99 one-time payment. No renewal, no subscription.',
+      'CA$ 1,299.99 one-time purchase. Not a subscription — no renewal.',
     );
     expect(
       pressable(renderer, 'paywall-continue').props.accessibilityLabel,
@@ -690,9 +690,6 @@ describe('PaywallScreen podium', () => {
       pressable(renderer, 'paywall-plan-monthly').props.accessibilityLabel,
     ).toBe('Monthly membership, $4.99 per month, selected');
     let copy = allText(renderer);
-    expect(copy).toContain(
-      'Monthly · $4.99 per month, auto-renews. Cancel anytime.',
-    );
     expect(copy).toContain('Continue · $4.99/mo');
     expect(copy).toContain(
       '$4.99 per month, automatically renewing until canceled.',
@@ -703,11 +700,10 @@ describe('PaywallScreen podium', () => {
       pressable(renderer, 'paywall-plan-annual').props.onPress(),
     );
     copy = allText(renderer);
-    expect(copy).toContain(
-      'Yearly · $39.99 per year, auto-renews. Cancel anytime.',
-    );
     expect(copy).toContain('Start free trial');
-    expect(copy).toContain('After the 7-day free trial,');
+    expect(copy).toContain(
+      'After the 7-day free trial, $39.99 per year, automatically renewing until canceled.',
+    );
 
     act(() => renderer.unmount());
   });
@@ -746,9 +742,6 @@ describe('PaywallScreen podium', () => {
       pressable(renderer, 'paywall-plan-lifetime').props.accessibilityLabel,
     ).toBe('Lifetime membership, $159.99 one-time, selected');
     const copy = allText(renderer);
-    expect(copy).toContain(
-      'Lifetime · $159.99 one-time payment. No renewal, no subscription.',
-    );
     expect(copy).toContain('Continue · $159.99 once');
     expect(copy).toContain(
       '$159.99 one-time purchase. Not a subscription — no renewal.',

@@ -30,7 +30,6 @@ import {
 } from '../state/accessStore';
 import { showBrandNotice } from '../design/BrandNotice';
 import {
-  FREE_PLAY_EYEBROW,
   freeRatingAllowanceCopy,
   membershipHeroCopy,
   RATING_CONSUMPTION_RULE,
@@ -61,27 +60,14 @@ export interface PaywallScreenProps {
 /** The value page's sell — every line is a real, shipping capability (no
  * invented features): unlimited ratings, evidence-bound coaching, the saved
  * practice library, and the rank/progress system. */
-const BENEFITS: Array<{ icon: IconName; title: string; body: string }> = [
-  {
-    icon: 'replay',
-    title: 'Unlimited technique analyses',
-    body: 'Automatic capture with replay and checkpoint feedback.',
-  },
+const BENEFITS: Array<{ icon: IconName; title: string }> = [
+  { icon: 'replay', title: 'Unlimited technique analyses' },
   {
     icon: 'verdict',
-    title: 'Coaching that follows evidence',
-    body: 'When reviewed work exists, a server-accepted score sets its priority and reassessment baseline.',
+    title: 'Coaching that follows your server-accepted scores',
   },
-  {
-    icon: 'ladder',
-    title: 'Rank and progress from real scores',
-    body: 'Player rank and trends built from your saved analysis results.',
-  },
-  {
-    icon: 'cones',
-    title: 'Practice, kept together',
-    body: 'Save available drills and coaching videos with your practice plan.',
-  },
+  { icon: 'ladder', title: 'Rank and progress from real scores' },
+  { icon: 'cones', title: 'Drills and coaching videos saved with your plan' },
 ];
 
 type PaywallPage = 'value' | 'pricing';
@@ -141,16 +127,6 @@ function planDetail(plan: StorePlan): string {
       : 'Billed yearly';
   }
   return 'Billed monthly · cancel anytime';
-}
-
-/** Restates the selected plan in plain words; prices come from the store. */
-function selectedPlanSummary(plan: StorePlan): string {
-  if (plan.period === 'lifetime') {
-    return `Lifetime · ${plan.priceString} one-time payment. No renewal, no subscription.`;
-  }
-  return `${PLAN_TITLES[plan.period]} · ${plan.priceString} per ${periodLabel(
-    plan.period,
-  )}, auto-renews. Cancel anytime.`;
 }
 
 function PlanRow(props: {
@@ -282,10 +258,7 @@ function BenefitRow(props: (typeof BENEFITS)[number]) {
       <View style={styles.benefitIcon}>
         <Icon name={props.icon} color={color.ink} size={18} />
       </View>
-      <View style={styles.benefitCopy}>
-        <Text style={styles.benefitTitle}>{props.title}</Text>
-        <Text style={styles.benefitBody}>{props.body}</Text>
-      </View>
+      <Text style={styles.benefitTitle}>{props.title}</Text>
     </View>
   );
 }
@@ -601,16 +574,17 @@ export function PaywallScreen(props: PaywallScreenProps) {
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.hero}>
-                <Text style={styles.eyebrow}>
-                  {hero?.eyebrow ?? 'STORE-VERIFIED PRICING'}
-                </Text>
-                <Text style={styles.title}>
+                {hero?.eyebrow ? (
+                  <Text style={styles.eyebrow}>{hero.eyebrow}</Text>
+                ) : null}
+                <Text
+                  style={[styles.title, !hero?.eyebrow && styles.titleLead]}
+                >
                   {hero?.title ?? 'Choose your plan.'}
                 </Text>
-                <Text style={styles.subtitle}>
-                  {hero?.detail ??
-                    `${allowanceCopy} Every price below comes from your app store — never an estimate.`}
-                </Text>
+                {hero ? (
+                  <Text style={styles.subtitle}>{hero.detail}</Text>
+                ) : null}
               </View>
 
               <View style={styles.plans}>
@@ -639,12 +613,6 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   </View>
                 ) : null}
 
-                {selectedPlan && !offerWithheld ? (
-                  <Text style={styles.selectedSummary}>
-                    {selectedPlanSummary(selectedPlan)}
-                  </Text>
-                ) : null}
-
                 {status === 'loading' && !plans && !offerWithheld ? (
                   <View
                     accessibilityRole="progressbar"
@@ -653,7 +621,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                   >
                     <BrandSpinner color={color.court} trackColor={color.line} />
                     <Text style={styles.loadingText}>
-                      Loading secure store pricing…
+                      Loading store pricing…
                     </Text>
                   </View>
                 ) : null}
@@ -661,15 +629,9 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 {!plans && status !== 'loading' && !offerWithheld ? (
                   <View style={styles.unavailableCard}>
                     <Icon name="shield" color={color.ink} size={22} />
-                    <View style={styles.unavailableCopy}>
-                      <Text style={styles.unavailableTitle}>
-                        Store pricing is unavailable
-                      </Text>
-                      <Text style={styles.unavailableBody}>
-                        We couldn’t load a verified App Store offer. Try
-                        again—no estimated price will be shown.
-                      </Text>
-                    </View>
+                    <Text style={styles.unavailableTitle}>
+                      Store pricing is unavailable
+                    </Text>
                   </View>
                 ) : null}
               </View>
@@ -798,15 +760,16 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 <View style={styles.crownBadge}>
                   <Icon name="crown" size={27} color={color.ink} />
                 </View>
-                <Text style={styles.eyebrow}>
-                  {hero?.eyebrow ?? FREE_PLAY_EYEBROW}
-                </Text>
-                <Text style={styles.title}>
+                {hero?.eyebrow ? (
+                  <Text style={styles.eyebrow}>{hero.eyebrow}</Text>
+                ) : null}
+                <Text
+                  style={[styles.title, !hero?.eyebrow && styles.titleLead]}
+                >
                   {hero?.title ?? 'A coach for every stroke.'}
                 </Text>
                 <Text style={styles.subtitle}>
-                  {hero?.detail ??
-                    `${allowanceCopy} Membership keeps scoring, practice, and progress moving together.`}
+                  {hero?.detail ?? allowanceCopy}
                 </Text>
                 <Text style={styles.ratingRule}>{RATING_CONSUMPTION_RULE}</Text>
               </View>
@@ -848,14 +811,6 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 </Text>
                 <Icon name="arrow" color={color.onDark} size={20} />
               </PressableScale>
-
-              <View style={styles.trustRow}>
-                <Icon name="shield" color={color.inkSoft} size={17} />
-                <Text style={styles.trustText}>
-                  Store-verified pricing on the next step. Purchases are handled
-                  by your app store — cancel anytime.
-                </Text>
-              </View>
             </ScrollView>
           )}
         </Animated.View>
@@ -941,6 +896,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     maxWidth: 410,
   },
+  titleLead: { marginTop: space.md },
   subtitle: {
     ...type.body,
     color: color.inkSoft,
@@ -975,9 +931,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: color.surfaceAlt,
   },
-  benefitCopy: { flex: 1 },
-  benefitTitle: { ...type.bodyBold, color: color.ink },
-  benefitBody: { ...type.caption, color: color.inkSoft, marginTop: 2 },
+  benefitTitle: { ...type.bodyBold, color: color.ink, flex: 1 },
   plans: { marginTop: space.lg, gap: space.sm + space.xs },
   // Full-width plan rows, the recommended plan first. Always a column, so
   // localized amounts have the whole card; the row inside each card stacks
@@ -1077,11 +1031,6 @@ const styles = StyleSheet.create({
   onPlanMuted: { color: color.inkSoft },
   onHero: { color: color.onDark },
   onHeroMuted: { color: color.onDarkMuted },
-  selectedSummary: {
-    ...type.caption,
-    color: color.inkSoft,
-    textAlign: 'center',
-  },
   loadingCard: {
     minHeight: 96,
     borderRadius: radius.lg,
@@ -1102,12 +1051,10 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceElevated,
     padding: space.md,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: space.md,
   },
-  unavailableCopy: { flex: 1 },
-  unavailableTitle: { ...type.bodyBold, color: color.ink },
-  unavailableBody: { ...type.caption, color: color.inkSoft, marginTop: 3 },
+  unavailableTitle: { ...type.bodyBold, color: color.ink, flex: 1 },
   errorCard: {
     minHeight: 44,
     marginTop: space.md,
