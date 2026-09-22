@@ -215,7 +215,7 @@ describe('Home streak badge hit target (wf fix-21)', () => {
     const texts = renderer.root
       .findAllByType(Text)
       .map(node => String(node.props.children));
-    expect(texts.some(text => text.includes('Your court is ready.'))).toBe(
+    expect(texts.some(text => text.includes('No scored reads yet.'))).toBe(
       true,
     );
     act(() => renderer.unmount());

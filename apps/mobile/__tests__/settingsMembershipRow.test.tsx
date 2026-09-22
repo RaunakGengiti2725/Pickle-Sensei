@@ -213,9 +213,6 @@ describe('Settings membership row', () => {
       .findAllByType(Text)
       .map(text => text.props.children)
       .join(' ');
-    expect(copy).toContain(
-      'Current capture behavior, reported without assumptions.',
-    );
     expect(copy).toContain('App-private storage');
     expect(copy).toContain('Not configured');
     act(() => membership.props.onPress());

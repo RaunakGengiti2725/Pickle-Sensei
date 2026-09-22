@@ -618,7 +618,7 @@ describe('ProgressScreen dashboard', () => {
     const text = renderedText(renderer);
 
     expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('This chart is waiting on you.');
+    expect(text).not.toContain('No captures yet.');
     expect(text).toMatch(/1\s+captured/);
     expect(text).toContain('· 1 imported');
     expect(text).toContain('First measured period on this device.');
@@ -641,7 +641,7 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain('forehand drive');
     expect(text).toContain('3.9s imported clip · pose sequence measured');
     expect(text).toContain('ANALYZED');
-    expect(text).not.toContain('No measured captures yet');
+    expect(text).not.toContain('No captures yet');
     expect(findByTestId(renderer, 'practice-excluded-note')).toBeNull();
     act(() => renderer.unmount());
   });
@@ -662,11 +662,8 @@ describe('ProgressScreen dashboard', () => {
       await pressByLabel(renderer, '7 days range');
       const text = renderedText(renderer);
 
-      expect(text).toContain('No verified captures in this range.');
-      expect(text).toContain(
-        'Your verified captures fall outside the selected dates. Check Recent captures below.',
-      );
-      expect(text).not.toContain('This chart is waiting on you.');
+      expect(text).toContain('No captures in this range.');
+      expect(text).not.toContain('No captures yet.');
       expect(text).toContain('forehand drive');
       expect(text).toContain(
         '1 saved clip without measured pose evidence is not counted.',
@@ -682,7 +679,7 @@ describe('ProgressScreen dashboard', () => {
       if (days === 8) {
         await pressByLabel(renderer, '4 weeks range');
         expect(renderedText(renderer)).not.toContain(
-          'No verified captures in this range.',
+          'No captures in this range.',
         );
         expect(
           findByTestId(renderer, 'practice-stat-captures')!.props
@@ -705,10 +702,7 @@ describe('ProgressScreen dashboard', () => {
     ]);
     const renderer = await renderScreen();
     await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('This chart is waiting on you.');
-    expect(renderedText(renderer)).not.toContain(
-      'Your verified captures fall outside the selected dates.',
-    );
+    expect(renderedText(renderer)).toContain('No captures yet.');
     act(() => renderer.unmount());
   });
 
@@ -721,7 +715,7 @@ describe('ProgressScreen dashboard', () => {
     await pressByLabel(renderer, 'practice progress');
     const text = renderedText(renderer);
 
-    expect(text).toContain('This chart is waiting on you.');
+    expect(text).toContain('No captures yet.');
     expect(
       findByTestId(renderer, 'practice-stat-captures')!.props
         .accessibilityLabel,
@@ -729,7 +723,7 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain(
       '1 saved clip without measured pose evidence is not counted.',
     );
-    expect(text).toContain('No measured captures yet');
+    expect(text).toContain('No captures yet');
     act(() => renderer.unmount());
   });
 
@@ -813,15 +807,13 @@ describe('ProgressScreen dashboard', () => {
     await pressByLabel(renderer, 'technique progress');
     const text = renderedText(renderer);
 
-    expect(text).toContain('No score is being estimated.');
-    expect(text).toContain(
-      'No comparable scored reads in this window yet. Your next validated analysis starts this chart.',
-    );
+    expect(text).toContain('No score yet.');
+    expect(text).toContain('No scored reads in this window yet.');
     expect(
       findByTestId(renderer, 'technique-stat-reps')!.props.accessibilityLabel,
     ).toBe('SCORED REPS: 0');
     expect(findByTestId(renderer, 'personal-best-card')).toBeNull();
-    expect(text).toContain('Comparable trends start after scoring');
+    expect(text).toContain('No scored strokes yet');
     act(() => renderer.unmount());
   });
 
@@ -939,7 +931,7 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain('+0.6');
     expect(text).toContain('LOWER RECENT AVG');
     expect(text).toContain('4.9');
-    expect(text).toContain('They are not a player rating.');
+    expect(text).toContain('Not a player rating.');
     act(() => renderer.unmount());
   });
 

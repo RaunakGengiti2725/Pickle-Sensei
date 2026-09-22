@@ -393,6 +393,13 @@ export function NotificationSettingsScreen() {
           </>
         ) : null}
 
+        <View style={styles.privacyNote}>
+          <Icon name="shield" size={16} color={color.inkSoft} />
+          <Text style={[type.caption, styles.privacyNoteCopy]}>
+            Reminders are scheduled on this phone. They never include your name,
+            scores, or clips.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -443,16 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   enableTitle: { color: color.onDark, marginTop: space.md },
-  enableBenefits: { marginTop: space.sm, gap: 4 },
-  enableBenefit: { color: color.onDarkMuted },
   enableAction: { marginTop: space.lg },
   enableError: { color: color.onDark, marginTop: space.sm },
   enableSecondaryAction: { marginTop: space.sm },
-  enableFootnote: {
-    color: color.onDarkFaint,
-    marginTop: space.sm,
-    textAlign: 'center',
-  },
   groupCard: { paddingHorizontal: space.md, paddingVertical: 2 },
   reminderRow: {
     minHeight: 66,

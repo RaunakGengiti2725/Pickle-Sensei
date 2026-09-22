@@ -1283,7 +1283,6 @@ export function ManageAccountScreen() {
           </View>
         </Card>
 
-
         {session && !session.localOnly ? (
           <PressableScale
             accessibilityRole="button"
@@ -1388,7 +1387,6 @@ const styles = StyleSheet.create({
     borderBottomColor: color.line,
   },
   detailValue: { color: color.ink, flexShrink: 1, textAlign: 'right' },
-  syncNote: { color: color.inkSoft, marginTop: space.md },
   deleteLink: {
     minHeight: 44,
     alignSelf: 'center',

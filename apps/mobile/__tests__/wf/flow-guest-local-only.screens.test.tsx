@@ -482,10 +482,10 @@ describe('SignInScreen reached from a guest (ConnectAccount route)', () => {
     asGuest();
     const renderer = render(<SignInScreen onBack={() => {}} />);
     const copy = allText(renderer);
-    expect(copy).toContain('A connected account is required for free ratings');
     expect(copy).toContain(
-      'Your existing on-device reads stay here when you connect.',
+      'An account is required for ratings, membership, and synced progress.',
     );
+    expect(copy).toContain('Reads on this device stay here.');
     act(() => renderer.unmount());
   });
 

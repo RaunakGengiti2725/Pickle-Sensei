@@ -801,7 +801,7 @@ describe('HomeScreen button ledger', () => {
       // Estimated DUPR first (6.4 → 2.98), the score beneath.
       expect(text).toContain('2.98');
       expect(text).toContain('6.4 /10');
-      expect(text).toContain('Latest validated scored stroke on this device');
+      expect(text).toContain('Latest technique');
       act(() => renderer.unmount());
     });
   });
@@ -859,9 +859,8 @@ describe('HomeScreen button ledger', () => {
       expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
       const text = allText(renderer);
       expect(text).toContain('THIS WEEK');
-      expect(text).toContain('Scored technique reads on this device');
       expect(text).toMatch(/1 scored read\b/);
-      expect(text).not.toContain('Your court is ready.');
+      expect(text).not.toContain('No scored reads yet.');
       // Footer: one scored day, avg and best both 3.7 — nothing invented.
       expect(text).toContain('1 scored day');
       expect(text.match(/3\.7/g)?.length).toBeGreaterThanOrEqual(2);
@@ -942,8 +941,7 @@ describe('HomeScreen button ledger', () => {
     it('tells a first week and a quiet week apart honestly', async () => {
       const first = await renderHome();
       let text = allText(first);
-      expect(text).toContain('Your court is ready.');
-      expect(text).toContain('Your first scored read starts this record.');
+      expect(text).toContain('No scored reads yet.');
       expect(text).toContain('—');
       expect(chartLabel(first, 'score-dot-plot')).toBe(
         'No scored reads in this window yet.',
@@ -955,8 +953,7 @@ describe('HomeScreen button ledger', () => {
       const quiet = await renderHome();
       text = allText(quiet);
       expect(text).toContain('Quiet week so far.');
-      expect(text).toContain('Your next scored read lands here.');
-      expect(text).not.toContain('Your court is ready.');
+      expect(text).not.toContain('No scored reads yet.');
       act(() => quiet.unmount());
     });
   });
@@ -1280,7 +1277,6 @@ describe('HomeScreen button ledger', () => {
       const text = allText(renderer);
       expect(text).toContain('serve daily average');
       expect(text).toContain('7.1');
-      expect(text).toContain('Latest synced daily average');
       act(() => renderer.unmount());
     });
   });

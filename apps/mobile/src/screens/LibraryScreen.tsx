@@ -60,6 +60,7 @@ type LibraryTab = 'reads' | 'saved';
 /** Pending-clips group header + pill, exported so tests pin the copy. */
 export const PENDING_SECTION_LABEL = 'SAVED CLIPS · NOT ANALYZED';
 export const PENDING_SECTION_PILL = 'NOT SCORED';
+export const PENDING_SECTION_NOTE = 'Opening a clip never starts a rating.';
 export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
 /** Reads-tab copy when the local repository could not be read. */
 export const READS_LOAD_ERROR_TITLE = 'Your reads couldn’t be opened.';
@@ -448,7 +449,9 @@ export function LibraryScreen() {
                 <Icon name="shield" size={22} color={color.court} />
               </View>
               <Text style={[type.h2, styles.messageTitle]}>
-                Saved drills need a connected account.
+                {localOnly
+                  ? 'Saved drills need a connected account.'
+                  : 'Saved drills aren’t available in this build.'}
               </Text>
               {savedError?.message ? (
                 <Text style={[type.body, styles.messageBody]}>
@@ -494,8 +497,8 @@ export function LibraryScreen() {
                 Saved entries couldn’t be verified right now.
               </Text>
               <Text style={[type.body, styles.messageBody]}>
-                {savedDrills.length} saved{' '}
-                {plural(savedDrills.length, 'drill')} could not be loaded.
+                {savedDrills.length} saved {plural(savedDrills.length, 'drill')}{' '}
+                could not be loaded.
               </Text>
               <View style={styles.retryWrap}>
                 <Button
@@ -723,6 +726,9 @@ export function LibraryScreen() {
                           </PressableScale>
                         );
                       })}
+                      <Text style={[type.caption, styles.pendingNote]}>
+                        {PENDING_SECTION_NOTE}
+                      </Text>
                     </View>
                   ) : null}
                   <Text
@@ -805,7 +811,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   pageHeader: { paddingTop: space.xl, marginBottom: space.lg },
   pageTitle: { color: color.ink },
-  pageSubtitle: { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
   segmentedControl: {
     flexDirection: 'row',
     backgroundColor: color.surfaceAlt,
@@ -958,7 +963,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  exploreCopy: { color: color.inkSoft, marginTop: 2 },
   stateBlock: { minHeight: 260 },
   messageCard: { padding: space.lg, marginBottom: space.lg },
   messageIcon: {

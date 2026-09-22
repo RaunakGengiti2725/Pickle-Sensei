@@ -290,7 +290,7 @@ describe('Home — loading and failure', () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
     expect(copy).not.toContain('Your court couldn’t load');
-    expect(copy).toContain('Latest validated scored stroke on this device');
+    expect(copy).toContain('Latest technique');
     expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
@@ -437,14 +437,10 @@ describe('Home — controls', () => {
   it('empty court is honest and non-dead-end (no placeholder numbers)', async () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
-    expect(copy).toContain('Your court is ready.');
-    expect(copy).toContain('Your first scored read starts this record.');
+    expect(copy).toContain('No scored reads yet.');
     expect(copy).toContain('No scored technique yet');
-    expect(copy).toContain(
-      'Camera practice still counts. Scores appear only after validated analysis.',
-    );
     expect(copy).toContain('—');
-    expect(copy).toContain('Your first read starts here');
+    expect(copy).toContain('No reads yet');
     expect(copy).not.toContain('Live Court');
     expect(copy).not.toContain('Chosen focus');
     act(() => renderer.unmount());

@@ -502,9 +502,7 @@ describe('LibraryScreen · reads tab', () => {
       }
       const renderer = await renderLibrary();
       expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
-      expect(allText(renderer)).not.toContain(
-        'Your measured reads, in one place.',
-      );
+      expect(allText(renderer)).not.toContain('No reads yet.');
       expect(findByLabel(renderer, 'Analyze your first stroke')).toBeNull();
       expect(
         renderer.root.findAll(node => node.props.accessibilityRole === 'alert')
@@ -670,7 +668,7 @@ describe('LibraryScreen · reads tab', () => {
     mockListShots.mockResolvedValue([]);
     const renderer = await renderLibrary();
 
-    expect(allText(renderer)).toContain('Your measured reads, in one place.');
+    expect(allText(renderer)).toContain('No reads yet.');
     const button = findByLabel(renderer, 'Analyze your first stroke');
     expect(button).not.toBeNull();
     expect(button!.props.disabled).toBeFalsy();
@@ -695,9 +693,7 @@ describe('LibraryScreen · reads tab', () => {
     expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain('Forehand Drive · auto capture');
     expect(text).toContain('Clip saved — analysis has not run yet');
-    expect(text).toContain(
-      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
-    );
+    expect(text).toContain('Opening a clip never starts a rating.');
     // The clip rows are not buttons; the only non-tab control is the
     // always-reachable Analyze CTA so the page is never a dead end.
     const nonTab = pressables(renderer).filter(
@@ -842,7 +838,7 @@ describe('LibraryScreen · saved tab navigation', () => {
     await pressTab(renderer, 'Saved drills');
 
     expect(allText(renderer)).toContain(
-      'Saved training needs a synced account.',
+      'Saved drills need a connected account.',
     );
     expect(allText(renderer)).toContain('Connect a synced account');
     await pressByLabel(renderer, 'Connect account');
@@ -862,7 +858,7 @@ describe('LibraryScreen · saved tab navigation', () => {
     await pressTab(renderer, 'Saved drills');
 
     expect(allText(renderer)).toContain(
-      'no authenticated training API connection',
+      'Saved drills aren’t available in this build.',
     );
     expect(findByLabel(renderer, 'Connect account')).toBeNull();
 

@@ -1120,6 +1120,10 @@ export function ProgressScreen() {
                       </Text>
                     </View>
                   ))}
+                  <Text style={[type.caption, styles.signalDisclosure]}>
+                    Accepted scored reads from the last 30 days. Not a player
+                    rating.
+                  </Text>
                 </Card>
               </>
             ) : null}
@@ -1168,11 +1172,6 @@ const styles = StyleSheet.create({
   },
   pageHeader: { maxWidth: 380 },
   pageTitle: { color: color.onDark },
-  pageSubtitle: {
-    color: color.onDarkSubtle,
-    marginTop: space.sm,
-    maxWidth: 340,
-  },
   // WHOOP-style underline tabs (MOBBIN: WHOOP OVERVIEW/SLEEP/RECOVERY/STRAIN).
   sectionBar: {
     flexDirection: 'row',
@@ -1234,7 +1233,6 @@ const styles = StyleSheet.create({
   },
   practiceHeroHeading: { flex: 1, minWidth: 0 },
   heroEyebrow: { color: color.volt },
-  heroSource: { color: color.onDarkSubtle, marginTop: 4 },
   // Sized by its content — a fixed width truncated "DAY STREAK" to
   // "DAY STR…" the moment the digits took any room.
   streakChip: {
@@ -1309,7 +1307,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.voltTint,
   },
   captureZeroCopy: { flex: 1, minWidth: 0 },
-  captureZeroDetail: { color: color.onDarkSubtle, marginTop: 3 },
   comparisonCopy: { color: color.onDarkSubtle, marginTop: 3 },
   excludedNote: { color: color.onDarkFaint, marginTop: space.sm },
   practiceFooter: {
@@ -1368,14 +1365,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.mint,
   },
   evidenceDetail: { color: color.onDarkSubtle, marginTop: 10 },
-  evidenceDisclosure: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginTop: 10,
-    paddingHorizontal: space.sm,
-  },
-  evidenceDisclosureCopy: { color: color.onDarkSubtle, flex: 1 },
   emptyPractice: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   emptyPracticeIcon: {
     width: 48,
@@ -1385,7 +1374,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyPracticeCopy: { color: color.onDarkSubtle, marginTop: 4 },
   captureList: {
     borderRadius: radius.lg,
     backgroundColor: color.inkElevated,
@@ -1454,7 +1442,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
   },
-  techniqueEmptyCopy: { color: color.onDarkSubtle, marginTop: 4 },
   techniqueScoreRow: { marginTop: space.xl },
   techniqueScore: {
     ...type.display,
@@ -1516,7 +1503,6 @@ const styles = StyleSheet.create({
     borderTopColor: color.lineDark,
   },
   strokeEmpty: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  strokeEmptyCopy: { color: color.onDarkSubtle, marginTop: 4 },
   strokeCard: { marginBottom: 10, padding: space.lg },
   strokeTop: {
     flexDirection: 'row',

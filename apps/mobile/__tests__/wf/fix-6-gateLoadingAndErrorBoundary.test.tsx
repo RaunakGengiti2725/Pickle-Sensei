@@ -474,7 +474,7 @@ describe('Gate returning authentication', () => {
       signedOut(returningState(reason));
       const renderer = renderApp();
       expect(allText(renderer)).toContain('Sign in again.');
-      expect(allText(renderer)).toContain('check for a saved coaching profile');
+      expect(allText(renderer)).toContain('restore your profile and progress');
       expect(allText(renderer)).not.toMatch(
         /WELCOME|ONBOARDING|ROOT_NAVIGATOR/,
       );

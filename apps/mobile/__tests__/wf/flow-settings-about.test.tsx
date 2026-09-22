@@ -775,9 +775,6 @@ describe('AGENTS.md invariants for settings-about', () => {
     // D-046: the app's headline rating is an estimated DUPR, so Settings
     // says exactly what it is and is not, in the shared words.
     expect(copy).toContain(DUPR_ESTIMATE_NOTE);
-    expect(copy).toContain(
-      'The technique score beneath each figure describes stroke form.',
-    );
     expect(copy).not.toMatch(/≈/);
     act(() => renderer.unmount());
   });

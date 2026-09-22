@@ -160,7 +160,7 @@ describe('Library saved drills visibility', () => {
     const text = renderedText(renderer);
 
     expect(text).toContain('Saved entries couldn’t be verified right now.');
-    expect(text).toContain('server catalog entry could not be loaded');
+    expect(text).toContain('1 saved drill could not be loaded.');
     expect(text).not.toContain('Dink Target Ladder');
     expect(
       renderer.root.findAll(
@@ -184,8 +184,7 @@ describe('Library saved drills visibility', () => {
 
     expect(text).toContain('Dink Target Ladder');
     expect(text).not.toContain('Gone ');
-    expect(text).toContain('1 additional saved');
-    expect(text).toContain('entry is hidden');
+    expect(text).toContain('1 more saved drill could not be loaded.');
 
     act(() => renderer.unmount());
   });

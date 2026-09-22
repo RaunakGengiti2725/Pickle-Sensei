@@ -329,24 +329,21 @@ describe('Library flow · Reads tab', () => {
     const renderer = await renderLibrary();
     expect(allText(renderer)).not.toContain('Opening your library…');
     expect(allText(renderer)).toContain('Your reads couldn’t be opened.');
-    expect(allText(renderer)).not.toContain(
-      'Your measured reads, in one place.',
-    );
+    expect(allText(renderer)).not.toContain('No reads yet.');
     expect(findByLabel(renderer, 'Analyze your first stroke')).toHaveLength(0);
     const retry = oneByLabel(renderer, 'Try again');
     expect(retry.props.accessibilityRole).toBe('button');
     await pressByLabel(renderer, 'Try again');
     expect(mockListShots).toHaveBeenCalledTimes(2);
     expect(allText(renderer)).not.toContain('Your reads couldn’t be opened.');
-    expect(allText(renderer)).toContain('Your measured reads, in one place.');
+    expect(allText(renderer)).toContain('No reads yet.');
     act(() => renderer.unmount());
   });
 
   it('the empty state routes into Analyze with a labeled primary action', async () => {
     const renderer = await renderLibrary();
     const text = allText(renderer);
-    expect(text).toContain('Your measured reads, in one place.');
-    expect(text).toContain('Unscored captures stay clearly marked.');
+    expect(text).toContain('No reads yet.');
     const cta = oneByLabel(renderer, 'Analyze your first stroke');
     expect(cta.props.accessibilityRole).toBe('button');
     expect(cta.props.accessibilityState.disabled).toBeFalsy();
@@ -364,7 +361,7 @@ describe('Library flow · Reads tab', () => {
     expect(text).toContain('7.4');
     expect(text).toContain('NOT READ');
     // The empty state never coexists with rows.
-    expect(text).not.toContain('Your measured reads, in one place.');
+    expect(text).not.toContain('No reads yet.');
 
     // A scored row's label carries its estimated DUPR (7.4 → 3.60) and the
     // 0–10 score; an unread row's label stays the bare stroke.
@@ -413,10 +410,8 @@ describe('Library flow · Reads tab', () => {
     // states the real next step and the Analyze CTA stays reachable so the
     // tab is never a dead end. No Result row exists for an unscored clip.
     expect(text).not.toContain('READY TO ANALYZE');
-    expect(text).toContain(
-      'Saved technique confirmations and interrupted analyses reopen the same clip. Other pending clips remain read-only. Opening a clip never starts a rating.',
-    );
-    expect(text).toContain('Your measured reads, in one place.');
+    expect(text).toContain('Opening a clip never starts a rating.');
+    expect(text).toContain('No reads yet.');
     expect(text).toContain('Analyze your first stroke');
     expect(
       pressables(renderer).filter(n =>
@@ -506,7 +501,7 @@ describe('Library flow · Saved drills tab', () => {
     const renderer = await renderLibrary();
     await openSavedTab(renderer);
     const text = allText(renderer);
-    expect(text).toContain('Saved training needs a synced account.');
+    expect(text).toContain('Saved drills need a connected account.');
     expect(text).toContain('Connect a synced account to load saved drills');
     await pressByLabel(renderer, 'Connect account');
     expect(mockNavigate).toHaveBeenCalledWith('ConnectAccount');
@@ -522,7 +517,7 @@ describe('Library flow · Saved drills tab', () => {
     const renderer = await renderLibrary();
     await openSavedTab(renderer);
     expect(allText(renderer)).toContain(
-      'The app has no authenticated training API connection in this build.',
+      'Saved drills aren’t available in this build.',
     );
     expect(findByLabel(renderer, 'Connect account')).toHaveLength(0);
     act(() => renderer.unmount());
@@ -573,7 +568,7 @@ describe('Library flow · Saved drills tab', () => {
     act(() => useTrainingStore.setState({ drillDetails: {} }));
     text = allText(renderer);
     expect(text).toContain('Saved entries couldn’t be verified right now.');
-    expect(text).toContain('1 saved entry is hidden');
+    expect(text).toContain('1 saved drill could not be loaded.');
     expect(text).not.toContain('Dink Target Ladder');
     loadSavedDrills.mockClear();
     await pressByLabel(renderer, 'Try again');

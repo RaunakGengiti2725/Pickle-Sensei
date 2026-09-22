@@ -816,14 +816,12 @@ const styles = StyleSheet.create({
     backgroundColor: color.voltTint,
   },
   practiceZeroTitle: { color: color.onDark },
-  practiceZeroCopy: { color: color.onDarkSubtle, marginTop: 2 },
   practiceCardTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: space.md,
   },
-  practiceCardSource: { color: color.onDarkSubtle, marginTop: 4 },
   // Two-lens segmented control (the Progress range bar's dark idiom, sized
   // to the header stack); vertical hitSlop lifts each 28pt segment to 44pt
   // without the neighbours' touch areas overlapping.
@@ -904,7 +902,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.courtSoft,
   },
   techniqueSummaryTitle: { color: color.ink, textTransform: 'capitalize' },
-  techniqueSummaryCopy: { color: color.graphite, marginTop: 3 },
   techniqueSummaryScoreWrap: { alignItems: 'flex-end' },
   techniqueSummaryScore: {
     ...type.score,
