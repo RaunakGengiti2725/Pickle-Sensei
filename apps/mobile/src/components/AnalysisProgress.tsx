@@ -137,9 +137,6 @@ export const ANALYSIS_STAGE_LABELS: Record<AnalysisStageKey, string> = {
   saving: 'Saving your result',
 };
 
-/** Static, honest overall hint for the unmeasured stages. */
-export const ANALYSIS_DURATION_HINT = 'usually under ~10 seconds';
-
 /** One renderable snapshot of the progress surface. */
 export interface AnalysisProgressUi {
   stage: AnalysisStageKey;
@@ -157,7 +154,7 @@ export function analysisStageProgress(
     stage,
     progress: null,
     label: ANALYSIS_STAGE_LABELS[stage],
-    sublabel: ANALYSIS_DURATION_HINT,
+    sublabel: null,
   };
 }
 

@@ -395,8 +395,8 @@ describe('imported-video extraction progress', () => {
     expect(renderedText(renderer)).not.toContain('90%');
     expect(progressBarNode(renderer).props.accessibilityValue.now).toBe(40);
 
-    // Extraction succeeds → the staged analysis surface: honest stage label
-    // with the static overall hint, indeterminate (no invented percentage).
+    // Extraction succeeds → the staged analysis surface: honest stage label,
+    // indeterminate (no invented percentage or duration).
     await extraction.resolve({
       poseSequence: { ...extractedPoseSequence },
       framesWithPose: 126,
@@ -404,7 +404,7 @@ describe('imported-video extraction progress', () => {
     });
     expect(renderedText(renderer)).toContain('Measuring your swing…');
     expect(renderedText(renderer)).toContain('Measuring your swing');
-    expect(renderedText(renderer)).toContain('usually under ~10 seconds');
+    expect(renderedText(renderer)).not.toContain('usually under');
     expect(
       progressBarNode(renderer).props.accessibilityValue.now,
     ).toBeUndefined();
@@ -500,9 +500,9 @@ describe('guided-capture analysis progress', () => {
     await act(async () => {});
 
     // The analyzing surface keeps its exact caption, now with the honest
-    // indeterminate stage bar: label + static hint, no percentage.
+    // indeterminate stage bar: label only, no percentage or duration.
     expect(renderedText(renderer)).toContain('Measuring your swing…');
-    expect(renderedText(renderer)).toContain('usually under ~10 seconds');
+    expect(renderedText(renderer)).not.toContain('usually under');
     const bar = progressBarNode(renderer);
     expect(bar.props.accessibilityValue).toEqual({ min: 0, max: 100 });
     expect(renderedText(renderer)).not.toContain('%');

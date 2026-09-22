@@ -240,7 +240,7 @@ function ReplayCard(props: {
       <Card tone="dark" style={styles.replayCard}>
         <Text style={[type.micro, { color: color.onDarkMuted }]}>REPLAY</Text>
         <Text style={[type.body, styles.replayEmpty]}>
-          No replay evidence is stored for this stroke on this device.
+          No replay is stored on this device.
         </Text>
       </Card>
     );
@@ -510,10 +510,9 @@ function ReplayCard(props: {
 
       <Text style={[type.caption, styles.replayDisclosure]}>
         {nativePlayback
-          ? 'Playback and scrubbing stay on this device — the clip is ' +
-            'never uploaded.'
-          : 'Scrubbing moves the measured evidence timeline. The clip file ' +
-            'stays on this device.'}
+          ? 'The clip stays on this device — never uploaded.'
+          : 'Scrubbing moves the measured timeline; the clip stays on this ' +
+            'device.'}
       </Text>
     </Card>
   );
@@ -808,16 +807,17 @@ export function StrokeResultAnalyzing(props: {
           testID="stroke-result-analyzing-progress"
         />
       ) : null}
-      <Text
-        style={[
-          type.caption,
-          styles.analyzingDetail,
-          { color: props.dark ? color.onDarkSubtle : color.inkSoft },
-        ]}
-      >
-        {props.detail ??
-          'Only measured evidence will be shown — nothing is invented.'}
-      </Text>
+      {props.detail ? (
+        <Text
+          style={[
+            type.caption,
+            styles.analyzingDetail,
+            { color: props.dark ? color.onDarkSubtle : color.inkSoft },
+          ]}
+        >
+          {props.detail}
+        </Text>
+      ) : null}
     </View>
   );
 }

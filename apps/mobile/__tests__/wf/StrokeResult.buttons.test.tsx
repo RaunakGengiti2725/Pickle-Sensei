@@ -459,9 +459,7 @@ describe('StrokeResult ledger — measured rows "See more" / "Show fewer"', () =
 describe('StrokeResult ledger — replay Play/Pause (measured-timeline mode)', () => {
   it('play advances the clock on a timer, pause freezes it, and the run stops honestly at the end', () => {
     const { renderer } = renderSurface();
-    expect(textOf(renderer)).toContain(
-      'Scrubbing moves the measured evidence timeline',
-    );
+    expect(textOf(renderer)).toContain('Scrubbing moves the measured timeline');
     expect(replayClock(renderer)).toBe('0.00s');
     expect(iconNames(renderer)).toContain('play');
 
@@ -556,9 +554,7 @@ describe('StrokeResult ledger — replay Play/Pause (measured-timeline mode)', (
       clip: null,
       attempts: [],
     });
-    expect(textOf(renderer)).toContain(
-      'No replay evidence is stored for this stroke on this device.',
-    );
+    expect(textOf(renderer)).toContain('No replay is stored on this device.');
     expect(hasPressable(renderer, 'Play replay')).toBe(false);
     expect(
       renderer.root.findAll(
@@ -633,7 +629,7 @@ describe('StrokeResult ledger — replay controls drive the native player', () =
 
   it('play/pause toggles the player `playing` prop without starting a JS timer', () => {
     const { renderer } = renderSurface();
-    expect(textOf(renderer)).toContain('the clip is never uploaded');
+    expect(textOf(renderer)).toContain('never uploaded');
     expect(player(renderer).props.uri).toBe(clip.uri);
     expect(player(renderer).props.playing).toBe(false);
     expect(player(renderer).props.seekMs).toBe(-1);
