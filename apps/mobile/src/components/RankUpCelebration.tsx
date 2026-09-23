@@ -184,15 +184,15 @@ function CelebrationStage(props: {
 
       <Text style={[type.caption, styles.detail]}>
         {placement
-          ? `Your current form across ${summary.techniqueCount} ${
+          ? `Current form across ${summary.techniqueCount} ${
               summary.techniqueCount === 1 ? 'technique' : 'techniques'
-            } — recent swings count most.`
+            }.`
           : summary.nextTier
             ? `${formatDuprDistance(
                 summary.rating,
                 summary.nextTier.minRating,
-              )} to ${summary.nextTier.label}. Every analysis moves it.`
-            : 'Top tier — every new analysis defends it.'}
+              )} to ${summary.nextTier.label}.`
+            : 'Top tier.'}
       </Text>
     </>
   );

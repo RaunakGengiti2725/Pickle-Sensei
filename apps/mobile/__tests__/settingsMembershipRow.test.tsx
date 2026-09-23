@@ -168,7 +168,7 @@ afterEach(() => {
 });
 
 describe('Settings membership row', () => {
-  it('keeps account, membership and privacy context neutral without changing their labels or actions', async () => {
+  it('keeps account and membership context neutral without changing their labels or actions', async () => {
     configureAccessStore(backendReturning(async () => freeAccess(1)));
     const renderer = renderScreen();
     await flush();
@@ -199,25 +199,9 @@ describe('Settings membership row', () => {
       membership.findAllByType(Icon).find(icon => icon.props.name === 'crown')!
         .props.color,
     ).toBe(color.inkSoft);
-    const privacy = renderer.root.findByProps({
-      testID: 'settings-privacy-context',
-    });
-    expect(StyleSheet.flatten(privacy.props.style).backgroundColor).toBe(
-      color.surfaceAlt,
-    );
-    expect(privacy.findByType(Icon).props).toMatchObject({
-      name: 'shield',
-      color: color.inkSoft,
-    });
-    const copy = privacy
-      .findAllByType(Text)
-      .map(text => text.props.children)
-      .join(' ');
-    expect(copy).toContain(
-      'Current capture behavior, reported without assumptions.',
-    );
-    expect(copy).toContain('App-private storage');
-    expect(copy).toContain('Not configured');
+    expect(
+      renderer.root.findAllByProps({ testID: 'settings-privacy-context' }),
+    ).toHaveLength(0);
     act(() => membership.props.onPress());
     expect(mockNavigate).toHaveBeenCalledWith('Paywall', {
       source: 'settings',

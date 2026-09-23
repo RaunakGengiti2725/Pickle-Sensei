@@ -343,7 +343,7 @@ describe('ProgressScreen button ledger', () => {
     await pressByLabel(renderer, '7 days range');
     const text = renderedText(renderer);
     expect(text).toContain('VS. PRIOR 7 DAYS');
-    expect(text).toContain('CAPTURE EVIDENCE 7 DAYS');
+    expect(text).not.toContain('CAPTURE EVIDENCE');
     expect(text).not.toContain('VS. PRIOR 90 DAYS');
     act(() => renderer.unmount());
   });

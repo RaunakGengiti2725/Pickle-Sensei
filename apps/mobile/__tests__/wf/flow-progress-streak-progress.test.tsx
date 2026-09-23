@@ -416,7 +416,7 @@ describe('flow: progress dashboard', () => {
       'Consistency. 0 days training streak, momentum level 1. Opens the streak calendar.';
     expect(hostByLabel(renderer, label)).not.toBeNull();
     expect(renderedText(renderer)).toContain(
-      'Your first analysis lights the flame.',
+      'Your first training session starts your streak.',
     );
     await pressByLabel(renderer, label);
     expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');

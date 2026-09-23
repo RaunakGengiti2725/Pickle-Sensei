@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppState, Text } from 'react-native';
+import { AppState } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
   PermissionState,
@@ -120,7 +120,6 @@ jest.mock('../../src/consistency/store', () => {
 });
 
 import { useNotificationStore } from '../../src/notifications/notificationStore';
-import { NotificationPrimingCard } from '../../src/notifications/NotificationPrimingCard';
 import { useNotificationBootstrap } from '../../src/notifications/useNotificationBootstrap';
 import { useConsistencyStore } from '../../src/consistency/store';
 
@@ -180,49 +179,6 @@ async function unmount(renderer: TestRenderer.ReactTestRenderer) {
   });
 }
 
-function textContent(renderer: TestRenderer.ReactTestRenderer): string {
-  return renderer.root
-    .findAllByType(Text)
-    .map(node =>
-      React.Children.toArray(node.props.children)
-        .filter(child => typeof child === 'string')
-        .join(''),
-    )
-    .join('\n');
-}
-
-function pressableByLabel(
-  renderer: TestRenderer.ReactTestRenderer,
-  label: string,
-): TestRenderer.ReactTestInstance | null {
-  const matches = renderer.root.findAll(
-    node =>
-      node.props.accessibilityLabel === label &&
-      typeof node.props.onPress === 'function',
-  );
-  return (
-    matches.find(node => node.props.accessibilityRole !== undefined) ??
-    matches[0] ??
-    null
-  );
-}
-
-async function press(node: TestRenderer.ReactTestInstance | null) {
-  expect(node).not.toBeNull();
-  await act(async () => {
-    node!.props.onPress();
-  });
-  await flush();
-}
-
-function cardVisible(renderer: TestRenderer.ReactTestRenderer): boolean {
-  return (
-    renderer.root.findAll(
-      node => node.props.testID === 'notification-priming-card',
-    ).length > 0
-  );
-}
-
 function storedPrefs(forOwner = owner) {
   return parseNotificationPrefs(
     mockKvTable.get(notificationPrefsKeyForOwner(forOwner)) ?? null,
@@ -270,133 +226,6 @@ afterEach(() => {
   jest.useRealTimers();
   jest.restoreAllMocks();
   setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-});
-
-describe('Home priming card', () => {
-  async function renderCard() {
-    let renderer!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      renderer = TestRenderer.create(<NotificationPrimingCard />);
-    });
-    await flush();
-    return renderer;
-  }
-
-  it('is hidden until the store hydrated, then offers the choice with both buttons wired + labelled', async () => {
-    setActiveDataOwner(owner);
-    const renderer = await renderCard();
-    expect(cardVisible(renderer)).toBe(false);
-
-    await act(async () => {
-      await useNotificationStore.getState().hydrate();
-    });
-    await flush();
-    expect(cardVisible(renderer)).toBe(true);
-    const body = textContent(renderer);
-    expect(body).toContain('A nudge on practice days?');
-    expect(body).toContain('Scheduled on this phone only.');
-
-    const turnOn = pressableByLabel(renderer, 'Turn on practice reminders');
-    const notNow = pressableByLabel(renderer, 'Not now');
-    expect(turnOn?.props.accessibilityRole).toBe('button');
-    expect(turnOn?.props.accessibilityHint).toBe(
-      'Request notification permission and schedule reminders',
-    );
-    expect(notNow?.props.accessibilityRole).toBe('button');
-    expect(notNow?.props.accessibilityHint).toBe('Dismiss this reminder offer');
-    // Card never asks the OS on its own — only a tap does.
-    expect(mockScheduler.requestCalls).toBe(0);
-    await unmount(renderer);
-  });
-
-  it('"Turn on" → grant: enables, schedules, persists, card goes away', async () => {
-    setActiveDataOwner(owner);
-    await useNotificationStore.getState().hydrate();
-    const renderer = await renderCard();
-    await press(pressableByLabel(renderer, 'Turn on practice reminders'));
-
-    expect(mockScheduler.requestCalls).toBe(1);
-    expect(useNotificationStore.getState().prefs.enabled).toBe(true);
-    expect(storedPrefs().enabled).toBe(true);
-    expect(storedPrefs().promptDismissed).toBe(true);
-    expect(mockScheduler.appliedPlans.length).toBe(1);
-    expect(cardVisible(renderer)).toBe(false);
-    await unmount(renderer);
-  });
-
-  it('"Turn on" → deny: nothing scheduled, card hides (no re-nag), Settings remains the recovery path', async () => {
-    setActiveDataOwner(owner);
-    mockScheduler.requestResult = 'denied';
-    await useNotificationStore.getState().hydrate();
-    const renderer = await renderCard();
-    await press(pressableByLabel(renderer, 'Turn on practice reminders'));
-
-    expect(useNotificationStore.getState().permission).toBe('denied');
-    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
-    expect(mockScheduler.appliedPlans).toEqual([]);
-    expect(cardVisible(renderer)).toBe(false);
-    await unmount(renderer);
-  });
-
-  it('"Turn on" → prompt throws: stays visible and tappable, nothing enabled', async () => {
-    setActiveDataOwner(owner);
-    mockScheduler.requestError = new Error('boom');
-    await useNotificationStore.getState().hydrate();
-    const renderer = await renderCard();
-    await press(pressableByLabel(renderer, 'Turn on practice reminders'));
-
-    expect(useNotificationStore.getState().permission).toBe('unknown');
-    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
-    expect(cardVisible(renderer)).toBe(true);
-    mockScheduler.requestError = null;
-    await press(pressableByLabel(renderer, 'Turn on practice reminders'));
-    expect(useNotificationStore.getState().prefs.enabled).toBe(true);
-    expect(cardVisible(renderer)).toBe(false);
-    await unmount(renderer);
-  });
-
-  it('"Not now" dismisses durably without touching the OS prompt; survives re-hydrate', async () => {
-    setActiveDataOwner(owner);
-    await useNotificationStore.getState().hydrate();
-    const renderer = await renderCard();
-    await press(pressableByLabel(renderer, 'Not now'));
-
-    expect(mockScheduler.requestCalls).toBe(0);
-    expect(useNotificationStore.getState().prefs.promptDismissed).toBe(true);
-    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
-    expect(storedPrefs().promptDismissed).toBe(true);
-    expect(cardVisible(renderer)).toBe(false);
-
-    await act(async () => {
-      resetStore();
-      await useNotificationStore.getState().hydrate();
-    });
-    await flush();
-    expect(cardVisible(renderer)).toBe(false);
-    await unmount(renderer);
-  });
-
-  it('never shows for a denied permission or an already-enabled user', async () => {
-    setActiveDataOwner(owner);
-    mockScheduler.permission = 'denied';
-    await useNotificationStore.getState().hydrate();
-    await useNotificationStore.getState().refreshPermission();
-    const renderer = await renderCard();
-    expect(cardVisible(renderer)).toBe(false);
-
-    mockScheduler.permission = 'granted';
-    await act(async () => {
-      await useNotificationStore.getState().refreshPermission();
-    });
-    await flush();
-    expect(cardVisible(renderer)).toBe(true);
-    await act(async () => {
-      await useNotificationStore.getState().setPrefs({ enabled: true });
-    });
-    await flush();
-    expect(cardVisible(renderer)).toBe(false);
-    await unmount(renderer);
-  });
 });
 
 describe('App bootstrap (owner changes + foreground)', () => {

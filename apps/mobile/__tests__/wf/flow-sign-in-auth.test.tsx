@@ -300,7 +300,7 @@ describe('SignInScreen surface', () => {
     expect(copy).toContain('Your ratings,');
     expect(copy).toContain('tied to you.');
     expect(copy).toContain(
-      'A connected account is required for free ratings, membership, and server-verified coaching. Synced progress stays with that account.',
+      'An account is required for ratings, membership, and synced progress.',
     );
 
     for (const label of [

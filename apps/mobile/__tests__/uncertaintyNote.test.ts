@@ -138,7 +138,7 @@ describe('uncertaintyNotes', () => {
     expect(notes).toEqual([
       { kind: 'contact', text: UNCERTAINTY_COPY.contact },
     ]);
-    expect(notes[0]?.text).toContain('Contact wasn’t located on this attempt');
+    expect(notes[0]?.text).toContain('Contact wasn’t located');
   });
 
   it('an unconfirmed low-confidence estimate also reads as uncertain contact', () => {
@@ -187,9 +187,8 @@ describe('uncertaintyNotes', () => {
       { kind: 'contact_estimate', text: UNCERTAINTY_COPY.contact_estimate },
     ]);
     expect(notes[0]?.text).toBe(
-      'Contact is estimated from your wrist-speed peak — the paddle and ball ' +
-        'are not tracked, so the exact strike frame may differ by a frame or ' +
-        'two.',
+      'Contact is estimated from your wrist-speed peak, so the exact strike ' +
+        'frame may differ by a frame or two.',
     );
     // Never "couldn't measure the phase timing" when the phases ARE there.
     expect(notes.map(note => note.kind)).not.toContain('phase_timing');

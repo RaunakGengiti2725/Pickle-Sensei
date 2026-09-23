@@ -1283,12 +1283,6 @@ export function ManageAccountScreen() {
           </View>
         </Card>
 
-        <Text style={[type.caption, styles.syncNote]}>
-          Your profile, analysis history, and progress sync to this account.
-          Signing out from Settings keeps that data; it will be waiting the next
-          time you sign in.
-        </Text>
-
         {session && !session.localOnly ? (
           <PressableScale
             accessibilityRole="button"
@@ -1393,7 +1387,6 @@ const styles = StyleSheet.create({
     borderBottomColor: color.line,
   },
   detailValue: { color: color.ink, flexShrink: 1, textAlign: 'right' },
-  syncNote: { color: color.inkSoft, marginTop: space.md },
   deleteLink: {
     minHeight: 44,
     alignSelf: 'center',

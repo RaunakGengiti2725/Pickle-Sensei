@@ -56,11 +56,8 @@ jest.mock('../src/notifications/notificationStore', () => {
   };
 });
 
-import {
-  OnboardingScreen,
-  ONBOARDING_MASCOT_MOMENTS,
-} from '../src/screens/OnboardingScreen';
-import { color, type } from '../src/design/tokens';
+import { OnboardingScreen } from '../src/screens/OnboardingScreen';
+import { color } from '../src/design/tokens';
 import { BrandDialog, type BrandDialogAction } from '../src/design/components';
 
 /**
@@ -146,7 +143,7 @@ describe('OnboardingScreen', () => {
     mockSignOut.mockClear();
   });
 
-  it('keeps all eight captions as plain context, progress and 44pt actions without illustrations', () => {
+  it('keeps all eight steps free of context captions and illustrations, with progress and 44pt actions', () => {
     const renderer = renderScreen();
     const steps = [
       ['name', null],
@@ -160,19 +157,11 @@ describe('OnboardingScreen', () => {
     ] as const;
 
     for (const [index, [step, choice]] of steps.entries()) {
-      const context = renderer.root
-        .findAllByType(Text)
-        .find(node => node.props.testID === `onboarding-context-${step}`)!;
-      expect(context.props.children).toBe(
-        ONBOARDING_MASCOT_MOMENTS[step].caption,
-      );
-      const contextStyle = StyleSheet.flatten(context.props.style);
-      expect(contextStyle).toMatchObject({
-        fontSize: type.caption.fontSize,
-        color: color.inkSoft,
-      });
-      expect(contextStyle.backgroundColor).toBeUndefined();
-      expect(contextStyle.borderWidth).toBeUndefined();
+      expect(
+        renderer.root
+          .findAllByType(Text)
+          .filter(node => node.props.testID === `onboarding-context-${step}`),
+      ).toHaveLength(0);
       expect(renderer.root.findAllByType(Image)).toHaveLength(0);
       expect(
         renderer.root.findByProps({ accessibilityRole: 'progressbar' }).props
@@ -224,15 +213,11 @@ describe('OnboardingScreen', () => {
         renderer.root.findByProps({ testID: 'onboarding-focus' }).props.style,
       ).backgroundColor,
     ).toBe(color.surfaceDark);
-    for (const number of [1, 2, 3]) {
-      expect(
-        StyleSheet.flatten(
-          renderer.root.findByProps({
-            testID: `onboarding-plan-step-${number}`,
-          }).props.style,
-        ).backgroundColor,
-      ).toBe(color.surfaceAlt);
-    }
+    expect(
+      renderer.root.findAll(node =>
+        /^onboarding-plan-step-/.test(String(node.props.testID ?? '')),
+      ),
+    ).toHaveLength(0);
     const access = renderer.root.findByProps({
       testID: 'onboarding-access-context',
     });
@@ -252,7 +237,7 @@ describe('OnboardingScreen', () => {
     expect(allText(renderer)).toContain('PLAYER SETUP');
     expect(allText(renderer)).toContain('What should we call you?');
     expect(allText(renderer)).toContain(
-      'Enter a preferred name or nickname to continue. No legal name needed.',
+      'A nickname is fine. No legal name needed.',
     );
     expect(allText(renderer)).not.toMatch(/optional|skip/i);
 

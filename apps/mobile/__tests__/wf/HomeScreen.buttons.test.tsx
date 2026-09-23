@@ -55,26 +55,8 @@ jest.mock('../../src/data/db', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockGetKv = jest.fn<Promise<string | null>, unknown[]>();
-const mockSetKv = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listRealAnalysisFacts: (...args: unknown[]) =>
-    mockListRealAnalysisFacts(...args),
-  getKv: (...args: unknown[]) => mockGetKv(...args),
-  setKv: (...args: unknown[]) => mockSetKv(...args),
-}));
-
-const mockGetApiSession = jest.fn<unknown, []>(() => null);
-jest.mock('../../src/account/apiSession', () => ({
-  getApiSession: () => mockGetApiSession(),
-}));
-
-const mockFetchCanonicalProgress = jest.fn<Promise<unknown>, unknown[]>();
-jest.mock('../../src/progress/api', () => ({
-  fetchCanonicalProgress: (...args: unknown[]) =>
-    mockFetchCanonicalProgress(...args),
 }));
 
 jest.mock('../../src/progress/playerRank', () => {
@@ -116,25 +98,10 @@ jest.mock('../../src/progress/rankCelebration', () => {
   };
 });
 
-const mockRequestPermissionAndEnable = jest.fn(async () => true);
-const mockDismissPrompt = jest.fn(async () => {});
-const mockNotificationState = {
-  hydrated: true,
-  prefs: { enabled: false, promptDismissed: false },
-  permission: 'unknown' as 'unknown' | 'denied' | 'granted',
-  requestPermissionAndEnable: mockRequestPermissionAndEnable,
-  dismissPrompt: mockDismissPrompt,
-};
-jest.mock('../../src/notifications/notificationStore', () => ({
-  useNotificationStore: (
-    selector: (s: typeof mockNotificationState) => unknown,
-  ) => selector(mockNotificationState),
-}));
-
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import { color, type as typography } from '../../src/design/tokens';
 import { duprAccessibilityLabel } from '../../src/progress/duprEstimate';
-import type { LocalShotRow, RealAnalysisFact } from '../../src/data/repository';
+import type { LocalShotRow } from '../../src/data/repository';
 import {
   setActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
@@ -152,29 +119,6 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function syncedProgress(score: number) {
-  return {
-    series: [
-      {
-        day: new Date().toISOString().slice(0, 10),
-        shotType: 'serve',
-        scoringModelVersion: 'm1',
-        shotCount: 1,
-        avgScore: score,
-        bestScore: score,
-      },
-    ],
-    improving: [],
-    needsAttention: [],
-    streak: {
-      currentDays: 0,
-      longestDays: 0,
-      practicedToday: false,
-      lastPracticeDate: null,
-    },
-  };
-}
-
 function shot(overrides: Partial<LocalShotRow>): LocalShotRow {
   return {
     id: 'shot-1',
@@ -186,27 +130,6 @@ function shot(overrides: Partial<LocalShotRow>): LocalShotRow {
     resultKind: 'scored',
     source: 'real',
     favorite: false,
-    ...overrides,
-  };
-}
-
-/** A real scored analysis `hoursAgo` before now — inside the week window. */
-function fact(
-  hoursAgo: number,
-  overrides: Partial<RealAnalysisFact> = {},
-): RealAnalysisFact {
-  return {
-    id: `fact-${hoursAgo}`,
-    shotType: 'forehand_drive',
-    capturedAt: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
-    overallScore: 3.7,
-    confidence: 0.9,
-    resultKind: 'scored',
-    scoringModelVersion: 'model-1',
-    shotConfigVersion: 'config-1',
-    sessionId: null,
-    priorityCheckpoint: null,
-    checkpointScores: {},
     ...overrides,
   };
 }
@@ -328,25 +251,11 @@ describe('HomeScreen button ledger', () => {
     mockGetDb.mockReturnValue({ execute: jest.fn() });
     mockListShots.mockReset();
     mockListShots.mockResolvedValue([]);
-    mockListRealAnalysisFacts.mockReset();
-    mockListRealAnalysisFacts.mockResolvedValue([]);
-    mockGetKv.mockReset();
-    mockGetKv.mockResolvedValue(null);
-    mockSetKv.mockReset();
-    mockSetKv.mockResolvedValue(undefined);
-    mockGetApiSession.mockReset();
-    mockGetApiSession.mockReturnValue(null);
-    mockFetchCanonicalProgress.mockReset();
     mockRefreshConsistency.mockClear();
-    mockRequestPermissionAndEnable.mockClear();
-    mockDismissPrompt.mockClear();
     mockAppState.profile = null;
     mockAppState.ownerKey = OWNER;
     setActiveDataOwner(OWNER);
     mockConsistencyState.snapshot = null;
-    mockNotificationState.hydrated = true;
-    mockNotificationState.prefs = { enabled: false, promptDismissed: false };
-    mockNotificationState.permission = 'unknown';
   });
 
   afterEach(() => {
@@ -358,13 +267,12 @@ describe('HomeScreen button ledger', () => {
     jest.restoreAllMocks();
   });
 
-  it('uses the shared card-score and big-stat roles without changing the measured values', async () => {
+  it('uses the shared card-score role without changing the measured values', async () => {
     mockListShots.mockResolvedValue([shot({})]);
-    mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
     const renderer = await renderHome();
-    // D-046: the latest-technique card and the recent-read row both print
-    // the estimated DUPR (6.4 → 2.98) in the card-score role with the
-    // " DUPR" unit nested, and "6.4 /10" as the smaller micro line.
+    // D-046: the recent-read row prints the estimated DUPR (6.4 → 2.98) in
+    // the card-score role with the " DUPR" unit nested, and "6.4 /10" as
+    // the smaller micro line.
     const duprNumerals = renderer.root
       .findAllByType(Text)
       .filter(
@@ -373,13 +281,13 @@ describe('HomeScreen button ledger', () => {
           node.props.children[0] === '2.98',
       );
     // The rank banner prints the same estimate in its own bodyBold role; the
-    // two card scores are the ones in the shared card-score role.
+    // card score is the one in the shared card-score role.
     const scores = duprNumerals.filter(
       node =>
         StyleSheet.flatten(node.props.style)?.fontSize ===
         typography.score.fontSize,
     );
-    expect(scores).toHaveLength(2);
+    expect(scores).toHaveLength(1);
     for (const score of scores) {
       expect(StyleSheet.flatten(score.props.style)).toMatchObject({
         ...typography.score,
@@ -389,7 +297,7 @@ describe('HomeScreen button ledger', () => {
     const secondary = renderer.root
       .findAllByType(Text)
       .filter(node => node.props.children === '6.4 /10');
-    expect(secondary.length).toBeGreaterThanOrEqual(2);
+    expect(secondary.length).toBeGreaterThanOrEqual(1);
     for (const line of secondary) {
       expect(StyleSheet.flatten(line.props.style)).toMatchObject(
         typography.micro,
@@ -400,19 +308,6 @@ describe('HomeScreen button ledger', () => {
         .findAllByType(Text)
         .filter(node => node.props.children === '6.4'),
     ).toHaveLength(0);
-    const counters = renderer.root
-      .findAllByType(Text)
-      .filter(
-        node =>
-          StyleSheet.flatten(node.props.style)?.fontSize ===
-          typography.display.fontSize,
-      );
-    expect(counters).toHaveLength(1);
-    expect(counters[0]!.props.children).toBe(1);
-    expect(StyleSheet.flatten(counters[0]!.props.style)).toMatchObject({
-      ...typography.display,
-      color: color.onDark,
-    });
     act(() => renderer.unmount());
   });
 
@@ -783,181 +678,10 @@ describe('HomeScreen button ledger', () => {
       const renderer = await renderHome();
       const text = allText(renderer);
       expect(text).toContain('—');
-      expect(text).toContain('No scored technique yet');
       expect(
         pressableByLabel(renderer, openResultLabel('drive', null)),
       ).not.toBeNull();
       act(() => renderer.unmount());
-    });
-
-    it('shows the latest scored stroke as the technique headline', async () => {
-      mockListShots.mockResolvedValue([
-        shot({ id: 'n1', shotType: 'drive', overallScore: null }),
-        shot({ id: 's1', shotType: 'third_shot_drop', overallScore: 6.4 }),
-      ]);
-      const renderer = await renderHome();
-      const text = allText(renderer);
-      expect(text).toContain('third shot drop');
-      // Estimated DUPR first (6.4 → 2.98), the score beneath.
-      expect(text).toContain('2.98');
-      expect(text).toContain('6.4 /10');
-      expect(text).toContain('Latest validated scored stroke on this device');
-      act(() => renderer.unmount());
-    });
-  });
-
-  describe('NotificationPrimingCard actions rendered on Home', () => {
-    it('Turn on requests permission through the notification store', async () => {
-      const renderer = await renderHome();
-      const turnOn = pressableByLabel(renderer, 'Turn on practice reminders')!;
-      expect(turnOn).not.toBeNull();
-      expect(turnOn.props.accessibilityRole).toBe('button');
-      expect(meetsHitTarget(turnOn)).toBe(true);
-      await press(turnOn);
-      expect(mockRequestPermissionAndEnable).toHaveBeenCalledTimes(1);
-      expect(mockNavigate).not.toHaveBeenCalled();
-      act(() => renderer.unmount());
-    });
-
-    it('Not now dismisses the prompt through the notification store', async () => {
-      const renderer = await renderHome();
-      const notNow = pressableByLabel(renderer, 'Not now')!;
-      expect(notNow).not.toBeNull();
-      expect(notNow.props.accessibilityRole).toBe('button');
-      expect(meetsHitTarget(notNow)).toBe(true);
-      await press(notNow);
-      expect(mockDismissPrompt).toHaveBeenCalledTimes(1);
-      act(() => renderer.unmount());
-    });
-
-    it('is hidden once reminders were answered', async () => {
-      mockNotificationState.prefs = { enabled: false, promptDismissed: true };
-      const renderer = await renderHome();
-      expect(
-        pressableByLabel(renderer, 'Turn on practice reminders'),
-      ).toBeNull();
-      expect(pressableByLabel(renderer, 'Not now')).toBeNull();
-      act(() => renderer.unmount());
-    });
-  });
-
-  describe('This week card (scored reads, two chart lenses)', () => {
-    const scoresTab = (renderer: Renderer) =>
-      pressableByTestId(renderer, 'home-week-chart-scores')!;
-    const readsTab = (renderer: Renderer) =>
-      pressableByTestId(renderer, 'home-week-chart-reads')!;
-    const chartLabel = (renderer: Renderer, testID: string) =>
-      renderer.root.findAll(
-        n => typeof n.type === 'string' && n.props.testID === testID,
-      )[0]?.props.accessibilityLabel as string | undefined;
-
-    it('counts the first scored read whatever path captured it (the scan-not-showing bug)', async () => {
-      // One scored analysis exists (imported video OR guided camera — the
-      // card no longer cares which); the capture-evidence table is not read.
-      mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
-      const renderer = await renderHome();
-      expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
-      const text = allText(renderer);
-      expect(text).toContain('THIS WEEK');
-      expect(text).toContain('Scored technique reads on this device');
-      expect(text).toMatch(/1 scored read\b/);
-      expect(text).not.toContain('Your court is ready.');
-      // Footer: one scored day, avg and best both 3.7 — nothing invented.
-      expect(text).toContain('1 scored day');
-      expect(text.match(/3\.7/g)?.length).toBeGreaterThanOrEqual(2);
-      // Default lens is the dot plot, summarized for screen readers.
-      expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
-      );
-      expect(chartLabel(renderer, 'practice-volume-chart')).toBeUndefined();
-      act(() => renderer.unmount());
-    });
-
-    it('toggle switches to the reads-per-day bars and remembers the choice on device', async () => {
-      mockListRealAnalysisFacts.mockResolvedValue([
-        fact(30, { id: 'a', overallScore: 5.2 }),
-        fact(2, { id: 'b', overallScore: 6.1 }),
-      ]);
-      const renderer = await renderHome();
-      const scores = scoresTab(renderer);
-      const reads = readsTab(renderer);
-      for (const tab of [scores, reads]) {
-        expect(tab.props.accessibilityRole).toBe('tab');
-        expect(meetsHitTarget(tab)).toBe(true);
-      }
-      expect(scores.props.accessibilityState).toMatchObject({ selected: true });
-      expect(reads.props.accessibilityState).toMatchObject({ selected: false });
-
-      await press(reads);
-      expect(mockSetKv).toHaveBeenCalledWith(
-        expect.anything(),
-        'home.week-chart',
-        'reads',
-      );
-      expect(readsTab(renderer).props.accessibilityState).toMatchObject({
-        selected: true,
-      });
-      expect(chartLabel(renderer, 'practice-volume-chart')).toBe(
-        'Seven day read volume: 2 scored reads across 2 scored days.',
-      );
-      expect(chartLabel(renderer, 'score-dot-plot')).toBeUndefined();
-      // The hero count is the same number in both lenses.
-      expect(allText(renderer)).toMatch(/2 scored reads\b/);
-
-      await press(scoresTab(renderer));
-      expect(mockSetKv).toHaveBeenLastCalledWith(
-        expect.anything(),
-        'home.week-chart',
-        'scores',
-      );
-      expect(chartLabel(renderer, 'score-dot-plot')).toBe(
-        'Seven day estimated DUPR: 2 scored reads across 2 days, latest Estimated DUPR 2.94, technique score 6.1 out of 10.',
-      );
-      act(() => renderer.unmount());
-    });
-
-    it('opens on the remembered lens', async () => {
-      mockGetKv.mockResolvedValue('reads');
-      mockListRealAnalysisFacts.mockResolvedValue([fact(1)]);
-      const renderer = await renderHome();
-      expect(mockGetKv).toHaveBeenCalledWith(
-        expect.anything(),
-        'home.week-chart',
-      );
-      expect(readsTab(renderer).props.accessibilityState).toMatchObject({
-        selected: true,
-      });
-      expect(chartLabel(renderer, 'practice-volume-chart')).toBeDefined();
-      act(() => renderer.unmount());
-    });
-
-    it('a broken preference read never fails the Home load', async () => {
-      mockGetKv.mockRejectedValue(new Error('kv missing'));
-      const renderer = await renderHome();
-      expect(allText(renderer)).toContain('THIS WEEK');
-      expect(pressableByLabel(renderer, 'Try again')).toBeNull();
-      act(() => renderer.unmount());
-    });
-
-    it('tells a first week and a quiet week apart honestly', async () => {
-      const first = await renderHome();
-      let text = allText(first);
-      expect(text).toContain('Your court is ready.');
-      expect(text).toContain('Your first scored read starts this record.');
-      expect(text).toContain('—');
-      expect(chartLabel(first, 'score-dot-plot')).toBe(
-        'No scored reads in this window yet.',
-      );
-      act(() => first.unmount());
-
-      // Comparable reads exist, but all of them predate this week.
-      mockListRealAnalysisFacts.mockResolvedValue([fact(24 * 12)]);
-      const quiet = await renderHome();
-      text = allText(quiet);
-      expect(text).toContain('Quiet week so far.');
-      expect(text).toContain('Your next scored read lands here.');
-      expect(text).not.toContain('Your court is ready.');
-      act(() => quiet.unmount());
     });
   });
 
@@ -965,7 +689,6 @@ describe('HomeScreen button ledger', () => {
     it('reloads shots and analyses, then clears the refreshing flag', async () => {
       const renderer = await renderHome();
       expect(mockListShots).toHaveBeenCalledTimes(1);
-      expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
 
       let release!: (rows: unknown[]) => void;
       mockListShots.mockImplementationOnce(
@@ -1062,19 +785,7 @@ describe('HomeScreen button ledger', () => {
     });
   });
 
-  describe('account-synced progress', () => {
-    it('never requests another owner’s canonical history', async () => {
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
-      mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(9.1));
-      mockListShots.mockResolvedValue([shot({ shotType: 'dink' })]);
-      const renderer = await renderHome();
-      expect(
-        pressableByLabel(renderer, openResultLabel('dink')),
-      ).not.toBeNull();
-      expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
-      act(() => renderer.unmount());
-    });
-
+  describe('owner-scoped local reads', () => {
     it('rejects local work from a previous sign-in even when the owner returns before render', async () => {
       const local = deferred<unknown[]>();
       mockListShots.mockReturnValueOnce(local.promise);
@@ -1089,93 +800,6 @@ describe('HomeScreen button ledger', () => {
       expect(
         pressableByLabel(renderer, openResultLabel('serve')),
       ).not.toBeNull();
-      act(() => renderer.unmount());
-    });
-
-    it('hides loaded history and rejects late canonical data from an earlier sign-in generation', async () => {
-      const canonical = deferred<ReturnType<typeof syncedProgress>>();
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress.mockReturnValueOnce(canonical.promise);
-      mockListShots.mockResolvedValue([shot({ shotType: 'dink' })]);
-      const renderer = await renderHome();
-      setActiveDataOwner(OTHER_OWNER);
-      setActiveDataOwner(OWNER);
-      const local = deferred<unknown[]>();
-      mockListShots.mockReturnValueOnce(local.promise);
-      mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(7.9));
-      await act(async () => renderer.update(<HomeScreen />));
-      expect(allText(renderer)).toContain('Loading your court');
-      expect(pressableByLabel(renderer, openResultLabel('dink'))).toBeNull();
-      await act(async () => canonical.resolve(syncedProgress(4.2)));
-      expect(allText(renderer)).toContain('Loading your court');
-      await act(async () => local.resolve([]));
-      expect(allText(renderer)).toContain('7.9');
-      expect(allText(renderer)).not.toContain('4.2');
-      act(() => renderer.unmount());
-    });
-
-    it('ignores canonical data while blurred and only merges the next focus response', async () => {
-      const first = deferred<ReturnType<typeof syncedProgress>>();
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
-      const renderer = await renderHome();
-      mockFocused = false;
-      await act(async () => renderer.update(<HomeScreen />));
-      await act(async () => first.resolve(syncedProgress(4.2)));
-      expect(allText(renderer)).not.toContain('4.2');
-      mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(7.9));
-      mockFocused = true;
-      await act(async () => renderer.update(<HomeScreen />));
-      expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(2);
-      expect(allText(renderer)).toContain('7.9');
-      act(() => renderer.unmount());
-    });
-
-    it('paints local reads and finishes refresh while canonical progress is still pending', async () => {
-      const canonical = deferred<ReturnType<typeof syncedProgress>>();
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress.mockReturnValue(canonical.promise);
-      mockListShots.mockResolvedValue([shot({ shotType: 'dink' })]);
-      mockListRealAnalysisFacts.mockResolvedValue([fact(1)]);
-      const renderer = await renderHome();
-
-      expect(allText(renderer)).not.toContain('Loading your court');
-      expect(
-        pressableByLabel(renderer, openResultLabel('dink')),
-      ).not.toBeNull();
-      expect(allText(renderer)).toContain('THIS WEEK');
-      expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
-      await act(async () => {
-        renderer.root.findByType(RefreshControl).props.onRefresh();
-      });
-      expect(renderer.root.findByType(RefreshControl).props.refreshing).toBe(
-        false,
-      );
-      expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(2);
-
-      await act(async () => canonical.resolve(syncedProgress(9.1)));
-      expect(allText(renderer)).toContain('6.4');
-      expect(allText(renderer)).not.toContain('9.1');
-      act(() => renderer.unmount());
-    });
-
-    it('ignores a superseded canonical response instead of overwriting the latest refresh', async () => {
-      const first = deferred<ReturnType<typeof syncedProgress>>();
-      const second = deferred<ReturnType<typeof syncedProgress>>();
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress
-        .mockReturnValueOnce(first.promise)
-        .mockReturnValueOnce(second.promise);
-      const renderer = await renderHome();
-      expect(allText(renderer)).not.toContain('Loading your court');
-      await act(async () => {
-        renderer.root.findByType(RefreshControl).props.onRefresh();
-      });
-      await act(async () => second.resolve(syncedProgress(7.9)));
-      expect(allText(renderer)).toContain('7.9');
-      await act(async () => first.resolve(syncedProgress(4.2)));
-      expect(allText(renderer)).toContain('7.9');
-      expect(allText(renderer)).not.toContain('4.2');
       act(() => renderer.unmount());
     });
 
@@ -1200,93 +824,18 @@ describe('HomeScreen button ledger', () => {
       act(() => renderer.unmount());
     });
 
-    it('does not publish a previous owner’s pending canonical progress', async () => {
-      const first = deferred<ReturnType<typeof syncedProgress>>();
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress.mockReturnValueOnce(first.promise);
-      const renderer = await renderHome();
-      setActiveDataOwner(OTHER_OWNER);
-      mockAppState.ownerKey = OTHER_OWNER;
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OTHER_OWNER });
-      mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(7.9));
-      await act(async () => renderer.update(<HomeScreen />));
-      await act(async () => first.resolve(syncedProgress(4.2)));
-      expect(allText(renderer)).toContain('7.9');
-      expect(allText(renderer)).not.toContain('4.2');
-      act(() => renderer.unmount());
-    });
-
-    it('does not launch canonical work when local reads finish after unmount', async () => {
+    it('drops local reads that finish after unmount', async () => {
       const local = deferred<unknown[]>();
       mockListShots.mockReturnValue(local.promise);
-      mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
-      mockFetchCanonicalProgress.mockResolvedValue(syncedProgress(7.9));
       const renderer = await renderHome();
       act(() => renderer.unmount());
       await act(async () => local.resolve([shot({})]));
-      expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
       expect(renderer.toJSON()).toBeNull();
-    });
-
-    it('falls back to local data when the progress fetch rejects', async () => {
-      mockGetApiSession.mockReturnValue({
-        apiBaseUrl: 'https://api.test',
-        bearerToken: 'token',
-        canonicalAppUserId: OWNER,
-      });
-      mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
-      const renderer = await renderHome();
-      expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
-      expect(allText(renderer)).toContain('No scored technique yet');
-      expect(pressableByTestId(renderer, 'home-streak-badge')).not.toBeNull();
-      act(() => renderer.unmount());
-    });
-
-    it('shows the synced daily average when no local scored read exists', async () => {
-      mockGetApiSession.mockReturnValue({
-        apiBaseUrl: 'https://api.test',
-        bearerToken: 'token',
-        canonicalAppUserId: OWNER,
-      });
-      mockFetchCanonicalProgress.mockResolvedValue({
-        series: [
-          {
-            day: '2026-08-20',
-            shotType: 'dink',
-            scoringModelVersion: 'm1',
-            shotCount: 2,
-            avgScore: 5.5,
-            bestScore: 6,
-          },
-          {
-            day: '2026-08-28',
-            shotType: 'serve',
-            scoringModelVersion: 'm1',
-            shotCount: 1,
-            avgScore: 7.1,
-            bestScore: 7.1,
-          },
-        ],
-        improving: [],
-        needsAttention: [],
-        streak: {
-          currentDays: 0,
-          longestDays: 0,
-          practicedToday: false,
-          lastPracticeDate: null,
-        },
-      });
-      const renderer = await renderHome();
-      const text = allText(renderer);
-      expect(text).toContain('serve daily average');
-      expect(text).toContain('7.1');
-      expect(text).toContain('Latest synced daily average');
-      act(() => renderer.unmount());
     });
   });
 
   describe('profile-driven copy', () => {
-    it('greets by first name and shows the self-set focus and level', async () => {
+    it('greets by first name and shows the self-set level', async () => {
       mockAppState.profile = {
         firstName: 'Ada',
         skillLevel: '3.5',
@@ -1296,14 +845,7 @@ describe('HomeScreen button ledger', () => {
       const text = allText(renderer);
       expect(text).toContain('Ready when you are, Ada.');
       expect(text).toContain('SELF · 3.5');
-      expect(text).toContain('paddle ready');
-      expect(
-        renderer.root.findAll(
-          n =>
-            isHost(n) &&
-            n.props.accessibilityLabel === 'Self-selected focus: paddle ready',
-        ).length,
-      ).toBe(1);
+      expect(text).not.toContain('paddle ready');
       act(() => renderer.unmount());
     });
   });
@@ -1321,22 +863,12 @@ describe('HomeScreen button ledger', () => {
           'Player rank Gold I, estimated DUPR 2.98, technique rating 6.40 out of 10.',
         ),
         '2 days training streak. Opens the consistency calendar.',
-        'Turn on practice reminders',
-        'Not now',
         'Stroke Analysis. Analyze one movement with fast, detailed feedback.',
         'Drill Library. Guided drills you can search.',
-        'DUPR chart: every scored read at its estimated DUPR',
-        'Reads chart: scored reads per day',
         openResultLabel('dink'),
       ]);
       for (const node of controls) {
-        // The week-card lenses are a two-tab segmented control; every other
-        // control is a button.
-        expect(node.props.accessibilityRole).toBe(
-          String(node.props.testID).startsWith('home-week-chart-')
-            ? 'tab'
-            : 'button',
-        );
+        expect(node.props.accessibilityRole).toBe('button');
         expect(node.props.disabled ?? false).toBe(false);
         expect(hostOf(node).props.accessibilityState?.disabled ?? false).toBe(
           false,

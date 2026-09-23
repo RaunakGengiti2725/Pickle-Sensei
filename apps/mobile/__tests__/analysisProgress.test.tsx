@@ -1,7 +1,6 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
-  ANALYSIS_DURATION_HINT,
   ANALYSIS_STAGE_LABELS,
   AnalysisProgressBar,
   analysisStageProgress,
@@ -125,16 +124,15 @@ describe('extraction ETA math', () => {
 // ─── Stage model helpers ─────────────────────────────────────────────────────
 
 describe('analysis stage snapshots', () => {
-  it('unmeasured stages are indeterminate with the static honest hint', () => {
+  it('unmeasured stages are indeterminate with no invented sublabel', () => {
     for (const stage of ['verifying', 'measuring', 'saving'] as const) {
       expect(analysisStageProgress(stage)).toEqual({
         stage,
         progress: null,
         label: ANALYSIS_STAGE_LABELS[stage],
-        sublabel: ANALYSIS_DURATION_HINT,
+        sublabel: null,
       });
     }
-    expect(ANALYSIS_DURATION_HINT).toBe('usually under ~10 seconds');
   });
 
   it('extraction is indeterminate before the first native event, real after', () => {
@@ -227,7 +225,7 @@ describe('AnalysisProgressBar', () => {
         dark
         progress={null}
         label="Measuring your swing"
-        sublabel="usually under ~10 seconds"
+        sublabel="Still working"
       />,
     );
     const node = progressNode(renderer);
@@ -235,7 +233,7 @@ describe('AnalysisProgressBar', () => {
     expect(node.props.accessibilityValue.now).toBeUndefined();
     const rendered = textOf(renderer);
     expect(rendered).toContain('Measuring your swing');
-    expect(rendered).toContain('usually under ~10 seconds');
+    expect(rendered).toContain('Still working');
     expect(rendered).not.toContain('%');
     await act(async () => renderer.unmount());
   });

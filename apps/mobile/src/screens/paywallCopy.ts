@@ -6,19 +6,15 @@ import {
 import type { MembershipState } from '../billing/membershipState';
 import type { CanonicalAccessState } from '../billing/types';
 
-export { FREE_PLAY_EYEBROW } from '../billing/freeRatings';
-
 export interface MembershipHeroCopy {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   detail: string;
 }
 
 export const MEMBERSHIP_VERIFICATION_HERO: MembershipHeroCopy = {
-  eyebrow: 'MEMBERSHIP VERIFICATION',
   title: 'Verify your membership.',
-  detail:
-    'Verification is pending, not another purchase. Retry with our server without opening the app store.',
+  detail: 'Verification is pending, not another purchase.',
 };
 
 /**
@@ -45,7 +41,7 @@ export function membershipHeroCopy(
 }
 
 export const RATING_CONSUMPTION_RULE =
-  'A completed rating uses one free rating. Unscored attempts are not charged. Pending work may keep a rating reserved until it is reconciled.';
+  'Only a completed rating uses a free rating — unscored attempts are not charged, and a pending capture may keep one reserved.';
 
 function capitalize(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);

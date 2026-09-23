@@ -927,7 +927,9 @@ it.each(['ready', 'error'] as const)(
     expect(renderer!.root.findByType(ScreenHeader).props.title).toBe(
       'Confirm technique',
     );
-    expect(JSON.stringify(renderer!.toJSON())).toContain('existing operation');
+    expect(JSON.stringify(renderer!.toJSON())).toContain(
+      'must be verified before continuing',
+    );
     expect(store.count('analysis_run_journal', OWNER)).toBe(1);
     expect(http.mock.calls.every(([url]) => url.includes('/finalize'))).toBe(
       true,

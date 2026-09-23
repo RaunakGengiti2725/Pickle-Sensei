@@ -69,7 +69,7 @@ import { DrillLibraryScreen } from '../../src/screens/DrillLibraryScreen';
  * success and the failure path.
  */
 
-const SAVED_TOAST = 'Saved to your library · Library → Saved drills';
+const SAVED_TOAST = 'Saved to your library';
 const REMOVED_TOAST = 'Removed from saved drills';
 const YOUTUBE_FAIL_COPY = 'YouTube could not be opened on this device.';
 const CATALOG_FAIL_TITLE = 'The drill catalog could not load.';
@@ -771,9 +771,7 @@ describe('DrillLibraryScreen button ledger', () => {
       await expandDink(renderer);
       expect(mockGetDrill).toHaveBeenCalledTimes(1);
       let copy = allText(renderer);
-      expect(copy).toContain(
-        'Drill detail could not be loaded from this deployment.',
-      );
+      expect(copy).toContain('Drill detail could not load.');
       expect(copy).toContain('Drill detail is not deployed for this build.');
       expect(copy).not.toContain('Loading drill detail…');
 
@@ -795,9 +793,7 @@ describe('DrillLibraryScreen button ledger', () => {
       await pressByLabel(renderer, 'Retry detail for Dink Target Ladder');
       expect(mockGetDrill).toHaveBeenCalledTimes(3);
       copy = allText(renderer);
-      expect(copy).not.toContain(
-        'Drill detail could not be loaded from this deployment.',
-      );
+      expect(copy).not.toContain('Drill detail could not load.');
       expect(copy).toContain('Contact the ball below your waist.');
       expect(
         findByLabel(renderer, 'Retry detail for Dink Target Ladder'),

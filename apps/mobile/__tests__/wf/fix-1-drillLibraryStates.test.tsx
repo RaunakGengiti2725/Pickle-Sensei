@@ -67,8 +67,7 @@ import { DrillLibraryScreen } from '../../src/screens/DrillLibraryScreen';
  */
 
 const FOCUS_HINT =
-  'After two scored analyses of the same technique, this library sorts ' +
-  'itself around your weakest checkpoint.';
+  'Your focus appears after two scored analyses of the same technique.';
 
 const dinkDrill: CatalogDrill = {
   id: '0b96363e-4a11-47c5-9d2c-3f5b8e6f2a17',

@@ -693,13 +693,13 @@ describe('StrokeResult — measured rows collapse (§1.4)', () => {
 });
 
 describe('StrokeResultAnalyzing — single-state arc + honest stage captions', () => {
-  it('renders the stage caption and the no-invention disclosure', async () => {
+  it('renders the stage caption with no default detail line', async () => {
     const renderer = await render(
       <StrokeResultAnalyzing caption="Measuring your swing…" dark />,
     );
     const rendered = textOf(renderer);
     expect(rendered).toContain('Measuring your swing…');
-    expect(rendered).toContain('nothing is invented');
+    expect(rendered).not.toContain('nothing is invented');
     await unmount(renderer);
   });
 });

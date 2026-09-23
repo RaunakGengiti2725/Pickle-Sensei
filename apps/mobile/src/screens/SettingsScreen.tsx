@@ -27,9 +27,6 @@ import { useAuthStore } from '../auth/authStore';
 import { useConsentStore } from '../state/consentStore';
 import { useNotificationStore } from '../notifications/notificationStore';
 import { formatReminderMinutes } from '../notifications/types';
-import { useConsistencyStore } from '../consistency/store';
-import { plural } from '../util/plural';
-import { scoringStackStatus } from '../vision/providers';
 import { selectMembershipState, useAccessStore } from '../state/accessStore';
 import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
@@ -192,8 +189,7 @@ function SignOutSheet(props: {
               },
             ]}
           >
-            Your on-device reads remain private and intact. Synced progress will
-            be available after you sign in again.
+            Your reads stay on this device.
           </Text>
           <View style={{ gap: 10, marginTop: space.xl }}>
             <Button
@@ -229,7 +225,6 @@ export function SettingsScreen() {
   const hydrateConsent = useConsentStore(s => s.hydrate);
   const notificationPrefs = useNotificationStore(s => s.prefs);
   const notificationPermission = useNotificationStore(s => s.permission);
-  const consistency = useConsistencyStore(s => s.snapshot);
   const { legalPrivacyUrl, legalTermsUrl } = getRuntimePublicConfig();
 
   // The consent value must reflect the server ledger, never a hard-coded
@@ -271,8 +266,6 @@ export function SettingsScreen() {
       ? 'Local · this device'
       : 'Progress stays on this phone until you connect an account.'
     : `${session?.provider ?? ''} account`;
-  const scoringStack = scoringStackStatus();
-  const modelLabel = scoringStack.version;
   const consentValue =
     consentAvailability !== 'ready'
       ? 'Manage'
@@ -304,14 +297,6 @@ export function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
-        <Text
-          style={[
-            type.body,
-            { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
-          ]}
-        >
-          Your player profile, coaching preferences, and privacy controls.
-        </Text>
 
         <Card tone="soft" style={styles.accountCard}>
           <View style={styles.accountTop}>
@@ -410,18 +395,6 @@ export function SettingsScreen() {
             icon="spark"
             label="Current focus"
             value={(profile?.focusCheckpoint ?? '—').replace(/_/g, ' ')}
-          />
-          <SettingRow
-            icon="flame"
-            label="Consistency"
-            value={
-              consistency
-                ? `${consistency.currentStreak} day streak · ${
-                    consistency.earned.length
-                  } ${plural(consistency.earned.length, 'badge')}`
-                : '—'
-            }
-            onPress={() => navigation.navigate('StreakCalendar')}
             last
           />
         </Card>
@@ -449,41 +422,6 @@ export function SettingsScreen() {
             last
           />
         </Card>
-        <View style={styles.privacyCard} testID="settings-privacy-context">
-          <View style={styles.privacyHeader}>
-            <View style={styles.privacyIcon}>
-              <Icon name="shield" size={22} color={color.inkSoft} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.h3, { color: color.ink }]}>
-                Private by default
-              </Text>
-              <Text
-                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
-              >
-                Current capture behavior, reported without assumptions.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.privacyRows}>
-            <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.inkSoft }]}>
-                Captured clips
-              </Text>
-              <Text style={[type.bodyBold, { color: color.ink }]}>
-                App-private storage
-              </Text>
-            </View>
-            <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.inkSoft }]}>
-                Cloud video upload
-              </Text>
-              <Text style={[type.bodyBold, { color: color.ink }]}>
-                Not configured
-              </Text>
-            </View>
-          </View>
-        </View>
 
         <SectionTitle title="About" />
         <Card style={styles.groupCard}>
@@ -519,11 +457,6 @@ export function SettingsScreen() {
             icon="library"
             label="App version"
             value={getRuntimePublicConfig().appVersion}
-          />
-          <SettingRow
-            icon="spark"
-            label="Scoring model"
-            value={modelLabel}
             last={!legalPrivacyUrl && !legalTermsUrl}
           />
           {legalPrivacyUrl ? (
@@ -553,8 +486,7 @@ export function SettingsScreen() {
             style={[type.caption, { color: color.inkSoft, flex: 1 }]}
             testID="settings-dupr-note"
           >
-            {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
-            describes stroke form.
+            {DUPR_ESTIMATE_NOTE}
           </Text>
         </View>
 
@@ -643,35 +575,6 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     textAlign: 'right',
     maxWidth: 130,
-  },
-  privacyCard: {
-    // The white consent Card above has no bottom margin of its own, so the
-    // context panel needs explicit top spacing or the two visually fuse.
-    marginTop: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.surfaceAlt,
-    padding: space.lg,
-  },
-  privacyHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  privacyIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    backgroundColor: color.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  privacyRows: {
-    marginTop: space.lg,
-    paddingTop: space.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
-  },
-  privacyRow: {
-    minHeight: 45,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   ratingNote: {
     flexDirection: 'row',

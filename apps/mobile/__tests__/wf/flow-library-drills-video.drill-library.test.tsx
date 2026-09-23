@@ -282,7 +282,7 @@ describe('Drill Library flow · catalog', () => {
       'The drill catalog needs a synced account.',
     );
     expect(allText(renderer)).toContain(
-      'Sign in with Apple or Google to browse the catalog and save drills to your library.',
+      'Sign in with Apple or Google to browse and save drills.',
     );
     expect(findByLabel(renderer, 'Try again')).toHaveLength(0);
     await act(async () => {
@@ -343,18 +343,14 @@ describe('Drill Library flow · detail + bookmark', () => {
     const renderer = await renderScreen();
     await openDetail(renderer);
     const text = allText(renderer);
-    expect(text).toContain(
-      'Drill detail could not be loaded from this deployment.',
-    );
+    expect(text).toContain('Drill detail could not load.');
     expect(text).toContain(OFFLINE_COPY);
     expect(text).not.toContain('Loading drill detail…');
 
     await pressByLabel(renderer, 'Retry detail for Dink Target Ladder');
     expect(mockGetDrill).toHaveBeenCalledTimes(2);
     expect(allText(renderer)).toContain('Third Shot Sports');
-    expect(allText(renderer)).not.toContain(
-      'Drill detail could not be loaded from this deployment.',
-    );
+    expect(allText(renderer)).not.toContain('Drill detail could not load.');
     act(() => renderer.unmount());
   });
 
@@ -406,9 +402,7 @@ describe('Drill Library flow · detail + bookmark', () => {
     });
 
     await act(async () => resolveSave());
-    expect(allText(renderer)).toContain(
-      'Saved to your library · Library → Saved drills',
-    );
+    expect(allText(renderer)).toContain('Saved to your library');
     const saved = oneByLabel(
       renderer,
       'Remove Dink Target Ladder from saved drills',

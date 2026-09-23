@@ -225,7 +225,7 @@ describe('PlayerRankCard account-rank fetch (its only async path)', () => {
     expect(copy).toContain('Diamond');
     expect(copy).toContain('7.60');
     expect(copy).toContain('Saved to your account.');
-    expect(copy).toContain('Top tier — every new analysis defends it.');
+    expect(copy).toContain('Top tier');
     expect(copy).toContain('third shot drop');
     expectNoControls(renderer);
     // The account rank is reported to the ceremony store as the latest resolve.

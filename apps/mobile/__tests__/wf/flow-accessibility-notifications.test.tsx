@@ -226,7 +226,7 @@ describe('Notification settings — accessibility workflow', () => {
     });
     const renderer = renderScreen();
     expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
-    expect(allText(renderer)).toContain('Off by default.');
+    expect(allText(renderer)).toContain('Practice reminders');
     const turnOn = byLabel(renderer, 'Turn on reminders');
     expect(turnOn.props.accessibilityRole).toBe('button');
     expect(minHeightOf(turnOn)).toBeGreaterThanOrEqual(MIN_TARGET_PT);

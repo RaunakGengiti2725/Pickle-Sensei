@@ -587,10 +587,7 @@ describe('ProgressScreen dashboard', () => {
       findByTestId(renderer, 'practice-stat-active-days')!.props
         .accessibilityLabel,
     ).toBe('ACTIVE DAYS: 2. Prior period 1, trending up');
-    expect(
-      findByTestId(renderer, 'practice-stat-pose-tracked')!.props
-        .accessibilityLabel,
-    ).toBe('POSE TRACKED: 0.9s. Prior period 0.3s, trending up');
+    expect(findByTestId(renderer, 'practice-stat-pose-tracked')).toBeNull();
 
     // Hero: count, honest comparison sentence, and the capture streak.
     expect(text).toContain('+2 captures versus the prior 4 weeks.');
@@ -618,7 +615,7 @@ describe('ProgressScreen dashboard', () => {
     const text = renderedText(renderer);
 
     expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('This chart is waiting on you.');
+    expect(text).not.toContain('No verified captures yet.');
     expect(text).toMatch(/1\s+captured/);
     expect(text).toContain('· 1 imported');
     expect(text).toContain('First measured period on this device.');
@@ -630,12 +627,8 @@ describe('ProgressScreen dashboard', () => {
       findByTestId(renderer, 'practice-stat-active-days')!.props
         .accessibilityLabel,
     ).toBe('ACTIVE DAYS: 1');
-    // Camera-only instrumentation is not faked for an import: "—", not 0.0s.
-    expect(
-      findByTestId(renderer, 'practice-stat-pose-tracked')!.props
-        .accessibilityLabel,
-    ).toBe('POSE TRACKED: —');
     expect(text).not.toContain('0.0s');
+    expect(text).not.toContain('POSE AVAILABILITY');
     // It is listed as what it is, titled by the user's declaration.
     expect(text).toContain('RECENT CAPTURES');
     expect(text).toContain('forehand drive');
@@ -663,10 +656,7 @@ describe('ProgressScreen dashboard', () => {
       const text = renderedText(renderer);
 
       expect(text).toContain('No verified captures in this range.');
-      expect(text).toContain(
-        'Your verified captures fall outside the selected dates. Check Recent captures below.',
-      );
-      expect(text).not.toContain('This chart is waiting on you.');
+      expect(text).not.toContain('No verified captures yet.');
       expect(text).toContain('forehand drive');
       expect(text).toContain(
         '1 saved clip without measured pose evidence is not counted.',
@@ -675,10 +665,6 @@ describe('ProgressScreen dashboard', () => {
         findByTestId(renderer, 'practice-stat-captures')!.props
           .accessibilityLabel,
       ).toMatch(/^CAPTURES: 0/);
-      expect(
-        findByTestId(renderer, 'practice-stat-pose-tracked')!.props
-          .accessibilityLabel,
-      ).toBe('POSE TRACKED: —');
       if (days === 8) {
         await pressByLabel(renderer, '4 weeks range');
         expect(renderedText(renderer)).not.toContain(
@@ -705,10 +691,7 @@ describe('ProgressScreen dashboard', () => {
     ]);
     const renderer = await renderScreen();
     await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('This chart is waiting on you.');
-    expect(renderedText(renderer)).not.toContain(
-      'Your verified captures fall outside the selected dates.',
-    );
+    expect(renderedText(renderer)).toContain('No verified captures yet.');
     act(() => renderer.unmount());
   });
 
@@ -721,7 +704,7 @@ describe('ProgressScreen dashboard', () => {
     await pressByLabel(renderer, 'practice progress');
     const text = renderedText(renderer);
 
-    expect(text).toContain('This chart is waiting on you.');
+    expect(text).toContain('No verified captures yet.');
     expect(
       findByTestId(renderer, 'practice-stat-captures')!.props
         .accessibilityLabel,
@@ -813,15 +796,13 @@ describe('ProgressScreen dashboard', () => {
     await pressByLabel(renderer, 'technique progress');
     const text = renderedText(renderer);
 
-    expect(text).toContain('No score is being estimated.');
-    expect(text).toContain(
-      'No comparable scored reads in this window yet. Your next validated analysis starts this chart.',
-    );
+    expect(text).toContain('No score yet.');
+    expect(text).toContain('No scored reads in this window yet.');
     expect(
       findByTestId(renderer, 'technique-stat-reps')!.props.accessibilityLabel,
     ).toBe('SCORED REPS: 0');
     expect(findByTestId(renderer, 'personal-best-card')).toBeNull();
-    expect(text).toContain('Comparable trends start after scoring');
+    expect(text).toContain('No scored strokes yet');
     act(() => renderer.unmount());
   });
 
@@ -890,7 +871,7 @@ describe('ProgressScreen dashboard', () => {
     act(() => renderer.unmount());
   });
 
-  it('renders the account-synced series and server signals when signed in', async () => {
+  it('renders the account-synced series without server signals when signed in', async () => {
     mockGetApiSession.mockReturnValue({
       canonicalAppUserId: OWNER,
       token: 'fake',
@@ -933,13 +914,10 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain('6.8');
     // By-stroke compares the account's daily averages, labeled as such.
     expect(text).toContain('daily averages');
-    // Server signals render with their honest disclosure.
-    expect(text).toContain('OBSERVED SCORE SIGNALS');
-    expect(text).toContain('RECENT READS HIGHER');
-    expect(text).toContain('+0.6');
-    expect(text).toContain('LOWER RECENT AVG');
-    expect(text).toContain('4.9');
-    expect(text).toContain('They are not a player rating.');
+    // Server checkpoint signals stay off the dashboard.
+    expect(text).not.toContain('OBSERVED SCORE SIGNALS');
+    expect(text).not.toContain('RECENT READS HIGHER');
+    expect(text).not.toContain('LOWER RECENT AVG');
     act(() => renderer.unmount());
   });
 
@@ -1003,13 +981,12 @@ describe('ProgressScreen dashboard', () => {
     act(() => renderer.unmount());
   });
 
-  it('shows THIS SET for two comparable reads from one sitting and opens an attempt', async () => {
+  it('renders no THIS SET card, even for two comparable reads from one sitting', async () => {
     const sessionId = 'aaaaaaaa-0000-4000-8000-000000000001';
     mockListRealAnalysisFacts.mockResolvedValue([
-      // Newest first, as the repository returns them.
       fact({
         id: 'set-2',
-        capturedAt: daysAgoIso(0.01), // ~14 min ago
+        capturedAt: daysAgoIso(0.01),
         overallScore: 7.4,
         sessionId,
         priorityCheckpoint: 'recovery',
@@ -1023,61 +1000,11 @@ describe('ProgressScreen dashboard', () => {
         priorityCheckpoint: 'contact_position',
         checkpointScores: { contact_position: 48 },
       }),
-      // Unrelated older history stays out of the set.
-      fact({ capturedAt: daysAgoIso(5), overallScore: 5 }),
-    ]);
-    const renderer = await renderScreen();
-    await pressByLabel(renderer, 'technique progress');
-    const text = renderedText(renderer);
-
-    expect(findByTestId(renderer, 'practice-set-card')).not.toBeNull();
-    expect(text).toContain('THIS SET');
-    expect(text).toContain('+0.53 DUPR in this set');
-    expect(text).toContain(
-      '2 attempts · best 3.60 DUPR · contact position improved from 48 to 81',
-    );
-    // Both attempts render as pills, in order, the latest ringed.
-    expect(findByTestId(renderer, 'practice-set-attempt-set-1')).not.toBeNull();
-    expect(findByTestId(renderer, 'practice-set-attempt-set-2')).not.toBeNull();
-    expect(findByTestId(renderer, 'practice-set-latest-pill')).not.toBeNull();
-
-    await pressByLabel(
-      renderer,
-      'Attempt 1 of 2, Estimated DUPR 3.07, technique score 6.6 out of 10',
-    );
-    expect(mockNavigate).toHaveBeenCalledWith('Result', {
-      analysisId: 'set-1',
-    });
-    act(() => renderer.unmount());
-  });
-
-  it('renders no THIS SET card for a single-attempt sitting', async () => {
-    mockListRealAnalysisFacts.mockResolvedValue([
-      fact({
-        capturedAt: daysAgoIso(0.01),
-        overallScore: 7.4,
-        sessionId: 'aaaaaaaa-0000-4000-8000-000000000001',
-      }),
-      // Two reads without any set tie never form one.
-      fact({ capturedAt: daysAgoIso(0.03), overallScore: 6.1 }),
-      fact({ capturedAt: daysAgoIso(0.04), overallScore: 6.0 }),
     ]);
     const renderer = await renderScreen();
     await pressByLabel(renderer, 'technique progress');
     expect(findByTestId(renderer, 'practice-set-card')).toBeNull();
     expect(renderedText(renderer)).not.toContain('THIS SET');
-    act(() => renderer.unmount());
-  });
-
-  it('renders no THIS SET card once the sitting is older than a day', async () => {
-    const sessionId = 'aaaaaaaa-0000-4000-8000-000000000001';
-    mockListRealAnalysisFacts.mockResolvedValue([
-      fact({ capturedAt: daysAgoIso(1.1), overallScore: 7.4, sessionId }),
-      fact({ capturedAt: daysAgoIso(1.2), overallScore: 6.6, sessionId }),
-    ]);
-    const renderer = await renderScreen();
-    await pressByLabel(renderer, 'technique progress');
-    expect(findByTestId(renderer, 'practice-set-card')).toBeNull();
     act(() => renderer.unmount());
   });
 

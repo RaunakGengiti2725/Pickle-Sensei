@@ -956,7 +956,7 @@ export function TrendChart(props: {
 
 export function EmptyState(props: {
   title: string;
-  body: string;
+  body?: string;
   action?: React.ReactNode;
   dark?: boolean;
 }) {
@@ -981,19 +981,21 @@ export function EmptyState(props: {
       >
         {props.title}
       </Text>
-      <Text
-        style={[
-          type.body,
-          {
-            color: props.dark ? color.onDarkSubtle : color.inkSoft,
-            textAlign: 'center',
-            marginTop: space.sm,
-            maxWidth: 300,
-          },
-        ]}
-      >
-        {props.body}
-      </Text>
+      {props.body ? (
+        <Text
+          style={[
+            type.body,
+            {
+              color: props.dark ? color.onDarkSubtle : color.inkSoft,
+              textAlign: 'center',
+              marginTop: space.sm,
+              maxWidth: 300,
+            },
+          ]}
+        >
+          {props.body}
+        </Text>
+      ) : null}
       {props.action ? (
         <View style={{ marginTop: space.lg, alignSelf: 'stretch' }}>
           {props.action}

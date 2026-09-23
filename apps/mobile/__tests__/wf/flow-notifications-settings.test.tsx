@@ -286,8 +286,7 @@ describe('notification settings — opt-in', () => {
     expect(useNotificationStore.getState().permission).toBe('undetermined');
 
     const body = textContent(renderer);
-    expect(body).toContain('Stay match-ready.');
-    expect(body).toContain('Off by default.');
+    expect(body).toContain('Practice reminders');
     expect(body).toContain('Reminders are scheduled on this phone.');
     // Off state shows no per-reminder switches yet.
     expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
@@ -641,9 +640,7 @@ describe('notification settings — enabled controls', () => {
   it('every Text on the screen is lock-screen-safe framing copy (no names, scores, clips)', async () => {
     const renderer = await renderEnabled();
     const body = textContent(renderer);
-    expect(body).toContain(
-      'Reminder copy never includes your name, scores, or clips — it is written for a lock screen.',
-    );
+    expect(body).toContain('They never include your name, scores, or clips.');
     expect(body).toContain('Reminders are scheduled on this phone.');
     await unmountScreen(renderer);
   });

@@ -43,24 +43,8 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listRealAnalysisFacts: (...args: unknown[]) =>
-    mockListRealAnalysisFacts(...args),
-  getKv: jest.fn(async () => null),
-  setKv: jest.fn(async () => {}),
-}));
-
-const mockGetApiSession = jest.fn<unknown, []>(() => null);
-jest.mock('../../src/account/apiSession', () => ({
-  getApiSession: () => mockGetApiSession(),
-}));
-
-const mockFetchCanonicalProgress = jest.fn<Promise<unknown>, unknown[]>();
-jest.mock('../../src/progress/api', () => ({
-  fetchCanonicalProgress: (...args: unknown[]) =>
-    mockFetchCanonicalProgress(...args),
 }));
 
 const mockFetchPlayerRank = jest.fn<Promise<null>, unknown[]>(async () => null);
@@ -106,19 +90,6 @@ jest.mock('../../src/progress/rankCelebration', () => {
       selector(state),
   };
 });
-
-const mockNotificationState = {
-  hydrated: true,
-  prefs: { enabled: false, promptDismissed: true },
-  permission: 'unknown' as string,
-  requestPermissionAndEnable: jest.fn(async () => false),
-  dismissPrompt: jest.fn(async () => {}),
-};
-jest.mock('../../src/notifications/notificationStore', () => ({
-  useNotificationStore: (
-    selector: (s: typeof mockNotificationState) => unknown,
-  ) => selector(mockNotificationState),
-}));
 
 import { HomeScreen } from '../../src/screens/HomeScreen';
 import type { LocalShotRow } from '../../src/data/repository';
@@ -212,17 +183,10 @@ beforeEach(() => {
   mockNavigate.mockClear();
   mockMaybeCelebrate.mockClear();
   mockFetchPlayerRank.mockClear();
-  mockFetchCanonicalProgress.mockReset();
-  mockGetApiSession.mockReset().mockReturnValue(null);
   mockListShots.mockReset().mockResolvedValue([]);
-  mockListRealAnalysisFacts.mockReset().mockResolvedValue([]);
   mockAppState.profile = null;
   mockConsistencyState.snapshot = null;
   mockConsistencyState.refresh.mockClear();
-  mockNotificationState.prefs = { enabled: false, promptDismissed: true };
-  mockNotificationState.permission = 'unknown';
-  mockNotificationState.requestPermissionAndEnable.mockClear();
-  mockNotificationState.dismissPrompt.mockClear();
 });
 
 afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
@@ -277,21 +241,6 @@ describe('Home — loading and failure', () => {
     expect(recovered).not.toContain('Your court couldn’t load');
     expect(recovered).toContain('Recent reads');
     expect(recovered).toMatch(/1\s+latest/);
-    act(() => renderer.unmount());
-  });
-
-  it('a synced-progress failure never blocks the court (device data still renders)', async () => {
-    mockGetApiSession.mockReturnValue({
-      canonicalAppUserId: OWNER,
-      token: 't',
-    });
-    mockFetchCanonicalProgress.mockRejectedValue(new Error('503'));
-    mockListShots.mockResolvedValue([shot({})]);
-    const renderer = await renderHome();
-    const copy = allText(renderer);
-    expect(copy).not.toContain('Your court couldn’t load');
-    expect(copy).toContain('Latest validated scored stroke on this device');
-    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 
@@ -437,16 +386,11 @@ describe('Home — controls', () => {
   it('empty court is honest and non-dead-end (no placeholder numbers)', async () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
-    expect(copy).toContain('Your court is ready.');
-    expect(copy).toContain('Your first scored read starts this record.');
-    expect(copy).toContain('No scored technique yet');
-    expect(copy).toContain(
-      'Camera practice still counts. Scores appear only after validated analysis.',
-    );
-    expect(copy).toContain('—');
-    expect(copy).toContain('Your first read starts here');
+    expect(copy).toContain('No reads yet');
     expect(copy).not.toContain('Live Court');
     expect(copy).not.toContain('Chosen focus');
+    expect(copy).not.toContain('THIS WEEK');
+    expect(copy).not.toContain('Latest technique');
     act(() => renderer.unmount());
   });
 
@@ -484,7 +428,7 @@ describe('Home — controls', () => {
     act(() => renderer.unmount());
   });
 
-  it('shows the profile name, self-rated level and chosen focus when present', async () => {
+  it('shows the profile name and self-rated level when present', async () => {
     mockAppState.profile = {
       firstName: 'Sam',
       skillLevel: '3.5',
@@ -494,59 +438,7 @@ describe('Home — controls', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Ready when you are, Sam.');
     expect(copy).toContain('SELF · 3.5');
-    expect(copy).toContain('Chosen focus');
-    expect(copy).toContain('paddle ready');
-    expect(
-      hostNodes(
-        renderer,
-        n => n.props.accessibilityLabel === 'Self-selected focus: paddle ready',
-      ),
-    ).toHaveLength(1);
-    act(() => renderer.unmount());
-  });
-});
-
-describe('Home — notification priming card', () => {
-  it('is hidden once answered or when permission is denied', async () => {
-    let renderer = await renderHome();
-    expect(
-      renderer.root.findAll(
-        n => n.props.testID === 'notification-priming-card',
-      ),
-    ).toHaveLength(0);
-    act(() => renderer.unmount());
-
-    mockNotificationState.prefs = { enabled: false, promptDismissed: false };
-    mockNotificationState.permission = 'denied';
-    renderer = await renderHome();
-    expect(
-      renderer.root.findAll(
-        n => n.props.testID === 'notification-priming-card',
-      ),
-    ).toHaveLength(0);
-    act(() => renderer.unmount());
-  });
-
-  it('Turn on requests permission; Not now dismisses — both wired, labeled buttons', async () => {
-    mockNotificationState.prefs = { enabled: false, promptDismissed: false };
-    const renderer = await renderHome();
-    expect(allText(renderer)).toContain('A nudge on practice days?');
-
-    const turnOn = pressableByLabel(renderer, 'Turn on practice reminders');
-    expect(turnOn.props.accessibilityRole).toBe('button');
-    expect(turnOn.props.accessibilityHint).toBe(
-      'Request notification permission and schedule reminders',
-    );
-    await press(turnOn);
-    expect(
-      mockNotificationState.requestPermissionAndEnable,
-    ).toHaveBeenCalledTimes(1);
-
-    const notNow = pressableByLabel(renderer, 'Not now');
-    expect(notNow.props.accessibilityRole).toBe('button');
-    await press(notNow);
-    expect(mockNotificationState.dismissPrompt).toHaveBeenCalledTimes(1);
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(copy).not.toContain('Chosen focus');
     act(() => renderer.unmount());
   });
 });

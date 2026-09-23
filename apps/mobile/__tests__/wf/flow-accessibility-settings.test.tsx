@@ -207,7 +207,6 @@ describe('Settings root — accessibility workflow', () => {
     expect(labels).toEqual(
       expect.arrayContaining([
         'Pickle Sensei Pro, Verify access',
-        'Consistency, —',
         'Notifications, Daily · 5:30 PM',
         'Data & consent, Training: off',
         'App walkthrough, Replay',
@@ -232,7 +231,6 @@ describe('Settings root — accessibility workflow', () => {
       'Hitting hand,',
       'Current focus,',
       'App version,',
-      'Scoring model,',
     ]) {
       expect(labels.some(l => l.startsWith(staticRow))).toBe(false);
     }
@@ -244,7 +242,6 @@ describe('Settings root — accessibility workflow', () => {
     const renderer = renderScreen();
     const routes: Array<[string, unknown[]]> = [
       ['Pickle Sensei Pro', ['Paywall', { source: 'settings' }]],
-      ['Consistency', ['StreakCalendar']],
       ['Notifications', ['NotificationSettings']],
       ['Data & consent', ['ConsentSettings']],
       ['Manage account', ['ManageAccount']],

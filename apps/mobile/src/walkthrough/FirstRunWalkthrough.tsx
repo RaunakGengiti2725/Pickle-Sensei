@@ -56,7 +56,6 @@ interface WalkthroughStep {
   targetKey: WalkthroughTargetKey;
   /** Spotlight shape: 'circle' hugs round controls, 'rounded' hugs cards. */
   shape: 'circle' | 'rounded';
-  eyebrow: string;
   headline: string;
   body: string;
   finePrint?: string;
@@ -67,42 +66,37 @@ export const WALKTHROUGH_STEPS: readonly WalkthroughStep[] = [
     key: 'coach',
     targetKey: 'coach-fab',
     shape: 'circle',
-    eyebrow: 'START HERE',
     headline: 'Every read starts here.',
-    body: 'Auto Analyze: prop the phone and play — your stroke is captured automatically. Import Video: rate a clip you already have.',
+    body: 'Auto Analyze captures your stroke as you play; Import Video rates a clip you already have.',
   },
   {
     key: 'honest',
     targetKey: 'rank-banner',
     shape: 'rounded',
-    eyebrow: 'HONEST RATINGS',
     headline: 'Only clear reads count.',
-    body: 'Clear reads build your rank and streak. If a stroke can’t be read, the app says so — and it costs nothing.',
+    body: 'Clear reads build your rank and streak; if a stroke can’t be read, the app says so.',
     finePrint: 'One validated rating free · Unscored attempts don’t count',
   },
   {
     key: 'library',
     targetKey: 'tab-library',
     shape: 'rounded',
-    eyebrow: 'YOUR READS',
     headline: 'Your reads live here.',
-    body: 'Scored reads and saved clips, all in one place.',
+    body: 'Scored reads and saved clips.',
   },
   {
     key: 'progress',
     targetKey: 'tab-progress',
     shape: 'rounded',
-    eyebrow: 'OVER TIME',
     headline: 'Track progress here.',
-    body: 'Streaks, trends, and personal bests from your real reads.',
+    body: 'Streaks, trends, and personal bests.',
   },
   {
     key: 'streak',
     targetKey: 'home-streak',
     shape: 'rounded',
-    eyebrow: 'DAILY STREAK',
-    headline: 'Train a little every day.',
-    body: 'A day counts when you finish a read or a drill — never for just opening the app. Tap the flame for your calendar, Streak Shields and achievements.',
+    headline: 'Your daily streak.',
+    body: 'A day counts when you finish a read or a drill — tap the flame for your calendar, Streak Shields and achievements.',
   },
 ] as const;
 
@@ -363,9 +357,6 @@ function StepSpotlight(props: {
         measureBody(measured.width, measured.height);
       }}
     >
-      <Text allowFontScaling style={[type.micro, styles.eyebrow]}>
-        {step.eyebrow}
-      </Text>
       <Text allowFontScaling style={[type.h2, styles.headline]}>
         {step.headline}
       </Text>
@@ -883,8 +874,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.md,
   },
   copy: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
-  eyebrow: { color: color.volt },
-  headline: { color: color.onDark, marginTop: space.sm },
+  headline: { color: color.onDark },
   body: { color: color.onDarkMuted, marginTop: space.sm },
   finePrint: { color: color.onDarkSubtle, marginTop: space.sm },
   controls: {

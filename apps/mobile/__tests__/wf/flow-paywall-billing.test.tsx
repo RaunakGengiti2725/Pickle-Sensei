@@ -695,7 +695,7 @@ describe('paywall-billing: pricing page controls', () => {
       pressable(renderer, 'paywall-continue').props.accessibilityLabel,
     ).toBe('Continue · $7.99/mo');
     expect(allText(renderer)).toContain(
-      'Monthly · $7.99 per month, auto-renews. Cancel anytime.',
+      '$7.99 per month, automatically renewing until canceled.',
     );
 
     await press(renderer, 'paywall-plan-lifetime');

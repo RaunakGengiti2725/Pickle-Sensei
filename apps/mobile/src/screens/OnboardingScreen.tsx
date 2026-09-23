@@ -12,7 +12,6 @@ import {
 import type { Handedness } from '@pickle/shared-types';
 import { BrandDialog, Button, PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
-import type { MascotPose, MascotTone } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import { focusForGoal, useAppStore, type Gender } from '../state/appStore';
@@ -40,67 +39,6 @@ const STEPS = [
   'notifications',
 ] as const;
 type Step = (typeof STEPS)[number];
-
-/** Supplied step context remains available as plain text; pose metadata is
- * retained without rendering illustrated panels in the questionnaire. */
-export const ONBOARDING_MASCOT_MOMENTS: Record<
-  Step,
-  {
-    pose: MascotPose;
-    tone: MascotTone;
-    eyebrow: string;
-    caption: string;
-  }
-> = {
-  name: {
-    pose: 'bounce',
-    tone: 'volt',
-    eyebrow: 'LET’S WARM UP',
-    caption: 'A few quick answers shape your first session around you.',
-  },
-  gender: {
-    pose: 'greet',
-    tone: 'court',
-    eyebrow: 'COACHING THAT FITS',
-    caption: 'Your references should feel natural and respectful.',
-  },
-  level: {
-    pose: 'ready',
-    tone: 'volt',
-    eyebrow: 'START AT YOUR LEVEL',
-    caption: 'The right baseline keeps every cue clear and useful.',
-  },
-  handedness: {
-    pose: 'backhand',
-    tone: 'court',
-    eyebrow: 'MIRRORED FOR YOU',
-    caption: 'Every checkpoint follows your real hitting side.',
-  },
-  goal: {
-    pose: 'smash',
-    tone: 'volt',
-    eyebrow: 'A TARGET WORTH CHASING',
-    caption: 'Your first training focus starts with what matters most.',
-  },
-  problem: {
-    pose: 'question',
-    tone: 'warn',
-    eyebrow: 'FIND THE PATTERN',
-    caption: 'Tell Sensei where the rally usually slips away.',
-  },
-  reveal: {
-    pose: 'celebrate',
-    tone: 'volt',
-    eyebrow: 'PLAN READY',
-    caption: 'Your answers are now one focused place to begin.',
-  },
-  notifications: {
-    pose: 'serve',
-    tone: 'court',
-    eyebrow: 'ON YOUR SCHEDULE',
-    caption: 'A timely nudge can keep the next session in rhythm.',
-  },
-};
 
 interface Choice {
   value: string;
@@ -177,12 +115,12 @@ const PROBLEMS: Choice[] = [
  */
 const NAME_QUESTION = {
   title: 'What should we call you?',
-  sub: 'Enter a preferred name or nickname to continue. No legal name needed.',
+  sub: 'A nickname is fine. No legal name needed.',
 } as const;
 
 const QUESTIONS: Record<
   Exclude<Step, 'name' | 'reveal' | 'notifications'>,
-  { title: string; sub: string; choices: Choice[] }
+  { title: string; sub?: string; choices: Choice[] }
 > = {
   gender: {
     title: 'How do you identify?',
@@ -196,17 +134,14 @@ const QUESTIONS: Record<
   },
   handedness: {
     title: 'Which side is home?',
-    sub: 'Mirrors every measurement to your swing.',
     choices: HANDS,
   },
   goal: {
     title: 'What do you want to own?',
-    sub: 'Your first training focus starts here.',
     choices: GOALS,
   },
   problem: {
     title: 'What breaks down most?',
-    sub: 'Helps prioritize your first fixes.',
     choices: PROBLEMS,
   },
 };
@@ -384,7 +319,12 @@ export function OnboardingScreen(props: {
   const goal = answers['goal'] ?? 'all-around';
   const focus = focusForGoal(goal);
   const focusCopy = FOCUS_COPY[focus] ?? FOCUS_COPY['contact_position']!;
-  const stepContext = ONBOARDING_MASCOT_MOMENTS[step].caption;
+  const question =
+    step === 'reveal' || step === 'notifications'
+      ? null
+      : step === 'name'
+        ? NAME_QUESTION
+        : QUESTIONS[step];
   const answeredProfile = {
     firstName: firstName || undefined,
     gender: answers['gender'] as Gender | undefined,
@@ -501,14 +441,12 @@ export function OnboardingScreen(props: {
             <Text style={[type.micro, { color: color.court }]}>
               PLAYER SETUP
             </Text>
-            <Text style={[type.hero, styles.stepTitle]}>
-              {step === 'name' ? NAME_QUESTION.title : QUESTIONS[step].title}
-            </Text>
-            <Text style={[type.body, styles.stepSub]}>
-              {step === 'name' ? NAME_QUESTION.sub : QUESTIONS[step].sub}
-            </Text>
+            <Text style={[type.hero, styles.stepTitle]}>{question?.title}</Text>
+            {question?.sub ? (
+              <Text style={[type.body, styles.stepSub]}>{question.sub}</Text>
+            ) : null}
             {step === 'name' ? (
-              <>
+              <View style={styles.stepBody}>
                 <TextInput
                   accessibilityLabel="Name or nickname (required)"
                   autoFocus
@@ -529,29 +467,9 @@ export function OnboardingScreen(props: {
                   }}
                   style={styles.nameInput}
                 />
-                <Text
-                  testID="onboarding-context-name"
-                  style={[
-                    type.caption,
-                    styles.stepContext,
-                    styles.contextAfter,
-                  ]}
-                >
-                  {stepContext}
-                </Text>
-              </>
+              </View>
             ) : (
-              <>
-                <Text
-                  testID={`onboarding-context-${step}`}
-                  style={[
-                    type.caption,
-                    styles.stepContext,
-                    styles.contextBefore,
-                  ]}
-                >
-                  {stepContext}
-                </Text>
+              <View style={styles.stepBody}>
                 {QUESTIONS[step].choices.map(choice => (
                   <ChoiceCard
                     key={choice.value}
@@ -560,7 +478,7 @@ export function OnboardingScreen(props: {
                     onPress={() => select(step, choice.value)}
                   />
                 ))}
-              </>
+              </View>
             )}
           </LockedScroll>
           <View
@@ -580,9 +498,7 @@ export function OnboardingScreen(props: {
             <Text style={[type.micro, { color: color.court }]}>
               YOUR STARTING PLAN
             </Text>
-            <Text style={[type.hero, styles.stepTitle]}>
-              One focus.{`\n`}Visible progress.
-            </Text>
+            <Text style={[type.hero, styles.stepTitle]}>One focus.</Text>
             {firstName ? (
               <Text
                 style={[
@@ -593,13 +509,6 @@ export function OnboardingScreen(props: {
                 Built for {firstName}.
               </Text>
             ) : null}
-
-            <Text
-              testID="onboarding-context-reveal"
-              style={[type.caption, styles.stepContext, styles.contextAfter]}
-            >
-              {stepContext}
-            </Text>
 
             <View style={styles.focusCard} testID="onboarding-focus">
               <View style={styles.focusTop}>
@@ -627,37 +536,6 @@ export function OnboardingScreen(props: {
               </Text>
             </View>
 
-            <View style={{ marginTop: space.lg, gap: space.md }}>
-              {[
-                [
-                  '1',
-                  'Step into frame — live pose guidance captures the motion automatically.',
-                ],
-                [
-                  '2',
-                  'A stroke name and score appear only when a validated model is confident.',
-                ],
-                [
-                  '3',
-                  'Reviewed drills follow real scored evidence—not a guessed profile.',
-                ],
-              ].map(([n, line]) => (
-                <View key={n} style={styles.stepRow}>
-                  <View
-                    style={styles.stepBadge}
-                    testID={`onboarding-plan-step-${n}`}
-                  >
-                    <Text style={[type.micro, { color: color.inkSoft }]}>
-                      {n}
-                    </Text>
-                  </View>
-                  <Text style={[type.body, { color: color.inkSoft, flex: 1 }]}>
-                    {line}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
             <View style={styles.accessCard} testID="onboarding-access-context">
               <View style={styles.accessIcon}>
                 <Icon name="crown" size={20} color={color.inkSoft} />
@@ -667,14 +545,9 @@ export function OnboardingScreen(props: {
                   Your first rating is on us.
                 </Text>
                 <Text style={[type.caption, styles.accessCopy]}>
-                  After your first successful, server-accepted Technique Score,
-                  Pickle Sensei Pro is required before another rating can start.
-                  Unscored attempts do not count. Past results and saved drills
-                  stay available; reviewed plans appear only when matching work
-                  is published.
-                </Text>
-                <Text style={[type.micro, styles.accessPrice]}>
-                  MONTHLY + ANNUAL · LOCAL STORE PRICING · ELIGIBLE TRIALS ONLY
+                  After your first server-accepted Technique Score, Pickle
+                  Sensei Pro is required before another rating can start.
+                  Unscored attempts do not count.
                 </Text>
               </View>
             </View>
@@ -689,20 +562,8 @@ export function OnboardingScreen(props: {
       ) : (
         <>
           <LockedScroll key="notifications" bottomInset={space.lg}>
-            <Text style={[type.micro, { color: color.court }]}>
-              STAY IN RHYTHM
-            </Text>
+            <Text style={[type.micro, { color: color.court }]}>REMINDERS</Text>
             <Text style={[type.hero, styles.stepTitle]}>Stay match-ready.</Text>
-            <Text style={[type.body, styles.notificationIntro]}>
-              Get a useful nudge when it can help—never a stream of noise.
-            </Text>
-
-            <Text
-              testID="onboarding-context-notifications"
-              style={[type.caption, styles.stepContext, styles.contextAfter]}
-            >
-              {stepContext}
-            </Text>
 
             <View style={styles.notificationPreview}>
               <View style={styles.notificationPreviewHeader}>
@@ -720,9 +581,6 @@ export function OnboardingScreen(props: {
               </View>
               <Text style={[type.h3, styles.notificationPreviewTitle]}>
                 Ready for a few clean reps?
-              </Text>
-              <Text style={[type.caption, styles.notificationPreviewBody]}>
-                A short court session today keeps your training plan moving.
               </Text>
             </View>
 
@@ -747,8 +605,8 @@ export function OnboardingScreen(props: {
             <View style={styles.notificationPrivacy}>
               <Icon name="shield" size={17} color={color.inkSoft} />
               <Text style={[type.caption, styles.notificationPrivacyCopy]}>
-                Scheduled on this phone. Lock-screen copy never includes your
-                name, scores, or clips.
+                Scheduled on this phone. No name, scores, or clips on the lock
+                screen.
               </Text>
             </View>
           </LockedScroll>
@@ -868,15 +726,8 @@ const styles = StyleSheet.create({
   // One title block for every onboarding step (questions, reveal,
   // notifications): micro kicker → hero title → body sub, same position.
   stepTitle: { color: color.ink, marginTop: space.sm },
-  stepSub: {
-    color: color.inkSoft,
-    marginTop: space.sm,
-    maxWidth: 340,
-    marginBottom: space.lg,
-  },
-  stepContext: { color: color.inkSoft, maxWidth: 340 },
-  contextBefore: { marginBottom: space.lg },
-  contextAfter: { marginTop: space.lg },
+  stepSub: { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
+  stepBody: { marginTop: space.lg },
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -935,16 +786,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
-  stepBadge: {
-    width: 26,
-    height: 26,
-    borderRadius: radius.pill,
-    backgroundColor: color.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1,
-  },
   accessCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -965,16 +806,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceAlt,
   },
   accessCopy: { color: color.inkSoft, marginTop: 4 },
-  accessPrice: {
-    color: color.inkSoft,
-    marginTop: space.sm,
-    letterSpacing: 0.45,
-  },
-  notificationIntro: {
-    color: color.inkSoft,
-    marginTop: space.sm,
-    maxWidth: 340,
-  },
   notificationPreview: {
     marginTop: space.lg,
     padding: space.lg,
@@ -1002,7 +833,6 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   notificationPreviewTitle: { color: color.onDark, marginTop: space.lg },
-  notificationPreviewBody: { color: color.onDarkMuted, marginTop: 4 },
   notificationBenefits: { marginTop: space.lg, gap: 10 },
   notificationBenefit: {
     minHeight: 64,

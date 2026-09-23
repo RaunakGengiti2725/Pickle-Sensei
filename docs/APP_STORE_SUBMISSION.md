@@ -853,16 +853,16 @@ build, signed in to an account with real analyses. Captions are optional
 overlays you may render above the device frame; keep them in the brand voice
 (sentence case, ends with a period, no superlatives).
 
-| #   | Screen to capture                                                                                        | Caption (optional overlay)                          | Why                                                       |
-| --- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------- |
-| 1   | Result screen: score ring, checkpoint list with numbers and bands                                        | Your technique, scored honestly.                    | The hero; shows the product outcome first                 |
-| 2   | Auto Analyze camera in `composing` state: silhouette outline, brackets, status card, shutter             | Match the outline. Tap record. Swing.               | Shows the capture flow and the private, on-device framing |
-| 3   | Form Review: slow-motion frame with skeleton overlay, phase strip, coaching cue at a stop                | See the fix on your own swing.                      | Flagship replay                                           |
-| 4   | Result "What to fix" list + recommended drills card                                                      | One clear next step, with the drill that trains it. | Coaching value                                            |
-| 5   | Progress dashboard (dark): score trend chart, key statistics with ▲/▼ deltas                             | Progress you can measure.                           | Retention story                                           |
-| 6   | Home with the Player Rank banner unfolded (tier ladder) and streak chip                                  | Climb from Bronze to Diamond.                       | Rank + consistency                                        |
-| 7   | Drill Library list or a drill detail with an attributed video card                                       | Guided drills, with videos from real coaches.       | Library depth (mention attribution honestly)              |
-| 8   | Settings → Privacy card ("Private by default", clips: app-private storage, cloud upload: not configured) | Your video never leaves your phone.                 | Privacy positioning (optional 8th shot)                   |
+| #   | Screen to capture                                                                                                | Caption (optional overlay)                          | Why                                                       |
+| --- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------- |
+| 1   | Result screen: score ring, checkpoint list with numbers and bands                                                | Your technique, scored honestly.                    | The hero; shows the product outcome first                 |
+| 2   | Auto Analyze camera in `composing` state: silhouette outline, brackets, status card, shutter                     | Match the outline. Tap record. Swing.               | Shows the capture flow and the private, on-device framing |
+| 3   | Form Review: slow-motion frame with skeleton overlay, phase strip, coaching cue at a stop                        | See the fix on your own swing.                      | Flagship replay                                           |
+| 4   | Result "What to fix" list + recommended drills card                                                              | One clear next step, with the drill that trains it. | Coaching value                                            |
+| 5   | Progress dashboard (dark): score trend chart, key statistics with ▲/▼ deltas                                     | Progress you can measure.                           | Retention story                                           |
+| 6   | Home with the Player Rank banner unfolded (tier ladder) and streak chip                                          | Climb from Bronze to Diamond.                       | Rank + consistency                                        |
+| 7   | Drill Library list or a drill detail with an attributed video card                                               | Guided drills, with videos from real coaches.       | Library depth (mention attribution honestly)              |
+| 8   | Settings → Data & consent ("Analyze my video" card: clips stay in app-private storage, not used to train models) | Your video never leaves your phone.                 | Privacy positioning (optional 8th shot)                   |
 
 Do not include the paywall as a screenshot (allowed, but it wastes a slot; the
 description already discloses pricing). Do not show sandbox banners, debug

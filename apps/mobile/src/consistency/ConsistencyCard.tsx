@@ -33,9 +33,9 @@ export function ConsistencyCard(props: {
   );
   const statusLine =
     !snapshot || snapshot.totalActivities === 0
-      ? 'Your first analysis lights the flame.'
+      ? 'Your first training session starts your streak.'
       : snapshot.atRisk
-        ? 'No training yet today — one analysis keeps it alive.'
+        ? 'No training yet today.'
         : snapshot.trainedToday
           ? `Day ${streak} secured · ${snapshot.trainedLast7} of the last 7 days`
           : `You trained ${snapshot?.trainedLast7 ?? 0} of the last 7 days`;

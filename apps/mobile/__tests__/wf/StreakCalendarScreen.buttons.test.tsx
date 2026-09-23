@@ -489,7 +489,7 @@ describe('StreakCalendarScreen buttons', () => {
     press(mar8);
     expect(detailCard(renderer)).toHaveLength(1);
     const copy = allText(renderer);
-    expect(copy).toContain('A Streak Shield protected this day.');
+    expect(copy).toContain('A Streak Shield protected this day');
     expect(copy).not.toContain('ACTIVIT');
     act(() => renderer.unmount());
   });
@@ -534,7 +534,7 @@ describe('StreakCalendarScreen buttons', () => {
       const renderer = renderScreen();
       expect(mockRefresh).toHaveBeenCalledTimes(1);
       const copy = allText(renderer);
-      expect(copy).toContain('Your first analysis lights the flame.');
+      expect(copy).toContain('Your first training session starts your streak.');
       expect(copy).toContain('0 DAY STREAK');
       expect(detailCard(renderer)).toHaveLength(0);
 

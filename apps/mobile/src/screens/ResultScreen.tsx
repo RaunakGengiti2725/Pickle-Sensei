@@ -809,7 +809,7 @@ function SyncRepairNotice(props: {
                 props.evidence.lastError
                   ? ` (last response: ${props.evidence.lastError})`
                   : ''
-              }. It is not sent again on its own; retry saving once the rating service has been updated.`
+              }. It is not sent again on its own — retry once the rating service has been updated.`
             : 'This read needs another attempt to save to your account.'}
       </Text>
       <Button
@@ -846,9 +846,9 @@ export interface ResultBreakdownSheetProps {
  * FULL BREAKDOWN — the complete result surface, logic unchanged: the
  * canonical `StrokeResult` (header, replay, ONE insight, measured rows,
  * ledger) with the form-review entry card, WHAT TO FIX in full, the stroke
- * map, the provenance trace, the personalized training plan and the
- * feedback prompt — on the same dark surface as the guide's pages. Hosted
- * by the `ResultDetails` route ("Full breakdown" on the guide's score page)
+ * map, the personalized training plan and the feedback prompt — on the same
+ * dark surface as the guide's pages. Hosted by the `ResultDetails` route
+ * ("Full breakdown" on the guide's score page)
  * and, inline, by the guide's not-scored page — the honest ledger IS that
  * page.
  *
@@ -986,14 +986,10 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
                 ))}
             </Card>
 
-            <View style={styles.traceRow}>
-              <Icon name="shield" size={17} color={color.onDarkSubtle} />
-              <Text style={[type.caption, styles.traceCopy]}>
-                Scored with {scored.versionVector.scoringModelVersion} ·
-                configuration {scored.versionVector.shotConfigVersion} ·
-                verified on-device source
-              </Text>
-            </View>
+            <Text style={[type.caption, styles.traceCopy]}>
+              Scored with {scored.versionVector.scoringModelVersion} ·
+              configuration {scored.versionVector.shotConfigVersion}
+            </Text>
           </>
         ) : null}
 
@@ -1374,10 +1370,9 @@ function ProblemPage(props: {
 // ─── Page 3: DRILLS ─────────────────────────────────────────────────────────
 
 /**
- * The page is the three drill cards. Its header is two lines: the measured
- * fault in the same words the recap uses, and the one instruction that
- * matters — pick a drill and run it before the next swing. Where a saved
- * drill lands is the bookmark's job to show, not the header's to explain.
+ * The page is the three drill cards under a title and, when there is one,
+ * the measured fault in the same words the recap uses. Where a saved drill
+ * lands is the bookmark's job to show, not the header's to explain.
  */
 function DrillsPage(props: {
   analysis: ShotAnalysis & { overallScore: number };
@@ -1408,13 +1403,12 @@ function DrillsPage(props: {
 
   return (
     <View testID="result-guide-step-drills">
-      <Text style={[type.micro, styles.kicker]}>DRILLS</Text>
       <Text style={[type.h1, styles.headline]}>Drills to fix it</Text>
-      <Text style={[type.body, styles.sub]} testID="result-guide-drills-sub">
-        {props.priorityFix
-          ? `${props.priorityFix.name} — ${directionPhrase(props.priorityFix.direction)}. Pick one drill and run it before your next ${props.shotLabel}.`
-          : `Pick one drill and run it before your next ${props.shotLabel}.`}
-      </Text>
+      {props.priorityFix ? (
+        <Text style={[type.body, styles.sub]} testID="result-guide-drills-sub">
+          {`${props.priorityFix.name} — ${directionPhrase(props.priorityFix.direction)}.`}
+        </Text>
+      ) : null}
       <RecommendedDrills
         analysis={props.analysis}
         dark
@@ -1445,8 +1439,8 @@ const ALL_CHECKPOINTS = Number.MAX_SAFE_INTEGER;
  *
  *   fault    → the coaching cue matched to the MEASURED direction of the
  *              priority fault (the same line the replay's stop card and the
- *              fix list speak), then the loop: work a drill, film the same
- *              stroke again, see whether that checkpoint moves.
+ *              fix list speak), then the loop: film the same stroke again,
+ *              see whether that checkpoint moves.
  *   clean    → the strongest checkpoint's own "keep it" cue, then: film the
  *              same stroke again and see whether it holds.
  *   neither  → null; nothing is written for a record with no scored
@@ -1461,13 +1455,13 @@ export function coachNote(
   if (priorityFix) {
     return {
       cue: priorityFix.cue,
-      next: `Work one drill, then film another ${shotLabel} and see whether ${priorityFix.name.toLowerCase()} moves.`,
+      next: `Film another ${shotLabel} and see whether ${priorityFix.name.toLowerCase()} moves.`,
     };
   }
   if (strongest) {
     return {
       cue: coachingCue(strongest.key, 'none', analysis.shotType),
-      next: `Film another ${shotLabel} and see whether every checkpoint holds again.`,
+      next: `Film another ${shotLabel} and see whether every checkpoint holds.`,
     };
   }
   return null;
@@ -1497,7 +1491,6 @@ function NextPage(props: {
   const note = coachNote(analysis, priorityFix, strongest, props.shotLabel);
   return (
     <View testID="result-guide-step-next">
-      <Text style={[type.micro, styles.kicker]}>NEXT</Text>
       <Text style={[type.h1, styles.headline]}>Ready for another swing?</Text>
 
       <Card
@@ -1729,7 +1722,7 @@ function TrainingPlanSection(props: {
       setDialog({
         title: 'Video unavailable',
         detail:
-          'This rights-cleared coaching video could not be opened. Refresh the plan and try again.',
+          'This video could not be opened. Refresh the plan and try again.',
         tone: 'danger',
       });
     }
@@ -1753,7 +1746,7 @@ function TrainingPlanSection(props: {
       setDialog({
         title: 'Replace the current plan?',
         detail:
-          'The server will supersede your current plan and build reviewed work from this scored read.',
+          'Your current plan will be superseded by reviewed work from this read.',
         tone: 'danger',
         confirmLabel: 'Replace plan',
         onConfirm: () => void createPlan(analysis.id),
@@ -1775,8 +1768,7 @@ function TrainingPlanSection(props: {
             A score is required.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            No plan is generated from an uncertain capture. Try another
-            full-body read; this attempt does not consume a rating.
+            Try another full-body read — this attempt does not consume a rating.
           </Text>
         </Card>
       ) : planStatus === 'loading' || planStatus === 'idle' ? (
@@ -1792,8 +1784,7 @@ function TrainingPlanSection(props: {
             Training is not connected.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {planError?.message ??
-              'A canonical signed-in account and authenticated training API are required. The app will not substitute local recommendations.'}
+            {planError?.message ?? 'A signed-in account is required.'}
           </Text>
         </Card>
       ) : planStatus === 'error' ? (
@@ -1828,8 +1819,8 @@ function TrainingPlanSection(props: {
           </Text>
           <Text style={[type.body, styles.improvementBody]}>
             {currentPlan.scoreDelta === null
-              ? 'Your reassessment used a different scoring model, so the server did not invent a comparison.'
-              : 'Change from the plan baseline, verified on the server using the same scoring model.'}
+              ? 'A different scoring model was used, so no comparison is shown.'
+              : 'Change from the plan baseline, verified on the server.'}
           </Text>
         </Card>
       ) : planForThisRead && currentPlan ? (
@@ -1845,12 +1836,8 @@ function TrainingPlanSection(props: {
               />
             </View>
             <Text style={[type.h1, styles.planIntroTitle]}>
-              Build the next point.
-            </Text>
-            <Text style={[type.body, styles.planIntroBody]}>
-              One warm-up and two targeted prescriptions selected by the server
-              for {humanize(currentPlan.priorityCheckpoint)} ·{' '}
-              {humanize(currentPlan.priorityDirection)}.
+              {humanize(currentPlan.priorityCheckpoint)} ·{' '}
+              {humanize(currentPlan.priorityDirection)}
             </Text>
             <View style={styles.planProgressTrack}>
               <View
@@ -1902,8 +1889,8 @@ function TrainingPlanSection(props: {
                 ]}
               >
                 {allPrescribedComplete
-                  ? `Capture a newer ${shotLabel} read. The server will compare it only when the shot and model evidence are valid.`
-                  : 'Complete all three reviewed prescriptions before a new read can close the loop.'}
+                  ? `Capture a newer ${shotLabel} read — the server compares it only if the evidence is valid.`
+                  : 'Complete all three prescriptions first.'}
               </Text>
             </View>
           </Card>
@@ -1917,9 +1904,7 @@ function TrainingPlanSection(props: {
             Measure the change.
           </Text>
           <Text style={[type.body, styles.reassessBody]}>
-            This is a newer synced {shotLabel} read. The server will verify shot
-            type, timing, scoring model, and completed practice before comparing
-            it.
+            The server verifies this newer {shotLabel} read before comparing it.
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -1953,12 +1938,12 @@ function TrainingPlanSection(props: {
                   syncEvidence.code
                     ? ` (last response: ${syncEvidence.code})`
                     : ''
-                }. The receipt will not be presented again; the read stays on this device. Capture a new read to build training.`
-              : `Sync was refused ${syncEvidence.attempts} times and this read will not be sent again on its own${
+                }. It will not be presented again; the read stays on this device.`
+              : `Sync was refused ${syncEvidence.attempts} times${
                   syncEvidence.lastError
                     ? ` (last response: ${syncEvidence.lastError})`
                     : ''
-                }. It stays on this device; retry saving from its score page once the rating service has been updated, or capture a new read to build training.`}
+                }. It is not sent again on its own — retry from the score page once the rating service has been updated.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -1978,20 +1963,20 @@ function TrainingPlanSection(props: {
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
             {syncEvidence.kind === 'pending'
-              ? 'This real score is still in the secure outbox. Personalized training unlocks after the server accepts the shot.'
+              ? 'This score is still in the secure outbox. Training unlocks after the server accepts it.'
               : syncEvidence.kind === 'offline_queued'
-                ? 'This read was rated on court with an offline allocation. Its receipt is queued and is presented on the next online sync; personalized training unlocks after the server accepts it.'
+                ? 'This read was rated on court with an offline allocation. Its receipt is queued for the next sync; training unlocks after the server accepts it.'
                 : syncEvidence.kind === 'offline_held'
                   ? syncEvidence.answered
-                    ? 'The server received the receipt for this on-court read and is still confirming it. The same receipt is presented again on the next sync, so nothing is charged twice; training unlocks only if the server accepts it.'
-                    : 'The receipt for this on-court read was sent, but this phone has no confirmed answer for it. The same receipt is presented again on the next sync, so nothing is charged twice; training unlocks only if the server accepts it.'
+                    ? 'The server received the receipt for this on-court read and is still confirming it. The same receipt is presented again, so nothing is charged twice; training unlocks only if the server accepts it.'
+                    : 'The receipt for this on-court read was sent, but this phone has no confirmed answer for it. The same receipt is presented again, so nothing is charged twice; training unlocks only if the server accepts it.'
                   : syncEvidence.kind === 'rejected'
                     ? `The server refused this read ${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times${
                         syncEvidence.lastError
                           ? ` (last response: ${syncEvidence.lastError})`
                           : ''
-                      }. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
-                    : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
+                      }. It will be retried; training unlocks only if the server accepts it.`
+                    : 'The app could not verify whether this shot reached the server.'}
           </Text>
         </Card>
       ) : (
@@ -2005,9 +1990,7 @@ function TrainingPlanSection(props: {
               : 'Turn this read into a plan.'}
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            The server will create a plan only if this shot has a real score and
-            the exact fault has one reviewed warm-up plus two reviewed targeted
-            drills.
+            Built only when reviewed drills exist for this exact fault.
           </Text>
           <View style={styles.trainingAction}>
             <Button
@@ -2036,7 +2019,6 @@ function TrainingPlanSection(props: {
         title={dialog?.title ?? ''}
         detail={dialog?.detail ?? ''}
         tone={dialog?.tone ?? 'neutral'}
-        eyebrow={dialog?.onConfirm ? 'CONFIRM ACTION' : 'COACHING VIDEO'}
         onDismiss={() => setDialog(null)}
         testID="training-plan-dialog"
         actions={
@@ -2211,14 +2193,11 @@ const styles = StyleSheet.create({
   sheet: { marginTop: space.sm },
   reviewSlot: { marginTop: space.md },
   checkpointsCard: { paddingHorizontal: space.lg, paddingVertical: 5 },
-  traceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: space.sm,
+  traceCopy: {
+    color: color.onDarkSubtle,
     paddingHorizontal: space.sm,
     marginTop: space.lg,
   },
-  traceCopy: { color: color.onDarkSubtle, flex: 1 },
   // ── Personalized training ──
   trainingStateCard: { padding: space.lg },
   trainingStateIcon: {
@@ -2243,7 +2222,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   planIntroTitle: { color: color.onDark, marginTop: space.lg },
-  planIntroBody: { color: color.onDarkMuted, marginTop: space.sm },
   planProgressTrack: {
     height: 6,
     backgroundColor: color.lineDark,

@@ -1697,7 +1697,7 @@ describe('W01-05 — the mounted AnalyzeScreen reaches the honest Result', () =>
     expect({
       navigated: navigatedToResult(partial['id']),
       inventsCause:
-        visible.includes('couldn’t be measured cleanly enough') ||
+        visible.includes('swing family was read, not an exact stroke') ||
         visible.includes('would not commit to a stroke'),
     }).toEqual({ navigated: true, inventsCause: false });
     await expectPartialResult(String(partial['id']));

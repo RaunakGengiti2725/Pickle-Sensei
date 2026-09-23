@@ -258,9 +258,7 @@ describe('C2 — SignInScreen: scrolling body under a fixed Back header', () => 
     ).not.toHaveLength(0);
     expect(
       scroll.findAll(
-        n =>
-          n.props.children ===
-          'Your existing on-device reads stay here when you connect.',
+        n => n.props.children === 'Reads on this device stay here.',
       ),
     ).not.toHaveLength(0);
   });

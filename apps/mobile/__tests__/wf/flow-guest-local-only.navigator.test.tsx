@@ -430,7 +430,7 @@ describe('RootNavigator ConnectAccount route', () => {
     await settle();
 
     expect(allText(renderer)).toContain(
-      'A connected account is required for free ratings',
+      'An account is required for ratings, membership, and synced progress.',
     );
     expect(mockGoBack).not.toHaveBeenCalled();
     const back = pressable(renderer, 'Back');
