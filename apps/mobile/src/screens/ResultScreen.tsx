@@ -985,6 +985,11 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
                   />
                 ))}
             </Card>
+
+            <Text style={[type.caption, styles.traceCopy]}>
+              Scored with {scored.versionVector.scoringModelVersion} ·
+              configuration {scored.versionVector.shotConfigVersion}
+            </Text>
           </>
         ) : null}
 
@@ -2188,6 +2193,11 @@ const styles = StyleSheet.create({
   sheet: { marginTop: space.sm },
   reviewSlot: { marginTop: space.md },
   checkpointsCard: { paddingHorizontal: space.lg, paddingVertical: 5 },
+  traceCopy: {
+    color: color.onDarkSubtle,
+    paddingHorizontal: space.sm,
+    marginTop: space.lg,
+  },
   // ── Personalized training ──
   trainingStateCard: { padding: space.lg },
   trainingStateIcon: {

@@ -319,7 +319,7 @@ describe('flow: streak calendar', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     expect(copy).toContain('0 DAY STREAK');
-    expect(copy).toContain('Your first analysis starts your streak.');
+    expect(copy).toContain('Your first training session starts your streak.');
     expect(copy).toContain('MOMENTUM LEVEL 1');
     expect(copy).toContain('Next reward: First Spark — 1 day away');
     expect(dayDetail(renderer)).toHaveLength(0);

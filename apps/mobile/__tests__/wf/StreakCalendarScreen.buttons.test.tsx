@@ -534,7 +534,7 @@ describe('StreakCalendarScreen buttons', () => {
       const renderer = renderScreen();
       expect(mockRefresh).toHaveBeenCalledTimes(1);
       const copy = allText(renderer);
-      expect(copy).toContain('Your first analysis starts your streak.');
+      expect(copy).toContain('Your first training session starts your streak.');
       expect(copy).toContain('0 DAY STREAK');
       expect(detailCard(renderer)).toHaveLength(0);
 

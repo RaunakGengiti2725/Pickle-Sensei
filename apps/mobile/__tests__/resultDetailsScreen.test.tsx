@@ -406,7 +406,7 @@ describe('ResultDetailsScreen — the full breakdown on its own route', () => {
     // Everything that used to be on the single Result page is here.
     expect(copy).toContain('Stroke map');
     expect(copy).toContain('observed');
-    expect(copy).not.toContain('Scored with');
+    expect(copy).toContain('Scored with sm-v1');
     expect(copy).toContain('You chose this technique.');
     expect(copy).toContain('Stroke window');
     expect(copy).toContain('What to fix');

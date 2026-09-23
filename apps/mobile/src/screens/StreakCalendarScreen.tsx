@@ -405,7 +405,7 @@ export function StreakCalendarScreen() {
 
   const statusLine =
     !snapshot || snapshot.totalActivities === 0
-      ? 'Your first analysis starts your streak.'
+      ? 'Your first training session starts your streak.'
       : snapshot.atRisk
         ? 'No training yet today.'
         : snapshot.trainedToday

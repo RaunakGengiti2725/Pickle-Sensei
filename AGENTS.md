@@ -564,7 +564,9 @@ ceremony each — `StreakCelebration` overlay in App.tsx), and the once-per-day
 Surfaces: Home top-bar flame chip + rank-banner streak block, Progress
 `ConsistencyCard` + `AchievementsShowcase` (locked badges advertise honestly:
 "N days away"), the `StreakCalendar` screen (month grid, shielded days, day
-detail), Settings Player row. Streak-defense notifications read
+detail). The Settings Player "Consistency" row was removed in the 2026-09-22
+simplification (Home + Progress already reach the calendar); do not re-add it.
+Streak-defense notifications read
 `computeConsistencySnapshot()` (see `notificationStore.defaultLoadContext`);
 copy states only facts true at delivery (`streakDefenseCopy`).
 
