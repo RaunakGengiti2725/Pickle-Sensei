@@ -336,7 +336,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     }
     expect(copy).toContain('App version');
     expect(copy).toContain('1.0');
-    expect(copy).toContain('Scoring model');
     expect(copy).toContain('1 free rating left');
     // Consent hydrates on mount so the row never shows a hard-coded claim.
     expect(useConsentStore.getState().hydrate).toHaveBeenCalled();
@@ -347,7 +346,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     const renderer = renderScreen();
     for (const label of [
       'Pickle Sensei Pro',
-      'Consistency',
       'Notifications',
       'Data & consent',
       'Rate Pickle Sensei',
@@ -367,7 +365,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
       'Hitting hand',
       'Current focus',
       'App version',
-      'Scoring model',
     ]) {
       expect(rowsStartingWith(renderer, label)).toHaveLength(0);
     }
@@ -380,8 +377,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     expect(mockNavigate).toHaveBeenLastCalledWith('Paywall', {
       source: 'settings',
     });
-    act(() => row(renderer, 'Consistency').props.onPress());
-    expect(mockNavigate).toHaveBeenLastCalledWith('StreakCalendar');
     act(() => row(renderer, 'Notifications').props.onPress());
     expect(mockNavigate).toHaveBeenLastCalledWith('NotificationSettings');
     act(() => row(renderer, 'Data & consent').props.onPress());

@@ -6,26 +6,8 @@ import {
   captureSourceDetail,
   displayCaptureTitle,
   excludedCapturesNote,
-  percent,
 } from '../src/screens/ProgressScreen';
 import type { CaptureHistoryEntry } from '../src/data/repository';
-
-describe('percent', () => {
-  it('formats in-range rates as whole percentages', () => {
-    expect(percent(0)).toBe('0%');
-    expect(percent(0.874)).toBe('87%');
-    expect(percent(1)).toBe('100%');
-  });
-
-  it('keeps the honest em dash for missing values', () => {
-    expect(percent(null)).toBe('—');
-  });
-
-  it('clamps out-of-range input so an impossible rate can never render', () => {
-    expect(percent(1.6)).toBe('100%');
-    expect(percent(-0.4)).toBe('0%');
-  });
-});
 
 describe('displayCaptureTitle', () => {
   function entry(clip: { recognition?: unknown } | null): CaptureHistoryEntry {

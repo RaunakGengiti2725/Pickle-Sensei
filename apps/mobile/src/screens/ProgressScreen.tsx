@@ -51,19 +51,15 @@ import { DuprReadout } from '../progress/DuprReadout';
 import {
   DUPR_ESTIMATE_LABEL,
   DUPR_ESTIMATE_NOTE,
-  duprFromScore,
   formatDupr,
   formatDuprDelta,
   formatTechniqueScore,
 } from '../progress/duprEstimate';
-import { PracticeSetCard } from '../progress/PracticeSetCard';
-import { latestPracticeSet } from '../progress/practiceSetProgress';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { ScoreTrendChart } from '../progress/ScoreTrendChart';
 import { StatDeltaRow } from '../progress/StatDeltaRow';
 import {
   buildTechniqueDashboard,
-  formatSignedDelta,
   vsPriorLabel,
 } from '../progress/techniqueDashboard';
 import { PlayerRankCard } from '../components/PlayerRankCard';
@@ -90,19 +86,6 @@ const RANGE_LABELS: Record<PracticeHistoryRangeKey, string> = {
   '28d': '4W',
   '90d': '3M',
 };
-
-function average(values: number[]) {
-  if (!values.length) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function spread(values: number[]) {
-  const mean = average(values);
-  if (mean === null || values.length < 2) return null;
-  const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
-}
 
 function deviceTimeZone() {
   try {
@@ -138,15 +121,6 @@ function dayKey(value: string, formatter: Intl.DateTimeFormat) {
   return `${year}-${month}-${day}`;
 }
 
-function formatTrackedTime(milliseconds: number) {
-  const seconds = milliseconds / 1_000;
-  if (seconds < 10) return `${seconds.toFixed(1)}s`;
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.round(seconds % 60);
-  return `${minutes}m ${remaining}s`;
-}
-
 /** Calendar day ("2026-08-30") → short label ("Aug 30") in the device zone. */
 function shortDayLabel(day: string) {
   const parsed = new Date(`${day}T12:00:00`);
@@ -155,13 +129,6 @@ function shortDayLabel(day: string) {
     month: 'short',
     day: 'numeric',
   });
-}
-
-export function percent(value: number | null) {
-  if (value === null) return '—';
-  // Defensive display clamp: a rate can only be 0–100%, so out-of-range
-  // input never renders as an impossible percentage.
-  return `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%`;
 }
 
 export function displayCaptureTitle(capture: CaptureHistoryEntry) {
@@ -198,42 +165,12 @@ function basisLabel(count: number, basis: 'daily averages' | 'scored reads') {
     : plural(count, 'scored read', 'scored reads');
 }
 
-function EvidenceMetric(props: {
-  label: string;
-  value: number | null;
-  detail: string;
-}) {
-  return (
-    <View
-      accessibilityLabel={`${props.label}: ${percent(props.value)}. ${
-        props.detail
-      }`}
-      style={styles.evidenceMetric}
-    >
-      <Text style={[type.micro, styles.evidenceLabel]}>{props.label}</Text>
-      <Text style={styles.evidenceValue}>{percent(props.value)}</Text>
-      <View style={styles.evidenceTrack}>
-        {props.value !== null ? (
-          <View
-            style={[
-              styles.evidenceFill,
-              { width: `${Math.max(0, Math.min(100, props.value * 100))}%` },
-            ]}
-          />
-        ) : null}
-      </View>
-      <Text style={[type.caption, styles.evidenceDetail]}>{props.detail}</Text>
-    </View>
-  );
-}
-
 export function ProgressScreen() {
   const { width } = useWindowDimensions();
   const tabBarInset = useTabBarContentInset();
   const tabBarDock = useTabScrollDock('Performance');
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
-  const profile = useAppStore(state => state.profile);
   const ownerKey = useAppStore(state => state.ownerKey);
   const activeOwner = getActiveDataOwner();
   const ownerGeneration =
@@ -330,13 +267,6 @@ export function ProgressScreen() {
     () => buildTechniqueDashboard(facts, { asOfIso, timeZone, range }),
     [asOfIso, facts, range, timeZone],
   );
-  // The sitting the player just had: shown only when it holds two or more
-  // comparable reads landed within the last day (nothing older masquerades
-  // as "this set"). Independent of the selected range on purpose.
-  const practiceSet = useMemo(
-    () => latestPracticeSet(facts, { asOfIso }),
-    [asOfIso, facts],
-  );
   const selectedDefinition = PRACTICE_HISTORY_RANGES.find(
     candidate => candidate.key === range,
   )!;
@@ -399,8 +329,6 @@ export function ProgressScreen() {
           shotType,
           points,
           movement: points.length >= 2 ? points.at(-1)! - points[0]! : null,
-          spread: spread(points.slice(-10)),
-          duprSpread: spread(points.slice(-10).map(duprFromScore)),
           repCount: comparable.reduce((sum, point) => sum + point.shotCount, 0),
           basis: 'daily averages' as const,
         };
@@ -424,10 +352,6 @@ export function ProgressScreen() {
         shotType,
         points,
         movement: points.length >= 2 ? points.at(-1)! - points[0]! : null,
-        spread: spread(points.slice(-10)),
-        // The printed spread is the deviation of the DUPR figures themselves
-        // — the map is not linear, so a 0–10 deviation cannot be converted.
-        duprSpread: spread(points.slice(-10).map(duprFromScore)),
         repCount: points.length,
         basis: 'scored reads' as const,
       };
@@ -458,14 +382,6 @@ export function ProgressScreen() {
   const practiceHasPrior = previousCaptureCount > 0;
   const previousActiveDays =
     practice.activeDays - practice.priorPeriodDelta.activeDays;
-  const previousTrackedMs =
-    practice.trackedDurationMs - practice.priorPeriodDelta.trackedDurationMs;
-  // Pose duration is guided-camera instrumentation. With no camera capture
-  // in the window there is nothing measured — "—", never a fabricated 0.0s.
-  const hasCameraEvidence = practice.cameraCaptureCount > 0;
-  const trackedTimeCopy = hasCameraEvidence
-    ? formatTrackedTime(practice.trackedDurationMs)
-    : '—';
 
   const reps = dashboard.scoredReps;
   const repsDelta =
@@ -683,11 +599,6 @@ export function ProgressScreen() {
                 </View>
                 <View style={styles.practiceDivider} />
                 <View style={styles.practiceFooterItem}>
-                  <Text style={styles.footerValue}>{trackedTimeCopy}</Text>
-                  <Text style={styles.footerLabel}>pose tracked</Text>
-                </View>
-                <View style={styles.practiceDivider} />
-                <View style={styles.practiceFooterItem}>
                   <Text style={styles.footerValue}>
                     {practice.longestStreak}
                   </Text>
@@ -724,39 +635,6 @@ export function ProgressScreen() {
                   practiceHasPrior ? practice.priorPeriodDelta.activeDays : null
                 }
                 testID="practice-stat-active-days"
-              />
-              <StatDeltaRow
-                icon="person"
-                label="POSE TRACKED"
-                value={trackedTimeCopy}
-                previous={
-                  practiceHasPrior && hasCameraEvidence
-                    ? formatTrackedTime(previousTrackedMs)
-                    : null
-                }
-                delta={
-                  practiceHasPrior && hasCameraEvidence
-                    ? practice.priorPeriodDelta.trackedDurationMs
-                    : null
-                }
-                testID="practice-stat-pose-tracked"
-              />
-            </View>
-
-            <DashSectionHeader
-              title="CAPTURE EVIDENCE"
-              right={selectedDefinition.label.toUpperCase()}
-            />
-            <View style={styles.evidenceGrid}>
-              <EvidenceMetric
-                label="POSE AVAILABILITY"
-                value={practice.meanPoseAvailability}
-                detail="pose-producing input frames"
-              />
-              <EvidenceMetric
-                label="JOINT COVERAGE"
-                value={practice.meanJointCoverage}
-                detail="key joints per pose frame"
               />
             </View>
 
@@ -855,15 +733,6 @@ export function ProgressScreen() {
                 />
               )}
             </Card>
-
-            {practiceSet ? (
-              <PracticeSetCard
-                summary={practiceSet}
-                onOpenAttempt={analysisId =>
-                  navigation.navigate('Result', { analysisId })
-                }
-              />
-            ) : null}
 
             <DashSectionHeader
               title="KEY STATISTICS"
@@ -1054,79 +923,10 @@ export function ProgressScreen() {
                         height={66}
                       />
                     </View>
-                    <View style={styles.strokeMeta}>
-                      <Text style={[type.caption, styles.strokeMetaLabel]}>
-                        Last {Math.min(10, item.points.length)}{' '}
-                        {basisLabel(
-                          Math.min(10, item.points.length),
-                          item.basis,
-                        )}{' '}
-                        standard deviation
-                      </Text>
-                      <Text style={[type.bodyBold, { color: color.onDark }]}>
-                        {item.duprSpread === null
-                          ? 'Need 2'
-                          : `±${item.duprSpread.toFixed(2)}`}
-                      </Text>
-                    </View>
                   </Card>
                 );
               })
             )}
-
-            {canonical &&
-            (canonical.improving.length || canonical.needsAttention.length) ? (
-              <>
-                <DashSectionHeader
-                  title="OBSERVED SCORE SIGNALS"
-                  right="LAST 30 DAYS"
-                />
-                <Card tone="dark" style={styles.signalCard}>
-                  {canonical.improving.slice(0, 2).map(signal => (
-                    <View
-                      key={`up-${signal.checkpoint}`}
-                      style={styles.signalRow}
-                    >
-                      <View style={styles.flex}>
-                        <Text style={[type.bodyBold, styles.signalName]}>
-                          {signal.checkpoint.replace(/_/g, ' ')}
-                        </Text>
-                        <Text style={[type.micro, { color: color.mint }]}>
-                          RECENT READS HIGHER
-                        </Text>
-                      </View>
-                      <Text style={[styles.signalValue, { color: color.mint }]}>
-                        {formatSignedDelta(signal.delta)}
-                      </Text>
-                    </View>
-                  ))}
-                  {canonical.needsAttention.slice(0, 2).map(signal => (
-                    <View
-                      key={`focus-${signal.checkpoint}`}
-                      style={styles.signalRow}
-                    >
-                      <View style={styles.flex}>
-                        <Text style={[type.bodyBold, styles.signalName]}>
-                          {signal.checkpoint.replace(/_/g, ' ')}
-                        </Text>
-                        <Text style={[type.micro, { color: color.flame }]}>
-                          LOWER RECENT AVG
-                        </Text>
-                      </View>
-                      <Text
-                        style={[styles.signalValue, { color: color.flame }]}
-                      >
-                        {signal.avg.toFixed(1)}
-                      </Text>
-                    </View>
-                  ))}
-                  <Text style={[type.caption, styles.signalDisclosure]}>
-                    Accepted scored reads from the last 30 days. Not a player
-                    rating.
-                  </Text>
-                </Card>
-              </>
-            ) : null}
 
             <ConsistencyCard
               snapshot={consistency}
@@ -1140,19 +940,6 @@ export function ProgressScreen() {
               </>
             ) : null}
 
-            <View style={styles.levelContext}>
-              <View style={styles.levelIcon}>
-                <Icon name="person" color={color.mint} size={20} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={[type.micro, { color: color.onDarkFaint }]}>
-                  SELF-REPORTED PLAYING LEVEL
-                </Text>
-                <Text style={[type.h3, styles.levelValue]}>
-                  {profile?.skillLevel ?? 'Not set'}
-                </Text>
-              </View>
-            </View>
             <Text style={styles.ratingDisclosure} testID="progress-dupr-note">
               {DUPR_ESTIMATE_NOTE}
             </Text>
@@ -1336,35 +1123,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
-  evidenceGrid: { flexDirection: 'row', gap: 10 },
-  evidenceMetric: {
-    flex: 1,
-    minHeight: 160,
-    padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.inkElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
-  },
-  evidenceLabel: { color: color.onDarkMuted },
-  evidenceValue: {
-    ...type.score,
-    color: color.onDark,
-    marginTop: 8,
-  },
-  evidenceTrack: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: color.onDarkTint,
-    overflow: 'hidden',
-    marginTop: 9,
-  },
-  evidenceFill: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: color.mint,
-  },
-  evidenceDetail: { color: color.onDarkSubtle, marginTop: 10 },
   emptyPractice: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   emptyPracticeIcon: {
     width: 48,
@@ -1486,22 +1244,6 @@ const styles = StyleSheet.create({
     ...type.score,
     color: color.volt,
   },
-  signalCard: { gap: space.md },
-  signalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  signalName: {
-    color: color.onDark,
-    textTransform: 'capitalize',
-  },
-  signalValue: {
-    ...type.h3,
-    fontVariant: ['tabular-nums'],
-  },
-  signalDisclosure: {
-    color: color.onDarkSubtle,
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineDark,
-  },
   strokeEmpty: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   strokeCard: { marginBottom: 10, padding: space.lg },
   strokeTop: {
@@ -1519,38 +1261,6 @@ const styles = StyleSheet.create({
   },
   strokeMovement: { marginTop: 2 },
   chartWrap: { marginTop: space.md, alignItems: 'center', overflow: 'hidden' },
-  strokeMeta: {
-    marginTop: space.md,
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineDark,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: space.md,
-  },
-  strokeMetaLabel: { color: color.onDarkSubtle, flex: 1 },
-  levelContext: {
-    minHeight: 82,
-    borderRadius: radius.lg,
-    backgroundColor: color.inkElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
-    paddingHorizontal: space.md,
-    marginTop: space.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-  },
-  levelIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: color.mintTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  levelValue: { color: color.onDark, marginTop: 3 },
   ratingDisclosure: {
     ...type.caption,
     color: color.onDarkFaint,

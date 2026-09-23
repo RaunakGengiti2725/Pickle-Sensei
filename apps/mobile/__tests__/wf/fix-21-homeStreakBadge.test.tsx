@@ -40,33 +40,13 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>(async () => []);
-const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>(
-  async () => [],
-);
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listRealAnalysisFacts: (...args: unknown[]) =>
-    mockListRealAnalysisFacts(...args),
-  getKv: jest.fn(async () => null),
-  setKv: jest.fn(async () => {}),
-}));
-
-jest.mock('../../src/account/apiSession', () => ({
-  getApiSession: () => null,
-}));
-
-jest.mock('../../src/progress/api', () => ({
-  fetchCanonicalProgress: jest.fn(async () => null),
 }));
 
 jest.mock('../../src/components/PlayerRankBanner', () => {
   const { View } = require('react-native');
   return { PlayerRankBanner: () => <View testID="rank-banner-stub" /> };
-});
-
-jest.mock('../../src/notifications/NotificationPrimingCard', () => {
-  const { View } = require('react-native');
-  return { NotificationPrimingCard: () => <View testID="priming-stub" /> };
 });
 
 jest.mock('../../src/walkthrough/targets', () => ({
@@ -134,7 +114,7 @@ function streakPressable(renderer: TestRenderer.ReactTestRenderer) {
 describe('Home streak badge hit target (wf fix-21)', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
-    mockListRealAnalysisFacts.mockClear();
+    mockListShots.mockClear();
     mockConsistencyState.snapshot = null;
   });
   afterEach(() => {
@@ -209,15 +189,13 @@ describe('Home streak badge hit target (wf fix-21)', () => {
     act(() => renderer.unmount());
   });
 
-  it('renders the seven-day week card from the real analysis facts read', async () => {
+  it('loads the court from a single local shots read', async () => {
     const renderer = await renderHome();
-    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
+    expect(mockListShots).toHaveBeenCalledTimes(1);
     const texts = renderer.root
       .findAllByType(Text)
       .map(node => String(node.props.children));
-    expect(texts.some(text => text.includes('No scored reads yet.'))).toBe(
-      true,
-    );
+    expect(texts.some(text => text.includes('No reads yet'))).toBe(true);
     act(() => renderer.unmount());
   });
 });

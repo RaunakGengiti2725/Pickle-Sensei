@@ -519,43 +519,30 @@ file, not practice. Before this, imports were excluded outright ("automatic
 captures only") and a scored Import Video scan left every Practice number at
 zero while Technique showed the score. Imports count toward captures, active
 days, streak and the volume bars; the camera-only instrumentation (pose
-tracked, pose availability, joint coverage) aggregates guided captures only
-and renders "—" (not 0.0s) when the window has none (`cameraCaptureCount`).
-The hero discloses stored clips the chart refuses to count
+tracked, pose availability, joint coverage) still aggregates guided captures
+only in `practiceHistory.ts` (`cameraCaptureCount`) but the Practice tab no
+longer renders it (the CAPTURE EVIDENCE grid was cut with the 2026-09-22
+simplification — the tab shows captures, active days, the volume chart and
+the recent-captures list). The hero discloses stored clips the chart refuses to count
 (`excludedCaptureCount` → `excludedCapturesNote`, testID
 `practice-excluded-note`) so an exclusion is never silent again. Pinned:
 `practiceHistory.test.ts` (measured import counts / raw import excluded),
 `progressScreenDashboard.test.tsx` ("counts a scored IMPORTED clip"),
 `progressScreenCopy.test.ts`.
 
-## Home "This week" card (scored reads, two lenses)
+## Home (simplified 2026-09-22)
 
-Rebased 2026-09-03 from capture evidence to SCORED READS. The card reads
-`listRealAnalysisFacts` + `buildTechniqueDashboard(range: '7d')` — the same
-comparable-reads rule Progress applies — so a scored analysis shows up
-whatever path captured it (guided camera or imported video). It previously
-counted only `automatic_pose_trigger` captures with valid pose evidence: the
-first scan (an import) scored 3.7 while the card still read "Your court is
-ready". `listCaptureHistory`/`buildPracticeHistory` (pose tracked, capture
-streak) stay on Progress → Practice only (see the Practice-tab rule above for
-which captures count there). Two lenses on the SAME reads:
-`src/progress/ScoreDotPlot.tsx` (one dot per read at its exact score in its
-day column, same-day reads fanned out chronologically, newest read volt +
-halo, faint time-order trace via react-native-svg once `onLayout` knows the
-width, direct value labels while ≤ 8 reads — alternating sides inside a fan
-and never outside the plot) and `PracticeVolumeChart` (reads per day,
-`accessibilityLabel` override). Toggle = two `tab`s in a `tablist` in the
-card header (`home-week-chart-scores|reads`, 28pt segments + vertical
-hitSlop 8 = 44pt); the choice is a DEVICE-level kv `home.week-chart`
-(`WEEK_CHART_KV_KEY`, default scores; a failed kv read never fails the Home
-load). Both plots are 82pt tall so toggling never moves the card. Footer:
-scored days / avg score / best score. Empty copy tells a first week ("Your
-court is ready.") from a quiet week ("Quiet week so far." — comparable reads
-exist before the window, i.e. `scoredReps.previous !== null`).
-`TechniqueDashboard.reads` (`ScoredReadPoint[]`, ascending, id tiebreak)
-feeds the dots. Pinned: `__tests__/scoreDotPlot.test.tsx`,
-`techniqueDashboard.test.ts` (reads), `wf/HomeScreen.buttons.test.tsx`
-("This week card").
+`HomeScreen` renders only: BrandMark + self-rated level pill + the streak
+chip (`home-streak-badge` → StreakCalendar), the `PlayerRankBanner`, the
+greeting, the two mode cards (Stroke Analysis → Analyze, Drill Library) and
+the five most recent local reads (`listShots(db, 250)` is the ONLY load;
+`slice(0, 5)` for the list, the full page feeds the rank banner). The
+week-chart card (`ScoreDotPlot`, `home.week-chart` kv), the "Latest
+technique" card, the "Chosen focus" section, the canonical-progress fetch and
+the notification priming card were removed on purpose — Progress owns the
+dashboards, Settings → Notifications owns reminder opt-in. Do not re-add a
+second dashboard to Home. Pinned: `wf/HomeScreen.buttons.test.tsx`,
+`wf/flow-home-coach-portal-home.test.tsx`, `wf/fix-21-homeStreakBadge.test.tsx`.
 
 ## Consistency (streak / Momentum XP / achievements)
 
@@ -990,8 +977,10 @@ carries `sessionId`, `priorityCheckpoint`, `checkpointScores`;
 `src/progress/practiceSetProgress.ts` (pure, integer tenths, same
 stroke + scoringModelVersion + shotConfigVersion only) →
 `PracticeSetCard` ("THIS SET": Δ headline, attempt pills, one factual insight)
-on the Progress Technique tab (`latestPracticeSet`, ≤24 h) and on the Result
-surface (`summarizePracticeSet`, ≥2 comparable attempts).
+on the Result surface (`summarizePracticeSet`, ≥2 comparable attempts). The
+Progress Technique tab copy of the card (`latestPracticeSet`, ≤24 h) was
+removed in the 2026-09-22 simplification along with the OBSERVED SCORE
+SIGNALS section and the by-stroke spread line; the pure module stays.
 
 ## Library saved drills
 
