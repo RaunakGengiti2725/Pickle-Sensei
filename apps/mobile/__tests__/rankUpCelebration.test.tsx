@@ -202,7 +202,7 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
     },
   );
 
-  it('keeps the reflowing estimated-DUPR numeral (7.02 → 3.35) over the /10 line and uncapped remaining-points copy', async () => {
+  it('keeps the reflowing estimated-DUPR numeral (7.02 → 4.02) over the /10 line and uncapped remaining-points copy', async () => {
     const previous = {
       window: Dimensions.get('window'),
       screen: Dimensions.get('screen'),
@@ -238,18 +238,18 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
       await act(async () => {
         renderer = TestRenderer.create(withSafeArea(<RankUpCelebration />));
       });
-      // D-046: the big numeral is the estimated DUPR (7.02 → 3.35) with its
+      // D-046: the big numeral is the estimated DUPR (7.02 → 4.02) with its
       // unit; the 0–10 rating is the smaller line beneath it.
       const rating = renderer.root
         .findAllByType(Text)
         .find(node => node.props.testID === 'rank-up-rating')!;
       expect(rating.props).toMatchObject({
         accessibilityLabel:
-          'Estimated DUPR 3.35, technique rating 7.02 out of 10',
+          'Estimated DUPR 4.02, technique rating 7.02 out of 10',
       });
       expect(rating.props.numberOfLines).toBeUndefined();
       expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
-      expect(rating.props.children[0]).toBe('3.35');
+      expect(rating.props.children[0]).toBe('4.02');
       expect(
         rating
           .findAllByType(Text)
@@ -271,11 +271,11 @@ describe('RankUpCelebration layout contracts (not native viewport proof)', () =>
       expect(texts.some(node => /≈/.test(String(node.props.children)))).toBe(
         false,
       );
-      // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
+      // 7.02 → 4.02 against Diamond's 7.5 → 4.50: 0.48 DUPR to go.
       expect(
         texts.some(
           node =>
-            node.props.children === '0.32 to Diamond. Every analysis moves it.',
+            node.props.children === '0.48 to Diamond. Every analysis moves it.',
         ),
       ).toBe(true);
     } finally {

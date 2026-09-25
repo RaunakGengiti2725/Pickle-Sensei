@@ -225,23 +225,21 @@ describe('Settings hub controls', () => {
     act(() => renderer.unmount());
   });
 
-  it('Notifications, Data & consent, Consistency and Walkthrough rows all navigate to real routes', async () => {
+  it('Notifications, Data & consent and Walkthrough rows all navigate to real routes', async () => {
     const renderer = renderScreen();
     await pressRow(renderer, 'Notifications,');
     await pressRow(renderer, 'Data & consent,');
-    await pressRow(renderer, 'Consistency,');
     await pressRow(renderer, 'App walkthrough,');
     expect(mockNavigate.mock.calls).toEqual([
       ['NotificationSettings'],
       ['ConsentSettings'],
-      ['StreakCalendar'],
       ['Tabs', { screen: 'Home' }],
     ]);
     expect(mockReplay).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 
-  it('read-only rows (version, scoring model, profile facts) are not pressable', () => {
+  it('version, scoring model and profile facts are text, never pressable rows', () => {
     const renderer = renderScreen();
     for (const prefix of [
       'App version,',
@@ -251,6 +249,7 @@ describe('Settings hub controls', () => {
       'Playing level,',
       'Hitting hand,',
       'Current focus,',
+      'Consistency,',
     ]) {
       expect(rowsByLabelPrefix(renderer, prefix)).toHaveLength(0);
     }

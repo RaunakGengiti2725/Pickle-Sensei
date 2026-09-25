@@ -433,6 +433,20 @@ export function presentOfflineJourney(
 }
 
 /**
+ * Whether the card has anything to tell the player: false while the first
+ * read is in flight and for an empty wallet (no pass held, nothing waiting
+ * or on hold). Settings shows the card only when this is true; an
+ * unreadable wallet still shows, because "could not be read" is never
+ * turned into "nothing held".
+ */
+export function offlineJourneyHasNews(state: OfflineJourneyState): boolean {
+  return (
+    state.kind !== 'loading' &&
+    presentOfflineJourney(state).badge !== 'NONE HELD'
+  );
+}
+
+/**
  * The last ledger read, bound to the owner context it was read under and to
  * the sequence number of the read that produced it. Every surface that shows
  * the offline journey (Analyze, Settings) reads the ledger itself on mount,

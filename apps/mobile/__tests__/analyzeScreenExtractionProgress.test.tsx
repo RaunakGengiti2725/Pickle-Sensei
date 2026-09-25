@@ -39,9 +39,6 @@ jest.mock('../src/camera/capture', () => {
     },
   };
 });
-jest.mock('../src/camera/TargetSelector', () => ({
-  TargetSelector: () => null,
-}));
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
@@ -87,7 +84,6 @@ jest.mock('react-native-svg', () => {
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
-import { TargetSelector } from '../src/camera/TargetSelector';
 import {
   assertCapturedClip,
   captureStrokeVideo,
@@ -258,6 +254,17 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
   act(() => node.props.onPress());
 }
 
+/** The saved page's pinned score action. */
+function scoreAction(renderer: ReactTestRenderer): () => void {
+  const [node] = renderer.root.findAll(
+    n =>
+      n.props.accessibilityLabel === 'Get my Technique Score' &&
+      typeof n.props.onPress === 'function',
+  );
+  if (!node) throw new Error('No Get my Technique Score action');
+  return node.props.onPress;
+}
+
 async function renderScreen(
   source: 'library' | 'camera',
 ): Promise<ReactTestRenderer> {
@@ -327,9 +334,8 @@ describe('imported-video extraction progress', () => {
 
     const renderer = await renderScreen('library');
     pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
     await act(async () => {
-      selector.props.onSkip();
+      scoreAction(renderer)();
     });
 
     // Extraction armed, no native event yet: honest indeterminate state —
@@ -431,8 +437,7 @@ describe('imported-video extraction progress', () => {
     );
     const renderer = await renderScreen('library');
     pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
-    await act(async () => selector.props.onSkip());
+    await act(async () => scoreAction(renderer)());
     const options = jest.mocked(extractImportedPoseSequence).mock.lastCall?.[2];
     expect(options?.signal?.aborted).toBe(false);
     expect(options?.operationId).toBeTruthy();
@@ -457,9 +462,8 @@ describe('imported-video extraction progress', () => {
 
     const renderer = await renderScreen('library');
     pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
     await act(async () => {
-      selector.props.onSkip();
+      scoreAction(renderer)();
     });
     emit(
       extractionEvent('extracting', {

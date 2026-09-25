@@ -30,9 +30,6 @@ jest.mock('../src/camera/capture', () => {
     subscribeToCameraEvents: jest.fn(() => () => {}),
   };
 });
-jest.mock('../src/camera/TargetSelector', () => ({
-  TargetSelector: () => null,
-}));
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
@@ -78,7 +75,6 @@ jest.mock('react-native-svg', () => {
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
-import { TargetSelector } from '../src/camera/TargetSelector';
 import {
   assertCapturedClip,
   importStrokeVideo,
@@ -118,6 +114,17 @@ async function renderLibraryScreen(): Promise<ReactTestRenderer> {
   });
   await act(async () => {});
   return renderer;
+}
+
+/** The saved page's pinned score action. */
+function scoreAction(renderer: ReactTestRenderer): () => void {
+  const [node] = renderer.root.findAll(
+    n =>
+      n.props.accessibilityLabel === 'Get my Technique Score' &&
+      typeof n.props.onPress === 'function',
+  );
+  if (!node) throw new Error('No Get my Technique Score action');
+  return node.props.onPress;
 }
 
 describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
@@ -177,9 +184,8 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
     await act(async () => {
       radios[0]!.props.onPress();
     });
-    const selector = renderer.root.findByType(TargetSelector);
     await act(async () => {
-      selector.props.onSkip();
+      scoreAction(renderer)();
     });
     const rendered = textContents(renderer);
     expect(rendered).toContain('Nothing was rated.');
@@ -207,11 +213,11 @@ describe('Gate 11 — AnalyzeScreen failure surfaces', () => {
     await act(async () => {
       radios[0]!.props.onPress();
     });
-    const selector = renderer.root.findByType(TargetSelector);
+    const score = scoreAction(renderer);
     await act(async () => {
-      void selector.props.onSkip();
-      void selector.props.onSkip();
-      void selector.props.onSkip();
+      score();
+      score();
+      score();
     });
     expect(runCaptureAnalysis).toHaveBeenCalledTimes(1);
     await act(async () => {

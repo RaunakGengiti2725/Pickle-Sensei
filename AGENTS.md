@@ -298,8 +298,9 @@ fontSize/fontFamily near a token. Title roles:
   (`marginTop: space.sm` after a kicker) → `type.body` sub
   (`marginTop: space.sm`, `maxWidth: 340`).
 - Sub-page headers: `ScreenHeader` (`type.h3`). Section headers:
-  `SectionTitle` (`type.h3`); Progress's dark dashboard uses
-  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere). With
+  `SectionTitle` (`type.h3`, Progress included); the dark cards that carry
+  their own micro label (PracticeSetCard) use DashSectionHeader
+  (`type.micro`, letterSpacing 1.2 everywhere). With
   `wrapTitle`, `ScreenHeader` gives the title a full-width row below controls
   at `fontScale >= 2`; otherwise it preserves the standard centered row.
   Do not shrink the font or reuse the narrow Back/Close side slots for long
@@ -396,36 +397,41 @@ files under `Sources/` need `bundle exec pod install` to enter the pod
 target. The OS sheet never appears in TestFlight builds by design; dev
 builds always show it.
 
-## Ratings display: ESTIMATED DUPR first, the /10 beneath (D-046, 2026-09-10)
+## Ratings display: ESTIMATED DUPR first, the /10 beneath (D-046, 2026-09-10; scale ends fixed 2026-09-11)
 
 Every rating a player reads — the analysis `overallScore`, the rank
 `rating`, their averages, bests, deltas and tier bands — is printed as an
-ESTIMATED DUPR. The map is NOT linear (DUPR is bunched in the 3s; 5.0+ is
-the top ~0.7% of rated players, 6.0+ ≈ 190 people): `DUPR_ANCHORS` in
+ESTIMATED DUPR. THE ESTIMATE SPANS DUPR'S FULL 2.0–8.0 SCALE: 0/10 is 2.00
+and a perfect 10/10 is 8.00 (owner, 2026-09-11 — the earlier 6.00 ceiling
+was withdrawn; `DUPR_CEILING === DUPR_SCALE_MAX`). The map is still NOT
+linear (DUPR is bunched in the 3s and sparse at the top): `DUPR_ANCHORS` in
 `src/progress/duprEstimate.ts` tie the scoring engine's band boundaries to
-DUPR's published bands — score 0 → 2.00, 6.5 (checkpoints average the
-red/yellow line) → 3.00, 8.0 (the green line) → 4.00, 9.5 → 5.00, 10 → 6.00
-(the ceiling; never higher) — linear between anchors, two decimals
-(`formatDupr`; 5.8 → 2.89, 7.0 → 3.33, 7.8 → 3.87, 9.0 → 4.67). Differences
+evenly spaced 1.5-DUPR steps — score 0 → 2.00, 6.5 (checkpoints average the
+red/yellow line) → 3.50, 8.0 (the green line) → 5.00, 9.5 → 6.50, 10 → 8.00
+(never higher) — linear between anchors, two decimals (`formatDupr`;
+5.8 → 3.34, 7.0 → 4.00, 7.8 → 4.80, 9.0 → 6.00). Differences
 are ALWAYS `duprDelta(from, to)` / `formatDuprDelta` / `formatDuprDistance`
 = the difference of the two converted endpoints — never a rescaled score
 gap, the map is not linear. `duprFraction` is the fill of a ring/bar (the
-DUPR's position between 2.00 and 6.00); `formatTechniqueScore` prints the
+DUPR's position between 2.00 and 8.00); `formatTechniqueScore` prints the
 "6.4 /10" line; `duprAccessibilityLabel` is VoiceOver's phrase;
 `DUPR_ESTIMATE_NOTE` the disclaimer. `src/progress/DuprReadout.tsx` renders
 the canonical pair — big DUPR + ` DUPR` unit, micro `x.x /10` beneath — in
-the host's numeral role; `ScoreRing` does the same inside the ring (its arc
-is `duprFraction`). Rules: the big number is
+the host's numeral role; `ScoreRing` (its arc is `duprFraction`) is the ONE
+exception to the `/10` line: inside the ring it stacks the numeral, the
+`DUPR` unit (`h2`) and a micro `ESTIMATED` eyebrow, all white, with no
+`/10` (owner, 2026-09-11 — the page's note beneath names the technique
+score and VoiceOver hears both figures). Rules: the big number is
 ALWAYS the DUPR and ALWAYS says DUPR (unit, caption or kicker); the 0–10
-figure is ALWAYS the smaller secondary; surfaces with room carry the
-disclaimer (Result score page, rank banner fold-out, rank card, Progress
-footer, Settings); never print a bare `toFixed(1)` score or a "/10"-only
+figure is ALWAYS the smaller secondary wherever it is shown; surfaces with room carry the
+disclaimer (Result score page, rank banner fold-out, Progress footer —
+which also covers the rank card above it —, Settings footer); never print a bare `toFixed(1)` score or a "/10"-only
 number again. The DATA never changes — SQLite, sync payloads, the server,
 `computePlayerRank` and the tier thresholds stay on 0–10; convert at render
 only. Checkpoint scores (0–100) are a different quantity and stay as they
 are. The rank tiers keep their 0–10 thresholds, so their DUPR bands read
-Bronze 2.00–2.53 · Silver 2.54–2.76 · Gold 2.77–2.99 · Platinum 3.00–3.66 ·
-Diamond 3.67+ (re-anchoring the ladder to DUPR bands is a separate
+Bronze 2.00–2.80 · Silver 2.81–3.14 · Gold 3.15–3.49 · Platinum 3.50–4.49 ·
+Diamond 4.50+ (re-anchoring the ladder to DUPR bands is a separate
 shared-types + migration + edge decision). DUPR is a third-party trademark:
 the H06 scan bans it in App Store metadata + Info.plist
 (`STORE_ONLY_RULES`) and allows it in-app; if Apple
@@ -456,8 +462,10 @@ PlayerRankCard) report it to `src/progress/rankCelebration.ts`, which keeps a
 durable owner-scoped kv record (`rank.celebrated:<owner>`) and raises the
 `RankUpCelebration` overlay (mounted in App.tsx) once per upward tier change.
 The Home banner no longer navigates on tap — it glow-pulses and unfolds the
-tier ladder in place (`player-rank-banner-toggle`); its streak block is a
-separate press target that opens the StreakCalendar route.
+tier ladder in place (`player-rank-banner-toggle`). Its streak block (a
+separate press target to the StreakCalendar route) renders only when the
+host passes `streakDays`; Home stopped passing it on 2026-09-24, because
+the top-bar flame chip already shows the streak.
 
 Rank insignia (owner request 2026-09-10 — every division is its own badge):
 `RankIcon tier division` renders one of fifteen custom badges (Bronze III …
@@ -474,10 +482,30 @@ floor). `division` omitted → the plate-only tier mark (ladder rows, 26px);
 is what the ladder fills / YOU pill borrow (≥ 4.5:1 on surfaceDark).
 Pinned by `__tests__/rankUpCelebration.test.tsx` ("rank insignia").
 
-## Progress dashboard (Performance tab)
+## Progress page (Performance tab)
 
-`ProgressScreen` is a WHOOP-style dark dashboard (bg `surfaceDark`,
-light-content status bar — same surface family as GameplayProgressScreen).
+ONE calm light page (owner request 2026-09-24: "too much going on, very
+overstimulating" — MOBBIN: Cal AI progress, Alma trends, Bevel exercise
+lists). Top to bottom, and nothing else: hero title + one-line subtitle;
+`PlayerRankCard` (the one ink card: tier insignia, tier/division, distance
+to the next tier, the rating as DUPR + `/10`); `ConsistencyCard` (white:
+streak headline, one status line, the last seven days as dots — trained /
+shield-bridged / rest — opening `StreakCalendar`, where momentum, shields,
+milestones and achievements live); then, only once a scored read exists,
+the 7 days / 4 weeks / 90 days segmented tabs, ONE ink trend card
+(`ScoreTrendChart` + the insight line, eyebrow `EST. DUPR · <WINDOW>`), the
+"Strokes" list (each stroke's latest comparable read as `DuprReadout` in the
+`type.score` role + one plain line: "Up 0.12 in 4 weeks" /
+"Down …" / "No change …" / "1 scored read in 4 weeks", movement =
+`duprDelta` of the window's first and latest comparable reads) and the
+`DUPR_ESTIMATE_NOTE` footnote (`progress-dupr-note`). With no scored read at
+all the lower half is one card, "Get your first score", whose only action
+("Analyze your first stroke") opens `Analyze` through the rating gate.
+REMOVED and not to be re-added without an owner decision: the
+Technique/Practice tabs and the whole Practice tab, key-statistics rows,
+the latest-technique hero, personal-best card, per-stroke sparklines and
+standard deviations, server score signals, the THIS SET card (still on
+Result), achievements, the momentum/XP bar and the self-reported level.
 All comparison math lives in the pure module
 `src/progress/techniqueDashboard.ts` (pinned by
 `__tests__/techniqueDashboard.test.ts`): per stroke, only scored reads that
@@ -490,14 +518,13 @@ in integer TENTHS (the rank formula's integer-math convention) so results
 are exact and independent of row order — float summation once flipped a
 ±0.0 delta's triangle. The screen's own `dayKey` guards unparseable
 timestamps (formatToParts throws on Invalid Date; one corrupt row must
-exclude itself, not crash the page). UI pieces:
-`src/progress/StatDeltaRow.tsx` (key-statistics row, ▲ mint / ▼ flame
-prior-window triangles), `src/progress/ScoreTrendChart.tsx` and the upgraded
-`PracticeVolumeChart` (value labels only on short windows, translucent
-"today" column, honest 4dp stubs for unscored days). The technique tab also
-links to `GameplayProgress` (otherwise only reachable from LiveSummary).
+exclude itself, not crash the page). The window's first/last day comes from
+the dashboard's own bucket keys. `src/progress/ScoreTrendChart.tsx` keeps
+value labels only on short windows, a translucent "today" column and honest
+4dp stubs for unscored days; `StatDeltaRow` no longer has a screen consumer.
 Pins: `__tests__/progressScreenDashboard.test.tsx` (render + retry + DST +
-midnight + canonical/server-signal paths),
+midnight + canonical paths + owner switches),
+`wf/ProgressScreen.buttons.test.tsx` (the full pressable ledger),
 `__tests__/techniqueDashboardEdgeCases.test.ts` (timezones incl. UTC+14 and
 Lord Howe, window edges, seeded invariants, order-independence, 5k-fact
 volume), `__tests__/progressChartsComponents.test.tsx` (chart/stat-row
@@ -505,6 +532,10 @@ honesty).
 
 ## Practice tab — what counts as verified practice (2026-09-03)
 
+The Practice tab was removed from Progress on 2026-09-24 (see above); the
+pure module and `practiceHistory.test.ts` remain but have no screen
+consumer (its `PRACTICE_HISTORY_RANGES` still define the windows). The rule,
+for any future consumer:
 `practiceHistory.ts isVerifiedPracticeCapture()` is the ONE rule, used by the
 aggregation AND the "Recent captures" list: payload passed the strict parser,
 still matches the row metadata, and carries measured pose evidence — a guided
@@ -520,12 +551,51 @@ and renders "—" (not 0.0s) when the window has none (`cameraCaptureCount`).
 The hero discloses stored clips the chart refuses to count
 (`excludedCaptureCount` → `excludedCapturesNote`, testID
 `practice-excluded-note`) so an exclusion is never silent again. Pinned:
-`practiceHistory.test.ts` (measured import counts / raw import excluded),
-`progressScreenDashboard.test.tsx` ("counts a scored IMPORTED clip"),
-`progressScreenCopy.test.ts`.
+`practiceHistory.test.ts` (measured import counts / raw import excluded).
 
-## Home "This week" card (scored reads, two lenses)
+## Home page (2026-09-24)
 
+ONE calm start page (owner: "simpler, easier to use, easier on the eyes"
+— MOBBIN: Hevy, Future, Withings home tabs). Top to bottom, and nothing
+else: `BrandMark` + the flame chip (`home-streak-badge`, walkthrough target
+`home-streak`; its label adds ", at risk — no training yet today" when the
+run is at risk); `PlayerRankBanner` WITHOUT `streakDays` (walkthrough target
+`rank-banner`); the greeting; the two mode cards (Stroke Analysis → Analyze
+camera, Drill Library); `NotificationPrimingCard` until answered; "Recent
+reads" = the newest `HOME_RECENT_READS` (3) in one grouped white card, with
+"See all" → `Tabs/Library`. Home reads ONLY `listShots(db, 250)` — no
+analysis facts, no kv view preference, no canonical progress fetch (trends
+are Progress's job). REMOVED and not to be re-added without an owner
+decision: the "This week" chart card (and its `home.week-chart` kv), the
+latest-technique card, the chosen-focus card and the `SELF · level` /
+`NEW PLAYER` pill. Pinned by `wf/HomeScreen.buttons.test.tsx`,
+`wf/flow-home-coach-portal-home.test.tsx`, `wf/fix-21-homeStreakBadge.test.tsx`.
+
+## Settings page (2026-09-24)
+
+One short list (MOBBIN: Monzo, Hers, BeReal settings): hero title + one-line
+subtitle; a white account card (initial, name, "Signed in with Apple /
+Google" or the guest caption, and `playerFactsLine` — "Beginner ·
+Right-handed"); Membership (Connect account for guests · Pickle Sensei Pro
+· Manage subscription when subscribed); the offline-pass card ONLY when
+`offlineJourneyHasNews` (never the empty "NONE HELD" wallet or the
+in-flight "CHECKING" read; an unreadable wallet still shows); Reminders &
+privacy (Notifications · Data & consent); About (Rate Pickle Sensei [iOS]
+· App walkthrough · Privacy policy · Terms of use — legal rows only with a
+URL); Account (Manage account for synced sessions — the deletion entry, one
+level off the root per App Review 5.1.1(v) — and Sign out as a red row);
+then a quiet footer: "Pickle Sensei <version> · Scoring model <id>"
+(`settings-app-version`) and `DUPR_ESTIMATE_NOTE` (`settings-dupr-note`).
+Rows are plain text (no icon tiles), ≥ 44pt, chevron when pressable, a11y
+label "<label>, <value>". REMOVED: the six read-only Player rows, the
+Consistency row, the "Private by default" card (Data & consent says where
+clips live), the SYNCED/LOCAL pill and the App version / Scoring model rows
+(now the footer).
+
+## The former Home "This week" card (scored reads, two lenses)
+
+Removed from Home on 2026-09-24; `ScoreDotPlot` and `PracticeVolumeChart`
+keep their tests but have no screen consumer. For any future consumer:
 Rebased 2026-09-03 from capture evidence to SCORED READS. The card reads
 `listRealAnalysisFacts` + `buildTechniqueDashboard(range: '7d')` — the same
 comparable-reads rule Progress applies — so a scored analysis shows up
@@ -533,8 +603,8 @@ whatever path captured it (guided camera or imported video). It previously
 counted only `automatic_pose_trigger` captures with valid pose evidence: the
 first scan (an import) scored 3.7 while the card still read "Your court is
 ready". `listCaptureHistory`/`buildPracticeHistory` (pose tracked, capture
-streak) stay on Progress → Practice only (see the Practice-tab rule above for
-which captures count there). Two lenses on the SAME reads:
+streak) have no screen consumer since the Practice tab was removed. Two
+lenses on the SAME reads:
 `src/progress/ScoreDotPlot.tsx` (one dot per read at its exact score in its
 day column, same-day reads fanned out chronologically, newest read volt +
 halo, faint time-order trace via react-native-svg once `onLayout` knows the
@@ -550,8 +620,7 @@ court is ready.") from a quiet week ("Quiet week so far." — comparable reads
 exist before the window, i.e. `scoredReps.previous !== null`).
 `TechniqueDashboard.reads` (`ScoredReadPoint[]`, ascending, id tiebreak)
 feeds the dots. Pinned: `__tests__/scoreDotPlot.test.tsx`,
-`techniqueDashboard.test.ts` (reads), `wf/HomeScreen.buttons.test.tsx`
-("This week card").
+`techniqueDashboard.test.ts` (reads).
 
 ## Consistency (streak / Momentum XP / achievements)
 
@@ -570,10 +639,11 @@ The owner-scoped store (`store.ts`, kv `consistency:<owner>`) persists ONLY
 what cannot be derived: drill ledger, celebrated-milestone ids (one durable
 ceremony each — `StreakCelebration` overlay in App.tsx), and the once-per-day
 "Day N secured" marker (consumed by `DaySecuredBanner` on ResultScreen).
-Surfaces: Home top-bar flame chip + rank-banner streak block, Progress
-`ConsistencyCard` + `AchievementsShowcase` (locked badges advertise honestly:
-"N days away"), the `StreakCalendar` screen (month grid, shielded days, day
-detail), Settings Player row. Streak-defense notifications read
+Surfaces: the Home top-bar flame chip, the Progress `ConsistencyCard`
+(streak + this week's dots, light), the `StreakCalendar` screen (month
+grid, shielded days, day detail, and `AchievementsShowcase` — locked badges
+advertise honestly: "N days away"). Settings has no streak row since
+2026-09-24. Streak-defense notifications read
 `computeConsistencySnapshot()` (see `notificationStore.defaultLoadContext`);
 copy states only facts true at delivery (`streakDefenseCopy`).
 
@@ -914,8 +984,11 @@ nothing flashes light), top row close · segmented progress · "N OF M ·
 LABEL", pinned footer (primary Next with a descriptive label, Back/Done
 links). `GuideShell scroll={false}` gives a page a fixed flex column. Pages,
 each evidence-gated and SKIPPED when its evidence is absent: **Score** (kicker
-`ESTIMATED DUPR · <STROKE>`, the `ScoreRing` — big estimated DUPR, `EST.
-DUPR` caption, `6.4 /10` micro line — then `DUPR_ESTIMATE_NOTE`
+`ESTIMATED DUPR · <STROKE>`, the `ScoreRing` at 220 — the estimated DUPR
+numeral, the unit `DUPR` in the `h2` role and a micro `ESTIMATED` eyebrow
+stacked inside the arc, ALL white, and NO `/10` line in the ring (owner,
+2026-09-11; VoiceOver still hears both figures, the note beneath still
+names the technique score) — then `DUPR_ESTIMATE_NOTE`
 (`result-dupr-note`), ONE `selectInsight` sentence, THIS SET card) → **The problem**
 (with replay evidence the page IS `FormReviewPlayer fill` and NOTHING else —
 no kicker, no h1, no sub line, no "Full screen" link (2026-09-02: the page
@@ -986,8 +1059,9 @@ carries `sessionId`, `priorityCheckpoint`, `checkpointScores`;
 `src/progress/practiceSetProgress.ts` (pure, integer tenths, same
 stroke + scoringModelVersion + shotConfigVersion only) →
 `PracticeSetCard` ("THIS SET": Δ headline, attempt pills, one factual insight)
-on the Progress Technique tab (`latestPracticeSet`, ≤24 h) and on the Result
-surface (`summarizePracticeSet`, ≥2 comparable attempts).
+on the Result surface (`summarizePracticeSet`, ≥2 comparable attempts); it
+left Progress in the 2026-09-24 simplification (`latestPracticeSet` has no
+screen consumer).
 
 ## Library saved drills
 

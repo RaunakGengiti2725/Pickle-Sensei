@@ -1,10 +1,10 @@
 /**
  * Button ledger for ProgressScreen at default text size: every pressable
- * is pressed here and its real observable effect asserted — section/range tabs
- * (state + selected a11y state + copy re-anchoring), both ConsistencyCard
- * instances (StreakCalendar route), the error-state retry (reload, loading
- * guard, repeated failure), and the AchievementsShowcase badge toggles the
- * technique tab hosts. A final sweep asserts no unlisted pressable exists.
+ * is pressed here and its real observable effect asserted — the range tabs
+ * (state + selected a11y state + copy re-anchoring), the streak card
+ * (StreakCalendar route), the empty page's one next step (Analyze) and the
+ * error-state retry (reload, loading guard, repeated failure). A final sweep
+ * asserts no unlisted pressable exists.
  */
 import React from 'react';
 import { Dimensions, Pressable, StyleSheet } from 'react-native';
@@ -36,11 +36,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
 }));
 
 const mockGetApiSession = jest.fn<unknown, []>(() => null);
@@ -88,7 +86,6 @@ jest.mock('../../src/progress/rankCelebration', () => {
 
 import { ProgressScreen } from '../../src/screens/ProgressScreen';
 import type { RootStackParams } from '../../src/navigation/params';
-import { STREAK_MILESTONES } from '../../src/consistency/milestones';
 import {
   setActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
@@ -105,8 +102,26 @@ function daysAgoDay(days: number): string {
   return daysAgoIso(days).slice(0, 10);
 }
 
-/** Both ConsistencyCard presses must land on a real root-stack route. */
+/** The streak card press must land on a real root-stack route. */
 const STREAK_ROUTE: keyof RootStackParams = 'StreakCalendar';
+/** The empty page's one next step, typed against the stack as well. */
+const ANALYZE_ROUTE: keyof RootStackParams = 'Analyze';
+
+function scoredFact() {
+  return {
+    id: 'aaaaaaaa-0000-4000-8000-000000000001',
+    shotType: 'dink',
+    capturedAt: daysAgoIso(2),
+    overallScore: 7.1,
+    confidence: 0.9,
+    resultKind: 'scored',
+    scoringModelVersion: 'model-2',
+    shotConfigVersion: 'config-1',
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
+  };
+}
 
 function consistencySnapshot() {
   return {
@@ -127,8 +142,6 @@ function consistencySnapshot() {
     totalTrainedDays: 9,
     totalActivities: 14,
     scoredAnalysisCount: 12,
-    // Engine-consistent: a 5-day run has already banked the 1- and 3-day
-    // milestones.
     earned: [
       { id: 'streak.1', earnedOnDay: daysAgoDay(4) },
       { id: 'streak.3', earnedOnDay: daysAgoDay(2) },
@@ -212,21 +225,19 @@ function flatStyle(node: TestRenderer.ReactTestInstance) {
   ) as Record<string, unknown>;
 }
 
-const SECTION_LABELS = ['technique progress', 'practice progress'] as const;
 const RANGE_LABELS = [
   '7 days range',
   '4 weeks range',
   '90 days range',
 ] as const;
 const RANGE_COPY: Record<(typeof RANGE_LABELS)[number], string> = {
-  '7 days range': 'VS. PRIOR 7 DAYS',
-  '4 weeks range': 'VS. PRIOR 4 WEEKS',
-  '90 days range': 'VS. PRIOR 90 DAYS',
+  '7 days range': 'EST. DUPR · 7 DAYS',
+  '4 weeks range': 'EST. DUPR · 4 WEEKS',
+  '90 days range': 'EST. DUPR · 90 DAYS',
 };
-const CONSISTENCY_EMPTY_LABEL =
-  'Consistency. 0 days training streak, momentum level 1. Opens the streak calendar.';
-const CONSISTENCY_SNAPSHOT_LABEL =
-  'Consistency. 5 days training streak, momentum level 2. Opens the streak calendar.';
+const STREAK_EMPTY_LABEL = 'Streak: 0 days. Opens the streak calendar.';
+const STREAK_SNAPSHOT_LABEL = 'Streak: 5 days. Opens the streak calendar.';
+const EMPTY_ACTION_LABEL = 'Analyze your first stroke';
 
 describe('ProgressScreen button ledger', () => {
   beforeEach(() => {
@@ -242,8 +253,6 @@ describe('ProgressScreen button ledger', () => {
     mockRefreshConsistency.mockClear();
     mockListRealAnalysisFacts.mockReset();
     mockListRealAnalysisFacts.mockResolvedValue([]);
-    mockListCaptureHistory.mockReset();
-    mockListCaptureHistory.mockResolvedValue([]);
     mockGetApiSession.mockReset();
     mockGetApiSession.mockReturnValue(null);
     mockFetchCanonicalProgress.mockReset();
@@ -260,56 +269,10 @@ describe('ProgressScreen button ledger', () => {
     jest.restoreAllMocks();
   });
 
-  it('section tabs switch the dashboard and expose tab semantics', async () => {
+  it('range tabs re-anchor the trend and expose tab semantics', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
     const renderer = await renderScreen();
-
-    // Default: technique. Only the technique statistics are mounted.
-    expect(hostByTestId(renderer, 'technique-stat-reps')).not.toBeNull();
-    expect(hostByTestId(renderer, 'practice-stat-captures')).toBeNull();
-
-    for (const label of SECTION_LABELS) {
-      const tab = pressableByLabel(renderer, label);
-      expect(tab.props.accessibilityRole).toBe('tab');
-      expect(typeof tab.props.onPress).toBe('function');
-      // >= 44pt hit target: the tab slot is minHeight 44.
-      expect(flatStyle(tab).minHeight).toBeGreaterThanOrEqual(44);
-    }
-    expect(
-      pressableByLabel(renderer, 'technique progress').props.accessibilityState
-        .selected,
-    ).toBe(true);
-    expect(
-      pressableByLabel(renderer, 'practice progress').props.accessibilityState
-        .selected,
-    ).toBe(false);
-
-    await pressByLabel(renderer, 'practice progress');
-    expect(hostByTestId(renderer, 'practice-stat-captures')).not.toBeNull();
-    expect(hostByTestId(renderer, 'technique-stat-reps')).toBeNull();
-    expect(renderedText(renderer)).toContain('VERIFIED PRACTICE');
-    expect(
-      pressableByLabel(renderer, 'practice progress').props.accessibilityState
-        .selected,
-    ).toBe(true);
-    expect(
-      pressableByLabel(renderer, 'technique progress').props.accessibilityState
-        .selected,
-    ).toBe(false);
-
-    // Re-pressing the active tab is a harmless no-op, not a crash.
-    await pressByLabel(renderer, 'practice progress');
-    expect(hostByTestId(renderer, 'practice-stat-captures')).not.toBeNull();
-
-    await pressByLabel(renderer, 'technique progress');
-    expect(hostByTestId(renderer, 'technique-stat-reps')).not.toBeNull();
-    expect(hostByTestId(renderer, 'practice-stat-captures')).toBeNull();
-    expect(renderedText(renderer)).toContain('LATEST VALIDATED TECHNIQUE');
-    act(() => renderer.unmount());
-  });
-
-  it('range tabs re-anchor every window label on both sections', async () => {
-    const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('VS. PRIOR 4 WEEKS');
+    expect(renderedText(renderer)).toContain(RANGE_COPY['4 weeks range']);
     expect(
       pressableByLabel(renderer, '4 weeks range').props.accessibilityState
         .selected,
@@ -319,11 +282,10 @@ describe('ProgressScreen button ledger', () => {
       const tab = pressableByLabel(renderer, label);
       expect(tab.props.accessibilityRole).toBe('tab');
       expect(typeof tab.props.onPress).toBe('function');
-      // WF-ISSUE: Range tabs render a 38pt-tall hit target without hitSlop
-      // expect(flatStyle(tab).minHeight).toBeGreaterThanOrEqual(44);
+      // >= 44pt hit target.
+      expect(flatStyle(tab).minHeight).toBeGreaterThanOrEqual(44);
     }
 
-    // Technique section.
     for (const label of RANGE_LABELS) {
       await pressByLabel(renderer, label);
       const text = renderedText(renderer);
@@ -335,42 +297,46 @@ describe('ProgressScreen button ledger', () => {
         ).toBe(other === label);
       }
     }
-    expect(renderedText(renderer)).toContain('90 DAYS');
-
-    // Practice section shares the same range state.
-    await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('VS. PRIOR 90 DAYS');
-    await pressByLabel(renderer, '7 days range');
-    const text = renderedText(renderer);
-    expect(text).toContain('VS. PRIOR 7 DAYS');
-    expect(text).toContain('CAPTURE EVIDENCE 7 DAYS');
-    expect(text).not.toContain('VS. PRIOR 90 DAYS');
+    // Re-pressing the active tab is a harmless no-op, not a crash.
+    await pressByLabel(renderer, '90 days range');
+    expect(renderedText(renderer)).toContain(RANGE_COPY['90 days range']);
     act(() => renderer.unmount());
   });
 
-  it('technique ConsistencyCard opens the streak calendar', async () => {
+  it('the streak card opens the streak calendar (fresh account)', async () => {
     const renderer = await renderScreen();
-    const card = pressableByLabel(renderer, CONSISTENCY_EMPTY_LABEL);
+    const card = pressableByLabel(renderer, STREAK_EMPTY_LABEL);
     expect(card.props.accessibilityRole).toBe('button');
     expect(card.props.testID).toBe('consistency-card');
 
-    await pressByLabel(renderer, CONSISTENCY_EMPTY_LABEL);
+    await pressByLabel(renderer, STREAK_EMPTY_LABEL);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith(STREAK_ROUTE);
     act(() => renderer.unmount());
   });
 
-  it('practice ConsistencyCard opens the streak calendar', async () => {
+  it('the streak card opens the streak calendar (running streak)', async () => {
     mockConsistencyState.snapshot = consistencySnapshot();
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
     const renderer = await renderScreen();
-    await pressByLabel(renderer, 'practice progress');
-    expect(mockNavigate).not.toHaveBeenCalled();
-
-    const card = pressableByLabel(renderer, CONSISTENCY_SNAPSHOT_LABEL);
+    const card = pressableByLabel(renderer, STREAK_SNAPSHOT_LABEL);
     expect(card.props.accessibilityRole).toBe('button');
-    await pressByLabel(renderer, CONSISTENCY_SNAPSHOT_LABEL);
+    await pressByLabel(renderer, STREAK_SNAPSHOT_LABEL);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith(STREAK_ROUTE);
+    act(() => renderer.unmount());
+  });
+
+  it('the empty page offers one next step that opens Analyze', async () => {
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('Get your first score');
+    const action = pressableByLabel(renderer, EMPTY_ACTION_LABEL);
+    expect(action.props.accessibilityRole).toBe('button');
+    expect(flatStyle(action).minHeight).toBeGreaterThanOrEqual(44);
+
+    await pressByLabel(renderer, EMPTY_ACTION_LABEL);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(ANALYZE_ROUTE);
     act(() => renderer.unmount());
   });
 
@@ -408,7 +374,7 @@ describe('ProgressScreen button ledger', () => {
       releaseReload([]);
     });
     const text = renderedText(renderer);
-    expect(text).toContain('KEY STATISTICS');
+    expect(text).toContain('Get your first score');
     expect(text).not.toContain('Progress couldn’t load');
     act(() => renderer.unmount());
   });
@@ -425,21 +391,10 @@ describe('ProgressScreen button ledger', () => {
     expect(retry.props.disabled).toBeFalsy();
 
     // Third attempt succeeds.
-    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
     await pressByLabel(renderer, 'Try again');
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(3);
-    expect(renderedText(renderer)).toContain('KEY STATISTICS');
-    act(() => renderer.unmount());
-  });
-
-  it('a failing capture-history read also routes through the retry', async () => {
-    mockListCaptureHistory
-      .mockRejectedValueOnce(new Error('captures unreadable'))
-      .mockResolvedValue([]);
-    const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('Progress couldn’t load');
-    await pressByLabel(renderer, 'Try again');
-    expect(renderedText(renderer)).toContain('KEY STATISTICS');
+    expect(renderedText(renderer)).toContain(RANGE_COPY['4 weeks range']);
     act(() => renderer.unmount());
   });
 
@@ -450,100 +405,75 @@ describe('ProgressScreen button ledger', () => {
       canonicalAppUserId: OWNER,
     });
     mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
     const renderer = await renderScreen();
     const text = renderedText(renderer);
     expect(text).not.toContain('Progress couldn’t load');
-    expect(text).toContain('KEY STATISTICS');
-    expect(text).not.toContain('OBSERVED SCORE SIGNALS');
+    expect(text).toContain(RANGE_COPY['4 weeks range']);
+    expect(text).toContain('7.1 /10');
     expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 
-  it('achievement badges toggle their story open and closed', async () => {
-    mockConsistencyState.snapshot = consistencySnapshot();
-    const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('ACHIEVEMENTS');
-
-    // The next locked milestone past the fixture's 5-day streak.
-    const first = STREAK_MILESTONES.find(milestone => milestone.days > 5)!;
-    const daysAway = first.days - 5;
-    const label = `${first.title}. Locked. ${daysAway} ${
-      daysAway === 1 ? 'day' : 'days'
-    } away`;
-    const badge = pressableByLabel(renderer, label);
-    expect(badge.props.accessibilityRole).toBe('button');
-    expect(renderedText(renderer)).not.toContain(first.blurb);
-
-    await pressByLabel(renderer, label);
-    expect(renderedText(renderer)).toContain(first.blurb);
-    expect(renderedText(renderer)).toContain(first.reward);
-
-    await pressByLabel(renderer, label);
-    expect(renderedText(renderer)).not.toContain(first.blurb);
-
-    // An earned badge opens too, and selecting it closes the other story.
-    const earned = STREAK_MILESTONES.find(m => m.id === 'streak.3')!;
-    const [earnedBadge] = pressables(renderer).filter(n =>
-      String(n.props.accessibilityLabel).startsWith(`${earned.title}. Earned`),
-    );
-    expect(earnedBadge).toBeDefined();
-    await act(async () => {
-      earnedBadge!.props.onPress();
+  it('keeps rating and stroke rows side by side, stacking them at large text sizes', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
+    const regular = await renderScreen();
+    expect(flatStyle(hostByTestId(regular, 'stroke-row-dink')!)).toMatchObject({
+      flexDirection: 'row',
     });
-    expect(renderedText(renderer)).toContain(earned.blurb);
-    expect(renderedText(renderer)).toContain('Unlocked');
-    act(() => renderer.unmount());
-  });
+    expect(
+      flatStyle(hostByTestId(regular, 'player-rank-card-rating')!),
+    ).toMatchObject({ alignItems: 'flex-end' });
+    act(() => regular.unmount());
 
-  it('hides achievements until a first activity exists', async () => {
-    mockConsistencyState.snapshot = {
-      ...consistencySnapshot(),
-      totalActivities: 0,
-      currentStreak: 0,
-    };
-    const renderer = await renderScreen();
-    expect(renderedText(renderer)).not.toContain('ACHIEVEMENTS');
-    act(() => renderer.unmount());
+    jest.spyOn(Dimensions, 'get').mockReturnValue({
+      width: 375,
+      height: 667,
+      scale: 2,
+      fontScale: 2,
+    });
+    const large = await renderScreen();
+    // The name keeps the full width; the DUPR sits under it, left-aligned.
+    expect(flatStyle(hostByTestId(large, 'stroke-row-dink')!)).toMatchObject({
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+    });
+    expect(flatStyle(hostByTestId(large, 'stroke-rating-dink')!)).toMatchObject(
+      { alignItems: 'flex-start' },
+    );
+    expect(
+      flatStyle(hostByTestId(large, 'player-rank-card-rating')!),
+    ).toMatchObject({ alignItems: 'flex-start' });
+    act(() => large.unmount());
   });
 
   it('ledger: every mounted pressable is wired, labeled, and accounted for', async () => {
+    const collect = (renderer: TestRenderer.ReactTestRenderer) =>
+      pressables(renderer).map(n => {
+        expect(typeof n.props.onPress).toBe('function');
+        expect(n.props.disabled).toBeFalsy();
+        expect(typeof n.props.accessibilityRole).toBe('string');
+        expect(typeof n.props.accessibilityLabel).toBe('string');
+        return n.props.accessibilityLabel as string;
+      });
+
+    // Scored history: the three range tabs and the streak card — no section
+    // tabs, no achievement badges.
     mockConsistencyState.snapshot = consistencySnapshot();
-    const renderer = await renderScreen();
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
+    const scored = await renderScreen();
+    expect(collect(scored).sort()).toEqual(
+      [...RANGE_LABELS, STREAK_SNAPSHOT_LABEL].sort(),
+    );
+    act(() => scored.unmount());
 
-    const badgeLabels = pressables(renderer)
-      .map(n => n.props.accessibilityLabel as string)
-      .filter(label => /\. (Locked\.|Earned)/.test(label));
-    // 8 streak milestones + 2 volume achievements.
-    expect(badgeLabels).toHaveLength(STREAK_MILESTONES.length + 2);
-
-    const techniqueLedger = [
-      ...SECTION_LABELS,
-      ...RANGE_LABELS,
-      ...badgeLabels,
-      CONSISTENCY_SNAPSHOT_LABEL,
-    ];
-    const techniqueFound = pressables(renderer).map(n => {
-      expect(typeof n.props.onPress).toBe('function');
-      expect(n.props.disabled).toBeFalsy();
-      expect(typeof n.props.accessibilityRole).toBe('string');
-      expect(typeof n.props.accessibilityLabel).toBe('string');
-      return n.props.accessibilityLabel as string;
-    });
-    expect(techniqueFound.sort()).toEqual([...techniqueLedger].sort());
-
-    await pressByLabel(renderer, 'practice progress');
-    const practiceLedger = [
-      ...SECTION_LABELS,
-      ...RANGE_LABELS,
-      CONSISTENCY_SNAPSHOT_LABEL,
-    ];
-    const practiceFound = pressables(renderer).map(n => {
-      expect(typeof n.props.onPress).toBe('function');
-      expect(n.props.disabled).toBeFalsy();
-      expect(typeof n.props.accessibilityRole).toBe('string');
-      return n.props.accessibilityLabel as string;
-    });
-    expect(practiceFound.sort()).toEqual([...practiceLedger].sort());
-    act(() => renderer.unmount());
+    // No scored history: the streak card and the one next step.
+    mockConsistencyState.snapshot = null;
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const empty = await renderScreen();
+    expect(collect(empty).sort()).toEqual(
+      [STREAK_EMPTY_LABEL, EMPTY_ACTION_LABEL].sort(),
+    );
+    act(() => empty.unmount());
   });
 });

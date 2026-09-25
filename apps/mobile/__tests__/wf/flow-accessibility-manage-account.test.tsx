@@ -345,7 +345,7 @@ describe('Manage account → delete account — accessibility workflow', () => {
       wanted: 'accuracy',
       details: null,
       platform: 'ios',
-      appVersion: '1.0',
+      appVersion: '1.1',
     });
     act(() => press(byLabelPrefix(renderer, 'Keep my account')));
 

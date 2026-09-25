@@ -323,19 +323,20 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Settings');
     expect(copy).toContain('Alex Chen');
-    expect(copy).toContain('google account');
+    expect(copy).toContain('Signed in with Google');
+    // The onboarding facts fold into one header line, not six rows.
+    expect(copy).toContain('Intermediate · Right-handed');
     for (const section of [
       'Membership',
-      'Player',
-      'Reminders',
-      'Privacy',
+      'Reminders & privacy',
       'About',
       'Account',
     ]) {
       expect(copy).toContain(section);
     }
-    expect(copy).toContain('App version');
-    expect(copy).toContain('1.0');
+    expect(copy).not.toContain('Player');
+    // Version and scoring model sit in the quiet footer.
+    expect(copy).toContain('Pickle Sensei 1.0');
     expect(copy).toContain('Scoring model');
     expect(copy).toContain('1 free rating left');
     // Consent hydrates on mount so the row never shows a hard-coded claim.
@@ -347,7 +348,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     const renderer = renderScreen();
     for (const label of [
       'Pickle Sensei Pro',
-      'Consistency',
       'Notifications',
       'Data & consent',
       'Rate Pickle Sensei',
@@ -358,19 +358,26 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     ]) {
       expect(rowsStartingWith(renderer, label)).toHaveLength(1);
     }
-    // Read-only player facts and the version row are plain rows — nothing
-    // that looks tappable but does nothing (App Review 2.1 / 4.2).
+    // Profile facts, the streak and the version are not rows at all —
+    // nothing that looks tappable but does nothing (App Review 2.1 / 4.2).
     for (const label of [
       'Name',
       'Gender',
       'Playing level',
       'Hitting hand',
       'Current focus',
+      'Consistency',
       'App version',
       'Scoring model',
     ]) {
       expect(rowsStartingWith(renderer, label)).toHaveLength(0);
     }
+    const footer = renderer.root.findAll(
+      node =>
+        node.props.testID === 'settings-app-version' &&
+        typeof node.props.onPress === 'function',
+    );
+    expect(footer).toHaveLength(0);
     act(() => renderer.unmount());
   });
 
@@ -380,8 +387,6 @@ describe('Settings root — rows, handlers and navigation targets', () => {
     expect(mockNavigate).toHaveBeenLastCalledWith('Paywall', {
       source: 'settings',
     });
-    act(() => row(renderer, 'Consistency').props.onPress());
-    expect(mockNavigate).toHaveBeenLastCalledWith('StreakCalendar');
     act(() => row(renderer, 'Notifications').props.onPress());
     expect(mockNavigate).toHaveBeenLastCalledWith('NotificationSettings');
     act(() => row(renderer, 'Data & consent').props.onPress());
@@ -528,7 +533,6 @@ describe('Settings root — guest (local-only) sessions', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Alex');
     expect(copy).toContain('Local · this device');
-    expect(copy).toContain('LOCAL');
     expect(rowsStartingWith(renderer, 'Manage account')).toHaveLength(0);
     expect(copy).not.toContain('Account details');
     act(() => row(renderer, 'Connect account').props.onPress());
@@ -773,11 +777,15 @@ describe('AGENTS.md invariants for settings-about', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     // D-046: the app's headline rating is an estimated DUPR, so Settings
-    // says exactly what it is and is not, in the shared words.
+    // says exactly what it is and is not, in the shared words (its footer).
     expect(copy).toContain(DUPR_ESTIMATE_NOTE);
-    expect(copy).toContain(
-      'The technique score beneath each figure describes stroke form.',
-    );
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.testID === 'settings-dupr-note',
+      ),
+    ).toHaveLength(1);
     expect(copy).not.toMatch(/≈/);
     act(() => renderer.unmount());
   });
@@ -787,9 +795,10 @@ describe('AGENTS.md invariants for settings-about', () => {
     const renderer = renderScreen();
     expect(rowsStartingWith(renderer, 'Privacy policy')).toHaveLength(0);
     expect(rowsStartingWith(renderer, 'Terms of use')).toHaveLength(0);
-    // About card still has its remaining rows.
+    // About card still has its remaining rows, and the footer its version.
     expect(rowsStartingWith(renderer, 'Rate Pickle Sensei')).toHaveLength(1);
-    expect(allText(renderer)).toContain('App version');
+    expect(rowsStartingWith(renderer, 'App walkthrough')).toHaveLength(1);
+    expect(allText(renderer)).toContain('Scoring model');
     act(() => renderer.unmount());
   });
 });

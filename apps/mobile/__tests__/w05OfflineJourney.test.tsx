@@ -144,6 +144,7 @@ import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import {
   HELD_PASS_READ_CADENCE_MS,
+  offlineJourneyHasNews,
   PENDING_RECEIPT_READ_CADENCE_MS,
   presentOfflineJourney,
   type OfflineJourneyState,
@@ -845,13 +846,28 @@ describe('W05-04 Settings surfaces the offline journey', () => {
     expectDossierCompliant(copy);
   });
 
-  it('says nothing is held rather than inventing an allowance', async () => {
+  it('says nothing is held rather than inventing an allowance — and Settings stays quiet about an empty wallet', async () => {
     const renderer = await render(<SettingsScreen />);
     await settle();
-    const copy = textOf(card(renderer));
-    expect(badgeOf(renderer)).toBe('NONE HELD');
-    expect(copy).toContain('No offline pass on this phone');
-    expectDossierCompliant(copy);
+    // Settings shows the card only when it has news (2026-09-24): an empty
+    // wallet is no news, so no card — and never an invented allowance.
+    expect(cards(renderer)).toHaveLength(0);
+    expect(textOf(renderer.root)).not.toMatch(/\d of \d/);
+    // The card's own copy for that wallet still states the fact plainly.
+    const truth = await ledgerTruth();
+    const empty: OfflineJourneyState = {
+      kind: 'read',
+      allocation: truth.allocation,
+      wallet: truth.wallet,
+    };
+    const view = presentOfflineJourney(empty);
+    expect(view.badge).toBe('NONE HELD');
+    expect(view.title).toBe('No offline pass on this phone');
+    expect(offlineJourneyHasNews(empty)).toBe(false);
+    expect(offlineJourneyHasNews({ kind: 'loading' })).toBe(false);
+    expectDossierCompliant(
+      [view.title, ...view.rows.map(r => r.value), ...view.notes].join(' | '),
+    );
   });
 
   it('never turns an unreadable wallet into an empty one', async () => {
@@ -995,9 +1011,11 @@ describe('W05-04 Settings surfaces the offline journey', () => {
     const gated = gateFirstTransaction();
     mockDb = () => gated.db;
     // Read #1: Settings opens; its single transaction stalls at the gate.
+    // While it is in flight Settings shows no card (it never flashes a
+    // "Checking" card that may vanish a moment later).
     const first = await render(<SettingsScreen />);
     await settle();
-    expect(badgeOf(first)).toBe('CHECKING');
+    expect(cards(first)).toHaveLength(0);
     await act(async () => first.unmount());
     mounted = null;
     // The player spends a ticket while read #1 is still stalled.
@@ -1737,7 +1755,8 @@ describe('W05-04 round 4 — the card follows trusted time, recovers from a tran
     signInAs(OTHER_OWNER, 'token-2');
     const settings = await render(<SettingsScreen />);
     await settleFake();
-    expect(badgeOf(settings)).toBe('NONE HELD');
+    // The read ran (empty wallet), so Settings shows no card.
+    expect(cards(settings)).toHaveLength(0);
     handle.calls.length = 0;
     await advance(HELD_PASS_READ_CADENCE_MS * 20);
     expect(ledgerReads()).toBe(0);

@@ -28,9 +28,6 @@ jest.mock('../../src/camera/capture', () => {
     subscribeToCameraEvents: jest.fn(() => () => {}),
   };
 });
-jest.mock('../../src/camera/TargetSelector', () => ({
-  TargetSelector: () => null,
-}));
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
@@ -76,7 +73,6 @@ import React from 'react';
 import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
-import { TargetSelector } from '../../src/camera/TargetSelector';
 import {
   assertCapturedClip,
   importStrokeVideo,
@@ -134,9 +130,8 @@ async function renderAndScore(): Promise<ReactTestRenderer> {
   await act(async () => {
     radios[0]!.props.onPress();
   });
-  const selector = renderer.root.findByType(TargetSelector);
   await act(async () => {
-    selector.props.onSkip();
+    buttonLabelled(renderer, 'Get my Technique Score').props.onPress();
   });
   return renderer;
 }

@@ -1,8 +1,8 @@
 /**
  * ProgressScreen derives its per-window fact slices from memoized arrays: a
- * section-tab toggle (unrelated state) must not re-run Intl day formatting
- * across the whole local history, and the range tabs must expose a ≥44pt
- * hit target.
+ * re-render with unchanged data (a streak refresh, a parent update) must not
+ * re-run Intl day formatting across the whole local history, and the range
+ * tabs must expose a ≥44pt hit target.
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -33,11 +33,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
 }));
 
 jest.mock('../../src/account/apiSession', () => ({
@@ -116,24 +114,10 @@ function hostByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return node;
 }
 
-async function press(renderer: TestRenderer.ReactTestRenderer, label: string) {
-  const [node] = renderer.root.findAll(
-    n =>
-      n.props.accessibilityLabel === label &&
-      typeof n.props.onPress === 'function',
-  );
-  if (!node) throw new Error(`No pressable labeled ${label}`);
-  await act(async () => {
-    node.props.onPress();
-  });
-}
-
 describe('fix-12: ProgressScreen render-time scans', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockListRealAnalysisFacts.mockReset();
-    mockListCaptureHistory.mockReset();
-    mockListCaptureHistory.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -144,7 +128,7 @@ describe('fix-12: ProgressScreen render-time scans', () => {
     jest.restoreAllMocks();
   });
 
-  it('does not re-format every fact when an unrelated section tab toggles', async () => {
+  it('does not re-format every fact when an unrelated re-render happens', async () => {
     mockListRealAnalysisFacts.mockResolvedValue(
       Array.from({ length: FACT_COUNT }, (_, index) => fact(index)),
     );
@@ -154,15 +138,18 @@ describe('fix-12: ProgressScreen render-time scans', () => {
       'formatToParts',
     );
 
-    await press(renderer, 'practice progress');
-    await press(renderer, 'technique progress');
+    // A streak refresh lands and the parent re-renders twice: no fact,
+    // range or timezone changed, so the memoized slices are reused.
+    mockConsistencyState.snapshot = null;
+    await act(async () => renderer.update(<ProgressScreen />));
+    await act(async () => renderer.update(<ProgressScreen />));
 
     expect(formatToParts.mock.calls.length).toBeLessThan(FACT_COUNT / 10);
     act(() => renderer.unmount());
   });
 
   it('range tabs expose at least a 44pt tall hit target', async () => {
-    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockListRealAnalysisFacts.mockResolvedValue([fact(0)]);
     const renderer = await renderScreen();
 
     for (const label of ['7 days range', '4 weeks range', '90 days range']) {

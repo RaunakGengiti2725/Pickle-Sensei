@@ -14,7 +14,6 @@ import { OriginalAnalysisExecution } from '../src/analysis/originalAnalysisOpera
 import type { OriginalAnalysisSnapshot } from '../src/analysis/originalAnalysisSnapshot';
 import { useAppStore } from '../src/state/appStore';
 import { Button, ScreenHeader } from '../src/design/components';
-import { TargetSelector } from '../src/camera/TargetSelector';
 import { TechniqueIntentPicker } from '../src/flow/TechniqueIntentPicker';
 import { reportScoredAnalysisForReview } from '../src/review/appStoreReview';
 import { triggerOutboxSync } from '../src/data/syncRuntime';
@@ -1396,7 +1395,7 @@ describe('W03 original saved-analysis retry UI', () => {
     expect(captureRunner.runOriginalCaptureAnalysis).toHaveBeenCalledTimes(2);
   });
 
-  it('persists import settings/target/practice BEFORE extraction fails and retries the saved movie, never the picker', async () => {
+  it('persists import settings/practice BEFORE extraction fails and retries the saved movie, never the picker', async () => {
     mockSource = 'library';
     useAppStore.setState({ profile: originalProfile });
     const { clip: imported, sidecar, extraction } = importedFixture();
@@ -1416,12 +1415,7 @@ describe('W03 original saved-analysis retry UI', () => {
       'saved imported clip',
     );
     pressByLabel(renderer, 'Forehand drive');
-    const target = {
-      point: { x: 0.48, y: 0.57 },
-      selectedAtIso: '2026-08-29T18:01:00.000Z',
-    };
-    const selector = renderer.root.findByType(TargetSelector);
-    act(() => selector.props.onConfirm(target));
+    act(() => action(renderer, 'Get my Technique Score')());
     await settled();
     expect(textOf(renderer)).toContain('Retry saved analysis');
     const original = logical();
@@ -1429,7 +1423,7 @@ describe('W03 original saved-analysis retry UI', () => {
       current_attempt_id: null,
       observation_seal: null,
     });
-    expect(original.snapshot.targetSeed).toEqual(target);
+    expect(original.snapshot.targetSeed).toBeNull();
     expect(attempts()).toHaveLength(0);
     expect(globalThis.fetch).not.toHaveBeenCalled();
     await act(async () => {
@@ -1448,7 +1442,7 @@ describe('W03 original saved-analysis retry UI', () => {
     expect(extractImportedPoseSequence).toHaveBeenCalledTimes(2);
     for (const call of jest.mocked(extractImportedPoseSequence).mock.calls) {
       expect(call[0].uri).toBe(imported.uri);
-      expect(call[1]).toEqual(target.point);
+      expect(call[1]).toBeNull();
     }
     expect(logical().snapshot).toEqual(original.snapshot);
     expect(practiceSets.planPracticeSet).toHaveBeenCalledTimes(1);
@@ -2011,7 +2005,7 @@ describe('W03 original saved-analysis retry UI', () => {
       const data = await openImport(`late-import-${change}`);
       const hold = gate<typeof data.extraction>();
       jest.mocked(extractImportedPoseSequence).mockReturnValue(hold.promise);
-      act(() => data.renderer.root.findByType(TargetSelector).props.onSkip());
+      act(() => action(data.renderer, 'Get my Technique Score')());
       await waitFor(
         () => jest.mocked(extractImportedPoseSequence).mock.calls.length === 1,
         'original extraction',
@@ -2043,20 +2037,14 @@ describe('W03 original saved-analysis retry UI', () => {
   );
 
   it.each(['selection', 'owner_ABA', 'origin_ABA', 'unmount'])(
-    'retained target selection after %s cannot start extraction, preparation, or a permit',
+    'retained score action after %s cannot start extraction, preparation, or a permit',
     async change => {
-      const { renderer } = await openImport(`stale-selector-${change}`);
-      const selector = renderer.root.findByType(TargetSelector).props;
+      const { renderer } = await openImport(`stale-score-${change}`);
+      const score = action(renderer, 'Get my Technique Score');
       if (change === 'selection') pressByLabel(renderer, 'Backhand drive');
       else if (change === 'unmount') await act(async () => renderer.unmount());
       else await act(async () => changeBinding(change));
-      act(() => {
-        selector.onConfirm({
-          point: { x: 0.2, y: 0.3 },
-          selectedAtIso: '2026-08-29T18:01:00.000Z',
-        });
-        selector.onSkip();
-      });
+      act(() => score());
       await flush();
       expect(
         captureRunner.prepareOriginalCaptureAnalysis,

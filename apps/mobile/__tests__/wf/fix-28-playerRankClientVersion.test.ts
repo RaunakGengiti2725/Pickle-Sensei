@@ -34,7 +34,7 @@ describe('fetchPlayerRank X-Client-Version header', () => {
     expect(headers['X-Client-Version']).toBe(
       getRuntimePublicConfig().appVersion,
     );
-    expect(headers['X-Client-Version']).toBe('1.0');
+    expect(headers['X-Client-Version']).toBe('1.1');
     expect(headers['X-Client-Version']).not.toBe('0.1.0');
   });
 });
