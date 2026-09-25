@@ -579,7 +579,8 @@ Google" or the guest caption, and `playerFactsLine` — "Beginner ·
 Right-handed"); Membership (Connect account for guests · Pickle Sensei Pro
 · Manage subscription when subscribed); the offline-pass card ONLY when
 `offlineJourneyHasNews` (never the empty "NONE HELD" wallet or the
-in-flight "CHECKING" read; an unreadable wallet still shows); Reminders &
+in-flight "CHECKING" read; an unreadable wallet and results waiting to sync
+still show); Reminders &
 privacy (Notifications · Data & consent); About (Rate Pickle Sensei [iOS]
 · App walkthrough · Privacy policy · Terms of use — legal rows only with a
 URL); Account (Manage account for synced sessions — the deletion entry, one

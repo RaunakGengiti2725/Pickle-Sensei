@@ -76,32 +76,6 @@ function deviceTimeZone() {
   }
 }
 
-function makeDayFormatter(timeZone: string) {
-  return new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
-
-function dayKey(value: string, formatter: Intl.DateTimeFormat) {
-  // A corrupt timestamp must exclude the row, never crash the screen:
-  // formatToParts throws a RangeError on an Invalid Date. The empty string
-  // sorts below every real day key, so range filters drop the fact.
-  const parsed = Date.parse(value);
-  if (!Number.isFinite(parsed)) return '';
-  let year = '';
-  let month = '';
-  let day = '';
-  for (const part of formatter.formatToParts(new Date(parsed))) {
-    if (part.type === 'year') year = part.value;
-    else if (part.type === 'month') month = part.value;
-    else if (part.type === 'day') day = part.value;
-  }
-  return `${year}-${month}-${day}`;
-}
-
 /** Count-correct label for a stroke's comparison basis. */
 function basisLabel(count: number, basis: 'daily averages' | 'scored reads') {
   return basis === 'daily averages'
@@ -153,7 +127,6 @@ export function ProgressScreen() {
   const consistency = useConsistencyStore(state => state.snapshot);
   const refreshConsistency = useConsistencyStore(state => state.refresh);
   const timeZone = useMemo(deviceTimeZone, []);
-  const dayFormatter = useMemo(() => makeDayFormatter(timeZone), [timeZone]);
   const [range, setRange] = useState<PracticeHistoryRangeKey>('28d');
   const [facts, setFacts] = useState<RealAnalysisFact[]>([]);
   const [canonical, setCanonical] = useState<CanonicalProgress | null>(null);
@@ -238,18 +211,6 @@ export function ProgressScreen() {
     dashboard.buckets[0]?.key.split(':')[0] ?? '9999-12-31';
   const selectedEndDay =
     dashboard.buckets.at(-1)?.key.split(':').at(-1) ?? '0000-01-01';
-  const factDays = useMemo(
-    () => facts.map(fact => dayKey(fact.capturedAt, dayFormatter)),
-    [dayFormatter, facts],
-  );
-  const selectedFacts = useMemo(
-    () =>
-      facts.filter((_, index) => {
-        const day = factDays[index]!;
-        return day >= selectedStartDay && day <= selectedEndDay;
-      }),
-    [factDays, facts, selectedEndDay, selectedStartDay],
-  );
   const selectedSeries = useMemo(
     () =>
       canonical?.series.filter(
@@ -272,32 +233,25 @@ export function ProgressScreen() {
           .map(point => point.avgScore);
         return { shotType, points, basis: 'daily averages' as const };
       }
-      const allForShot = selectedFacts.filter(
-        fact => fact.shotType === shotType,
-      );
-      const newest = allForShot[0];
-      if (!newest) return null;
-      const points = allForShot
-        .filter(
-          fact =>
-            fact.resultKind === 'scored' &&
-            fact.overallScore !== null &&
-            fact.scoringModelVersion === newest.scoringModelVersion &&
-            fact.shotConfigVersion === newest.shotConfigVersion,
-        )
-        .reverse()
-        .map(fact => fact.overallScore as number);
+      // Local rows are the trend's own comparable reads (oldest first), so
+      // the list and the chart always describe the same reads: the same
+      // version rule, the same window, and no future or unparseable
+      // timestamps — an unscored capture can never displace a score.
+      const points = dashboard.reads
+        .filter(read => read.shotType === shotType)
+        .map(read => read.score);
       return { shotType, points, basis: 'scored reads' as const };
-    }).filter(
-      (item): item is NonNullable<typeof item> =>
-        item !== null && item.points.length > 0,
-    );
-  }, [selectedFacts, selectedSeries]);
+    }).filter(item => item.points.length > 0);
+  }, [dashboard.reads, selectedSeries]);
 
+  // The lower half opens once a comparable scored read exists — in this
+  // window or before it (`previous` is null only without earlier history) —
+  // or the account has synced history. A read the dashboard cannot place
+  // never hides the first-score step.
   const hasScores =
-    facts.some(
-      fact => fact.resultKind === 'scored' && fact.overallScore !== null,
-    ) || Boolean(canonical?.series.length);
+    dashboard.scoredReps.current > 0 ||
+    dashboard.scoredReps.previous !== null ||
+    Boolean(canonical?.series.length);
 
   if (
     !loaded ||

@@ -440,10 +440,11 @@ export function presentOfflineJourney(
  * turned into "nothing held".
  */
 export function offlineJourneyHasNews(state: OfflineJourneyState): boolean {
-  return (
-    state.kind !== 'loading' &&
-    presentOfflineJourney(state).badge !== 'NONE HELD'
-  );
+  if (state.kind === 'loading') return false;
+  // Results waiting to sync are news even when no pass is held (the
+  // presenter still badges that wallet NONE HELD beside its waiting row).
+  if (state.kind === 'read' && state.wallet.pending.length > 0) return true;
+  return presentOfflineJourney(state).badge !== 'NONE HELD';
 }
 
 /**

@@ -865,6 +865,21 @@ describe('W05-04 Settings surfaces the offline journey', () => {
     expect(view.title).toBe('No offline pass on this phone');
     expect(offlineJourneyHasNews(empty)).toBe(false);
     expect(offlineJourneyHasNews({ kind: 'loading' })).toBe(false);
+    // A receipt still waiting to sync is news even with no pass held: the
+    // presenter badges that wallet NONE HELD beside its waiting row.
+    await holdGrant();
+    await spend('op-1');
+    const spent = await ledgerTruth();
+    expect(spent.wallet.pending.length).toBeGreaterThan(0);
+    const waiting: OfflineJourneyState = {
+      kind: 'read',
+      allocation: truth.allocation,
+      wallet: spent.wallet,
+    };
+    expect(presentOfflineJourney(waiting).rows).toContainEqual(
+      expect.objectContaining({ label: 'Waiting to sync' }),
+    );
+    expect(offlineJourneyHasNews(waiting)).toBe(true);
     expectDossierCompliant(
       [view.title, ...view.rows.map(r => r.value), ...view.notes].join(' | '),
     );

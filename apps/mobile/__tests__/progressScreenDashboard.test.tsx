@@ -571,6 +571,58 @@ describe('ProgressScreen page', () => {
     act(() => renderer.unmount());
   });
 
+  it('keeps the first-score step when the only scored read cannot be placed in time', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({ capturedAt: 'not a real timestamp', overallScore: 9.9 }),
+    ]);
+    const renderer = await renderScreen();
+    expect(renderedText(renderer)).toContain('Get your first score');
+    expect(findByTestId(renderer, 'progress-trend')).toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('never lets an unscored newer capture hide a stroke’s score', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({
+        capturedAt: daysAgoIso(1),
+        resultKind: 'low_confidence',
+        overallScore: null,
+        scoringModelVersion: 'model-3',
+      }),
+      fact({ capturedAt: daysAgoIso(3), overallScore: 7 }),
+    ]);
+    const renderer = await renderScreen();
+    expect(findByTestId(renderer, 'stroke-row-dink')).not.toBeNull();
+    expect(renderedText(renderer)).toContain('1 scored read in 4 weeks');
+    act(() => renderer.unmount());
+  });
+
+  it('lists exactly the reads the trend counts: newest model only, nothing stamped in the future', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      // Saved out of time order: the older model's read comes first.
+      fact({
+        capturedAt: daysAgoIso(3),
+        overallScore: 7,
+        scoringModelVersion: 'model-1',
+      }),
+      fact({ capturedAt: daysAgoIso(1), overallScore: 8 }),
+      // A clock-skewed read stamped two hours from now.
+      fact({
+        capturedAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+        overallScore: 9.9,
+      }),
+    ]);
+    const renderer = await renderScreen();
+    const label = String(
+      findByTestId(renderer, 'stroke-row-dink')!.props.accessibilityLabel,
+    );
+    expect(label).toContain('technique score 8.0 out of 10');
+    expect(label).toContain('1 scored read in 4 weeks');
+    expect(renderedText(renderer)).not.toContain('9.9 /10');
+    expect(renderedText(renderer)).not.toContain('7.0 /10');
+    act(() => renderer.unmount());
+  });
+
   it('recovers through the error state retry', async () => {
     mockListRealAnalysisFacts
       .mockRejectedValueOnce(new Error('sqlite unavailable'))
