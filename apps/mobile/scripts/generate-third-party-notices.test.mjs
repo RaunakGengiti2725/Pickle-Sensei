@@ -958,6 +958,13 @@ test('the reviewed first-party pod checksum refresh reproduces the reference Pod
     ),
     [...checksums].filter(([name]) => name !== 'PickleNative'),
   );
+  assert.equal(
+    receipt.guards.find(
+      guard =>
+        guard.path === 'ios/Pods/Local Podspecs/PickleNative.podspec.json',
+    ).sha256,
+    '81275c9166882a3f4cc2a3aa60ce750be0d46071042a602c6f09914f171888a0',
+  );
   assert.deepEqual(artifactProblems(receipt, candidateArtifact(receipt)), []);
   assert.match(
     renderNotices(receipt).toString('utf8'),
