@@ -962,7 +962,7 @@ describe('Restrained visual primitives', () => {
     act(() => checkpoint.unmount());
   });
 
-  it('uses a solid score arc while presenting the estimated DUPR over the /10 reading', () => {
+  it('uses a solid score arc and stacks the estimated DUPR, its unit and ESTIMATED in white', () => {
     const renderer = render(<ScoreRing score={7.1} dark />);
     expect(
       renderer.root.findAll(node => node.props.id === 'scoreGradient'),
@@ -970,20 +970,52 @@ describe('Restrained visual primitives', () => {
     expect(
       renderer.root.findAll(node => node.props.stroke === color.volt).length,
     ).toBeGreaterThan(0);
-    // D-046: VoiceOver hears both figures and which is which; the caption
-    // names the unit and the smaller line keeps the 0–10 score.
+    // D-046: VoiceOver hears both figures and which is which.
     expect(
       renderer.root.findAll(
         node =>
           node.props.accessibilityLabel ===
-          'Estimated DUPR 3.40, technique score 7.1 out of 10',
+          'Estimated DUPR 4.10, technique score 7.1 out of 10',
       ).length,
     ).toBeGreaterThan(0);
+    // 2026-09-11 (owner): inside the ring the numeral, the `DUPR` unit in
+    // the h2 role and a micro `ESTIMATED` eyebrow — all white — and NO /10
+    // line; the unit is clearly smaller than the numeral, clearly larger
+    // than the eyebrow.
     const texts = renderer.root
       .findAllByType(Text)
       .map(node => node.props.children);
-    expect(texts).toContain('EST. DUPR');
-    expect(texts).toContain('7.1 /10');
+    // The numeral counts up from the floor on mount, so only its shape is
+    // pinned here; the final figure is the accessibility label above.
+    expect(texts).toHaveLength(3);
+    expect(texts[0]).toMatch(/^\d\.\d\d$/);
+    expect(texts.slice(1)).toEqual(['DUPR', 'ESTIMATED']);
+    expect(texts).not.toContain('7.1 /10');
+    expect(
+      renderer.root.findAllByProps({ testID: 'score-ring-technique-score' }),
+    ).toHaveLength(0);
+    const numeral = renderer.root.findByProps({ testID: 'score-ring-dupr' });
+    expect(StyleSheet.flatten(numeral.props.style)).toMatchObject({
+      ...type.display,
+      color: color.onDark,
+      fontSize: 154 * 0.3,
+      lineHeight: 154 * 0.33,
+    });
+    const unit = renderer.root.findByProps({ testID: 'score-ring-unit' });
+    expect(StyleSheet.flatten(unit.props.style)).toMatchObject({
+      ...type.h2,
+      color: color.onDark,
+    });
+    const eyebrow = renderer.root.findByProps({ testID: 'score-ring-eyebrow' });
+    expect(StyleSheet.flatten(eyebrow.props.style)).toMatchObject({
+      ...type.micro,
+      color: color.onDark,
+    });
+    const sizeOf = (node: ReturnType<typeof renderer.root.findByProps>) =>
+      StyleSheet.flatten(node.props.style).fontSize as number;
+    expect(sizeOf(unit)).toBeGreaterThan(type.caption.fontSize);
+    expect(sizeOf(unit)).toBeLessThan(sizeOf(numeral) / 2);
+    expect(sizeOf(eyebrow)).toBeLessThan(sizeOf(unit));
     act(() => renderer.unmount());
   });
 

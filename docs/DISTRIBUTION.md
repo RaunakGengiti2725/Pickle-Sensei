@@ -89,11 +89,16 @@ increments, bumps or picks a version or build number.
 Historical uploads (App Store Connect read-only inspection, recorded in
 `docs/RELEASE_READINESS_2026-09-07.md`): builds 1, 2 and 3 of version 1.0
 are valid uploads, build 3 is the newest, and no further page of builds was
-found. The committed identity in this revision is still 1.0 (1), so the
-release lanes refuse to upload it. The next identity must be a build number
-greater than 3; choosing it is the owner's decision and has NOT been made
-here — this repository does not select it. No upload or submission was
-performed while introducing this gate.
+found. The committed identity when this gate was introduced was still 1.0
+(1), so the release lanes refused to upload it. The next identity had to be
+a build number greater than 3; choosing it is the owner's decision — this
+repository does not select it. No upload or submission was performed while
+introducing this gate.
+
+Owner report (2026-09-24): version 1.0 is live on the App Store and build 5
+is the newest upload. The owner chose the next identity, **1.1 (6)**
+(D-054), committed here in every identity file. The release lanes still
+re-check the newest build App Store Connect holds before archiving.
 
 ## Signing model
 

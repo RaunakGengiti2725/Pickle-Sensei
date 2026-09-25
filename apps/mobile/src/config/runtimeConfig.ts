@@ -71,7 +71,7 @@ const GOOGLE_WEB_CLIENT_ID: string | null =
   '278019487172-crj0b3oig508i5e5dlqgfno275i9nes1.apps.googleusercontent.com';
 
 /** Keep this aligned with MARKETING_VERSION/versionName for each release. */
-const APP_VERSION = '1.0';
+const APP_VERSION = '1.1';
 
 // Numeric Apple app id from App Store Connect (App Information → General →
 // Apple ID). Settings' "Rate Pickle Sensei" row uses it for the direct

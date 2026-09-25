@@ -41,10 +41,12 @@ import {
   hasLicenseText,
   licenseCommentBlocks,
   npmClosure,
+  parsePodChecksums,
   parsePodVersions,
   readmeLicenseSection,
   renderNotices,
   resourceBytes,
+  revertPodChecksum,
   sha256,
   tarFiles,
   validateReceipt,
@@ -913,6 +915,134 @@ test('host-tool maintenance cannot cover arbitrary lock changes, borrowed integr
       ),
     );
   }
+});
+
+test('the reviewed first-party pod checksum refresh reproduces the reference Podfile.lock from the current lock and binds every pod checksum', () => {
+  const history = receipt.historicalPodLock;
+  assert.equal(history.kind, 'historical-first-party-pod-checksum');
+  assert.deepEqual(history.input, {
+    path: 'ios/Podfile.lock',
+    sha256: '0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f',
+    updatedInputSha256:
+      '414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9',
+  });
+  assert.deepEqual(history.pod, {
+    name: 'PickleNative',
+    before: '01c35ae8202ef7fa7afb56dd484af2f9cef5119c',
+    after: '71e1a49821e0d95e90f70191cd0375a8547a7506',
+  });
+  const lock = readFileSync(join(ROOT, 'ios/Podfile.lock'), 'utf8');
+  assert.equal(sha256(Buffer.from(lock)), history.input.updatedInputSha256);
+  assert.equal(
+    receipt.inputs.find(input => input.path === history.input.path).sha256,
+    history.input.updatedInputSha256,
+  );
+  const reverted = revertPodChecksum(lock, history.pod);
+  assert.equal(sha256(Buffer.from(reverted)), history.input.sha256);
+  assert.equal(revertPodChecksum(reverted, history.pod), null);
+  const checksums = parsePodChecksums(lock);
+  const pods = receipt.components.filter(item => item.id.startsWith('pod:'));
+  assert.equal(checksums.size, pods.length);
+  for (const item of pods)
+    assert.equal(checksums.get(item.name), item.specChecksum, item.id);
+  const firstParty = byID(receipt, 'pod:PickleNative');
+  assert.equal(firstParty.role, 'first-party-outside-third-party-notices');
+  assert.equal(firstParty.specChecksum, history.pod.after);
+  assert.deepEqual(
+    parsePodChecksums(reverted).get('PickleNative'),
+    history.pod.before,
+  );
+  assert.deepEqual(
+    [...parsePodChecksums(reverted)].filter(
+      ([name]) => name !== 'PickleNative',
+    ),
+    [...checksums].filter(([name]) => name !== 'PickleNative'),
+  );
+  assert.equal(
+    receipt.guards.find(
+      guard =>
+        guard.path === 'ios/Pods/Local Podspecs/PickleNative.podspec.json',
+    ).sha256,
+    '81275c9166882a3f4cc2a3aa60ce750be0d46071042a602c6f09914f171888a0',
+  );
+  assert.deepEqual(artifactProblems(receipt, candidateArtifact(receipt)), []);
+  assert.match(
+    renderNotices(receipt).toString('utf8'),
+    /Reviewed first-party pod checksum refresh after the reference: PickleNative podspec 01c35ae8202ef7fa7afb56dd484af2f9cef5119c -> 71e1a49821e0d95e90f70191cd0375a8547a7506\./,
+  );
+});
+
+test('the first-party pod checksum refresh cannot cover third-party pod changes, unrecorded checksums or arbitrary lock hashes', t => {
+  const wrongHistory = clone();
+  wrongHistory.historicalPodLock.pod.after = 'f'.repeat(40);
+  assert.ok(
+    validateReceipt(wrongHistory).includes(
+      'Historical first-party pod checksum receipt is invalid',
+    ),
+  );
+  assert.ok(
+    artifactProblems(wrongHistory, candidateArtifact(wrongHistory)).includes(
+      'Artifact dependency lock binding changed',
+    ),
+  );
+  const unrecorded = clone();
+  byID(unrecorded, 'pod:PickleNative').specChecksum =
+    receipt.historicalPodLock.pod.before;
+  const unrecordedErrors = validateReceipt(unrecorded);
+  assert.ok(
+    unrecordedErrors.includes(
+      'First-party pod checksum refresh is not recorded: PickleNative',
+    ),
+  );
+  assert.ok(
+    unrecordedErrors.includes(
+      'CocoaPods spec checksum changed: pod:PickleNative',
+    ),
+  );
+  assert.ok(
+    artifactProblems(unrecorded, candidateArtifact(unrecorded)).includes(
+      'Artifact dependency lock binding changed',
+    ),
+  );
+  const thirdParty = clone();
+  byID(thirdParty, 'pod:hermes-engine').specChecksum = '0'.repeat(40);
+  assert.ok(
+    validateReceipt(thirdParty).includes(
+      'CocoaPods spec checksum changed: pod:hermes-engine',
+    ),
+  );
+  const root = cleanClone(t);
+  const lockPath = join(root, 'ios/Podfile.lock');
+  const hermes = byID(receipt, 'pod:hermes-engine');
+  const movedLock = readFileSync(lockPath, 'utf8').replace(
+    `  hermes-engine: ${hermes.specChecksum}\n`,
+    `  hermes-engine: ${'0'.repeat(40)}\n`,
+  );
+  writeFileSync(lockPath, movedLock);
+  const moved = clone();
+  moved.inputs.find(input => input.path === 'ios/Podfile.lock').sha256 = sha256(
+    Buffer.from(movedLock),
+  );
+  byID(moved, 'pod:hermes-engine').specChecksum = '0'.repeat(40);
+  const movedErrors = validateReceipt(moved, { root });
+  assert.ok(
+    movedErrors.includes(
+      'Historical Podfile.lock is not the current lock with only the first-party pod checksum reverted',
+    ),
+  );
+  assert.ok(
+    !movedErrors.some(error => error.startsWith('Pinned input changed')),
+  );
+  assert.ok(
+    artifactProblems(moved, candidateArtifact(moved)).includes(
+      'Artifact dependency lock binding changed',
+    ),
+  );
+  const duplicated = `${movedLock}  PickleNative: ${receipt.historicalPodLock.pod.after}\n`;
+  assert.equal(
+    revertPodChecksum(duplicated, receipt.historicalPodLock.pod),
+    null,
+  );
 });
 
 test('historical membership cannot be promoted or reused as current-binary evidence', () => {

@@ -337,13 +337,13 @@ afterEach(() => {
 // ─── Settings as a guest ─────────────────────────────────────────────────────
 
 describe('SettingsScreen — guest', () => {
-  it('labels the account LOCAL, explains where progress lives, and hides Manage account', () => {
+  it('says the account is local, explains where progress lives, and hides Manage account', () => {
     asGuest();
     const renderer = render(<SettingsScreen />);
 
     const copy = allText(renderer);
-    expect(copy).toContain('LOCAL');
     expect(copy).toContain('Local · this device');
+    expect(copy).not.toContain('Signed in with');
     expect(copy).not.toContain('SYNCED');
     expect(pressables(renderer, 'Manage account, Details')).toHaveLength(0);
     expect(copy).not.toContain('Manage account');

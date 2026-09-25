@@ -10,8 +10,8 @@
  * cost of ANY unrelated state change (tab toggle, range chip, refresh) grows
  * linearly with lifetime history.
  *
- * This test renders the screen with 3 000 facts and asserts that a single
- * section toggle re-runs formatToParts at least 3 000 more times.
+ * This test renders the screen with 3 000 facts and asserts that, with the
+ * slices memoized, an unrelated re-render runs formatToParts zero times.
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -42,11 +42,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
 }));
 
 jest.mock('../../src/account/apiSession', () => ({
@@ -114,29 +112,12 @@ function facts(count: number): RealAnalysisFact[] {
   }));
 }
 
-async function pressByLabel(
-  renderer: TestRenderer.ReactTestRenderer,
-  label: string,
-) {
-  const [node] = renderer.root.findAll(
-    n =>
-      n.props.accessibilityLabel === label &&
-      typeof n.props.onPress === 'function',
-  );
-  if (!node) throw new Error(`No pressable labeled ${label}`);
-  await act(async () => {
-    node.props.onPress();
-  });
-}
-
 describe('ProgressScreen per-render fact scan (mobile-perf-memory)', () => {
   let formatToParts: jest.SpyInstance;
 
   beforeEach(() => {
     jest.useFakeTimers();
     mockListRealAnalysisFacts.mockReset();
-    mockListCaptureHistory.mockReset();
-    mockListCaptureHistory.mockResolvedValue([]);
     formatToParts = jest.spyOn(Intl.DateTimeFormat.prototype, 'formatToParts');
   });
 
@@ -148,7 +129,7 @@ describe('ProgressScreen per-render fact scan (mobile-perf-memory)', () => {
     jest.useRealTimers();
   });
 
-  it('loads the full local history once and does NOT re-key any fact on an unrelated section toggle', async () => {
+  it('loads the full local history once and does NOT re-key any fact on an unrelated re-render', async () => {
     mockListRealAnalysisFacts.mockResolvedValue(facts(FACT_COUNT));
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -165,13 +146,17 @@ describe('ProgressScreen per-render fact scan (mobile-perf-memory)', () => {
     // Baseline after the data-loading renders settle.
     formatToParts.mockClear();
 
-    // A section toggle changes no fact, no range, no timezone, so the
+    // A parent re-render changes no fact, no range, no timezone, so the
     // memoized fact slices are reused and no fact goes through Intl again.
-    await pressByLabel(renderer, 'practice progress');
+    await act(async () => {
+      renderer.update(React.createElement(ProgressScreen));
+    });
     expect(formatToParts.mock.calls.length).toBe(0);
 
     formatToParts.mockClear();
-    await pressByLabel(renderer, 'technique progress');
+    await act(async () => {
+      renderer.update(React.createElement(ProgressScreen));
+    });
     expect(formatToParts.mock.calls.length).toBe(0);
 
     act(() => renderer.unmount());

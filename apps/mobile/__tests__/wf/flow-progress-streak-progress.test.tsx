@@ -1,9 +1,9 @@
 /**
- * Progress dashboard flow, driven the way a player would: land on the
- * technique tab, switch sections and windows, hit a failing load and recover
- * through retry, and step into the streak calendar from either section.
- * Every control is exercised through its rendered handler and its
- * accessibility contract is asserted on the host node.
+ * Progress page flow, driven the way a player would: land on the one-page
+ * surface, switch windows, hit a failing load and recover through retry,
+ * and step into the streak calendar. Every control is exercised through its
+ * rendered handler and its accessibility contract is asserted on the host
+ * node.
  */
 import React from 'react';
 import { Text } from 'react-native';
@@ -36,11 +36,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listRealAnalysisFacts: (...args: unknown[]) =>
     mockListRealAnalysisFacts(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
 }));
 
 const mockGetApiSession = jest.fn<unknown, []>(() => null);
@@ -105,6 +103,19 @@ function daysAgoIso(days: number): string {
 
 function daysAgoDay(days: number): string {
   return daysAgoIso(days).slice(0, 10);
+}
+
+function scoredFact() {
+  return {
+    id: 'aaaaaaaa-0000-4000-8000-000000000001',
+    shotType: 'dink',
+    capturedAt: daysAgoIso(2),
+    overallScore: 7.1,
+    confidence: 0.9,
+    resultKind: 'scored',
+    scoringModelVersion: 'model-2',
+    shotConfigVersion: 'config-1',
+  };
 }
 
 function consistencySnapshot() {
@@ -200,7 +211,7 @@ async function pressByLabel(
   await press(pressableByLabel(renderer, label));
 }
 
-describe('flow: progress dashboard', () => {
+describe('flow: progress page', () => {
   beforeEach(() => {
     setActiveDataOwner(OWNER);
     jest.useFakeTimers();
@@ -208,8 +219,6 @@ describe('flow: progress dashboard', () => {
     mockMaybeCelebrate.mockClear();
     mockListRealAnalysisFacts.mockReset();
     mockListRealAnalysisFacts.mockResolvedValue([]);
-    mockListCaptureHistory.mockReset();
-    mockListCaptureHistory.mockResolvedValue([]);
     mockGetApiSession.mockReset();
     mockGetApiSession.mockReturnValue(null);
     mockFetchCanonicalProgress.mockReset();
@@ -227,25 +236,14 @@ describe('flow: progress dashboard', () => {
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
   });
 
-  it('opens on Technique with a real tablist and refreshes the streak on focus', async () => {
+  it('opens as one page without section tabs and refreshes the streak on focus', async () => {
     const renderer = await renderScreen();
 
-    const tabs = hostsByRole(renderer, 'tab');
-    const sectionTabs = tabs.filter(tab =>
-      String(tab.props.accessibilityLabel).endsWith(' progress'),
-    );
-    expect(sectionTabs.map(tab => tab.props.accessibilityLabel)).toEqual([
-      'technique progress',
-      'practice progress',
-    ]);
-    expect(sectionTabs[0]!.props.accessibilityState).toMatchObject({
-      selected: true,
-    });
-    expect(sectionTabs[0]!.props.accessibilityState.disabled).toBeFalsy();
-    expect(sectionTabs[1]!.props.accessibilityState).toMatchObject({
-      selected: false,
-    });
-    expect(hostsByRole(renderer, 'tablist').length).toBeGreaterThanOrEqual(2);
+    // One page: no Technique/Practice split, and a first-time player sees
+    // no window picker before there is anything to chart.
+    expect(hostsByRole(renderer, 'tab')).toHaveLength(0);
+    expect(hostsByRole(renderer, 'tablist')).toHaveLength(0);
+    expect(renderedText(renderer)).toContain('Get your first score');
     expect(mockConsistencyState.refresh).toHaveBeenCalledTimes(1);
 
     // Title role is the canonical top-level page hero (AGENTS.md typography).
@@ -260,36 +258,10 @@ describe('flow: progress dashboard', () => {
     act(() => renderer.unmount());
   });
 
-  it('switches sections both ways and keeps the selected tab honest', async () => {
-    const renderer = await renderScreen();
-    expect(renderedText(renderer)).toContain('DUPR TREND');
-
-    await pressByLabel(renderer, 'practice progress');
-    let text = renderedText(renderer);
-    expect(text).toContain('VERIFIED PRACTICE');
-    expect(text).not.toContain('DUPR TREND');
-    expect(
-      hostByLabel(renderer, 'practice progress')!.props.accessibilityState
-        .selected,
-    ).toBe(true);
-
-    // Re-pressing the active tab is a no-op, never a crash or a reload.
-    await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('VERIFIED PRACTICE');
-    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
-
-    await pressByLabel(renderer, 'technique progress');
-    text = renderedText(renderer);
-    expect(text).toContain('DUPR TREND');
-    expect(
-      hostByLabel(renderer, 'technique progress')!.props.accessibilityState
-        .selected,
-    ).toBe(true);
-    act(() => renderer.unmount());
-  });
-
   it('exposes every window option as a tab and re-anchors on each pick', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([scoredFact()]);
     const renderer = await renderScreen();
+    expect(hostsByRole(renderer, 'tablist')).toHaveLength(1);
     for (const option of PRACTICE_HISTORY_RANGES) {
       const tab = hostByLabel(renderer, `${option.label} range`);
       expect(tab).not.toBeNull();
@@ -300,7 +272,8 @@ describe('flow: progress dashboard', () => {
     }
 
     await pressByLabel(renderer, '7 days range');
-    expect(renderedText(renderer)).toContain('VS. PRIOR 7 DAYS');
+    expect(renderedText(renderer)).toContain('EST. DUPR · 7 DAYS');
+    expect(renderedText(renderer)).toContain('1 scored read in 7 days');
     expect(
       hostByLabel(renderer, '7 days range')!.props.accessibilityState.selected,
     ).toBe(true);
@@ -308,11 +281,8 @@ describe('flow: progress dashboard', () => {
       hostByLabel(renderer, '4 weeks range')!.props.accessibilityState.selected,
     ).toBe(false);
 
-    // The window applies to the practice section too.
-    await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('VS. PRIOR 7 DAYS');
     await pressByLabel(renderer, '90 days range');
-    expect(renderedText(renderer)).toContain('VS. PRIOR 90 DAYS');
+    expect(renderedText(renderer)).toContain('EST. DUPR · 90 DAYS');
     // Selecting a window never re-queries storage.
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
@@ -333,7 +303,7 @@ describe('flow: progress dashboard', () => {
     expect(text).toContain(
       'Your saved camera history could not be opened. No empty values were substituted.',
     );
-    expect(text).not.toContain('KEY STATISTICS');
+    expect(text).not.toContain('Get your first score');
 
     // First retry fails again: the error state returns, never a hang.
     await pressByLabel(renderer, 'Try again');
@@ -341,10 +311,10 @@ describe('flow: progress dashboard', () => {
     expect(renderedText(renderer)).toContain('Progress couldn’t load');
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(2);
 
-    // Second retry succeeds and the dashboard renders.
+    // Second retry succeeds and the page renders.
     await pressByLabel(renderer, 'Try again');
     await act(async () => {});
-    expect(renderedText(renderer)).toContain('KEY STATISTICS');
+    expect(renderedText(renderer)).toContain('Get your first score');
     expect(renderedText(renderer)).not.toContain('Progress couldn’t load');
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(3);
     act(() => renderer.unmount());
@@ -368,7 +338,7 @@ describe('flow: progress dashboard', () => {
     });
     await act(async () => {});
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(2);
-    expect(renderedText(renderer)).toContain('KEY STATISTICS');
+    expect(renderedText(renderer)).toContain('Get your first score');
     act(() => renderer.unmount());
   });
 
@@ -384,37 +354,33 @@ describe('flow: progress dashboard', () => {
     const text = renderedText(renderer);
     expect(text).not.toContain('Loading measured progress');
     expect(text).not.toContain('Progress couldn’t load');
-    expect(text).toContain('KEY STATISTICS');
+    expect(text).toContain('Get your first score');
     // Device-only evidence stands in: nothing is invented for the rank.
     expect(text).toContain('Unranked');
     expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
 
-  it('routes the consistency card to StreakCalendar from both sections', async () => {
+  it('routes the streak card to StreakCalendar', async () => {
     mockConsistencyState.snapshot = consistencySnapshot();
     const renderer = await renderScreen();
-    const label =
-      'Consistency. 5 days training streak, momentum level 2. Opens the streak calendar.';
+    const label = 'Streak: 5 days. Opens the streak calendar.';
 
-    const techniqueCard = hostByLabel(renderer, label)!;
-    expect(techniqueCard.props.accessibilityRole).toBe('button');
-    expect(techniqueCard.props.accessibilityState?.disabled).toBeFalsy();
+    const card = hostByLabel(renderer, label)!;
+    expect(card.props.accessibilityRole).toBe('button');
+    expect(card.props.accessibilityState?.disabled).toBeFalsy();
+    expect(renderedText(renderer)).toContain('5-day streak');
     await pressByLabel(renderer, label);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');
-
-    await pressByLabel(renderer, 'practice progress');
-    await pressByLabel(renderer, label);
-    expect(mockNavigate).toHaveBeenCalledTimes(2);
-    expect(mockNavigate).toHaveBeenLastCalledWith('StreakCalendar');
     act(() => renderer.unmount());
   });
 
-  it('shows the fresh-account consistency card without inventing a streak', async () => {
+  it('shows the fresh-account streak card without inventing a streak', async () => {
     const renderer = await renderScreen();
-    const label =
-      'Consistency. 0 days training streak, momentum level 1. Opens the streak calendar.';
+    const label = 'Streak: 0 days. Opens the streak calendar.';
     expect(hostByLabel(renderer, label)).not.toBeNull();
+    expect(renderedText(renderer)).toContain('No streak yet');
     expect(renderedText(renderer)).toContain(
       'Your first analysis lights the flame.',
     );
@@ -441,9 +407,9 @@ describe('flow: progress dashboard', () => {
     expect(mockMaybeCelebrate.mock.calls[0]![0]).toMatchObject({
       tier: 'platinum',
     });
-    // Switching windows/sections re-renders but never re-reports.
+    // Switching windows re-renders but never re-reports.
     await pressByLabel(renderer, '7 days range');
-    await pressByLabel(renderer, 'practice progress');
+    await pressByLabel(renderer, '90 days range');
     expect(mockMaybeCelebrate).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });

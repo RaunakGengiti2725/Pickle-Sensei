@@ -533,7 +533,7 @@ describe('W08-01 ManageAccount deletion on the durable operation', () => {
           wanted: 'price',
           details: null,
           platform: 'ios',
-          appVersion: '1.0',
+          appVersion: '1.1',
         },
       });
       expect(journalRows()).toMatchObject([{ phase: 'ready' }]);

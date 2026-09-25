@@ -38,7 +38,7 @@ const dsn = `https://${'a'.repeat(32)}@o1.ingest.sentry.io/1`;
 // prints for a committed candidate; the bundle phase keeps its version, build,
 // bundle identifier, commit and verdict, so both shapes must parse alike.
 const generatedRecord = {
-  marketingVersion: '1.0',
+  marketingVersion: '1.1',
   buildNumber: 1,
   bundleIdentifier: 'com.picklesensei',
   moduleName: 'PickleSensei',
@@ -51,7 +51,7 @@ const generatedRecord = {
 };
 const generated: GeneratedReleaseIdentity = {
   bundleIdentifier: 'com.picklesensei',
-  marketingVersion: '1.0',
+  marketingVersion: '1.1',
   nativeBuildNumber: '1',
   sourceRevision: sha,
 };
@@ -88,7 +88,7 @@ describe('generated release identity file', () => {
     expect(parsed).toEqual(generated);
     expect(
       parseGeneratedReleaseIdentity({
-        marketingVersion: '1.0',
+        marketingVersion: '1.1',
         buildNumber: 1,
         bundleIdentifier: 'com.picklesensei',
         gitSha: sha,
@@ -231,8 +231,8 @@ describe('release identity applied to the diagnostics configuration', () => {
     const shipped = getRuntimePublicConfig().diagnostics;
     const drifted: Array<[RuntimeDiagnosticsConfig, GeneratedReleaseIdentity]> =
       [
-        [{ ...shipped, marketingVersion: '1.1' }, generated],
-        [shipped, { ...generated, marketingVersion: '1.1' }],
+        [{ ...shipped, marketingVersion: '0.9' }, generated],
+        [shipped, { ...generated, marketingVersion: '0.9' }],
         [{ ...shipped, nativeBuildNumber: '2' }, generated],
         [{ ...shipped, sourceRevision: 'b'.repeat(40) }, generated],
         [
@@ -292,7 +292,7 @@ describe('diagnostics gate with the generated release identity', () => {
       dsn,
       identity: {
         bundleIdentifier: 'com.picklesensei',
-        marketingVersion: '1.0',
+        marketingVersion: '1.1',
         nativeBuildNumber: '1',
         sourceRevision: sha,
         environment: 'test',
@@ -313,7 +313,7 @@ describe('diagnostics gate with the generated release identity', () => {
     );
     expect(options).toMatchObject({
       enabled: true,
-      release: 'com.picklesensei@1.0+1',
+      release: 'com.picklesensei@1.1+1',
       dist: '1',
       environment: 'test',
       enableNative: false,
@@ -332,7 +332,7 @@ describe('diagnostics gate with the generated release identity', () => {
     expect(reporter.capture(new Error(marker), 'handled_js')).toBe(true);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
-      release: 'com.picklesensei@1.0+1',
+      release: 'com.picklesensei@1.1+1',
       dist: '1',
       environment: 'test',
       tags: {
@@ -399,7 +399,7 @@ describe('startup wiring of the generated release identity', () => {
       state: 'ready_js_only',
       dsn,
       identity: expect.objectContaining({
-        marketingVersion: '1.0',
+        marketingVersion: '1.1',
         nativeBuildNumber: '1',
         sourceRevision: sha,
       }),

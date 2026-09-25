@@ -910,14 +910,17 @@ describe('static training flame', () => {
     },
   );
 
-  it('threads dark context through the empty consistency card', () => {
+  it('draws the light-surface flame on the empty streak card', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
         <ConsistencyCard snapshot={null} onPress={() => {}} />,
       );
     });
-    expect(renderer.root.findByType(FlameIcon).props.dark).toBe(true);
+    expect(renderer.root.findByType(FlameIcon).props.dark).toBeFalsy();
+    expect(renderer.root.findAllByType(Path)[0]!.props.stroke).toBe(
+      color.inkSoft,
+    );
     act(() => renderer.unmount());
   });
 
