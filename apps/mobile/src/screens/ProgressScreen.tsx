@@ -128,6 +128,7 @@ export function ProgressScreen() {
   const refreshConsistency = useConsistencyStore(state => state.refresh);
   const timeZone = useMemo(deviceTimeZone, []);
   const [range, setRange] = useState<PracticeHistoryRangeKey>('28d');
+  const [rankShowsRating, setRankShowsRating] = useState(false);
   const [facts, setFacts] = useState<RealAnalysisFact[]>([]);
   const [canonical, setCanonical] = useState<CanonicalProgress | null>(null);
   const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
@@ -296,7 +297,7 @@ export function ProgressScreen() {
           </Text>
         </View>
 
-        <PlayerRankCard facts={facts} />
+        <PlayerRankCard facts={facts} onRatingShown={setRankShowsRating} />
         <ConsistencyCard
           snapshot={consistency}
           onPress={() => navigation.navigate('StreakCalendar')}
@@ -409,10 +410,6 @@ export function ProgressScreen() {
                 </View>
               </>
             ) : null}
-
-            <Text style={styles.footnote} testID="progress-dupr-note">
-              {DUPR_ESTIMATE_NOTE}
-            </Text>
           </>
         ) : (
           <Card style={styles.emptyCard} testID="progress-empty">
@@ -435,6 +432,15 @@ export function ProgressScreen() {
             </View>
           </Card>
         )}
+
+        {/* D-046: every estimated DUPR on the page — the rank card's, which
+            can come from the account alone, and the trend's — carries the
+            disclaimer. */}
+        {hasScores || rankShowsRating ? (
+          <Text style={styles.footnote} testID="progress-dupr-note">
+            {DUPR_ESTIMATE_NOTE}
+          </Text>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

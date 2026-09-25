@@ -571,6 +571,32 @@ describe('ProgressScreen page', () => {
     act(() => renderer.unmount());
   });
 
+  it('keeps the estimate disclaimer beside an account-only rank when this phone has no scores', async () => {
+    const { fetchPlayerRank } = jest.requireMock(
+      '../src/progress/playerRank',
+    ) as { fetchPlayerRank: jest.Mock };
+    fetchPlayerRank.mockResolvedValueOnce({
+      rating: 5.5,
+      tier: 'gold',
+      techniqueCount: 0,
+      scoredShotCount: null,
+      updatedAt: null,
+      techniques: [],
+    });
+    mockGetApiSession.mockReturnValue({ canonicalAppUserId: OWNER });
+    mockFetchCanonicalProgress.mockRejectedValue(new Error('offline'));
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const text = renderedText(renderer);
+    expect(text).toContain('Get your first score');
+    expect(text).toContain('Gold');
+    expect(findByTestId(renderer, 'progress-dupr-note')).not.toBeNull();
+    act(() => renderer.unmount());
+  });
+
   it('keeps the first-score step when the only scored read cannot be placed in time', async () => {
     mockListRealAnalysisFacts.mockResolvedValue([
       fact({ capturedAt: 'not a real timestamp', overallScore: 9.9 }),

@@ -34,7 +34,12 @@ import { RankIcon } from './RankIcon';
  * disclaimer.
  */
 
-export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
+export function PlayerRankCard(props: {
+  facts: RealAnalysisFact[];
+  /** Told whether the card shows an estimated rating (local or account),
+   * so the host can keep the estimate disclaimer on screen with it. */
+  onRatingShown?: (shown: boolean) => void;
+}) {
   // Large text: the rating drops below the tier row so the tier name keeps
   // the card's full width.
   const stacked = useWindowDimensions().fontScale > 1.3;
@@ -72,6 +77,11 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
   useEffect(() => {
     if (resolved) void maybeCelebrate(resolved.summary);
   }, [maybeCelebrate, resolved]);
+
+  const { onRatingShown } = props;
+  useEffect(() => {
+    onRatingShown?.(resolved !== null);
+  }, [onRatingShown, resolved]);
 
   if (!resolved) {
     return (
