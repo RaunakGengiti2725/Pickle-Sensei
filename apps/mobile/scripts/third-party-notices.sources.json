@@ -12,7 +12,7 @@
     },
     {
       "path": "ios/Podfile.lock",
-      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f"
+      "sha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9"
     },
     {
       "path": "ios/PickleSensei.xcworkspace/xcshareddata/swiftpm/Package.resolved",
@@ -46,6 +46,20 @@
         "after": "11.1.1"
       }
     ]
+  },
+  "historicalPodLock": {
+    "kind": "historical-first-party-pod-checksum",
+    "scope": "The 2026-09-24 ios/Podfile.lock refresh changed only the SPEC CHECKSUMS line of the first-party PickleNative podspec (local app source, outside third-party notices; its podspec gained the offline wallet module on 2026-09-09). No third-party pod version or checksum moved. Reconstructing the old lock input preserves the original reference evidence digest; it does not certify current membership or any native delivery.",
+    "input": {
+      "path": "ios/Podfile.lock",
+      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f",
+      "updatedInputSha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9"
+    },
+    "pod": {
+      "name": "PickleNative",
+      "before": "01c35ae8202ef7fa7afb56dd484af2f9cef5119c",
+      "after": "71e1a49821e0d95e90f70191cd0375a8547a7506"
+    }
   },
   "components": [
     {
@@ -9854,7 +9868,7 @@
         "text": "Internal"
       },
       "generatedAcknowledgementHeading": true,
-      "specChecksum": "01c35ae8202ef7fa7afb56dd484af2f9cef5119c",
+      "specChecksum": "71e1a49821e0d95e90f70191cd0375a8547a7506",
       "roleEvidence": "Local app source. No third-party license or ownership certification is inferred from the empty generated acknowledgement."
     },
     {
@@ -21162,7 +21176,7 @@
     },
     {
       "path": "ios/Pods/Manifest.lock",
-      "sha256": "0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f",
+      "sha256": "414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9",
       "purpose": "installed-pods-lock"
     },
     {

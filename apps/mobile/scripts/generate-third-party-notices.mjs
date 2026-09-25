@@ -91,6 +91,21 @@ const HOST_TOOL_PATCHES = [
   { lockPath: 'node_modules/qs', before: '6.15.3', after: '6.16.0' },
   { lockPath: 'node_modules/uuid', before: '7.0.3', after: '11.1.1' },
 ];
+// Reviewed Podfile.lock refresh that moved exactly one SPEC CHECKSUMS line, the
+// first-party PickleNative podspec (local app source, outside third-party
+// notices). The reference lock hash must be reproducible from the current lock
+// by reverting that single line; no third-party pod may move.
+const FIRST_PARTY_POD_CHECKSUM_INPUT = {
+  path: 'ios/Podfile.lock',
+  sha256: '0ebb680715fe56d95aadb2a010ecb33854bd0e9c4dfc5857c15c575c91b8521f',
+  updatedInputSha256:
+    '414263fd016361af8eb79237bb22f1cb02c70ce331a91a5a1e1a388d9e4e04f9',
+};
+const FIRST_PARTY_POD_CHECKSUM_PATCH = {
+  name: 'PickleNative',
+  before: '01c35ae8202ef7fa7afb56dd484af2f9cef5119c',
+  after: '71e1a49821e0d95e90f70191cd0375a8547a7506',
+};
 const LOCK_INPUTS = [
   'package.json',
   'package-lock.json',
@@ -288,6 +303,28 @@ export function parsePodVersions(text) {
   }
   if (!pods.size) throw new Error('No CocoaPods versions found');
   return [...pods].sort(([a], [b]) => cmp(a, b));
+}
+
+export function parsePodChecksums(text) {
+  const section = text.split(/^SPEC CHECKSUMS:/m)[1];
+  if (!section) throw new Error('No CocoaPods spec checksums found');
+  const checksums = new Map();
+  for (const line of section.split('\n')) {
+    const match = line.match(/^ {2}"?([^\s":]+)"?: ([a-f0-9]{40})$/);
+    if (match) checksums.set(match[1], match[2]);
+  }
+  return checksums;
+}
+
+export function revertPodChecksum(text, pod) {
+  const current = `  ${pod.name}: ${pod.after}\n`;
+  const at = text.indexOf(current);
+  if (at < 0 || text.indexOf(current, at + 1) >= 0) return null;
+  return (
+    text.slice(0, at) +
+    `  ${pod.name}: ${pod.before}\n` +
+    text.slice(at + current.length)
+  );
 }
 
 export function fontNames(bytes) {
@@ -524,13 +561,7 @@ function collectPods(receipt, root) {
     const item = component(id, name, version, 'native-pod-candidate', {
       declaredLicense: spec?.license ?? null,
       generatedAcknowledgementHeading: ack.includes(`\n## ${name}\n`),
-      specChecksum:
-        text.match(
-          new RegExp(
-            `^  ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}: ([a-f0-9]{40})$`,
-            'm',
-          ),
-        )?.[1] ?? null,
+      specChecksum: parsePodChecksums(text).get(name) ?? null,
     });
     receipt.components.push(item);
     if (spec && spec.version !== version)
@@ -1794,6 +1825,23 @@ function isReviewedHostToolPatch(history) {
   );
 }
 
+function isReviewedFirstPartyPodRefresh(history) {
+  return (
+    history?.kind === 'historical-first-party-pod-checksum' &&
+    json(history.input) === json(FIRST_PARTY_POD_CHECKSUM_INPUT) &&
+    json(history.pod) === json(FIRST_PARTY_POD_CHECKSUM_PATCH)
+  );
+}
+
+function firstPartyPodComponent(receipt) {
+  return receipt.components.find(
+    item =>
+      item.id === `pod:${FIRST_PARTY_POD_CHECKSUM_PATCH.name}` &&
+      item.role === 'first-party-outside-third-party-notices' &&
+      item.specChecksum === FIRST_PARTY_POD_CHECKSUM_PATCH.after,
+  );
+}
+
 function artifactLockedInputs(receipt, artifact) {
   if (
     artifact.kind !== 'historical-reference' ||
@@ -1804,6 +1852,10 @@ function artifactLockedInputs(receipt, artifact) {
 
   const swift = receipt.historicalSwiftPM;
   const host = receipt.historicalHostTools;
+  const podRefresh = receipt.historicalPodLock;
+  const firstPartyOnly =
+    isReviewedFirstPartyPodRefresh(podRefresh) &&
+    Boolean(firstPartyPodComponent(receipt));
   const hostOnly =
     isReviewedHostToolPatch(host) &&
     host.packages.every(
@@ -1820,6 +1872,12 @@ function artifactLockedInputs(receipt, artifact) {
       input.sha256 === swift.unlinkedInputSha256
     )
       return swift.lockInput;
+    if (
+      firstPartyOnly &&
+      input.path === podRefresh.input.path &&
+      input.sha256 === podRefresh.input.updatedInputSha256
+    )
+      return { path: podRefresh.input.path, sha256: podRefresh.input.sha256 };
     const previous =
       hostOnly &&
       host.inputs.find(
@@ -2198,6 +2256,9 @@ export function validateReceipt(
   const hostHistory = receipt.historicalHostTools;
   if (hostHistory && !isReviewedHostToolPatch(hostHistory))
     errors.push('Historical host-tool maintenance receipt is invalid');
+  const podRefresh = receipt.historicalPodLock;
+  if (podRefresh && !isReviewedFirstPartyPodRefresh(podRefresh))
+    errors.push('Historical first-party pod checksum receipt is invalid');
   for (const item of historicalComponents) {
     if (
       !item.id.startsWith('swiftpm:') ||
@@ -2211,6 +2272,7 @@ export function validateReceipt(
     ...receipt.sources.filter(source => source.path),
     ...(history?.lockInput ? [history.lockInput] : []),
     ...(Array.isArray(hostHistory?.inputs) ? hostHistory.inputs : []),
+    ...(podRefresh?.input ? [podRefresh.input] : []),
   ].map(item => item.path);
   if (
     allPaths.some(
@@ -2432,15 +2494,36 @@ export function validateReceipt(
         errors.push(`Embedded font notice missing: ${item.id}`);
     }
   }
-  const expectedPods = parsePodVersions(
-    readFileSync(join(root, 'ios/Podfile.lock'), 'utf8'),
-  );
+  const podLock = readFileSync(join(root, 'ios/Podfile.lock'), 'utf8');
+  const expectedPods = parsePodVersions(podLock);
   const recordedPods = receipt.components
     .filter(item => item.id.startsWith('pod:'))
     .map(item => [item.name, item.version])
     .sort(([a], [b]) => cmp(a, b));
   if (json(expectedPods) !== json(recordedPods))
     errors.push('CocoaPods version/coverage changed');
+  if (isReviewedFirstPartyPodRefresh(podRefresh)) {
+    const lockChecksums = parsePodChecksums(podLock);
+    if (!firstPartyPodComponent(receipt))
+      errors.push(
+        `First-party pod checksum refresh is not recorded: ${podRefresh.pod.name}`,
+      );
+    const reverted = revertPodChecksum(podLock, podRefresh.pod);
+    if (
+      sha256(Buffer.from(podLock)) !== podRefresh.input.updatedInputSha256 ||
+      reverted === null ||
+      sha256(Buffer.from(reverted)) !== podRefresh.input.sha256
+    )
+      errors.push(
+        'Historical Podfile.lock is not the current lock with only the first-party pod checksum reverted',
+      );
+    for (const item of receipt.components.filter(entry =>
+      entry.id.startsWith('pod:'),
+    )) {
+      if ((lockChecksums.get(item.name) ?? null) !== item.specChecksum)
+        errors.push(`CocoaPods spec checksum changed: ${item.id}`);
+    }
+  }
   const swiftPins = readJSON(join(root, SWIFT_LOCK))
     .pins.map(pin => [pin.identity, pin.state.version, pin.state.revision])
     .sort(([a], [b]) => cmp(a, b));
@@ -2502,6 +2585,12 @@ export function renderNotices(
           ? [
               'Reviewed host-tool-only maintenance after the reference: qs 6.15.3 -> 6.16.0; xcode-scoped uuid 7.0.3 -> 11.1.1.',
               'Original reference hashes are retained. These updates are not exclusions from any future artifact.',
+            ]
+          : []),
+        ...(receipt.historicalPodLock
+          ? [
+              `Reviewed first-party pod checksum refresh after the reference: ${receipt.historicalPodLock.pod.name} podspec ${receipt.historicalPodLock.pod.before} -> ${receipt.historicalPodLock.pod.after}.`,
+              'No third-party pod version or checksum moved; the original reference lock hash is retained.',
             ]
           : []),
         ...receipt.inputs.map(
