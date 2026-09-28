@@ -8,7 +8,12 @@
 
 import { assertEquals } from "@std/assert";
 import { simulate } from "./webhookSim.ts";
-import { fakeSupabaseAccessToken, userRequest } from "./routesHarness.ts";
+import {
+  fakeSupabaseAccessToken,
+  TEST_USER_ID,
+  userRequest,
+  webhookRequest,
+} from "./routesHarness.ts";
 
 const MONTHLY = "pickle_sensei_pro_monthly";
 const LIFETIME = "pickle_sensei_pro_lifetime";
@@ -163,5 +168,70 @@ Deno.test(
     });
     assertEquals(result.status, 502);
     assertEquals(result.body.error.code, "billing_unavailable");
+  },
+);
+
+// ── the webhook re-verifies with the same fold ──────────────────────────────
+
+Deno.test(
+  "webhook: an INITIAL_PURCHASE backed by a Test Store subscription is acked but persists premium:false",
+  async () => {
+    const sim = await simulate();
+    try {
+      sim.h.subscriber = {
+        entitlements: entitled(MONTHLY, at(25 * DAY)),
+        subscriptions: { [MONTHLY]: subscription("test_store") },
+        non_subscriptions: {},
+      };
+      const res = await sim.h.handler(
+        webhookRequest({
+          id: "untrusted-store-initial",
+          type: "INITIAL_PURCHASE",
+          app_user_id: TEST_USER_ID,
+          entitlement_ids: ["pickle_sensei_pro"],
+          product_id: MONTHLY,
+          store: "TEST_STORE",
+          expiration_at_ms: Date.now() + 25 * DAY,
+        }),
+      );
+      assertEquals(await res.json(), { received: true, verified: true });
+      const row = sim.entitlementRows.get(TEST_USER_ID);
+      assertEquals(row?.premium, false);
+      assertEquals(row?.product_key, null);
+      assertEquals(sim.auditRows.get("untrusted-store-initial")?.event_type, "INITIAL_PURCHASE");
+    } finally {
+      sim.restore();
+    }
+  },
+);
+
+Deno.test(
+  "webhook: an INITIAL_PURCHASE backed by an App Store subscription still persists premium:true",
+  async () => {
+    const sim = await simulate();
+    try {
+      sim.h.subscriber = {
+        entitlements: entitled(MONTHLY, at(25 * DAY)),
+        subscriptions: { [MONTHLY]: subscription("app_store") },
+        non_subscriptions: {},
+      };
+      const res = await sim.h.handler(
+        webhookRequest({
+          id: "trusted-store-initial",
+          type: "INITIAL_PURCHASE",
+          app_user_id: TEST_USER_ID,
+          entitlement_ids: ["pickle_sensei_pro"],
+          product_id: MONTHLY,
+          store: "APP_STORE",
+          expiration_at_ms: Date.now() + 25 * DAY,
+        }),
+      );
+      assertEquals(await res.json(), { received: true, verified: true });
+      const row = sim.entitlementRows.get(TEST_USER_ID);
+      assertEquals(row?.premium, true);
+      assertEquals(row?.product_key, MONTHLY);
+    } finally {
+      sim.restore();
+    }
   },
 );
