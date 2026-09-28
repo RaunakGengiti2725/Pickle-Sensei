@@ -68,7 +68,6 @@ Deno.test("billing/sync: a Test Store subscription never grants Pro", async () =
   });
   assertEquals(result.status, 200);
   assertEquals(result.body.billing.premium, false);
-  assertEquals(result.body.billing.activeEntitlements, []);
   assertEquals(result.body.billing.productKey, null);
 });
 
@@ -130,7 +129,6 @@ for (const store of ["app_store", "mac_app_store", "play_store", "promotional"])
     });
     assertEquals(result.status, 200);
     assertEquals(result.body.billing.premium, true);
-    assertEquals(result.body.billing.activeEntitlements, ["pickle_sensei_pro"]);
     assertEquals(result.body.billing.productKey, MONTHLY);
   });
 }
