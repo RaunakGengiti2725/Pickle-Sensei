@@ -1486,6 +1486,41 @@ function permitView(row: PermitRow) {
  * so a rename inside RevenueCat can never silently lock paying users out. */
 const PREMIUM_ENTITLEMENT_KEYS = ["pickle_sensei_pro", "premium"] as const;
 
+/** RevenueCat stores whose purchases are honoured as Pro entitlements.
+ * Anything else — notably RevenueCat's Test Store, whose public `test_` SDK
+ * key simulates purchases without payment inside the same project — never
+ * grants access, however the entitlement reads. */
+const TRUSTED_REVENUECAT_STORES: ReadonlySet<string> = new Set([
+  "app_store",
+  "mac_app_store",
+  "play_store",
+  "promotional",
+]);
+
+/** Stores named by the purchase records behind an entitlement's product: its
+ * subscription row plus every non-subscription purchase. `undefined` when
+ * RevenueCat reports a malformed store (the verdict is unavailable), else the
+ * distinct lower-cased store identifiers (empty when no record names one). */
+function revenueCatProductStores(
+  subscriber: Record<string, unknown>,
+  product: unknown,
+  subscription: Record<string, unknown> | undefined,
+): Set<string> | undefined {
+  const stores = new Set<string>();
+  if (typeof product !== "string") return stores;
+  const purchases =
+    isRecord(subscriber.non_subscriptions) && Array.isArray(subscriber.non_subscriptions[product])
+      ? (subscriber.non_subscriptions[product] as unknown[])
+      : [];
+  for (const row of subscription === undefined ? purchases : [subscription, ...purchases]) {
+    if (!isRecord(row)) return undefined;
+    if (row.store === undefined || row.store === null) continue;
+    if (typeof row.store !== "string") return undefined;
+    stores.add(row.store.toLowerCase());
+  }
+  return stores;
+}
+
 interface VerifiedBilling {
   premium: boolean;
   /** RevenueCat entitlement identifiers verified active (informational). */
@@ -3703,6 +3738,9 @@ async function verifyRevenueCatSubscriber(
         ? subscriptions[product]
         : undefined;
     if (subscription !== undefined && !isRecord(subscription)) return null;
+    const stores = revenueCatProductStores(subscriber, product, subscription);
+    if (stores === undefined) return null;
+    if ([...stores].some((store) => !TRUSTED_REVENUECAT_STORES.has(store))) continue;
     let horizon = typeof expires === "string" ? expires : null;
     for (const grace of [
       entitlement.grace_period_expires_date,
