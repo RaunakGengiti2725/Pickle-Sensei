@@ -155,10 +155,48 @@ export interface BuildAppOptions {
   securityEvents?: ISecurityEventSink;
 }
 
+/** Request-id contract (mirrors the edge fn): honour a well-formed client
+ * `x-request-id` so one id correlates app logs with API logs, and mint a UUID
+ * otherwise. Unbounded or arbitrary bytes would otherwise be echoed verbatim
+ * into the response header and every log line. */
+const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
+/** A 32-byte base64url blob (HS256 JWT signature / API-key shape): never echo
+ * credential-shaped values into headers and logs even when they fit the id
+ * grammar. */
+const SECRET_SHAPED_RE = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+
+function firstHeader(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
+}
+
+export function resolveRequestId(
+  incoming: string | string[] | undefined,
+  authorization?: string | string[] | undefined,
+): string {
+  const candidate = firstHeader(incoming);
+  const bearer = firstHeader(authorization).replace(/^Bearer\s+/i, "");
+  return REQUEST_ID_RE.test(candidate) &&
+    !SECRET_SHAPED_RE.test(candidate) &&
+    (bearer === "" || candidate !== bearer)
+    ? candidate
+    : randomUUID();
+}
+
+/** Every response is JSON for a native client; a browser must never render,
+ * frame, sniff, or cache it. Route handlers may override a header explicitly. */
+export const SECURITY_RESPONSE_HEADERS: Readonly<Record<string, string>> = {
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=63072000; includeSubDomains",
+  "cache-control": "no-store",
+};
+
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: config.env !== "test",
-    genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
+    genReqId: (req) => resolveRequestId(req.headers["x-request-id"], req.headers.authorization),
   });
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
@@ -250,6 +288,9 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
 
   app.addHook("onSend", async (request, reply) => {
     reply.header("x-request-id", request.id);
+    for (const [name, value] of Object.entries(SECURITY_RESPONSE_HEADERS)) {
+      if (!reply.hasHeader(name)) reply.header(name, value);
+    }
   });
   app.addHook("onClose", async () => {
     await pool?.end();
