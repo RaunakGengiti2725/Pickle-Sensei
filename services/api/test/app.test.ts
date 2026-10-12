@@ -71,4 +71,31 @@ describe("API skeleton (no database)", () => {
     });
     expect(res.headers["x-request-id"]).toBe("req-abc-123");
   });
+
+  it("mints a fresh request id instead of echoing a malformed client one", async () => {
+    for (const bad of ["short", "x".repeat(65), "evil\r\nx-injected: 1", "a b c d e f g h"]) {
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/health",
+        headers: { "x-request-id": bad },
+      });
+      const echoed = res.headers["x-request-id"];
+      expect(echoed).not.toBe(bad);
+      expect(String(echoed)).toMatch(/^[0-9a-f-]{36}$/);
+    }
+  });
+
+  it("sends browser-hardening headers on every response", async () => {
+    for (const url of ["/v1/health", "/v1/me", "/v1/does-not-exist"]) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.headers["content-security-policy"]).toBe(
+        "default-src 'none'; frame-ancestors 'none'",
+      );
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["x-frame-options"]).toBe("DENY");
+      expect(res.headers["referrer-policy"]).toBe("no-referrer");
+      expect(res.headers["strict-transport-security"]).toBe("max-age=63072000; includeSubDomains");
+      expect(res.headers["cache-control"]).toBe("no-store");
+    }
+  });
 });
