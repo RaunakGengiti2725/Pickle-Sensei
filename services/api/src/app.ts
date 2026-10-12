@@ -160,10 +160,26 @@ export interface BuildAppOptions {
  * otherwise. Unbounded or arbitrary bytes would otherwise be echoed verbatim
  * into the response header and every log line. */
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
+/** A 32-byte base64url blob (HS256 JWT signature / API-key shape): never echo
+ * credential-shaped values into headers and logs even when they fit the id
+ * grammar. */
+const SECRET_SHAPED_RE = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 
-export function resolveRequestId(incoming: string | string[] | undefined): string {
-  const candidate = (Array.isArray(incoming) ? incoming[0] : incoming)?.trim() ?? "";
-  return REQUEST_ID_RE.test(candidate) ? candidate : randomUUID();
+function firstHeader(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? "";
+}
+
+export function resolveRequestId(
+  incoming: string | string[] | undefined,
+  authorization?: string | string[] | undefined,
+): string {
+  const candidate = firstHeader(incoming);
+  const bearer = firstHeader(authorization).replace(/^Bearer\s+/i, "");
+  return REQUEST_ID_RE.test(candidate) &&
+    !SECRET_SHAPED_RE.test(candidate) &&
+    (bearer === "" || candidate !== bearer)
+    ? candidate
+    : randomUUID();
 }
 
 /** Every response is JSON for a native client; a browser must never render,
@@ -180,7 +196,7 @@ export const SECURITY_RESPONSE_HEADERS: Readonly<Record<string, string>> = {
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: config.env !== "test",
-    genReqId: (req) => resolveRequestId(req.headers["x-request-id"]),
+    genReqId: (req) => resolveRequestId(req.headers["x-request-id"], req.headers.authorization),
   });
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;

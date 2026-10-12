@@ -85,6 +85,23 @@ describe("API skeleton (no database)", () => {
     }
   });
 
+  it("never echoes a credential-shaped or bearer-equal request id", async () => {
+    const bearer = "req-looks-like-a-session-token-0123456789";
+    const signatureShaped = "A".repeat(42) + "Q";
+    for (const [id, auth] of [
+      [bearer, `Bearer ${bearer}`],
+      [signatureShaped, undefined],
+    ] as const) {
+      const res = await app.inject({
+        method: "GET",
+        url: "/v1/health",
+        headers: { "x-request-id": id, ...(auth ? { authorization: auth } : {}) },
+      });
+      expect(res.headers["x-request-id"]).not.toBe(id);
+      expect(String(res.headers["x-request-id"])).toMatch(/^[0-9a-f-]{36}$/);
+    }
+  });
+
   it("sends browser-hardening headers on every response", async () => {
     for (const url of ["/v1/health", "/v1/me", "/v1/does-not-exist"]) {
       const res = await app.inject({ method: "GET", url });
