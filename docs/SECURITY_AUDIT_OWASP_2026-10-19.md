@@ -204,19 +204,28 @@ charset=utf-8`, `nosniff`, CSP `default-src 'none'`) built from compile-time
   verdict without consulting the backing subscription's `store` or
   `is_sandbox`. The same verdict feeds both `/v1/billing` sync and the
   webhook path.
-- **Why it matters:** the Android build ships the RevenueCat **Test Store**
-  public key (`test_…`, `apps/mobile/src/config/runtimeConfig.ts`) and the
-  server's documented fallback `REVENUECAT_PUBLIC_SDK_KEY` is "currently set
-  to the Test Store key" (`AGENTS.md`), i.e. the Test Store app lives in the
-  same RevenueCat project as the iOS App Store app. Test Store purchases are
-  free and need no payment credentials; public SDK keys are, by design,
-  extractable from any build. If Test Store products are attached to the
-  `pickle_sensei_pro` entitlement, anyone who logs the RC SDK in with their
-  own canonical account id (returned to them by `/v1/account/bootstrap`) and
-  "buys" a Test Store product receives server-verified premium.
+- **Why it matters:** the Android build ships a RevenueCat **Test Store**
+  public key (`test_…`, `apps/mobile/src/config/runtimeConfig.ts`), so a Test
+  Store app exists for this product. Whether it lives in the SAME RevenueCat
+  project as the iOS App Store app (and therefore shares the subscriber and
+  the `pickle_sensei_pro` entitlement) cannot be determined from the repo:
+  `AGENTS.md` is inconsistent about the server fallback key — the Deploy
+  section says `REVENUECAT_PUBLIC_SDK_KEY` is "currently set to the Test
+  Store key" while the Billing section says it "holds the PRODUCTION App
+  Store public key (`appl_…`) as of 2026-09-01"; the deployed secret is not
+  visible here. Test Store purchases are free and need no payment
+  credentials; public SDK keys are, by design, extractable from any build. If
+  the Test Store app shares the project and its products are attached to
+  `pickle_sensei_pro`, anyone who logs the RC SDK in with their own canonical
+  account id (returned to them by `/v1/account/bootstrap`) and "buys" a Test
+  Store product receives server-verified premium. The code gap (no
+  `store`/`is_sandbox` check) is certain; the exploitability depends on that
+  project configuration.
 - **Decision needed:** (a) confirm in the RevenueCat dashboard whether the
-  Test Store app's products map to `pickle_sensei_pro`; if so detach them or
-  move Test Store to a separate project; (b) decide whether the server should
+  Test Store app is in the production project and whether its products map to
+  `pickle_sensei_pro`; if so detach them or move Test Store to a separate
+  project, and reconcile the two `AGENTS.md` statements about
+  `REVENUECAT_PUBLIC_SDK_KEY` with the deployed value; (b) decide whether the server should
   ignore entitlements whose backing `subscriptions[product].store` is
   `test_store` and/or `is_sandbox === true` in production. Rejecting
   `is_sandbox` would break the documented dev/TestFlight sandbox flow
