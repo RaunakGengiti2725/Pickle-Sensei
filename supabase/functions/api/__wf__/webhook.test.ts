@@ -78,6 +78,17 @@ Deno.test("webhook: missing or wrong Authorization is rejected (401) before any 
   assertEquals(h.calls.length, 0);
 });
 
+Deno.test("webhook: malformed event ids are refused (400) before any work", async () => {
+  const h = await loadHarness();
+  for (const id of ["x".repeat(129), "evt 1", "evt\n1", "", 42, { id: "evt-1" }]) {
+    h.reset();
+    const res = await h.handler(webhookRequest({ id, type: "TEST", app_user_id: TEST_USER_ID }));
+    assertEquals(res.status, 400, `id=${JSON.stringify(id)}`);
+    assertEquals(await res.json(), { error: "Invalid event id." });
+    assertEquals(h.calls.length, 0, "neither RevenueCat nor the database was touched");
+  }
+});
+
 Deno.test(
   "webhook: body entitlement claims are never trusted — verdict comes from RevenueCat",
   async () => {

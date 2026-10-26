@@ -4153,6 +4153,15 @@ async function claimWebhookDelivery(
   return serviceUnavailable("Webhook event processing", { name: "AbortError" });
 }
 
+/** RevenueCat event ids are short opaque strings (UUIDs in practice). The id
+ * becomes the webhook_events primary key and the dedupe/claim key, so a
+ * non-string, oversized or control-character-laden value is refused before
+ * any RevenueCat or database work; an absent id keeps the random fallback. */
+const WEBHOOK_EVENT_ID = /^[\x21-\x7e]{1,128}$/;
+function isWebhookEventId(value: unknown): value is string {
+  return typeof value === "string" && WEBHOOK_EVENT_ID.test(value);
+}
+
 async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const secret = Deno.env.get("REVENUECAT_WEBHOOK_AUTH") ?? "";
   if (!secret) {
@@ -4168,6 +4177,9 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const event = isRecord(body.event) ? body.event : null;
   if (!event) {
     return errorJson(400, "Missing event payload.");
+  }
+  if (event.id != null && !isWebhookEventId(event.id)) {
+    return errorJson(400, "Invalid event id.");
   }
   const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
 
