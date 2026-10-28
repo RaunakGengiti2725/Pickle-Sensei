@@ -730,29 +730,39 @@ Deno.test(
   async () => {
     configureRedis(false);
     const { rateLimit } = await loadIsolate();
-    const ip = freshIp();
-    const venue = `venue-${crypto.randomUUID()}`;
-    await rateLimit.chargeAuthFailure(ip, venue, "credential", AUTH_FAILURE_LIMIT);
-    for (let i = 0; i < 25_000; i += 1) {
-      await rateLimit.chargeAuthFailure(ip, `forged-${i}`, "credential", AUTH_FAILURE_LIMIT);
+    const realNow = Date.now;
+    try {
+      // The flood is long enough to straddle an aligned window boundary on a
+      // slow runner, which would expire every shard mid-test; hold the clock.
+      const windowMs = AUTH_FAILURE_LIMIT.windowSeconds * 1_000;
+      const now = Math.floor(realNow() / windowMs) * windowMs + windowMs / 2;
+      Date.now = () => now;
+      const ip = freshIp();
+      const venue = `venue-${crypto.randomUUID()}`;
+      await rateLimit.chargeAuthFailure(ip, venue, "credential", AUTH_FAILURE_LIMIT);
+      for (let i = 0; i < 25_000; i += 1) {
+        await rateLimit.chargeAuthFailure(ip, `forged-${i}`, "credential", AUTH_FAILURE_LIMIT);
+      }
+      const venueShard = await rateLimit.peekAuthFailureBudget(ip, venue, AUTH_FAILURE_LIMIT);
+      assertEquals(venueShard.allowed, false, "a credential refused under saturation is held");
+      assertEquals(
+        (
+          await rateLimit.peekAuthFailureBudget(
+            ip,
+            `never-${crypto.randomUUID()}`,
+            AUTH_FAILURE_LIMIT,
+          )
+        ).allowed,
+        true,
+        "a credential never refused is admitted even when the shard store is full",
+      );
+      assertEquals(
+        (await rateLimit.peekRateLimit("ip", ip, 1_200, 60)).allowed,
+        true,
+        "shards do not crowd out the generic per-IP windows",
+      );
+    } finally {
+      Date.now = realNow;
     }
-    const venueShard = await rateLimit.peekAuthFailureBudget(ip, venue, AUTH_FAILURE_LIMIT);
-    assertEquals(venueShard.allowed, false, "a credential refused under saturation is held");
-    assertEquals(
-      (
-        await rateLimit.peekAuthFailureBudget(
-          ip,
-          `never-${crypto.randomUUID()}`,
-          AUTH_FAILURE_LIMIT,
-        )
-      ).allowed,
-      true,
-      "a credential never refused is admitted even when the shard store is full",
-    );
-    assertEquals(
-      (await rateLimit.peekRateLimit("ip", ip, 1_200, 60)).allowed,
-      true,
-      "shards do not crowd out the generic per-IP windows",
-    );
   },
 );

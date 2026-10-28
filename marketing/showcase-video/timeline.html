@@ -1,0 +1,1560 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Pickle Sensei showcase v2</title>
+    <style>
+      @font-face {
+        font-family: Manrope;
+        src: url(fonts/Manrope_400Regular.ttf);
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: Manrope;
+        src: url(fonts/Manrope_500Medium.ttf);
+        font-weight: 500;
+      }
+      @font-face {
+        font-family: Manrope;
+        src: url(fonts/Manrope_600SemiBold.ttf);
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: Manrope;
+        src: url(fonts/Manrope_700Bold.ttf);
+        font-weight: 700;
+      }
+      :root {
+        --ink: #071710;
+        --inkS: #627168;
+        --surface: #f7f6f0;
+        --dark: #06130e;
+        --lineD: #21382e;
+        --court: #087956;
+        --volt: #d7fa45;
+        --mint: #53d99b;
+        --onDark: #f8faf5;
+        --onDarkM: #a5b1aa;
+        --onDarkS: #93a39b;
+        --onVolt: #142014;
+        --cam: #071a13;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      body {
+        font-family: Manrope, system-ui, sans-serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        font-variant-numeric: tabular-nums;
+      }
+      #stage {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      #vig {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          ellipse 70% 55% at 50% 42%,
+          rgba(255, 255, 255, 0.55),
+          rgba(255, 255, 255, 0) 70%
+        );
+      }
+      /* icon lockup */
+      #lockup {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 1920px;
+      }
+      #icon {
+        position: absolute;
+        left: 50%;
+        top: 500px;
+        width: 440px;
+        height: 440px;
+        margin: 0 0 0 -220px;
+        border-radius: 99px;
+        background: #fff;
+        box-shadow:
+          0 44px 90px rgba(8, 18, 14, 0.2),
+          0 8px 22px rgba(8, 18, 14, 0.1);
+        overflow: hidden;
+        transform-origin: 50% 50%;
+      }
+      #icon img {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #iconName {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 962px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 76px;
+        letter-spacing: -3px;
+        color: var(--ink);
+      }
+      /* phone */
+      #phone {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 600px;
+        height: 1267px;
+        transform-origin: 0 0;
+      }
+      #bezel {
+        position: absolute;
+        inset: 0;
+        border-radius: 96px;
+        background: #0b100e;
+        box-shadow:
+          0 46px 90px rgba(8, 18, 14, 0.22),
+          0 10px 24px rgba(8, 18, 14, 0.12);
+      }
+      #bezel:after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 96px;
+        border: 2px solid rgba(255, 255, 255, 0.08);
+      }
+      #clip {
+        position: absolute;
+        left: 16px;
+        top: 16px;
+        width: 568px;
+        height: 1235px;
+        border-radius: 80px;
+        overflow: hidden;
+        background: var(--dark);
+      }
+      .shot {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 568px;
+        height: 1235px;
+      }
+      .shot img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .screen {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 402px;
+        height: 874px;
+        transform: scale(1.41294);
+        transform-origin: 0 0;
+        overflow: hidden;
+      }
+      .micro {
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+        line-height: 14px;
+      }
+      .cap {
+        font-weight: 500;
+        font-size: 13px;
+        line-height: 18px;
+      }
+      .body {
+        font-weight: 400;
+        font-size: 16px;
+        line-height: 23px;
+      }
+      .h2 {
+        font-weight: 600;
+        font-size: 21px;
+        line-height: 27px;
+        letter-spacing: -0.35px;
+      }
+      /* capture / scan */
+      #scrCap {
+        background: var(--cam);
+      }
+      #swing {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 402px;
+        height: 874px;
+        object-fit: cover;
+      }
+      #capShade {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          180deg,
+          rgba(7, 26, 19, 0.55),
+          rgba(7, 26, 19, 0) 20%,
+          rgba(7, 26, 19, 0) 78%,
+          rgba(7, 26, 19, 0.55)
+        );
+      }
+      .statusbar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 402px;
+        height: 54px;
+        color: #fff;
+      }
+      .statusbar .time {
+        position: absolute;
+        left: 38px;
+        top: 16px;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: -0.2px;
+      }
+      .statusbar .island {
+        position: absolute;
+        left: 139px;
+        top: 11px;
+        width: 124px;
+        height: 36px;
+        border-radius: 20px;
+        background: #000;
+      }
+      .statusbar .sig {
+        position: absolute;
+        right: 30px;
+        top: 19px;
+        height: 12px;
+        display: flex;
+        gap: 6px;
+        align-items: flex-end;
+      }
+      .statusbar .sig i {
+        display: block;
+        width: 3px;
+        background: currentColor;
+        border-radius: 1px;
+      }
+      .statusbar .batt {
+        position: relative;
+        margin-left: 8px;
+        width: 26px;
+        height: 12px;
+        border: 1.5px solid currentColor;
+        border-radius: 4px;
+        opacity: 0.9;
+      }
+      .statusbar .batt:after {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: 2px;
+        right: 3px;
+        bottom: 2px;
+        background: currentColor;
+        border-radius: 1.5px;
+      }
+      .cpill {
+        position: absolute;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 30px;
+        padding: 0 12px;
+        border-radius: 15px;
+        background: rgba(7, 17, 14, 0.82);
+        color: var(--onDark);
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+      }
+      .cpill b {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--volt);
+        display: inline-block;
+      }
+      .cpill .sp {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.25);
+        border-top-color: var(--volt);
+      }
+      .corner {
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--volt);
+        opacity: 0.7;
+      }
+      .corner.tl {
+        left: 34px;
+        top: 170px;
+        border-right: 0;
+        border-bottom: 0;
+        border-radius: 8px 0 0 0;
+      }
+      .corner.tr {
+        right: 34px;
+        top: 170px;
+        border-left: 0;
+        border-bottom: 0;
+        border-radius: 0 8px 0 0;
+      }
+      .corner.bl {
+        left: 34px;
+        bottom: 170px;
+        border-right: 0;
+        border-top: 0;
+        border-radius: 0 0 0 8px;
+      }
+      .corner.br {
+        right: 34px;
+        bottom: 170px;
+        border-left: 0;
+        border-top: 0;
+        border-radius: 0 0 8px 0;
+      }
+      #scanTint {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 0;
+        background: rgba(215, 250, 69, 0.07);
+      }
+      #scanBand {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 140px;
+        background: linear-gradient(180deg, rgba(215, 250, 69, 0), rgba(215, 250, 69, 0.22));
+      }
+      #scanLine {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--volt);
+        box-shadow:
+          0 0 14px 2px rgba(215, 250, 69, 0.85),
+          0 0 40px 6px rgba(215, 250, 69, 0.35);
+      }
+      #scanPct {
+        position: absolute;
+        right: 20px;
+        bottom: 110px;
+        color: var(--onDark);
+        font-weight: 600;
+        font-size: 12px;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+        background: rgba(7, 17, 14, 0.72);
+        padding: 6px 10px;
+        border-radius: 12px;
+      }
+      #capfoot {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 56px;
+        text-align: center;
+        color: var(--onDarkM);
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.9px;
+        text-transform: uppercase;
+      }
+      /* result score page (dark guide shell) */
+      #scrRes {
+        background: var(--dark);
+        color: var(--onDark);
+      }
+      .top {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 62px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .close {
+        width: 36px;
+        height: 36px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .segs {
+        display: flex;
+        gap: 6px;
+      }
+      .segs i {
+        width: 38px;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--lineD);
+        display: block;
+      }
+      .segs i.on {
+        background: var(--volt);
+      }
+      .kick {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 126px;
+        text-align: center;
+        color: var(--volt);
+      }
+      #ring {
+        position: absolute;
+        left: 91px;
+        top: 170px;
+        width: 220px;
+        height: 220px;
+      }
+      #ring svg {
+        position: absolute;
+        inset: 0;
+      }
+      #ringEye {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 62px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.9px;
+        color: var(--onDark);
+      }
+      #ringNum {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 78px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 64px;
+        letter-spacing: -2.5px;
+        line-height: 68px;
+        color: var(--onDark);
+      }
+      #ringUnit {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 146px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 21px;
+        letter-spacing: -0.35px;
+        color: var(--onDark);
+      }
+      .note {
+        position: absolute;
+        left: 28px;
+        right: 28px;
+        top: 414px;
+        text-align: center;
+        color: var(--onDarkM);
+      }
+      .insight {
+        position: absolute;
+        left: 24px;
+        right: 24px;
+        top: 480px;
+        text-align: center;
+        color: var(--onDark);
+        font-weight: 500;
+        font-size: 17px;
+        line-height: 25px;
+        letter-spacing: -0.15px;
+      }
+      .setcard {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 574px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--lineD);
+        padding: 14px 16px;
+      }
+      .setcard .r {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .setcard .v {
+        font-weight: 600;
+        font-size: 17px;
+        letter-spacing: -0.15px;
+      }
+      .footer {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        bottom: 34px;
+      }
+      .primary {
+        height: 56px;
+        border-radius: 28px;
+        background: var(--volt);
+        color: var(--onVolt);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-weight: 600;
+        font-size: 16px;
+      }
+      .done {
+        text-align: center;
+        margin-top: 14px;
+        font-weight: 600;
+        font-size: 16px;
+        color: var(--onDark);
+      }
+      /* problem + drills pages */
+      #scrProb {
+        background: var(--dark);
+        color: var(--onDark);
+      }
+      #probStage {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 120px;
+        height: 420px;
+        border-radius: 22px;
+        overflow: hidden;
+        background: #000;
+      }
+      #probStage img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      #probStage .clock {
+        position: absolute;
+        right: 12px;
+        top: 12px;
+        font-weight: 600;
+        font-size: 11px;
+        letter-spacing: 0.9px;
+        color: var(--onDark);
+        background: rgba(7, 17, 14, 0.72);
+        padding: 5px 9px;
+        border-radius: 10px;
+      }
+      #probStage .mark {
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--volt);
+        box-shadow: 0 0 0 4px rgba(215, 250, 69, 0.28);
+      }
+      #stopCard {
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: 556px;
+        height: 150px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--lineD);
+        padding: 14px 16px;
+      }
+      #stopCard .hdr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #stopCard .vr {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #stopCard .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--volt);
+      }
+      #stopCard .hl {
+        margin-top: 10px;
+        font-weight: 500;
+        font-size: 13px;
+        line-height: 18px;
+        color: var(--onDark);
+      }
+      #stopCard .cue {
+        margin-top: 6px;
+        font-weight: 400;
+        font-size: 16px;
+        line-height: 23px;
+        color: var(--onDark);
+      }
+      /* drill library cards, 1.8x the app's points */
+      #drills {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 1920px;
+      }
+      #chips {
+        position: absolute;
+        left: 90px;
+        top: 280px;
+        display: flex;
+        gap: 14px;
+      }
+      #chips span {
+        height: 54px;
+        padding: 0 24px;
+        border-radius: 27px;
+        background: #fff;
+        border: 1px solid var(--line);
+        display: inline-flex;
+        align-items: center;
+        font-weight: 600;
+        font-size: 22px;
+        color: var(--inkS);
+      }
+      #chips span.on {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--onDark);
+      }
+      .bigcard {
+        position: absolute;
+        left: 90px;
+        width: 900px;
+        border-radius: 47px;
+        background: #fff;
+        border: 1px solid var(--line);
+        padding: 43px;
+        box-shadow: 0 18px 44px rgba(8, 18, 14, 0.07);
+      }
+      .bigcard .hd {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+      }
+      .bigcard .head {
+        flex: 1;
+        min-width: 0;
+      }
+      .bigcard .t {
+        font-weight: 600;
+        font-size: 31px;
+        line-height: 40px;
+        letter-spacing: -0.3px;
+        color: var(--ink);
+      }
+      .bigcard .m {
+        margin-top: 7px;
+        font-weight: 500;
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bm {
+        flex: none;
+        width: 79px;
+        height: 79px;
+        border-radius: 40px;
+        background: #ebefe8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--inkS);
+      }
+      .bm.on {
+        background: #d8eee4;
+        color: var(--court);
+      }
+      .bigcard .d {
+        margin-top: 14px;
+        font-weight: 500;
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+      }
+      .bigcard .c {
+        margin-top: 14px;
+        font-weight: 500;
+        font-size: 23px;
+        line-height: 32px;
+        color: var(--inkS);
+      }
+      .bigcard .cta {
+        margin-top: 29px;
+        padding-top: 7px;
+        border-top: 1px solid var(--line);
+        min-height: 86px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .bigcard .cta span {
+        flex: 1;
+        font-weight: 600;
+        font-size: 29px;
+        line-height: 40px;
+        color: var(--court);
+      }
+      /* app store bar */
+      #store {
+        position: absolute;
+        left: 50%;
+        top: 1070px;
+        width: 560px;
+        height: 108px;
+        margin-left: -280px;
+        border-radius: 54px;
+        background: #fff;
+        box-shadow:
+          0 22px 50px rgba(8, 18, 14, 0.16),
+          0 2px 6px rgba(8, 18, 14, 0.06);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        font-weight: 600;
+        font-size: 38px;
+        letter-spacing: -1px;
+        color: var(--ink);
+      }
+      #store svg {
+        width: 38px;
+        height: 38px;
+        display: block;
+      }
+      /* 886x1920 App Store preview canvas */
+      .w886,
+      .w886 body,
+      .w886 #stage {
+        width: 886px;
+      }
+      .w886 #cap {
+        left: 40px;
+        right: 40px;
+        font-size: 58px;
+        letter-spacing: -1.5px;
+      }
+      .w886 #drills {
+        transform-origin: 90px 280px;
+        transform: translate(-30px, 0) scale(0.851);
+      }
+      /* caption + tap */
+      #cap {
+        position: absolute;
+        left: 60px;
+        right: 60px;
+        top: 1610px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 66px;
+        letter-spacing: -1.8px;
+        line-height: 1.15;
+        color: var(--ink);
+      }
+      #cap span {
+        display: inline-block;
+        margin: 0 0.14em;
+      }
+      #cap span.g {
+        color: var(--court);
+      }
+      #tap {
+        position: absolute;
+        width: 150px;
+        height: 150px;
+        margin: -75px 0 0 -75px;
+        border-radius: 50%;
+        background: rgba(7, 23, 16, 0.16);
+        border: 3px solid rgba(7, 23, 16, 0.28);
+      }
+      #tap:after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 28px;
+        height: 28px;
+        margin: -14px 0 0 -14px;
+        border-radius: 50%;
+        background: rgba(7, 23, 16, 0.35);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage">
+      <div id="vig"></div>
+      <div id="lockup">
+        <div id="icon"><img src="assets/icon520.png" /></div>
+        <div id="iconName">Pickle Sensei</div>
+      </div>
+      <div id="phone">
+        <div id="bezel"></div>
+        <div id="clip">
+          <div class="shot" id="shWelcome"><img src="sim/welcome.png" /></div>
+          <div class="shot" id="shHome"><img src="sim/home.png" /></div>
+          <div class="shot" id="shCoach"><img src="sim/coach.png" /></div>
+          <div id="scrCap" class="screen">
+            <img id="swing" />
+            <div id="scanTint"></div>
+            <div id="scanBand"></div>
+            <div id="scanLine"></div>
+            <div id="capShade"></div>
+            <div class="statusbar">
+              <span class="time">9:41</span><span class="island"></span
+              ><span class="sig"
+                ><i style="height: 4px"></i><i style="height: 6px"></i><i style="height: 9px"></i
+                ><i style="height: 12px"></i><span class="batt"></span
+              ></span>
+            </div>
+            <div class="cpill" id="capPill" style="left: 20px; top: 64px">
+              <span class="sp" id="capSpin"></span><b id="capDot" style="display: none"></b
+              ><span id="capPillT">Analyzing</span>
+            </div>
+            <div class="cpill" style="right: 20px; top: 64px">
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#F8FAF5"
+                stroke-width="2.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /></svg
+              ><span>On-device</span>
+            </div>
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div id="scanPct">0%</div>
+            <div id="capfoot">Private by default · nothing leaves your phone</div>
+          </div>
+          <div id="scrRes" class="screen">
+            <div class="statusbar">
+              <span class="time">9:41</span><span class="island"></span
+              ><span class="sig"
+                ><i style="height: 4px"></i><i style="height: 6px"></i><i style="height: 9px"></i
+                ><i style="height: 12px"></i><span class="batt"></span
+              ></span>
+            </div>
+            <div class="top">
+              <div class="close">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#F8FAF5"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </div>
+              <div class="segs"><i class="on"></i><i></i><i></i><i></i></div>
+              <div class="micro" style="color: var(--onDarkM)">1 of 4 · Score</div>
+            </div>
+            <div class="kick micro">Estimated DUPR · Forehand drive</div>
+            <div id="ring">
+              <svg viewBox="0 0 220 220">
+                <circle
+                  cx="110"
+                  cy="110"
+                  r="102.5"
+                  stroke="#21382E"
+                  stroke-width="15"
+                  fill="none"
+                />
+                <circle
+                  id="arc"
+                  cx="110"
+                  cy="110"
+                  r="102.5"
+                  stroke="#D7FA45"
+                  stroke-width="15"
+                  fill="none"
+                  stroke-linecap="round"
+                  transform="rotate(-90 110 110)"
+                />
+              </svg>
+              <div id="ringEye">Estimated</div>
+              <div id="ringNum">2.00</div>
+              <div id="ringUnit">DUPR</div>
+            </div>
+            <div class="note cap">
+              Estimated DUPR — derived from your technique score, not from match results. Not an
+              official DUPR rating.
+            </div>
+            <div class="insight">
+              Contact came late on this drive — the paddle met the ball behind your front hip.
+              Everything before it held.
+            </div>
+            <div class="setcard">
+              <div class="micro" style="color: var(--volt); margin-bottom: 8px">This set</div>
+              <div class="r">
+                <span class="cap" style="color: var(--onDarkM)">Technique score</span
+                ><span class="v">7.4 /10</span>
+              </div>
+              <div class="r" style="margin-top: 8px">
+                <span class="cap" style="color: var(--onDarkM)">Reads this sitting</span
+                ><span class="v">1</span>
+              </div>
+            </div>
+            <div class="footer">
+              <div class="primary">
+                See what to fix
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#142014"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </div>
+              <div class="done">Done</div>
+            </div>
+          </div>
+          <div id="scrProb" class="screen">
+            <div class="statusbar">
+              <span class="time">9:41</span><span class="island"></span
+              ><span class="sig"
+                ><i style="height: 4px"></i><i style="height: 6px"></i><i style="height: 9px"></i
+                ><i style="height: 12px"></i><span class="batt"></span
+              ></span>
+            </div>
+            <div class="top">
+              <div class="close">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#F8FAF5"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </div>
+              <div class="segs"><i class="on"></i><i class="on"></i><i></i><i></i></div>
+              <div class="micro" style="color: var(--onDarkM)">2 of 4 · The problem</div>
+            </div>
+            <div id="probStage">
+              <img src="vid/swing/0058.jpg" /><span class="clock">0:01.9</span
+              ><span class="mark" id="mk1"></span
+              ><span
+                class="mark"
+                id="mk2"
+                style="
+                  width: 10px;
+                  height: 10px;
+                  background: #53d99b;
+                  box-shadow: 0 0 0 4px rgba(83, 217, 155, 0.28);
+                "
+              ></span>
+            </div>
+            <div id="stopCard">
+              <div class="hdr">
+                <div class="vr">
+                  <span class="dot"></span
+                  ><span class="micro" style="color: var(--volt)">Priority fix</span
+                  ><span class="micro" style="color: var(--onDarkM)">Contact</span>
+                </div>
+                <span class="micro" style="color: var(--onDarkS)">Stop 1 of 1</span>
+              </div>
+              <div class="hl">Paddle met the ball behind the front hip</div>
+              <div class="cue">
+                Meet it out in front — let the ball come to a point level with your lead knee.
+              </div>
+            </div>
+            <div class="footer">
+              <div class="primary">
+                Fix it with drills
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#142014"
+                  stroke-width="2.4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </div>
+              <div class="done">Done</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="drills">
+        <div id="chips">
+          <span>All</span><span>Dinks</span><span>Volleys</span><span class="on">Drives</span
+          ><span>Serves</span>
+        </div>
+        <div class="bigcard" id="bc1" style="top: 358px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Out-front contact drops</div>
+              <div class="m">Drives · 3.0–4.0 · Paddle, ball</div>
+            </div>
+            <div class="bm" id="bm1">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
+            </div>
+          </div>
+          <div class="d">Freeze the paddle level with your lead knee.</div>
+          <div class="c">Coach Priya Nair</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+        <div class="bigcard" id="bc2" style="top: 759px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Wall drive &amp; freeze</div>
+              <div class="m">Drives · 3.0–4.5 · Wall, ball</div>
+            </div>
+            <div class="bm" id="bm2">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
+            </div>
+          </div>
+          <div class="d">Drive into the wall, hold the finish one count.</div>
+          <div class="c">Coach Marcus Lee</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+        <div class="bigcard" id="bc3" style="top: 1160px">
+          <div class="hd">
+            <div class="head">
+              <div class="t">Shadow swing finish</div>
+              <div class="m">Drives · 3.0–4.0 · Paddle only</div>
+            </div>
+            <div class="bm" id="bm3">
+              <svg
+                width="34"
+                height="34"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              >
+                <path d="M6 3h12v18l-6-4-6 4z" />
+              </svg>
+            </div>
+          </div>
+          <div class="d">Full forehand, no ball. Finish over the shoulder.</div>
+          <div class="c">Coach Priya Nair</div>
+          <div class="cta">
+            <span>Form guide &amp; videos</span
+            ><svg
+              width="29"
+              height="29"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#627168"
+              stroke-width="2.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="transform: rotate(90deg)"
+            >
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div id="store">
+        <svg viewBox="0 0 24 24" fill="#071710">
+          <path
+            d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"
+          /></svg
+        >Try it free today
+      </div>
+      <div id="cap"></div>
+      <div id="tap"></div>
+    </div>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const E = {
+        outExpo: (t) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)),
+        outCubic: (t) => 1 - Math.pow(1 - t, 3),
+        inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+        outBack: (t) => {
+          const c = 1.70158,
+            d = c + 1;
+          return 1 + d * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+        },
+        inCubic: (t) => t * t * t,
+      };
+      const P = (t, s, d, e = E.outCubic) => e(clamp((t - s) / d));
+      const pad = (n) => String(n).padStart(4, "0");
+      const vis = (el, on) => {
+        el.style.display = on ? "" : "none";
+      };
+      const op = (el, v) => {
+        el.style.opacity = v;
+      };
+      const tf = (el, v) => {
+        el.style.transform = v;
+      };
+      const SWING_N = 112;
+      let curSwing = -1;
+      function frameImg(img, dir, n, idx, cur) {
+        idx = clamp(Math.round(idx), 1, n);
+        if (idx !== cur) {
+          img.src = dir + "/" + pad(idx) + ".jpg";
+        }
+        return idx;
+      }
+      // ---- captions: one continuous narration; each word appears at its spoken time (whisper-aligned, padded).
+      const CAPS = [
+        {
+          out: 1.95,
+          w: [
+            ["This", 0.0],
+            ["is", 0.24],
+            ["Pickle", 0.48, 1],
+            ["Sensei.", 0.94, 1],
+          ],
+        },
+        {
+          out: 3.85,
+          w: [
+            ["It", 2.18],
+            ["starts", 2.38],
+            ["with", 2.66],
+            ["a", 3.02],
+            ["single", 3.14],
+            ["tap.", 3.38],
+          ],
+        },
+        {
+          out: 5.62,
+          w: [
+            ["Tap", 4.58],
+            ["Coach,", 4.86, 1],
+          ],
+        },
+        {
+          out: 6.9,
+          w: [
+            ["import", 5.74],
+            ["a", 5.94],
+            ["swing,", 6.22, 1],
+          ],
+        },
+        {
+          out: 10.1,
+          w: [
+            ["and", 6.98],
+            ["it", 7.08],
+            ["reads", 7.2, 1],
+            ["every", 7.4, 1],
+            ["frame.", 7.82, 1],
+          ],
+        },
+        {
+          out: 12.7,
+          w: [
+            ["Then", 10.3],
+            ["it", 10.5],
+            ["gives", 10.68],
+            ["you", 10.82],
+            ["an", 11.04, 0, 1],
+            ["estimated", 11.14, 1],
+            ["DUPR,", 11.56, 1],
+          ],
+        },
+        {
+          out: 15.3,
+          w: [
+            ["finds", 12.94],
+            ["the", 13.26],
+            ["one", 13.54, 1],
+            ["thing", 13.74, 1],
+            ["to", 14.0, 1, 2],
+            ["fix", 14.18, 1],
+            ["first,", 14.34, 1],
+          ],
+        },
+        {
+          out: 18.55,
+          w: [
+            ["and", 15.66],
+            ["matches", 15.74],
+            ["the", 16.04, 0, 1],
+            ["drills", 16.28, 1],
+            ["that", 16.52, 1],
+            ["fix", 16.8, 1],
+            ["it.", 16.96, 1],
+          ],
+        },
+        {
+          out: 20.9,
+          w: [
+            ["Every", 18.84],
+            ["swing,", 19.04],
+            ["seen.", 19.85, 1],
+          ],
+        },
+        {
+          out: 99,
+          w: [
+            ["Try", 21.12],
+            ["it", 21.32],
+            ["free", 21.52],
+            ["today", 21.68],
+            ["on", 22.02, 1, 1],
+            ["the", 22.26, 1],
+            ["App", 22.38, 1],
+            ["Store.", 22.52, 1],
+          ],
+        },
+      ];
+      function caption(t) {
+        const c = CAPS.find((c) => t >= c.w[0][1] - 0.05 && t < c.out + 0.3);
+        const el = $("cap");
+        if (!c) {
+          vis(el, false);
+          return;
+        }
+        vis(el, true);
+        el.innerHTML = c.w
+          .map(([w, at, g, br]) => {
+            const p = P(t, at - 0.05, 0.26);
+            return (
+              (br === 1 || (br === 2 && STAGE_W === 886) ? "<br>" : "") +
+              `<span class="${g ? "g" : ""}" style="opacity:${p};transform:translateY(${lerp(14, 0, p)}px) scale(${lerp(0.97, 1, p)})">${w}</span>`
+            );
+          })
+          .join("");
+        op(el, 1 - P(t, c.out, 0.28, E.inCubic));
+      }
+      function tapAt(t, s, x, y) {
+        if (t < s || t > s + 0.55) return;
+        const el = $("tap");
+        vis(el, true);
+        const p = P(t, s, 0.5);
+        el.style.left = x + "px";
+        el.style.top = y + "px";
+        tf(el, `scale(${lerp(0.35, 1.15, p)})`);
+        op(el, (1 - p) * 0.9 + 0.1 * (p < 0.5 ? 1 : 0));
+      }
+      const STAGE_W = (() => {
+        const w = +(new URLSearchParams(location.search).get("w") || 1080);
+        if (w === 886) document.documentElement.classList.add("w886");
+        return w;
+      })();
+      const PX0 = (STAGE_W - 600) / 2,
+        PY0 = 250;
+      function phone(x, y, s, o = 1) {
+        const el = $("phone");
+        vis(el, true);
+        tf(el, `translate(${x}px,${y}px) scale(${s})`);
+        op(el, o);
+      }
+      const pt = (x, y, px, py, s) => [px + (16 + x * 1.41294) * s, py + (16 + y * 1.41294) * s];
+      const SCREENS = ["shWelcome", "shHome", "shCoach", "scrCap", "scrRes", "scrProb"];
+      function show(id) {
+        SCREENS.forEach((k) => {
+          const el = $(k);
+          vis(el, k === id);
+          el.style.opacity = "";
+          el.style.transform = k.startsWith("scr") ? "scale(1.41294)" : "";
+        });
+      }
+      function lockup(t, s0, o) {
+        const el = $("lockup");
+        vis(el, true);
+        op(el, o);
+        tf($("icon"), `scale(${s0})`);
+      }
+      function setTime(t) {
+        ["lockup", "phone", "cap", "tap", "store", "drills"].forEach((k) => {
+          const el = $(k);
+          vis(el, false);
+          el.style.opacity = "";
+          el.style.transform = "";
+          el.style.filter = "";
+        });
+        // ===== S0 icon 0-2.2
+        if (t < 2.0) {
+          const ip = P(t, 0.05, 0.8, E.outBack);
+          const np = P(t, 0.5, 0.5);
+          const fo = P(t, 1.55, 0.38, E.inCubic);
+          lockup(t, lerp(0.72, 1, ip), 1 - fo);
+          op($("icon"), Math.min(1, ip * 1.6));
+          op($("iconName"), np);
+          tf($("iconName"), `translateY(${lerp(18, 0, np)}px)`);
+          if (fo > 0) $("lockup").style.filter = `blur(${fo * 10}px)`;
+        }
+        // ===== phone segments 1.85-15.9
+        if (t >= 1.95 && t < 15.95) {
+          let px = PX0,
+            py = lerp(2000, PY0, P(t, 1.95, 0.9, E.outExpo)),
+            s = 1;
+          const fo = P(t, 15.4, 0.45, E.inCubic);
+          phone(px, py, lerp(1, 0.97, fo), 1 - fo);
+          if (fo > 0) $("phone").style.filter = `blur(${fo * 12}px)`;
+          let scr = "shWelcome";
+          if (t >= 3.85) scr = "shHome";
+          if (t >= 5.02) scr = "shCoach";
+          if (t >= 6.35) scr = "scrCap";
+          if (t >= 10.15) scr = "scrRes";
+          if (t >= 12.75) scr = "scrProb";
+          show(scr);
+          const toHome = P(t, 3.85, 0.4, E.inOutCubic);
+          if (scr === "shHome" && toHome < 1) {
+            vis($("shWelcome"), true);
+            tf($("shWelcome"), `translateX(${lerp(0, -140, toHome)}px)`);
+            op($("shWelcome"), 1 - toHome);
+            tf($("shHome"), `translateX(${lerp(568, 0, toHome)}px)`);
+          }
+          const toCoach = P(t, 5.02, 0.3);
+          if (scr === "shCoach" && toCoach < 1) {
+            vis($("shHome"), true);
+            op($("shCoach"), toCoach);
+          }
+          const toCap = P(t, 6.35, 0.35);
+          if (scr === "scrCap" && toCap < 1) {
+            op($("scrCap"), toCap);
+          }
+          const toRes = P(t, 10.15, 0.4);
+          if (scr === "scrRes" && toRes < 1) {
+            vis($("scrCap"), true);
+            op($("scrRes"), toRes);
+          }
+          const toProb = P(t, 12.75, 0.35, E.inOutCubic);
+          if (scr === "scrProb" && toProb < 1) {
+            vis($("scrRes"), true);
+            tf($("scrRes"), `translateX(${lerp(0, -100, toProb)}px) scale(1.41294)`);
+            op($("scrRes"), 1 - toProb);
+            tf($("scrProb"), `translateX(${lerp(568, 0, toProb)}px) scale(1.41294)`);
+          }
+          // taps land on the spoken word
+          {
+            const [x, y] = pt(201, 720, px, py, s);
+            tapAt(t, 3.45, x, y);
+          }
+          {
+            const [x, y] = pt(201, 795, px, py, s);
+            tapAt(t, 4.72, x, y);
+          }
+          {
+            const [x, y] = pt(201, 640, px, py, s);
+            tapAt(t, 5.9, x, y);
+          }
+          {
+            const [x, y] = pt(201, 874 - 34 - 28, px, py, s);
+            tapAt(t, 12.45, x, y);
+            tapAt(t, 15.15, x, y);
+          }
+          // ---- scan scene
+          if (scr === "scrCap" || (scr === "scrRes" && toRes < 1)) {
+            const lt = t - 6.45;
+            const idx = lt * 30 + 1;
+            curSwing = frameImg($("swing"), "vid/swing", SWING_N, idx, curSwing);
+            const sp = P(t, 7.15, 2.4, E.inOutCubic);
+            const y = lerp(60, 814, sp);
+            const done = t >= 9.7;
+            vis($("scanLine"), !done);
+            vis($("scanBand"), !done);
+            vis($("scanTint"), true);
+            $("scanLine").style.top = y + "px";
+            $("scanBand").style.top = y - 140 + "px";
+            $("scanTint").style.height = (done ? 0 : y) + "px";
+            $("scanPct").textContent = done ? "Read complete" : Math.round(sp * 100) + "%";
+            $("capSpin").style.display = done ? "none" : "";
+            $("capDot").style.display = done ? "" : "none";
+            $("capDot").style.background = "#53D99B";
+            $("capPillT").textContent = done ? "Analysis complete" : "Analyzing";
+            $("capSpin").style.transform = `rotate(${(t * 420) % 360}deg)`;
+            document.querySelectorAll(".corner").forEach((c) => {
+              c.style.borderColor = done ? "#53D99B" : "#D7FA45";
+              c.style.opacity = done ? String(0.9 - 0.4 * P(t, 9.7, 0.8)) : "0.7";
+            });
+          }
+          // ---- score page: ring sweeps on "estimated DUPR"
+          if (scr === "scrRes" || (scr === "scrProb" && toProb < 1)) {
+            const sw = P(t, 10.9, 1.0);
+            const C = 2 * Math.PI * 102.5;
+            const frac = (3.62 - 2) / (6 - 2);
+            $("arc").style.strokeDasharray = C;
+            $("arc").style.strokeDashoffset = C * (1 - frac * sw);
+            $("ringNum").textContent = (2 + (3.62 - 2) * sw).toFixed(2);
+          }
+          // ---- problem page
+          if (scr === "scrProb") {
+            const cp = P(t, 12.95, 0.5, E.outBack);
+            $("stopCard").style.transform = `translateY(${lerp(40, 0, cp)}px)`;
+            $("stopCard").style.opacity = cp;
+            const pulse = 0.5 + 0.5 * Math.sin((t - 12.9) * 5);
+            $("mk1").style.left = "222px";
+            $("mk1").style.top = "226px";
+            $("mk1").style.boxShadow = `0 0 0 ${4 + 4 * pulse}px rgba(215,250,69,.28)`;
+            $("mk2").style.left = "150px";
+            $("mk2").style.top = "262px";
+          }
+        }
+        // ===== drill library cards 15.55-18.8
+        if (t >= 15.55 && t < 18.85) {
+          const el = $("drills");
+          vis(el, true);
+          el.style.transform = "";
+          const fo = P(t, 18.3, 0.45, E.inCubic);
+          op(el, 1 - fo);
+          if (fo > 0) el.style.filter = `blur(${fo * 10}px)`;
+          const cp = P(t, 15.6, 0.5);
+          $("chips").style.opacity = cp;
+          $("chips").style.transform = `translateY(${lerp(20, 0, cp)}px)`;
+          [1, 2, 3].forEach((i, k) => {
+            const p = P(t, 15.75 + k * 0.2, 0.5, E.outBack);
+            const c = $("bc" + i);
+            c.style.opacity = Math.min(1, p * 1.3);
+            c.style.transform = `translateY(${lerp(50, 0, p)}px) scale(${lerp(0.97, 1, p)})`;
+          });
+          tapAt(t, 17.3, 90 + 900 - 43 - 39.5, 358 + 43 + 39.5);
+          $("bm1").classList.toggle("on", t >= 17.55);
+        }
+        // ===== outro 18.75-24.4
+        if (t >= 18.7) {
+          const ip = P(t, 18.75, 0.8, E.outBack);
+          const np = P(t, 19.15, 0.5);
+          lockup(t, lerp(0.78, 1, ip), 1);
+          op($("icon"), Math.min(1, ip * 1.6));
+          op($("iconName"), np);
+          tf($("iconName"), `translateY(${lerp(16, 0, np)}px)`);
+          const sp = P(t, 20.95, 0.55, E.outBack);
+          if (sp > 0) {
+            vis($("store"), true);
+            op($("store"), Math.min(1, sp * 1.5));
+            tf($("store"), `translateY(${lerp(30, 0, sp)}px) scale(${lerp(0.94, 1, sp)})`);
+          }
+        }
+        caption(t);
+      }
+      async function decodeVisible() {
+        const im = $("swing");
+        if (im.style.display !== "none" && im.src) {
+          try {
+            await im.decode();
+          } catch (e) {}
+        }
+      }
+      window.__setTime = async (t) => {
+        setTime(t);
+        await decodeVisible();
+      };
+      window.__ready = (async () => {
+        await document.fonts.ready;
+        await Promise.all(
+          [...document.images].filter((i) => i.src).map((i) => i.decode().catch(() => {})),
+        );
+        return true;
+      })();
+      setTime(0);
+    </script>
+  </body>
+</html>

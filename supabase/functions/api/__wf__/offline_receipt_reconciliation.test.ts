@@ -97,6 +97,7 @@ import {
   SUPABASE_URL,
   userRequest,
 } from "./routesHarness.ts";
+import { withFrozenClock } from "./sessionHarness.ts";
 
 const h = await loadHarness();
 
@@ -1641,16 +1642,16 @@ Deno.test(
     const user = freshUser();
     const fixture = await settledFixture(user.sub, TICKET_A, 1);
     const entry = { receipt: fixture.receipt, grant: fixture.grant, output: fixture.output };
-    let limited: Response | null = null;
-    for (let i = 0; i < 30; i += 1) {
-      const response = await post({ receipts: [entry] }, user.token);
-      if (response.status === 429) {
-        limited = response;
-        break;
+    // The budget is an aligned fixed window: the burst must land in one minute.
+    const limited = await withFrozenClock(async (): Promise<Response | null> => {
+      for (let i = 0; i < 30; i += 1) {
+        const response = await post({ receipts: [entry] }, user.token);
+        if (response.status === 429) return response;
+        assertEquals(response.status, 200);
+        await response.body?.cancel();
       }
-      assertEquals(response.status, 200);
-      await response.body?.cancel();
-    }
+      return null;
+    });
     assert(limited, "expected a 429 within 30 deliveries");
     assert(limited.headers.get("Retry-After"));
     await limited.body?.cancel();

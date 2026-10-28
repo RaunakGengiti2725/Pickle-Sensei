@@ -46,6 +46,7 @@ import {
   TEST_USER_ID,
   userRequest,
 } from "./routesHarness.ts";
+import { withFrozenClock } from "./sessionHarness.ts";
 
 const h = await loadHarness();
 
@@ -873,49 +874,56 @@ Deno.test(
   async () => {
     reset();
     const user = freshUser();
-    let grantsAllowed = 0;
-    let limited: Response | null = null;
-    for (let i = 0; i < 40 && !limited; i += 1) {
-      const response = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, user.token);
-      if (response.status === 429) limited = response;
-      else {
-        assertEquals(response.status, 200);
-        grantsAllowed += 1;
+    // Both budgets are aligned fixed windows: the bursts must land in one minute.
+    await withFrozenClock(async () => {
+      let grantsAllowed = 0;
+      let limited: Response | null = null;
+      for (let i = 0; i < 40 && !limited; i += 1) {
+        const response = await post(
+          GRANTS_PATH,
+          { installationKeyId: INSTALLATION_KEY },
+          user.token,
+        );
+        if (response.status === 429) limited = response;
+        else {
+          assertEquals(response.status, 200);
+          grantsAllowed += 1;
+        }
+        await response.text();
       }
-      await response.text();
-    }
-    assert(limited, "the grants route must be budgeted well below the general user budget");
-    assert(grantsAllowed >= 1 && grantsAllowed <= 20, String(grantsAllowed));
-    assertMatch(limited.headers.get("Retry-After") ?? "", /^\d+$/);
+      assert(limited, "the grants route must be budgeted well below the general user budget");
+      assert(grantsAllowed >= 1 && grantsAllowed <= 20, String(grantsAllowed));
+      assertMatch(limited.headers.get("Retry-After") ?? "", /^\d+$/);
 
-    // Registration has its own scope: the exhausted grants budget does not block it.
-    const register = await post(
-      REGISTER_PATH,
-      { installationKeyId: INSTALLATION_KEY, attestationEnvironment: "production" },
-      user.token,
-    );
-    assertEquals(register.status, 200);
-    await register.text();
-    let registerLimited = false;
-    for (let i = 0; i < 40 && !registerLimited; i += 1) {
-      const response = await post(
+      // Registration has its own scope: the exhausted grants budget does not block it.
+      const register = await post(
         REGISTER_PATH,
         { installationKeyId: INSTALLATION_KEY, attestationEnvironment: "production" },
         user.token,
       );
-      registerLimited = response.status === 429;
-      await response.text();
-    }
-    assert(
-      registerLimited,
-      "the register route must be budgeted well below the general user budget",
-    );
+      assertEquals(register.status, 200);
+      await register.text();
+      let registerLimited = false;
+      for (let i = 0; i < 40 && !registerLimited; i += 1) {
+        const response = await post(
+          REGISTER_PATH,
+          { installationKeyId: INSTALLATION_KEY, attestationEnvironment: "production" },
+          user.token,
+        );
+        registerLimited = response.status === 429;
+        await response.text();
+      }
+      assert(
+        registerLimited,
+        "the register route must be budgeted well below the general user budget",
+      );
 
-    // Another account is unaffected.
-    const other = freshUser();
-    const fresh = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, other.token);
-    assertEquals(fresh.status, 200);
-    await fresh.text();
+      // Another account is unaffected.
+      const other = freshUser();
+      const fresh = await post(GRANTS_PATH, { installationKeyId: INSTALLATION_KEY }, other.token);
+      assertEquals(fresh.status, 200);
+      await fresh.text();
+    });
   },
 );
 
