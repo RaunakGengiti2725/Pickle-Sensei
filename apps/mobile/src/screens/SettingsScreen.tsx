@@ -16,19 +16,16 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Button,
   Card,
-  Pill,
   PressableScale,
   SectionTitle,
 } from '../design/components';
-import { Icon, type IconName } from '../design/icons';
+import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
-import { useAppStore, type Gender } from '../state/appStore';
+import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../auth/authStore';
 import { useConsentStore } from '../state/consentStore';
 import { useNotificationStore } from '../notifications/notificationStore';
 import { formatReminderMinutes } from '../notifications/types';
-import { useConsistencyStore } from '../consistency/store';
-import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
 import { selectMembershipState, useAccessStore } from '../state/accessStore';
 import { APP_STORE_SUBSCRIPTIONS_URL } from '../billing/membershipState';
@@ -42,8 +39,16 @@ import { useTabScrollDock } from '../navigation/tabBarDock';
 import { showBrandNotice } from '../design/BrandNotice';
 import {
   OfflineAllocationCard,
+  offlineJourneyHasNews,
   useOfflineJourney,
 } from '../components/OfflineAllocationCard';
+
+/**
+ * SETTINGS — one short list (owner request 2026-09-24; MOBBIN: Monzo, Hers,
+ * BeReal settings): who is signed in, membership, reminders and privacy,
+ * help and legal, the account. Plain rows without icon tiles; the app
+ * version, scoring model and DUPR note sit in a quiet footer.
+ */
 
 async function openLegalPage(label: string, url: string): Promise<void> {
   try {
@@ -84,15 +89,34 @@ async function rateApp(): Promise<void> {
   }
 }
 
-const GENDER_LABELS: Record<Gender, string> = {
-  female: 'Female',
-  male: 'Male',
-  nonbinary: 'Non-binary',
-  prefer_not_to_say: 'Prefer not to say',
+const HANDEDNESS_LABELS: Record<string, string> = {
+  right: 'Right-handed',
+  left: 'Left-handed',
+  ambidextrous: 'Ambidextrous',
 };
 
+/** "Beginner · Right-handed" / "Self-rated 3.5 · Left-handed" — the profile
+ * facts the player gave at onboarding, in one line; null when none. */
+export function playerFactsLine(
+  profile: { skillLevel?: string; handedness?: string } | null,
+): string | null {
+  const parts: string[] = [];
+  const level = profile?.skillLevel?.trim();
+  if (level) {
+    parts.push(
+      /^\d/.test(level)
+        ? `Self-rated ${level}`
+        : `${level.charAt(0).toUpperCase()}${level.slice(1)}`,
+    );
+  }
+  const hand = profile?.handedness
+    ? HANDEDNESS_LABELS[profile.handedness]
+    : undefined;
+  if (hand) parts.push(hand);
+  return parts.length ? parts.join(' · ') : null;
+}
+
 function SettingRow(props: {
-  icon: IconName;
   label: string;
   value: string;
   last?: boolean;
@@ -102,12 +126,7 @@ function SettingRow(props: {
 }) {
   const content = (
     <>
-      <View style={styles.rowIcon}>
-        <Icon name={props.icon} size={18} color={color.inkSoft} />
-      </View>
-      <Text style={[type.body, { color: color.ink, flex: 1 }]}>
-        {props.label}
-      </Text>
+      <Text style={[type.body, styles.rowLabel]}>{props.label}</Text>
       <Text
         numberOfLines={2}
         style={[
@@ -119,7 +138,7 @@ function SettingRow(props: {
         {props.value}
       </Text>
       {props.onPress ? (
-        <Icon name="arrow" size={17} color={color.inkSoft} />
+        <Icon name="chevron" size={16} color={color.inkSoft} />
       ) : null}
     </>
   );
@@ -130,7 +149,7 @@ function SettingRow(props: {
         accessibilityRole="button"
         accessibilityLabel={`${props.label}, ${props.value}`}
         onPress={props.onPress}
-        style={[styles.row, props.last && { borderBottomWidth: 0 }]}
+        style={[styles.row, props.last && styles.rowLast]}
       >
         {content}
       </PressableScale>
@@ -138,9 +157,7 @@ function SettingRow(props: {
   }
 
   return (
-    <View style={[styles.row, props.last && { borderBottomWidth: 0 }]}>
-      {content}
-    </View>
+    <View style={[styles.row, props.last && styles.rowLast]}>{content}</View>
   );
 }
 
@@ -229,8 +246,8 @@ export function SettingsScreen() {
   const hydrateConsent = useConsentStore(s => s.hydrate);
   const notificationPrefs = useNotificationStore(s => s.prefs);
   const notificationPermission = useNotificationStore(s => s.permission);
-  const consistency = useConsistencyStore(s => s.snapshot);
-  const { legalPrivacyUrl, legalTermsUrl } = getRuntimePublicConfig();
+  const { appVersion, legalPrivacyUrl, legalTermsUrl } =
+    getRuntimePublicConfig();
 
   // The consent value must reflect the server ledger, never a hard-coded
   // claim; re-hydrate whenever the signed-in session changes.
@@ -266,13 +283,21 @@ export function SettingsScreen() {
   const isGuest = session?.provider === 'guest';
   const accountName =
     isGuest && profile?.firstName ? profile.firstName : accountLabel;
-  const accountCaption = isGuest
-    ? profile?.firstName
-      ? 'Local · this device'
-      : 'Progress stays on this phone until you connect an account.'
-    : `${session?.provider ?? ''} account`;
-  const scoringStack = scoringStackStatus();
-  const modelLabel = scoringStack.version;
+  const accountCaption =
+    session === null
+      ? 'Signed out'
+      : isGuest
+        ? profile?.firstName
+          ? 'Local · this device'
+          : 'Progress stays on this phone until you connect an account.'
+        : `Signed in with ${
+            session.provider === 'apple'
+              ? 'Apple'
+              : session.provider === 'google'
+                ? 'Google'
+                : session.provider
+          }`;
+  const playerFacts = playerFactsLine(profile);
   const consentValue =
     consentAvailability !== 'ready'
       ? 'Manage'
@@ -304,56 +329,42 @@ export function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
-        <Text
-          style={[
-            type.body,
-            { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
-          ]}
-        >
-          Your player profile, coaching preferences, and privacy controls.
+        <Text style={[type.body, styles.subtitle]}>
+          Your account, reminders and privacy.
         </Text>
 
-        <Card tone="soft" style={styles.accountCard}>
-          <View style={styles.accountTop}>
-            <View style={styles.avatar}>
-              <Text style={[type.h2, { color: color.ink }]}>
-                {accountName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Pill
-              label={
-                session === null
-                  ? 'SIGNED OUT'
-                  : session.provider === 'guest'
-                    ? 'LOCAL'
-                    : 'SYNCED'
-              }
-              tone="neutral"
-            />
+        <Card style={styles.accountCard} testID="settings-account">
+          <View style={styles.avatar}>
+            <Text style={[type.h3, { color: color.ink }]}>
+              {accountName.charAt(0).toUpperCase()}
+            </Text>
           </View>
-          <Text
-            numberOfLines={1}
-            style={[type.h2, { color: color.ink, marginTop: space.lg }]}
-          >
-            {accountName}
-          </Text>
-          <Text style={[type.caption, { color: color.inkSoft, marginTop: 4 }]}>
-            {accountCaption}
-          </Text>
+          <View style={styles.flex}>
+            <Text style={[type.h3, { color: color.ink }]}>{accountName}</Text>
+            <Text style={[type.caption, styles.accountCaption]}>
+              {accountCaption}
+            </Text>
+            {playerFacts ? (
+              <Text
+                style={[type.caption, styles.accountCaption]}
+                testID="settings-player-facts"
+              >
+                {playerFacts}
+              </Text>
+            ) : null}
+          </View>
         </Card>
 
         <SectionTitle title="Membership" />
         <Card style={styles.groupCard}>
           {session?.localOnly ? (
             <SettingRow
-              icon="person"
               label="Connect account"
               value="For ratings"
               onPress={() => navigation.navigate('ConnectAccount')}
             />
           ) : null}
           <SettingRow
-            icon="crown"
             label="Pickle Sensei Pro"
             value={session?.localOnly ? 'Sign in first' : membershipLabel}
             preserveCase
@@ -366,7 +377,6 @@ export function SettingsScreen() {
           />
           {!session?.localOnly && membership.manageSubscription ? (
             <SettingRow
-              icon="shield"
               label="Manage subscription"
               value="App Store"
               preserveCase
@@ -375,73 +385,24 @@ export function SettingsScreen() {
             />
           ) : null}
         </Card>
-        {syncedAccount && offlineJourney ? (
+        {syncedAccount &&
+        offlineJourney &&
+        offlineJourneyHasNews(offlineJourney) ? (
           <OfflineAllocationCard
             state={offlineJourney}
             style={styles.offlineCard}
           />
         ) : null}
 
-        <SectionTitle title="Player" />
+        <SectionTitle title="Reminders & privacy" />
         <Card style={styles.groupCard}>
           <SettingRow
-            icon="person"
-            label="Name"
-            value={profile?.firstName ?? '—'}
-            preserveCase
-          />
-          <SettingRow
-            icon="person"
-            label="Gender"
-            value={profile?.gender ? GENDER_LABELS[profile.gender] : '—'}
-            preserveCase
-          />
-          <SettingRow
-            icon="progress"
-            label="Playing level"
-            value={profile?.skillLevel ?? '—'}
-          />
-          <SettingRow
-            icon="person"
-            label="Hitting hand"
-            value={profile?.handedness ?? '—'}
-          />
-          <SettingRow
-            icon="spark"
-            label="Current focus"
-            value={(profile?.focusCheckpoint ?? '—').replace(/_/g, ' ')}
-          />
-          <SettingRow
-            icon="flame"
-            label="Consistency"
-            value={
-              consistency
-                ? `${consistency.currentStreak} day streak · ${
-                    consistency.earned.length
-                  } ${plural(consistency.earned.length, 'badge')}`
-                : '—'
-            }
-            onPress={() => navigation.navigate('StreakCalendar')}
-            last
-          />
-        </Card>
-
-        <SectionTitle title="Reminders" />
-        <Card style={styles.groupCard}>
-          <SettingRow
-            icon="bell"
             label="Notifications"
             value={notificationsValue}
             preserveCase
             onPress={() => navigation.navigate('NotificationSettings')}
-            last
           />
-        </Card>
-
-        <SectionTitle title="Privacy" />
-        <Card style={styles.groupCard}>
           <SettingRow
-            icon="shield"
             label="Data & consent"
             value={consentValue}
             preserveCase
@@ -449,41 +410,6 @@ export function SettingsScreen() {
             last
           />
         </Card>
-        <View style={styles.privacyCard} testID="settings-privacy-context">
-          <View style={styles.privacyHeader}>
-            <View style={styles.privacyIcon}>
-              <Icon name="shield" size={22} color={color.inkSoft} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.h3, { color: color.ink }]}>
-                Private by default
-              </Text>
-              <Text
-                style={[type.caption, { color: color.inkSoft, marginTop: 3 }]}
-              >
-                Current capture behavior, reported without assumptions.
-              </Text>
-            </View>
-          </View>
-          <View style={styles.privacyRows}>
-            <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.inkSoft }]}>
-                Captured clips
-              </Text>
-              <Text style={[type.bodyBold, { color: color.ink }]}>
-                App-private storage
-              </Text>
-            </View>
-            <View style={styles.privacyRow}>
-              <Text style={[type.caption, { color: color.inkSoft }]}>
-                Cloud video upload
-              </Text>
-              <Text style={[type.bodyBold, { color: color.ink }]}>
-                Not configured
-              </Text>
-            </View>
-          </View>
-        </View>
 
         <SectionTitle title="About" />
         <Card style={styles.groupCard}>
@@ -494,7 +420,6 @@ export function SettingsScreen() {
               sheet. */}
           {Platform.OS === 'ios' ? (
             <SettingRow
-              icon="star"
               label="Rate Pickle Sensei"
               value="App Store"
               preserveCase
@@ -506,7 +431,6 @@ export function SettingsScreen() {
               tour spotlights Home-screen elements, so land on Home first —
               the overlay's measurement retries cover the tab transition. */}
           <SettingRow
-            icon="court"
             label="App walkthrough"
             value="Replay"
             preserveCase
@@ -514,21 +438,10 @@ export function SettingsScreen() {
               navigation.navigate('Tabs', { screen: 'Home' });
               useWalkthroughStore.getState().replay();
             }}
-          />
-          <SettingRow
-            icon="library"
-            label="App version"
-            value={getRuntimePublicConfig().appVersion}
-          />
-          <SettingRow
-            icon="spark"
-            label="Scoring model"
-            value={modelLabel}
             last={!legalPrivacyUrl && !legalTermsUrl}
           />
           {legalPrivacyUrl ? (
             <SettingRow
-              icon="shield"
               label="Privacy policy"
               value="View"
               onPress={() =>
@@ -539,7 +452,6 @@ export function SettingsScreen() {
           ) : null}
           {legalTermsUrl ? (
             <SettingRow
-              icon="library"
               label="Terms of use"
               value="View"
               onPress={() => void openLegalPage('Terms of use', legalTermsUrl)}
@@ -547,45 +459,47 @@ export function SettingsScreen() {
             />
           ) : null}
         </Card>
-        <View style={styles.ratingNote}>
-          <Icon name="shield" size={16} color={color.inkSoft} />
-          <Text
-            style={[type.caption, { color: color.inkSoft, flex: 1 }]}
-            testID="settings-dupr-note"
-          >
-            {DUPR_ESTIMATE_NOTE} The technique score beneath each figure
-            describes stroke form.
-          </Text>
-        </View>
 
         {/* Server-account management (incl. two-step deletion, App Review
-            5.1.1(v), now on the ManageAccount screen). Guests have no server
+            5.1.1(v), on the ManageAccount screen). Guests have no server
             account — their data never leaves the phone, so the row only
             renders for synced sessions. */}
-        {session && !session.localOnly ? (
-          <>
-            <SectionTitle title="Account" />
-            <Card style={styles.groupCard}>
-              <SettingRow
-                icon="person"
-                label="Manage account"
-                value="Details"
-                preserveCase
-                onPress={() => navigation.navigate('ManageAccount')}
-                last
-              />
-            </Card>
-          </>
-        ) : null}
+        <SectionTitle title="Account" />
+        <Card style={styles.groupCard}>
+          {session && !session.localOnly ? (
+            <SettingRow
+              label="Manage account"
+              value="Details"
+              preserveCase
+              onPress={() => navigation.navigate('ManageAccount')}
+            />
+          ) : null}
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            onPress={() => setConfirmingSignOut(true)}
+            style={[styles.row, styles.rowLast]}
+          >
+            <Text style={[type.body, styles.signOutLabel]}>Sign out</Text>
+          </PressableScale>
+        </Card>
 
-        <PressableScale
-          accessibilityLabel="Sign out"
-          onPress={() => setConfirmingSignOut(true)}
-          style={styles.signOutRow}
-        >
-          <Text style={[type.bodyBold, { color: color.bad }]}>Sign out</Text>
-          <Icon name="arrow" size={18} color={color.bad} />
-        </PressableScale>
+        <View style={styles.footer}>
+          <Text
+            style={[type.caption, styles.footerText]}
+            testID="settings-app-version"
+          >
+            {`Pickle Sensei ${appVersion} · Scoring model ${
+              scoringStackStatus().version
+            }`}
+          </Text>
+          <Text
+            style={[type.caption, styles.footerText]}
+            testID="settings-dupr-note"
+          >
+            {DUPR_ESTIMATE_NOTE}
+          </Text>
+        </View>
       </ScrollView>
 
       <SignOutSheet
@@ -601,94 +515,55 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1, minWidth: 0 },
   screen: { flex: 1, backgroundColor: color.surface },
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.xl,
   },
-  accountCard: { minHeight: 190, marginTop: space.xl },
-  accountTop: {
+  subtitle: { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
+  accountCard: {
+    marginTop: space.xl,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: space.md,
+    padding: space.md,
   },
   avatar: {
-    width: 54,
-    height: 54,
+    width: 48,
+    height: 48,
     borderRadius: radius.pill,
-    backgroundColor: color.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupCard: { paddingHorizontal: space.md, paddingVertical: 2 },
-  offlineCard: { marginTop: space.sm },
-  row: {
-    minHeight: 66,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
-  },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
     backgroundColor: color.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  accountCaption: { color: color.inkSoft, marginTop: 2 },
+  groupCard: { paddingHorizontal: space.md, paddingVertical: 0 },
+  offlineCard: { marginTop: space.sm },
+  row: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.line,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowLabel: { color: color.ink, flex: 1 },
   rowValue: {
     color: color.inkSoft,
     textTransform: 'capitalize',
     textAlign: 'right',
-    maxWidth: 130,
+    maxWidth: 150,
   },
-  privacyCard: {
-    // The white consent Card above has no bottom margin of its own, so the
-    // context panel needs explicit top spacing or the two visually fuse.
-    marginTop: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.surfaceAlt,
-    padding: space.lg,
-  },
-  privacyHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  privacyIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.pill,
-    backgroundColor: color.surfaceElevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  privacyRows: {
-    marginTop: space.lg,
-    paddingTop: space.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
-  },
-  privacyRow: {
-    minHeight: 45,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  ratingNote: {
-    flexDirection: 'row',
+  signOutLabel: { color: color.bad, flex: 1 },
+  footer: {
     gap: space.sm,
+    marginTop: space.lg,
     paddingHorizontal: space.sm,
-    marginTop: space.md,
   },
-  signOutRow: {
-    minHeight: 64,
-    paddingHorizontal: space.md,
-    marginTop: space.xl,
-    borderRadius: radius.lg,
-    backgroundColor: color.badSoft,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
+  footerText: { color: color.inkSoft },
   modalRoot: {
     flex: 1,
     backgroundColor: color.overlayStrong,

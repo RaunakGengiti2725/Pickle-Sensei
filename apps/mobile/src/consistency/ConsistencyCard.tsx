@@ -1,36 +1,63 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { PressableScale, RevealFill } from '../design/components';
+import { PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
-import { flameIntensityForStreak, type ConsistencySnapshot } from './engine';
+import {
+  dayFromOrdinal,
+  dayOrdinal,
+  flameIntensityForStreak,
+  type ConsistencySnapshot,
+} from './engine';
 import { AnimatedFlame } from './FlameIcon';
-import { SHIELD_MAX_HELD } from './milestones';
 import { plural } from '../util/plural';
 
 /**
- * The CONSISTENCY block of the player hierarchy (skill ⁄ consistency ⁄
- * achievements). Streak, momentum level, shields, and the next reward in
- * one dark card; tapping it opens the full calendar. It never shows rating
- * numbers — discipline and ability stay visually separate systems.
+ * The streak card on Progress: the current run, one status line and the
+ * last seven days as dots; tapping it opens the full calendar (momentum,
+ * shields and milestones live there). It never shows rating numbers —
+ * discipline and ability stay visually separate systems.
  */
+
+const WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+
+type WeekDayState = 'trained' | 'shielded' | 'rest';
+
+/** The device's calendar day, for the moment before a snapshot exists. */
+function deviceDay(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    '0',
+  )}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+/** The last seven calendar days, oldest first, ending on the snapshot's day. */
+export function lastSevenDays(snapshot: ConsistencySnapshot | null): Array<{
+  day: string;
+  letter: string;
+  state: WeekDayState;
+  today: boolean;
+}> {
+  const last = dayOrdinal(snapshot?.asOfDay ?? deviceDay());
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = dayFromOrdinal(last - 6 + index);
+    const entry = snapshot?.days[day];
+    return {
+      day,
+      letter: WEEKDAY_LETTERS[new Date(`${day}T12:00:00Z`).getUTCDay()]!,
+      state: entry ? (entry.shielded ? 'shielded' : 'trained') : 'rest',
+      today: index === 6,
+    };
+  });
+}
+
 export function ConsistencyCard(props: {
   snapshot: ConsistencySnapshot | null;
   onPress: () => void;
 }) {
   const snapshot = props.snapshot;
   const streak = snapshot?.currentStreak ?? 0;
-  const momentum = snapshot?.momentum ?? {
-    level: 1,
-    xpIntoLevel: 0,
-    xpForNextLevel: 40,
-  };
-  const fraction = Math.min(
-    1,
-    momentum.xpForNextLevel > 0
-      ? momentum.xpIntoLevel / momentum.xpForNextLevel
-      : 0,
-  );
   const statusLine =
     !snapshot || snapshot.totalActivities === 0
       ? 'Your first analysis lights the flame.'
@@ -43,75 +70,64 @@ export function ConsistencyCard(props: {
   return (
     <PressableScale
       accessibilityRole="button"
-      accessibilityLabel={`Consistency. ${streak} ${plural(
+      accessibilityLabel={`Streak: ${streak} ${plural(
         streak,
         'day',
-      )} training streak, momentum level ${
-        momentum.level
-      }. Opens the streak calendar.`}
+      )}. Opens the streak calendar.`}
       onPress={props.onPress}
       style={styles.card}
       testID="consistency-card"
     >
-      <View style={styles.headerRow}>
-        <Text style={[type.micro, styles.eyebrow]}>CONSISTENCY</Text>
-        <View style={styles.shieldRow}>
-          {Array.from({ length: SHIELD_MAX_HELD }, (_, index) => (
-            <Icon
-              key={index}
-              name="shield"
-              size={13}
-              color={
-                index < (snapshot?.shieldsAvailable ?? 0)
-                  ? color.mint
-                  : color.onDarkFaint
-              }
-            />
-          ))}
-        </View>
-      </View>
       <View style={styles.mainRow}>
         <View style={styles.flameWrap}>
           <AnimatedFlame
             intensity={flameIntensityForStreak(streak)}
-            size={34}
-            dark
+            size={30}
           />
         </View>
         <View style={styles.body}>
           <Text style={[type.h2, styles.streakText]}>
-            {streak}{' '}
-            <Text style={styles.streakUnit}>{plural(streak, 'day')}</Text>
+            {streak > 0 ? `${streak}-day streak` : 'No streak yet'}
           </Text>
-          <Text style={[type.caption, styles.status]} numberOfLines={1}>
-            {statusLine}
-          </Text>
+          <Text style={[type.caption, styles.status]}>{statusLine}</Text>
         </View>
-        <Icon name="chevron" color={color.onDarkFaint} size={16} />
+        <Icon name="chevron" color={color.inkSoft} size={16} />
       </View>
-      <View style={styles.momentumRow}>
-        <Text style={[type.micro, styles.momentumLabel]}>
-          MOMENTUM LV {momentum.level}
-        </Text>
-        <View style={styles.momentumTrack}>
-          <RevealFill
-            style={[
-              styles.momentumFill,
-              { width: `${Math.max(4, fraction * 100)}%` },
-            ]}
-          />
-        </View>
-        <Text style={[type.micro, styles.momentumXp]}>
-          {snapshot?.momentumXp ?? 0} XP
-        </Text>
+      <View style={styles.week} testID="consistency-week">
+        {lastSevenDays(snapshot).map(day => (
+          <View key={day.day} style={styles.weekDay}>
+            <View
+              style={[
+                styles.dot,
+                day.state === 'trained' && styles.dotTrained,
+                day.state === 'shielded' && styles.dotShielded,
+                day.today && day.state === 'rest' && styles.dotToday,
+              ]}
+              testID={`consistency-day-${day.state}`}
+            >
+              {day.state === 'trained' ? (
+                <Icon
+                  name="check"
+                  size={14}
+                  color={color.onDark}
+                  strokeWidth={2.6}
+                />
+              ) : day.state === 'shielded' ? (
+                <Icon name="shield" size={13} color={color.court} />
+              ) : null}
+            </View>
+            <Text
+              style={[
+                type.micro,
+                styles.weekLetter,
+                day.today && styles.weekLetterToday,
+              ]}
+            >
+              {day.letter}
+            </Text>
+          </View>
+        ))}
       </View>
-      {snapshot?.nextStreakMilestone ? (
-        <Text style={[type.micro, styles.nextLine]}>
-          NEXT: {snapshot.nextStreakMilestone.title.toUpperCase()} ·{' '}
-          {snapshot.nextStreakMilestone.daysAway}{' '}
-          {plural(snapshot.nextStreakMilestone.daysAway, 'DAY', 'DAYS')} AWAY
-        </Text>
-      ) : null}
     </PressableScale>
   );
 }
@@ -121,59 +137,44 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: color.inkElevated,
+    backgroundColor: color.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
-    overflow: 'hidden',
+    borderColor: color.line,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  eyebrow: { color: color.volt },
-  shieldRow: { flexDirection: 'row', gap: 4 },
   mainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm + 4,
-    marginTop: space.sm + 2,
   },
   flameWrap: {
-    width: 52,
-    height: 52,
+    width: 48,
+    height: 48,
     borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: color.flameTint,
   },
   body: { flex: 1, minWidth: 0 },
-  streakText: { color: color.onDark },
-  streakUnit: { ...type.h3, color: color.onDarkMuted },
-  status: { color: color.onDarkSubtle, marginTop: 2 },
-  momentumRow: {
+  streakText: { color: color.ink },
+  status: { color: color.inkSoft, marginTop: 2 },
+  week: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
+    justifyContent: 'space-between',
     marginTop: space.md,
+    paddingHorizontal: space.xs,
   },
-  momentumLabel: { color: color.onDarkMuted, letterSpacing: 0.8 },
-  momentumTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: color.onDarkTint,
-    overflow: 'hidden',
+  weekDay: { alignItems: 'center', gap: 6 },
+  dot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.surfaceAlt,
   },
-  momentumFill: {
-    height: '100%',
-    borderRadius: 3,
-    backgroundColor: color.volt,
-  },
-  momentumXp: { color: color.onDarkSubtle, fontVariant: ['tabular-nums'] },
-  nextLine: {
-    color: color.onDarkFaint,
-    marginTop: space.sm + 2,
-    letterSpacing: 0.8,
-  },
+  dotTrained: { backgroundColor: color.court },
+  dotShielded: { backgroundColor: color.courtSoft },
+  dotToday: { borderWidth: 1.5, borderColor: color.court },
+  weekLetter: { color: color.inkSoft },
+  weekLetterToday: { color: color.ink },
 });

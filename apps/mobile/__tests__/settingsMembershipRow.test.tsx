@@ -43,7 +43,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { SettingsScreen } from '../src/screens/SettingsScreen';
-import { Card, Pill, PressableScale } from '../src/design/components';
+import { Pill, PressableScale } from '../src/design/components';
 import { Icon } from '../src/design/icons';
 import { color } from '../src/design/tokens';
 import { useAuthStore, type AuthSession } from '../src/auth/authStore';
@@ -168,18 +168,14 @@ afterEach(() => {
 });
 
 describe('Settings membership row', () => {
-  it('keeps account, membership and privacy context neutral without changing their labels or actions', async () => {
+  it('keeps the account header and membership row calm without changing their labels or actions', async () => {
     configureAccessStore(backendReturning(async () => freeAccess(1)));
     const renderer = renderScreen();
     await flush();
-    const account = renderer.root
-      .findAllByType(Card)
-      .find(card => card.props.tone === 'soft')!;
-    expect(account).toBeDefined();
-    expect(account.findByType(Pill).props).toMatchObject({
-      label: 'SYNCED',
-      tone: 'neutral',
-    });
+    const account = renderer.root.findByProps({ testID: 'settings-account' });
+    // A plain white card: no status pill competing with the name.
+    expect(account.props.tone ?? 'light').toBe('light');
+    expect(account.findAllByType(Pill)).toHaveLength(0);
     expect(
       account
         .findAllByType(Text)
@@ -195,29 +191,14 @@ describe('Settings membership row', () => {
     expect(
       StyleSheet.flatten(membership.props.style).minHeight,
     ).toBeGreaterThanOrEqual(44);
+    // Rows carry no icon tiles, only the neutral chevron of a link.
+    expect(membership.findAllByType(Icon).map(icon => icon.props)).toEqual([
+      expect.objectContaining({ name: 'chevron', color: color.inkSoft }),
+    ]);
+    // Where clips live is explained on Data & consent, not in a card here.
     expect(
-      membership.findAllByType(Icon).find(icon => icon.props.name === 'crown')!
-        .props.color,
-    ).toBe(color.inkSoft);
-    const privacy = renderer.root.findByProps({
-      testID: 'settings-privacy-context',
-    });
-    expect(StyleSheet.flatten(privacy.props.style).backgroundColor).toBe(
-      color.surfaceAlt,
-    );
-    expect(privacy.findByType(Icon).props).toMatchObject({
-      name: 'shield',
-      color: color.inkSoft,
-    });
-    const copy = privacy
-      .findAllByType(Text)
-      .map(text => text.props.children)
-      .join(' ');
-    expect(copy).toContain(
-      'Current capture behavior, reported without assumptions.',
-    );
-    expect(copy).toContain('App-private storage');
-    expect(copy).toContain('Not configured');
+      renderer.root.findAllByProps({ testID: 'settings-privacy-context' }),
+    ).toHaveLength(0);
     act(() => membership.props.onPress());
     expect(mockNavigate).toHaveBeenCalledWith('Paywall', {
       source: 'settings',

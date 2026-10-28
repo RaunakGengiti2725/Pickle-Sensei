@@ -38,9 +38,6 @@ jest.mock('../../src/camera/capture', () => {
     importedPoseExtractionAvailable: jest.fn(() => true),
   };
 });
-jest.mock('../../src/camera/TargetSelector', () => ({
-  TargetSelector: () => null,
-}));
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
@@ -98,7 +95,8 @@ import TestRenderer, {
 import { ANALYZE_STEPS, AnalyzeScreen } from '../../src/screens/AnalyzeScreen';
 import { Button, PressableScale } from '../../src/design/components';
 import { Icon } from '../../src/design/icons';
-import { TargetSelector } from '../../src/camera/TargetSelector';
+import { MascotMoment } from '../../src/design/MascotMoment';
+import { CaptureEvidenceCard } from '../../src/camera/CaptureEvidenceCard';
 import {
   assertCapturedClip,
   captureStrokeVideo,
@@ -649,17 +647,19 @@ describe('AnalyzeScreen button ledger', () => {
       await pressButton(renderer, 'Try again');
       expect(capture).toHaveBeenCalledTimes(2);
       expect(rendered(renderer)).not.toContain('Nothing was rated.');
-      expect(rendered(renderer)).toContain('Captured');
+      expect(rendered(renderer)).toContain('Which stroke was this?');
+      await unmount(renderer);
 
       // Error phase again → Close + header Close both leave the screen.
       capture.mockRejectedValueOnce(new Error('Recording failed.'));
-      await pressButton(renderer, 'Record another clip');
-      expect(rendered(renderer)).toContain('Recording failed.');
-      await pressButton(renderer, 'Close');
+      const failed = await renderScreen('camera');
+      await pressButton(failed, 'Open automatic camera');
+      expect(rendered(failed)).toContain('Recording failed.');
+      await pressButton(failed, 'Close');
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-      await pressHeaderClose(renderer);
+      await pressHeaderClose(failed);
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1); // retained exit is inert
-      await unmount(renderer);
+      await unmount(failed);
       capture.mockRejectedValueOnce(new Error('Recording failed.'));
       const reopened = await renderScreen('camera');
       await pressButton(reopened, 'Open automatic camera');
@@ -672,10 +672,92 @@ describe('AnalyzeScreen button ledger', () => {
   // ─── SAVED phase ─────────────────────────────────────────────────────────
 
   describe('saved phase (guided capture)', () => {
-    it('stroke chips declare; score button is disabled until a declaration exists', async () => {
+    const STROKE_OPTIONS = [
+      'Serve',
+      'Return',
+      'Forehand drive',
+      'Backhand drive',
+      'Third-shot drop',
+      'Dink',
+      'Volley',
+      'Overhead',
+    ];
+
+    function strokeRows(renderer: ReactTestRenderer): string[][] {
+      const [picker] = renderer.root.findAll(
+        n => typeof n.type === 'string' && n.props.testID === 'stroke-picker',
+      );
+      if (!picker) throw new Error('No stroke picker');
+      return picker.children
+        .filter((row): row is ReactTestInstance => typeof row !== 'string')
+        .map(row =>
+          row
+            .findAll(
+              n => isPressable(n) && n.props.accessibilityRole === 'radio',
+            )
+            .map(n => String(n.props.accessibilityLabel)),
+        );
+    }
+
+    it('is only the stroke picker: eight hinted options in two columns and one pinned score button', async () => {
+      const renderer = await renderSavedCamera();
+      const copy = rendered(renderer);
+      expect(copy).toContain('Which stroke was this?');
+      for (const removed of [
+        'Capture complete',
+        'CAPTURE IN HAND',
+        'Record another clip',
+        'Open Library',
+      ]) {
+        expect(copy).not.toContain(removed);
+      }
+      expect(renderer.root.findAllByType(MascotMoment)).toHaveLength(0);
+      expect(renderer.root.findAllByType(CaptureEvidenceCard)).toHaveLength(0);
+
+      expect(strokeRows(renderer)).toEqual([
+        ['Serve', 'Return'],
+        ['Forehand drive', 'Backhand drive'],
+        ['Third-shot drop', 'Dink'],
+        ['Volley', 'Overhead'],
+      ]);
+      for (const option of STROKE_OPTIONS) {
+        const node = findByLabel(renderer, option);
+        expect(String(node?.props.accessibilityHint).trim()).not.toBe('');
+      }
+
+      const footer = renderer.root.findByProps({
+        testID: 'analyze-stroke-actions',
+      });
+      expect(footer.findAllByType(Button).map(b => b.props.label)).toEqual([
+        'Get my Technique Score',
+      ]);
+      expect(
+        renderer.root.findByType(ScrollView).findAllByType(Button),
+      ).toHaveLength(0);
+      await unmount(renderer);
+    });
+
+    it('stacks the stroke options in one column at large text sizes', async () => {
+      jest.spyOn(Dimensions, 'get').mockReturnValue({
+        width: 375,
+        height: 667,
+        scale: 2,
+        fontScale: 3.571,
+      });
+      capture.mockResolvedValue(guidedClip);
+      const renderer = await renderScreen('camera');
+      // At this scale the camera button shows "Open camera"; press it by label.
+      await press(renderer, 'Open automatic camera');
+      expect(strokeRows(renderer)).toEqual(
+        STROKE_OPTIONS.map(option => [option]),
+      );
+      await unmount(renderer);
+    });
+
+    it('stroke options declare; score button is disabled until a declaration exists', async () => {
       analyze.mockResolvedValue(scoredOutcome('analysis-2'));
       const renderer = await renderSavedCamera();
-      expect(rendered(renderer)).toContain('Captured');
+      expect(rendered(renderer)).toContain('Which stroke was this?');
 
       const score = 'Get my Technique Score';
       expect(buttonState(renderer, score).disabled).toBe(true);
@@ -683,16 +765,7 @@ describe('AnalyzeScreen button ledger', () => {
       await press(renderer, score);
       expect(analyze).not.toHaveBeenCalled();
 
-      for (const chip of [
-        'Serve',
-        'Return',
-        'Forehand drive',
-        'Backhand drive',
-        'Third-shot drop',
-        'Dink',
-        'Volley',
-        'Overhead',
-      ]) {
+      for (const chip of STROKE_OPTIONS) {
         expect(buttonState(renderer, chip).selected).toBe(false);
         await press(renderer, chip);
         expect(buttonState(renderer, chip).selected).toBe(true);
@@ -783,39 +856,31 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('Record another clip relaunches the camera; Open Library navigates to the Library tab; header Close pops to top', async () => {
+    it('offers no detours: the header Close is the only exit and pops to top', async () => {
       const renderer = await renderSavedCamera();
-      expect(capture).toHaveBeenCalledTimes(1);
-      await pressButton(renderer, 'Record another clip');
-      expect(capture).toHaveBeenCalledTimes(2);
-      expect(rendered(renderer)).toContain('Captured');
-
-      await pressButton(renderer, 'Open Library');
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', {
-        screen: 'Library',
-      });
-
-      await press(renderer, 'Close');
-      expect(mockNavigation.popToTop).not.toHaveBeenCalled(); // Library already left this visit
-      await unmount(renderer);
-      const reopened = await renderSavedCamera();
-      await pressHeaderClose(reopened);
+      for (const label of [
+        'Record another clip',
+        'Import another video',
+        'Open Library',
+      ]) {
+        expect(hasLabel(renderer, label)).toBe(false);
+      }
+      await pressHeaderClose(renderer);
       expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
-      await unmount(reopened);
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(capture).toHaveBeenCalledTimes(1);
+      await unmount(renderer);
     });
 
-    it('pose-less guided clip: honest "cannot be scored" copy, no score button, recovery buttons still live', async () => {
+    it('pose-less guided clip: honest "can’t be scored" copy, no picker, one live re-record button', async () => {
       const renderer = await renderSavedCamera(poselessClip);
       const copy = rendered(renderer);
-      expect(copy).toContain('cannot be scored');
+      expect(copy).toContain('can’t be scored');
       expect(hasLabel(renderer, 'Get my Technique Score')).toBe(false);
       expect(hasLabel(renderer, 'Dink')).toBe(false);
+      expect(hasLabel(renderer, 'Open Library')).toBe(false);
       await pressButton(renderer, 'Record another clip');
       expect(capture).toHaveBeenCalledTimes(2);
-      await pressButton(renderer, 'Open Library');
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', {
-        screen: 'Library',
-      });
       await unmount(renderer);
     });
 
@@ -955,26 +1020,23 @@ describe('AnalyzeScreen button ledger', () => {
   // ─── LIBRARY source (imported video) ─────────────────────────────────────
 
   describe('library source', () => {
-    it('auto-launches the picker; stroke chip → TargetSelector; onConfirm seeds the target and scores', async () => {
+    it('auto-launches the picker; stroke pick → Get my Technique Score scores with automatic player selection', async () => {
       importVideo.mockResolvedValue(importedClip);
       extract.mockResolvedValue({ poseSequence });
       analyze.mockResolvedValue(scoredOutcome('analysis-import'));
       const renderer = await renderScreen('library');
       expect(importVideo).toHaveBeenCalledTimes(1);
-      expect(rendered(renderer)).toContain('Capture complete');
-      expect(hasLabel(renderer, 'Import another video')).toBe(true);
-      expect(hasLabel(renderer, 'Get my Technique Score')).toBe(true);
+      expect(rendered(renderer)).toContain('Which stroke was this?');
+      expect(hasLabel(renderer, 'Import another video')).toBe(false);
+      expect(buttonState(renderer, 'Get my Technique Score').disabled).toBe(
+        true,
+      );
 
       await press(renderer, 'Forehand drive');
-      const selector = renderer.root.findByType(TargetSelector);
-      expect(selector.props.frameUri).toBe(importedClip.uri);
-      const selection = {
-        point: { x: 0.4, y: 0.6 },
-        selectedAtIso: '2026-08-27T18:01:00.000Z',
-      };
-      await act(async () => {
-        selector.props.onConfirm(selection);
-      });
+      expect(buttonState(renderer, 'Get my Technique Score').disabled).toBe(
+        false,
+      );
+      await press(renderer, 'Get my Technique Score');
       await act(async () => {});
 
       expect(setDeclaredStroke).toHaveBeenCalledWith(
@@ -982,15 +1044,11 @@ describe('AnalyzeScreen button ledger', () => {
         expect.any(String),
         'forehand_drive',
       );
-      expect(setCaptureTargetSeed).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.any(String),
-        selection,
-      );
+      expect(setCaptureTargetSeed).not.toHaveBeenCalled();
       expect(extract).toHaveBeenCalledTimes(1);
       expect(extract).toHaveBeenCalledWith(
         importedClip,
-        selection.point,
+        null,
         expect.objectContaining({
           operationId: expect.any(String),
           signal: expect.objectContaining({ aborted: false }),
@@ -1000,7 +1058,7 @@ describe('AnalyzeScreen button ledger', () => {
       expect(analyze.mock.calls[0]![0]).toEqual(
         expect.objectContaining({
           declaredStroke: 'forehand_drive',
-          targetSeed: selection,
+          targetSeed: null,
         }),
       );
       expect(analyze.mock.calls[0]![0].clip.poseSequence).toBe(poseSequence);
@@ -1010,7 +1068,7 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('onSkip scores without a seed; extraction failure → typed error copy; Try again reopens the picker', async () => {
+    it('scores without a seed; extraction failure → typed error copy; Try again reopens the picker', async () => {
       importVideo.mockResolvedValue(importedClip);
       extract.mockRejectedValueOnce(
         Object.assign(new Error('no person'), {
@@ -1019,11 +1077,7 @@ describe('AnalyzeScreen button ledger', () => {
       );
       const renderer = await renderScreen('library');
       await press(renderer, 'Dink');
-      const selector = renderer.root.findByType(TargetSelector);
-      expect(selector.props.automaticOnly).toBe(true);
-      await act(async () => {
-        selector.props.onSkip();
-      });
+      await press(renderer, 'Get my Technique Score');
       await act(async () => {});
       expect(setCaptureTargetSeed).not.toHaveBeenCalled();
       expect(extract).toHaveBeenCalledTimes(1);
@@ -1046,16 +1100,13 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(renderer);
     });
 
-    it('Import another video reopens the picker; header Close pops to top; picker cancel goes back', async () => {
+    it('header Close pops to top; picker cancel goes back', async () => {
       importVideo.mockResolvedValue(importedClip);
       const renderer = await renderScreen('library');
-      await pressButton(renderer, 'Import another video');
-      expect(importVideo).toHaveBeenCalledTimes(2);
+      expect(hasLabel(renderer, 'Import another video')).toBe(false);
       await press(renderer, 'Close');
       expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
-
-      await pressButton(renderer, 'Import another video');
-      expect(importVideo).toHaveBeenCalledTimes(2); // closed visit cannot reopen the picker
+      expect(importVideo).toHaveBeenCalledTimes(1);
       expect(mockNavigation.goBack).not.toHaveBeenCalled();
       await unmount(renderer);
       importVideo.mockRejectedValueOnce(
@@ -1069,7 +1120,7 @@ describe('AnalyzeScreen button ledger', () => {
       await unmount(reopened);
     });
 
-    it('TargetSelector is not shown again once a seed exists; Get my Technique Score scores directly', async () => {
+    it('scoring in flight: the header Close still works and a late result never routes', async () => {
       importVideo.mockResolvedValue(importedClip);
       extract.mockResolvedValue({ poseSequence });
       let resolveAnalysis!: (value: unknown) => void;
@@ -1081,14 +1132,7 @@ describe('AnalyzeScreen button ledger', () => {
       );
       const renderer = await renderScreen('library');
       await press(renderer, 'Serve');
-      const selector = renderer.root.findByType(TargetSelector);
-      const selection = {
-        point: { x: 0.5, y: 0.5 },
-        selectedAtIso: '2026-08-27T18:01:00.000Z',
-      };
-      await act(async () => {
-        selector.props.onConfirm(selection);
-      });
+      await press(renderer, 'Get my Technique Score');
       // Scoring is in flight: the header Close still works (no dead-end).
       expect(analyze).toHaveBeenCalledTimes(1);
       expect(rendered(renderer)).toContain('Measuring your swing…');

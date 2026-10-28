@@ -619,26 +619,39 @@ describe('Result guide — saved read recovery', () => {
 // ─── Scored: the four pages ─────────────────────────────────────────────────
 
 describe('Result guide — scored analysis', () => {
-  it('opens on the SCORE page: estimated-DUPR ring over the /10, its disclaimer, ONE measured insight — and no drills, replay or plan', async () => {
+  it('opens on the SCORE page: estimated-DUPR ring with its unit, its disclaimer, ONE measured insight — and no drills, replay or plan', async () => {
     const renderer = await renderScreen();
     expect(mockLoadEvidence).toHaveBeenCalledWith({}, 'analysis-1');
     expect(hostByTestId(renderer, 'result-guide-step-score')).toHaveLength(1);
     expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
 
     const copy = allText(renderer);
-    // D-046: the big number is the estimated DUPR (7.1 → 3.40), labelled
-    // as such, with the 0–10 score as the smaller line and the "not an
-    // official DUPR" note directly under the ring.
+    // D-046: the big number is the estimated DUPR (7.1 → 4.10), with the
+    // `DUPR` unit and `ESTIMATED` stacked beneath it inside the ring (owner,
+    // 2026-09-11: no /10 line in the ring) and the "not an official DUPR"
+    // note directly under the ring.
     expect(copy).toContain('ESTIMATED DUPR · FOREHAND DRIVE');
     expect(
       renderer.root.findAll(
         node =>
           node.props.accessibilityLabel ===
-          'Estimated DUPR 3.40, technique score 7.1 out of 10',
+          'Estimated DUPR 4.10, technique score 7.1 out of 10',
       ).length,
     ).toBeGreaterThan(0);
-    expect(copy).toContain('EST. DUPR');
-    expect(copy).toContain('7.1 /10');
+    // The numeral counts up on mount; its final figure is the label above.
+    expect(
+      hostByTestId(renderer, 'score-ring-dupr')[0]!.props.children,
+    ).toMatch(/^\d\.\d\d$/);
+    expect(hostByTestId(renderer, 'score-ring-unit')[0]!.props.children).toBe(
+      'DUPR',
+    );
+    expect(
+      hostByTestId(renderer, 'score-ring-eyebrow')[0]!.props.children,
+    ).toBe('ESTIMATED');
+    expect(hostByTestId(renderer, 'score-ring-technique-score')).toHaveLength(
+      0,
+    );
+    expect(copy).not.toContain('7.1 /10');
     expect(copy).not.toMatch(/≈/);
     expect(copy).toContain(DUPR_ESTIMATE_NOTE);
     expect(hostByTestId(renderer, 'result-dupr-note')).toHaveLength(1);
@@ -785,13 +798,13 @@ describe('Result guide — scored analysis', () => {
     // held, 3 (one yellow, two red) are to fix — the inapplicable and the
     // unscored ones count for nothing.
     expect(hostByTestId(renderer, 'result-guide-summary')).toHaveLength(1);
-    expect(copy).toContain('3.40 EST. DUPR 7.1 /10');
+    expect(copy).toContain('4.10 EST. DUPR 7.1 /10');
     expect(copy).toContain('6 HELD');
     expect(copy).toContain('3 TO FIX');
     expect(
       hostByTestId(renderer, 'result-guide-tile-score')[0]!.props
         .accessibilityLabel,
-    ).toBe('Estimated DUPR 3.40, technique score 7.1 out of 10');
+    ).toBe('Estimated DUPR 4.10, technique score 7.1 out of 10');
     expect(
       hostByTestId(renderer, 'result-guide-tile-held')[0]!.props
         .accessibilityLabel,
@@ -889,7 +902,7 @@ describe('Result guide — scored analysis', () => {
     expect(hostByTestId(renderer, 'fix-list')).toHaveLength(0);
     await press(renderer, 'result-guide-next');
     copy = allText(renderer);
-    expect(copy).toContain('3.40 EST. DUPR 7.1 /10');
+    expect(copy).toContain('4.10 EST. DUPR 7.1 /10');
     expect(copy).toContain('2 HELD');
     expect(copy).toContain('0 TO FIX');
     expect(copy).toContain('Priority fix Every checkpoint held');
@@ -1039,8 +1052,8 @@ describe('Result guide — scored analysis', () => {
     expect(hostByTestId(renderer, 'result-guide-practice-set')).toHaveLength(1);
     const copy = allText(renderer);
     expect(copy).toContain('THIS SET');
-    // The set's first attempt (6.4 → 2.98) to its latest (7.1 → 3.40).
-    expect(copy).toContain('+0.42 DUPR in this set');
+    // The set's first attempt (6.4 → 3.48) to its latest (7.1 → 4.10).
+    expect(copy).toContain('+0.62 DUPR in this set');
   });
 
   it('without replay evidence THE PROBLEM page shows the fix cards alone — no player, no full-screen link', async () => {

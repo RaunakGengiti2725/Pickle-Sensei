@@ -49,9 +49,6 @@ jest.mock('../src/camera/capture', () => {
     },
   };
 });
-jest.mock('../src/camera/TargetSelector', () => ({
-  TargetSelector: () => null,
-}));
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
@@ -108,7 +105,6 @@ import { createPendingFulfilmentStorage } from '../src/billing/pendingFulfilment
 import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { AnalyzeScreen } from '../src/screens/AnalyzeScreen';
-import { TargetSelector } from '../src/camera/TargetSelector';
 import {
   assertCapturedClip,
   cancelCameraOperation,
@@ -328,6 +324,17 @@ function pressByLabel(renderer: ReactTestRenderer, label: string) {
   );
   if (!node) throw new Error(`No pressable with accessibilityLabel ${label}`);
   act(() => node.props.onPress());
+}
+
+/** The saved page's pinned score action. */
+function scoreAction(renderer: ReactTestRenderer): () => void {
+  const [node] = renderer.root.findAll(
+    n =>
+      n.props.accessibilityLabel === 'Get my Technique Score' &&
+      typeof n.props.onPress === 'function',
+  );
+  if (!node) throw new Error('No Get my Technique Score action');
+  return node.props.onPress;
 }
 
 function hasButton(renderer: ReactTestRenderer, label: string): boolean {
@@ -809,9 +816,8 @@ describe('S9 — unmount during imported pose extraction', () => {
     );
     const renderer = await renderScreen('library');
     pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
     await act(async () => {
-      selector.props.onSkip();
+      scoreAction(renderer)();
     });
     await flush();
     expect(extractImportedPoseSequence).toHaveBeenCalledTimes(1);
@@ -851,9 +857,8 @@ describe('S9 — unmount during imported pose extraction', () => {
     deferred<unknown>(extractImportedPoseSequence as jest.Mock);
     const renderer = await renderScreen('library');
     pressByLabel(renderer, 'Forehand drive');
-    const selector = renderer.root.findByType(TargetSelector);
     await act(async () => {
-      selector.props.onSkip();
+      scoreAction(renderer)();
     });
     await flush();
     const [header] = renderer.root.findAll(

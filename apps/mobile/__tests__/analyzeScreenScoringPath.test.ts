@@ -3,19 +3,15 @@
 // it, so the db module is replaced wholesale.
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 
-import {
-  clipSupportsScoring,
-  importedClipNeedsTargetTap,
-} from '../src/screens/AnalyzeScreen';
+import { clipSupportsScoring } from '../src/screens/AnalyzeScreen';
 import { assertCapturedClip } from '../src/camera/capture';
-import type { TargetSelection } from '../src/camera/TargetSelector';
 
 /**
  * Saved-phase scoring state machine (AnalyzeScreen).
  *
  * The product contract: guided captures score from their recorded pose
- * sequence; imported videos enter the scoring flow through the
- * tap-the-person selector (declare stroke → tap yourself → analyze).
+ * sequence; imported videos always enter the scoring flow (declare stroke →
+ * analyze, with the player selected automatically).
  * This locks in the branch that a narrowing bug once made unreachable.
  */
 
@@ -112,44 +108,13 @@ const importedClip = assertCapturedClip({
   ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
 });
 
-const seed: TargetSelection = {
-  point: { x: 0.42, y: 0.63 },
-  selectedAtIso: '2026-08-28T00:00:00.000Z',
-};
-
 describe('AnalyzeScreen saved-phase scoring gate', () => {
   it('admits guided captures only when the recorded pose sequence exists', () => {
     expect(clipSupportsScoring(automaticClipWithPoseSequence)).toBe(true);
     expect(clipSupportsScoring(automaticClipWithoutPoseSequence)).toBe(false);
   });
 
-  it('always admits imported videos so the tap-the-person path is reachable', () => {
+  it('always admits imported videos', () => {
     expect(clipSupportsScoring(importedClip)).toBe(true);
-  });
-
-  it('requires the target tap for imported clips once a stroke is declared', () => {
-    expect(
-      importedClipNeedsTargetTap(importedClip, 'forehand_drive', null),
-    ).toBe(true);
-  });
-
-  it('waits for a stroke declaration before asking for the tap', () => {
-    expect(importedClipNeedsTargetTap(importedClip, null, null)).toBe(false);
-  });
-
-  it('stops asking once a target seed is confirmed', () => {
-    expect(
-      importedClipNeedsTargetTap(importedClip, 'forehand_drive', seed),
-    ).toBe(false);
-  });
-
-  it('never asks guided captures for a tap — their seed was locked live', () => {
-    expect(
-      importedClipNeedsTargetTap(
-        automaticClipWithPoseSequence,
-        'forehand_drive',
-        null,
-      ),
-    ).toBe(false);
   });
 });

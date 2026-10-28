@@ -96,6 +96,13 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     .replace(/\s+/g, ' ');
 }
 
+function viewLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
+  return renderer.root
+    .findAllByType(View)
+    .map(node => node.props.accessibilityLabel)
+    .filter((label): label is string => typeof label === 'string');
+}
+
 const INTERACTIVE_PROPS = [
   'onPress',
   'onPressIn',
@@ -160,14 +167,16 @@ describe('PlayerRankCard button ledger', () => {
     const renderer = await render(deviceFacts());
     const copy = allText(renderer);
     expect(copy).toContain('Gold');
-    // D-046: estimated DUPR first (5.5 → 2.85), the /10 beneath, the tier
-    // distance as the DUPR gap to Platinum's 6.5 → 3.00.
-    expect(copy).toContain('2.85');
+    // D-046: estimated DUPR first (5.5 → 3.27), the /10 beneath, the tier
+    // distance as the DUPR gap to Platinum's 6.5 → 3.50.
+    expect(copy).toContain('3.27');
     expect(copy).toContain('5.50 /10');
-    expect(copy).toContain('0.15 to Platinum');
-    expect(copy).toContain('Not an official DUPR rating.');
-    expect(copy).toContain('Computed on this device');
-    expect(copy).not.toContain('Saved to your account.');
+    expect(copy).toContain('0.23 to Platinum');
+    // The card stays compact: the host page carries the DUPR disclaimer, and
+    // the ladder, technique chips and source notes are gone.
+    expect(copy).not.toContain('Not an official DUPR rating.');
+    expect(copy).not.toContain('Computed on this device');
+    expect(copy).not.toContain('Current form across');
     expectNoControls(renderer);
     expect(mockMaybeCelebrate).toHaveBeenCalledTimes(1);
     expect(mockMaybeCelebrate.mock.calls[0]?.[0]).toMatchObject({
@@ -179,21 +188,18 @@ describe('PlayerRankCard button ledger', () => {
 
   it('exposes a descriptive accessibility label on the tier row', async () => {
     const renderer = await render(deviceFacts());
-    const labels = renderer.root
-      .findAllByType(View)
-      .map(node => node.props.accessibilityLabel)
-      .filter((label): label is string => typeof label === 'string');
+    const labels = viewLabels(renderer);
     expect(
       labels.some(
         label =>
           label.startsWith('Player rank Gold') &&
           label.includes(
-            'Estimated DUPR 2.85, technique rating 5.50 out of 10',
+            'Estimated DUPR 3.27, technique rating 5.50 out of 10',
           ) &&
           label.includes('1 technique.'),
       ),
     ).toBe(true);
-    expect(labels).toContain('Rank ladder position: Gold');
+    expect(labels).not.toContain('Rank ladder position: Gold');
     act(() => renderer.unmount());
   });
 });
@@ -224,9 +230,11 @@ describe('PlayerRankCard account-rank fetch (its only async path)', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Diamond');
     expect(copy).toContain('7.60');
-    expect(copy).toContain('Saved to your account.');
     expect(copy).toContain('Top tier — every new analysis defends it.');
-    expect(copy).toContain('third shot drop');
+    // The account rank's own evidence, not the two local dinks.
+    expect(
+      viewLabels(renderer).some(label => label.includes('2 techniques.')),
+    ).toBe(true);
     expectNoControls(renderer);
     // The account rank is reported to the ceremony store as the latest resolve.
     expect(mockMaybeCelebrate).toHaveBeenLastCalledWith(
@@ -243,9 +251,8 @@ describe('PlayerRankCard account-rank fetch (its only async path)', () => {
     expect(mockFetchPlayerRank).toHaveBeenCalledTimes(1);
     const copy = allText(renderer);
     expect(copy).toContain('Gold');
-    expect(copy).toContain('Computed on this device');
-    expect(copy).toContain('syncs to your account automatically');
-    expect(copy).not.toContain('Saved to your account.');
+    expect(copy).toContain('3.27');
+    expect(copy).toContain('0.23 to Platinum');
     expectNoControls(renderer);
     act(() => renderer.unmount());
   });
@@ -268,7 +275,7 @@ describe('PlayerRankCard account-rank fetch (its only async path)', () => {
     const renderer = await render(deviceFacts());
     const copy = allText(renderer);
     expect(copy).toContain('Gold');
-    expect(copy).toContain('Computed on this device');
+    expect(copy).toContain('3.27');
     act(() => renderer.unmount());
   });
 
@@ -289,7 +296,9 @@ describe('PlayerRankCard account-rank fetch (its only async path)', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Silver');
     expect(copy).toContain('3.90');
-    expect(copy).toContain('0 techniques');
+    expect(
+      viewLabels(renderer).some(label => label.includes('0 techniques.')),
+    ).toBe(true);
     expectNoControls(renderer);
     act(() => renderer.unmount());
   });

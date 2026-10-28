@@ -102,6 +102,17 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     .replace(/\s+/g, ' ');
 }
 
+/** The seven week dots, oldest first, as their state names. */
+function weekStates(renderer: TestRenderer.ReactTestRenderer): string[] {
+  return renderer.root
+    .findAll(
+      node =>
+        typeof node.type === 'string' &&
+        String(node.props.testID).startsWith('consistency-day-'),
+    )
+    .map(node => String(node.props.testID).replace('consistency-day-', ''));
+}
+
 describe('ConsistencyCard button ledger', () => {
   it('consistency-card -> onPress navigates to StreakCalendar (secured run)', () => {
     const navigate = jest.fn();
@@ -111,7 +122,7 @@ describe('ConsistencyCard button ledger', () => {
     expect(card.props.accessibilityRole).toBe('button');
     expect(securedSnapshot.currentStreak).toBe(3);
     expect(card.props.accessibilityLabel).toBe(
-      `Consistency. 3 days training streak, momentum level ${securedSnapshot.momentum.level}. Opens the streak calendar.`,
+      'Streak: 3 days. Opens the streak calendar.',
     );
     expect(card.props.disabled).toBeUndefined();
     expect(card.props.accessibilityState).toMatchObject({
@@ -134,10 +145,23 @@ describe('ConsistencyCard button ledger', () => {
     expect(findCard(renderer).props.disabled).toBeUndefined();
 
     const copy = allText(renderer);
+    expect(copy).toContain('3-day streak');
     expect(copy).toContain('Day 3 secured · 3 of the last 7 days');
-    expect(copy).toContain(`MOMENTUM LV ${securedSnapshot.momentum.level}`);
-    expect(copy).toContain(`${securedSnapshot.momentumXp} XP`);
-    expect(copy).toContain('NEXT: WEEK ONE · 4 DAYS AWAY');
+    // Momentum, shields and milestones live on the calendar, not the card.
+    expect(copy).not.toContain('MOMENTUM');
+    expect(copy).not.toContain('XP');
+    expect(copy).not.toContain('NEXT:');
+    // Mar 4–10, oldest first: the run is Mar 8, 9 and 10 (today).
+    expect(weekStates(renderer)).toEqual([
+      'rest',
+      'rest',
+      'rest',
+      'rest',
+      'trained',
+      'trained',
+      'trained',
+    ]);
+    expect(copy).toContain('W T F S S M T');
     act(() => renderer.unmount());
   });
 
@@ -150,6 +174,16 @@ describe('ConsistencyCard button ledger', () => {
     expect(copy).toContain(
       'No training yet today — one analysis keeps it alive.',
     );
+    // Today (Mar 11) is still open: the last dot is a rest day.
+    expect(weekStates(renderer)).toEqual([
+      'rest',
+      'rest',
+      'rest',
+      'trained',
+      'trained',
+      'trained',
+      'rest',
+    ]);
 
     act(() => {
       findCard(renderer).props.onPress();
@@ -165,14 +199,14 @@ describe('ConsistencyCard button ledger', () => {
 
     expect(card.props.accessibilityRole).toBe('button');
     expect(card.props.accessibilityLabel).toBe(
-      'Consistency. 0 days training streak, momentum level 1. Opens the streak calendar.',
+      'Streak: 0 days. Opens the streak calendar.',
     );
 
     const copy = allText(renderer);
+    expect(copy).toContain('No streak yet');
     expect(copy).toContain('Your first analysis lights the flame.');
-    expect(copy).toContain('MOMENTUM LV 1');
-    expect(copy).toContain('0 XP');
-    expect(copy).not.toContain('NEXT:');
+    // Before a snapshot exists the week still renders: seven open days.
+    expect(weekStates(renderer)).toEqual(Array(7).fill('rest'));
 
     act(() => {
       card.props.onPress();
@@ -191,14 +225,39 @@ describe('ConsistencyCard button ledger', () => {
     const onPress = jest.fn();
     const renderer = renderCard(emptySnapshot, onPress);
     const copy = allText(renderer);
+    expect(copy).toContain('No streak yet');
     expect(copy).toContain('Your first analysis lights the flame.');
-    // The engine advertises the first milestone even before any training.
-    expect(copy).toContain('NEXT: FIRST SPARK · 1 DAY AWAY');
+    expect(weekStates(renderer)).toEqual(Array(7).fill('rest'));
 
     act(() => {
       findCard(renderer).props.onPress();
     });
     expect(onPress).toHaveBeenCalledTimes(1);
+    act(() => renderer.unmount());
+  });
+
+  it('marks a shield-bridged day with its own dot', () => {
+    const shielded = {
+      ...securedSnapshot,
+      days: {
+        ...securedSnapshot.days,
+        '2026-03-07': {
+          ...securedSnapshot.days['2026-03-08']!,
+          day: '2026-03-07',
+          shielded: true,
+        },
+      },
+    };
+    const renderer = renderCard(shielded, () => undefined);
+    expect(weekStates(renderer)).toEqual([
+      'rest',
+      'rest',
+      'rest',
+      'shielded',
+      'trained',
+      'trained',
+      'trained',
+    ]);
     act(() => renderer.unmount());
   });
 

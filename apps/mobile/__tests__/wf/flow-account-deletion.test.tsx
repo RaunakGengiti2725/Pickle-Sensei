@@ -405,7 +405,7 @@ describe('Exit survey — what rides along with the step-1 request', () => {
         wanted: 'price',
         details: '$60 a year is steep for a rec player.',
         platform: 'ios',
-        appVersion: '1.0',
+        appVersion: '1.1',
       },
     });
     expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
@@ -450,7 +450,7 @@ describe('Exit survey — what rides along with the step-1 request', () => {
         wanted: null,
         details: null,
         platform: 'ios',
-        appVersion: '1.0',
+        appVersion: '1.1',
       },
     });
     act(() => renderer.unmount());

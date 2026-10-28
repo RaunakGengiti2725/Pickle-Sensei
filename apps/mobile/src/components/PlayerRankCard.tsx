@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
-import { Card, RevealFill } from '../design/components';
-import { color, radius, space, type } from '../design/tokens';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Card } from '../design/components';
+import { color, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
 import type { RealAnalysisFact } from '../data/repository';
 import {
@@ -12,13 +11,12 @@ import {
 } from '../progress/playerRank';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
 import {
-  DUPR_ESTIMATE_NOTE,
   DUPR_LABEL,
   formatDupr,
   formatDuprDistance,
   formatTechniqueScore,
 } from '../progress/duprEstimate';
-import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
+import { RankIcon } from './RankIcon';
 
 /**
  * The player's personal rank (Bronze → Silver → Gold → Platinum → Diamond).
@@ -31,21 +29,20 @@ import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
  * renders `<PlayerRankCard facts={facts} />`.
  *
  * Every figure prints as an estimated DUPR (D-046) — the headline rating
- * with its "/10" reading beneath, the distance to the next tier and the
- * technique chips — while the tier math stays on the 0–10 rating.
+ * with its "/10" reading beneath and the distance to the next tier — while
+ * the tier math stays on the 0–10 rating. The host page carries the DUPR
+ * disclaimer.
  */
 
-const TOP_OF_SCALE = 10;
-
-/** Fill fraction (0..1) of one tier segment on the ladder. */
-function segmentFill(rating: number, index: number): number {
-  const floor = PLAYER_RANK_TIERS[index]!.minRating;
-  const ceiling = PLAYER_RANK_TIERS[index + 1]?.minRating ?? TOP_OF_SCALE;
-  if (ceiling <= floor) return rating >= floor ? 1 : 0;
-  return Math.max(0, Math.min(1, (rating - floor) / (ceiling - floor)));
-}
-
-export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
+export function PlayerRankCard(props: {
+  facts: RealAnalysisFact[];
+  /** Told whether the card shows an estimated rating (local or account),
+   * so the host can keep the estimate disclaimer on screen with it. */
+  onRatingShown?: (shown: boolean) => void;
+}) {
+  // Large text: the rating drops below the tier row so the tier name keeps
+  // the card's full width.
+  const stacked = useWindowDimensions().fontScale > 1.3;
   const [serverRank, setServerRank] = useState<ServerPlayerRank | null>(null);
 
   useEffect(() => {
@@ -81,19 +78,21 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
     if (resolved) void maybeCelebrate(resolved.summary);
   }, [maybeCelebrate, resolved]);
 
+  const { onRatingShown } = props;
+  useEffect(() => {
+    onRatingShown?.(resolved !== null);
+  }, [onRatingShown, resolved]);
+
   if (!resolved) {
     return (
       <Card tone="dark" style={styles.card} testID="player-rank-card">
-        <View style={styles.headerRow}>
-          <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
-        </View>
-        <View style={styles.unrankedRow}>
+        <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
+        <View style={styles.tierRow}>
           <RankIcon tier={null} size={46} />
           <View style={styles.flex}>
             <Text style={[type.h3, { color: color.onDark }]}>Unranked</Text>
-            <Text style={[type.caption, styles.unrankedCopy]}>
-              Your first scored analysis places you. Your rank tracks your
-              current form — recent swings count most.
+            <Text style={[type.caption, styles.tierDetail]}>
+              Your first scored analysis places you.
             </Text>
           </View>
         </View>
@@ -101,32 +100,31 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
     );
   }
 
-  const { summary, source } = resolved;
+  const { summary } = resolved;
   const techniqueNoun =
     summary.techniqueCount === 1 ? 'technique' : 'techniques';
-  const sourceNote =
-    source === 'account'
-      ? 'Saved to your account.'
-      : 'Computed on this device — syncs to your account automatically.';
+  const rating = (
+    <View
+      style={[styles.ratingWrap, stacked && styles.ratingStacked]}
+      testID="player-rank-card-rating"
+    >
+      <Text style={styles.rating}>
+        {formatDupr(summary.rating)}
+        <Text style={[type.caption, styles.ratingScale]}>
+          {` ${DUPR_LABEL}`}
+        </Text>
+      </Text>
+      <Text style={[type.micro, styles.ratingTechnique]}>
+        {formatTechniqueScore(summary.rating, 2)}
+      </Text>
+    </View>
+  );
 
   return (
     <Card tone="dark" style={styles.card} testID="player-rank-card">
-      <View style={styles.headerRow}>
-        <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
-        <View style={styles.ratingWrap} testID="player-rank-card-rating">
-          <Text style={styles.rating}>
-            {formatDupr(summary.rating)}
-            <Text style={[type.caption, styles.ratingScale]}>
-              {` ${DUPR_LABEL}`}
-            </Text>
-          </Text>
-          <Text style={[type.micro, styles.ratingTechnique]}>
-            {formatTechniqueScore(summary.rating, 2)}
-          </Text>
-        </View>
-      </View>
-
+      <Text style={[type.micro, styles.eyebrow]}>PLAYER RANK</Text>
       <View
+        accessible
         accessibilityLabel={`Player rank ${summary.tierLabel} ${
           summary.divisionLabel
         }. Estimated DUPR ${formatDupr(
@@ -136,73 +134,29 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
         )} out of 10, from your current form across ${
           summary.techniqueCount
         } ${techniqueNoun}.`}
-        style={styles.tierRow}
       >
-        <RankIcon tier={summary.tier} division={summary.division} size={52} />
-        <View style={styles.flex}>
-          <Text style={[type.h2, { color: color.onDark }]}>
-            {summary.tierLabel}{' '}
-            <Text style={{ color: color.onDarkMuted }}>
-              {summary.divisionLabel}
+        <View style={styles.tierRow}>
+          <RankIcon tier={summary.tier} division={summary.division} size={52} />
+          <View style={styles.flex}>
+            <Text style={[type.h2, { color: color.onDark }]}>
+              {summary.tierLabel}{' '}
+              <Text style={{ color: color.onDarkMuted }}>
+                {summary.divisionLabel}
+              </Text>
             </Text>
-          </Text>
-          <Text style={[type.caption, styles.tierDetail]}>
-            {summary.nextTier
-              ? `${formatDuprDistance(
-                  summary.rating,
-                  summary.nextTier.minRating,
-                )} to ${summary.nextTier.label}`
-              : 'Top tier — every new analysis defends it.'}
-          </Text>
-        </View>
-      </View>
-
-      <View
-        accessibilityLabel={`Rank ladder position: ${summary.tierLabel}`}
-        style={styles.ladder}
-      >
-        {PLAYER_RANK_TIERS.map((tier, index) => {
-          const fill = segmentFill(summary.rating, index);
-          return (
-            <View key={tier.key} style={styles.ladderSegment}>
-              {fill > 0 ? (
-                <RevealFill
-                  delay={index * 60}
-                  style={[
-                    styles.ladderFill,
-                    {
-                      width: `${fill * 100}%`,
-                      backgroundColor: RANK_TIER_STYLE[tier.key].accent,
-                    },
-                  ]}
-                />
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
-
-      <View style={styles.techniqueWrap}>
-        {summary.techniques.map(technique => (
-          <View key={technique.shotType} style={styles.techniqueChip}>
-            <Text style={[type.micro, styles.techniqueChipLabel]}>
-              {technique.shotType.replace(/_/g, ' ')}{' '}
-              {formatDupr(technique.score)}
+            <Text style={[type.caption, styles.tierDetail]}>
+              {summary.nextTier
+                ? `${formatDuprDistance(
+                    summary.rating,
+                    summary.nextTier.minRating,
+                  )} to ${summary.nextTier.label}`
+                : 'Top tier — every new analysis defends it.'}
             </Text>
           </View>
-        ))}
+          {stacked ? null : rating}
+        </View>
+        {stacked ? rating : null}
       </View>
-
-      <Text style={[type.caption, styles.formulaNote]}>
-        Current form across {summary.techniqueCount} {techniqueNoun} — your
-        newest swings count most, and proven strokes weigh more. {sourceNote}
-      </Text>
-      <Text
-        style={[type.caption, styles.duprNote]}
-        testID="player-rank-card-dupr-note"
-      >
-        {DUPR_ESTIMATE_NOTE}
-      </Text>
     </Card>
   );
 }
@@ -215,13 +169,9 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   eyebrow: { color: color.volt },
   ratingWrap: { alignItems: 'flex-end' },
+  ratingStacked: { alignItems: 'flex-start', marginTop: space.md },
   rating: {
     ...type.score,
     color: color.onDark,
@@ -238,45 +188,4 @@ const styles = StyleSheet.create({
     marginTop: space.md,
   },
   tierDetail: { color: color.onDarkSubtle, marginTop: 2 },
-  ladder: {
-    flexDirection: 'row',
-    gap: 5,
-    marginTop: space.md,
-  },
-  ladderSegment: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: color.onDarkTint,
-    overflow: 'hidden',
-  },
-  ladderFill: { height: '100%', borderRadius: 3 },
-  techniqueWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: space.md,
-  },
-  techniqueChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: color.onDarkTint,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineMutedDark,
-  },
-  techniqueChipLabel: {
-    color: color.onDark,
-    letterSpacing: 0.4,
-    textTransform: 'capitalize',
-  },
-  formulaNote: { color: color.onDarkSubtle, marginTop: space.md },
-  duprNote: { color: color.onDarkFaint, marginTop: space.sm },
-  unrankedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm + 4,
-    marginTop: space.md,
-  },
-  unrankedCopy: { color: color.onDarkSubtle, marginTop: 2 },
 });

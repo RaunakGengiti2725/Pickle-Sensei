@@ -47,7 +47,9 @@ import { plural } from '../util/plural';
  * page — the banner unfolds in place with a brief transition, showing
  * the full tier ladder, the player's division, every contributing
  * technique, and how the form-weighted rating works. Tap again to fold it
- * away. The streak block is its own press target (→ the Consistency page).
+ * away. A host that passes `streakDays` also gets a streak block, its own
+ * press target (→ the Consistency page); Home omits it since the 2026-09-24
+ * simplification, because its top-bar flame chip already shows the streak.
  *
  * Data rules are unchanged from PlayerRankCard: account-saved rank when it
  * has seen the most evidence, local compute otherwise; no rank is ever
@@ -82,7 +84,8 @@ export function tierRangeLabel(index: number): string {
 
 export function PlayerRankBanner(props: {
   shots: readonly PlayerRankFactLike[];
-  streakDays: number;
+  /** Omitted → no streak block (the host shows the streak elsewhere). */
+  streakDays?: number;
   streakAtRisk?: boolean;
   onPressStreak?: () => void;
 }) {
@@ -201,7 +204,8 @@ export function PlayerRankBanner(props: {
         summary.rating,
       )}, technique rating ${summary.rating.toFixed(2)} out of 10.`
     : 'Player rank: unranked.';
-  const intensity = flameIntensityForStreak(props.streakDays);
+  const streakDays = props.streakDays;
+  const intensity = flameIntensityForStreak(streakDays ?? 0);
 
   return (
     <View style={styles.banner} testID="player-rank-banner">
@@ -280,36 +284,38 @@ export function PlayerRankBanner(props: {
             <Icon name="chevron" color={color.onDarkFaint} size={16} />
           </Animated.View>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${props.streakDays} ${plural(
-            props.streakDays,
-            'day',
-          )} training streak${
-            props.streakAtRisk ? ', at risk — no training yet today' : ''
-          }. Opens the consistency calendar.`}
-          disabled={!props.onPressStreak}
-          onPress={props.onPressStreak}
-          style={[styles.streakBlock, stacked && styles.streakBlockStacked]}
-          testID="player-rank-banner-streak"
-        >
-          <View style={styles.streakTop}>
-            <AnimatedFlame intensity={intensity} size={18} dark />
-            <Text style={styles.streakCount}>{props.streakDays}</Text>
-          </View>
-          <Text
-            style={[
-              styles.streakLabel,
-              props.streakAtRisk && props.streakDays > 0
-                ? styles.streakLabelAtRisk
-                : null,
-            ]}
+        {streakDays === undefined ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${streakDays} ${plural(
+              streakDays,
+              'day',
+            )} training streak${
+              props.streakAtRisk ? ', at risk — no training yet today' : ''
+            }. Opens the consistency calendar.`}
+            disabled={!props.onPressStreak}
+            onPress={props.onPressStreak}
+            style={[styles.streakBlock, stacked && styles.streakBlockStacked]}
+            testID="player-rank-banner-streak"
           >
-            {props.streakAtRisk && props.streakDays > 0
-              ? 'KEEP IT ALIVE'
-              : 'DAY STREAK'}
-          </Text>
-        </Pressable>
+            <View style={styles.streakTop}>
+              <AnimatedFlame intensity={intensity} size={18} dark />
+              <Text style={styles.streakCount}>{streakDays}</Text>
+            </View>
+            <Text
+              style={[
+                styles.streakLabel,
+                props.streakAtRisk && streakDays > 0
+                  ? styles.streakLabelAtRisk
+                  : null,
+              ]}
+            >
+              {props.streakAtRisk && streakDays > 0
+                ? 'KEEP IT ALIVE'
+                : 'DAY STREAK'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {foldOutMounted ? (

@@ -2,8 +2,8 @@
   "$comment": "Release operations manifest (i32-release-operations). Single source of truth for version scheme, environment separation, monitoring hooks, and rollback hooks. Companion prose: docs/RELEASE_OPERATIONS.md; staged-rollout plan: docs/RELEASE_PLAN_V1.md. Validated by `pnpm release:check` (tools/release/check-release-manifest.mjs). This file DEFINES operations; it executes nothing. Every entry with requiresHumanAuthorization=true is an irreversible action that must not be performed without an explicit human GO decision recorded in docs/DECISIONS.md.",
   "schemaVersion": 1,
   "versionScheme": {
-    "marketingVersion": "1.0",
-    "buildNumber": 1,
+    "marketingVersion": "1.1",
+    "buildNumber": 6,
     "rules": {
       "marketingVersion": "MAJOR.MINOR.PATCH; MUST equal iOS MARKETING_VERSION, Android versionName, and APP_VERSION in apps/mobile/src/config/runtimeConfig.ts",
       "buildNumber": "monotonically increasing integer across all releases; MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode; never reused or reset",

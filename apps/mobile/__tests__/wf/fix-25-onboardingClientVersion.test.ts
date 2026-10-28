@@ -37,7 +37,7 @@ describe('onboarding X-Client-Version header', () => {
   const expected = getRuntimePublicConfig().appVersion;
 
   it('matches the shipped app version and never the stale 0.1.0 literal', () => {
-    expect(expected).toBe('1.0');
+    expect(expected).toBe('1.1');
     expect(expected).not.toBe('0.1.0');
   });
 

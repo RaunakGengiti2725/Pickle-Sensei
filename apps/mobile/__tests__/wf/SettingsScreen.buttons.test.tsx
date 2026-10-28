@@ -436,22 +436,14 @@ describe('SettingsScreen button ledger', () => {
   });
 
   describe('Player', () => {
-    it('Consistency -> StreakCalendar', () => {
+    it('sums the profile up in the account header instead of read-only rows', () => {
       const renderer = renderScreen();
-      expect(rowLabel(renderer, 'Consistency')).toBe(
-        'Consistency, 2 day streak · 1 badge',
-      );
-      press(renderer, 'Consistency, 2 day streak · 1 badge');
-      expect(mockNavigate).toHaveBeenCalledTimes(1);
-      expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');
-      act(() => renderer.unmount());
-    });
-
-    it('Consistency stays tappable with an honest placeholder before the first snapshot', () => {
-      useConsistencyStore.setState({ snapshot: null });
-      const renderer = renderScreen();
-      press(renderer, 'Consistency, —');
-      expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');
+      const copy = allText(renderer);
+      expect(copy).toContain('Signed in with Google');
+      expect(copy).toContain('Intermediate · Right-handed');
+      // The streak lives on Home and Progress; Settings holds settings.
+      expect(rowLabel(renderer, 'Consistency')).toBeNull();
+      expect(copy).not.toContain('2 day streak');
       act(() => renderer.unmount());
     });
 
@@ -699,10 +691,10 @@ describe('SettingsScreen button ledger', () => {
       const renderer = renderScreen();
       press(renderer, 'Sign out');
       const nodes = renderer.root.findAllByType(PressableScale);
-      // Guest layout: Connect account, Pro, Consistency, Notifications,
-      // Data & consent, Rate, Walkthrough, Privacy, Terms, Sign out row,
-      // dialog X, Keep me signed in, Sign out (confirm).
-      expect(nodes).toHaveLength(13);
+      // Guest layout: Connect account, Pro, Notifications, Data & consent,
+      // Rate, Walkthrough, Privacy, Terms, Sign out row, dialog X, Keep me
+      // signed in, Sign out (confirm).
+      expect(nodes).toHaveLength(12);
       for (const node of nodes) {
         expect(typeof node.props.onPress).toBe('function');
         expect(typeof node.props.accessibilityLabel).toBe('string');
@@ -715,7 +707,7 @@ describe('SettingsScreen button ledger', () => {
       act(() => renderer.unmount());
     });
 
-    it('synced layout swaps Connect account for Manage account (13 pressables)', () => {
+    it('synced layout swaps Connect account for Manage account (12 pressables)', () => {
       const renderer = renderScreen();
       press(renderer, 'Sign out');
       const labels = renderer.root
@@ -723,7 +715,6 @@ describe('SettingsScreen button ledger', () => {
         .map(node => String(node.props.accessibilityLabel));
       expect(labels).toEqual([
         'Pickle Sensei Pro, 1 free rating left',
-        'Consistency, 2 day streak · 1 badge',
         'Notifications, Daily · 5:30 PM',
         'Data & consent, Training: off',
         'Rate Pickle Sensei, App Store',

@@ -24,59 +24,58 @@ import {
 /**
  * D-046: the headline rating is an estimated DUPR, always labelled an
  * estimate, with the 0–10 figure kept as the smaller secondary reading. The
- * map is NOT a straight line: DUPR is bunched in the 3s, 5.0+ is the top
- * ~0.7% of rated players and 6.0+ is about 190 people, so the scoring
- * engine's own band boundaries (checkpoints red < 65, yellow 65–79, green
- * ≥ 80) are anchored to DUPR's published bands (Novice < 3, Intermediate
- * 3–4, Advanced 4–5, Professional 5+) and everything between is linear.
- * These tests pin that shape so a display tweak can't silently change the
- * number a player sees.
+ * estimate spans DUPR's full published scale — 0/10 is 2.00 and a perfect
+ * 10/10 is 8.00 (owner, 2026-09-11) — and the map is NOT a straight line:
+ * DUPR is bunched in the 3s and sparse at the top, so the scoring engine's
+ * own band boundaries (checkpoints red < 65, yellow 65–79, green ≥ 80) are
+ * anchored to evenly spaced 1.5-DUPR steps of the 2–8 scale and everything
+ * between is linear. These tests pin that shape so a display tweak can't
+ * silently change the number a player sees.
  */
 
 describe('duprFromScore', () => {
-  it('anchors the scoring engine’s band boundaries to DUPR’s skill bands', () => {
+  it('spans DUPR’s full 2–8 scale and anchors the scoring engine’s band boundaries', () => {
     expect(DUPR_MIN).toBe(2);
-    expect(DUPR_CEILING).toBe(6);
-    expect(DUPR_SCALE_MAX).toBe(8);
+    expect(DUPR_CEILING).toBe(8);
+    expect(DUPR_CEILING).toBe(DUPR_SCALE_MAX);
     expect(DUPR_ANCHORS).toEqual([
       [0, 2],
-      [6.5, 3],
-      [8, 4],
-      [9.5, 5],
-      [10, 6],
+      [6.5, 3.5],
+      [8, 5],
+      [9.5, 6.5],
+      [10, 8],
     ]);
-    // A red-band average (checkpoints < 65) stays in the Novice band.
+    // A red-band average (checkpoints < 65) stays in the bottom quarter.
     expect(duprFromScore(0)).toBe(2);
-    expect(duprFromScore(6.5)).toBe(3);
-    // The green threshold (checkpoints averaging 80) is the Advanced line.
-    expect(duprFromScore(8)).toBe(4);
-    // Near-perfect form reaches the Professional line; perfect form on one
-    // swing is pro-level mechanics, and the estimate never goes higher.
-    expect(duprFromScore(9.5)).toBe(5);
-    expect(duprFromScore(10)).toBe(6);
+    expect(duprFromScore(6.5)).toBe(3.5);
+    // The green threshold (checkpoints averaging 80) is the midpoint.
+    expect(duprFromScore(8)).toBe(5);
+    // Near-perfect form reaches the top quarter; perfect form on one swing
+    // is the top of the DUPR scale, and the estimate never goes higher.
+    expect(duprFromScore(9.5)).toBe(6.5);
+    expect(duprFromScore(10)).toBe(8);
   });
 
-  it('keeps a failing swing in the novice range and the median rated player near 3.3', () => {
+  it('keeps a failing swing in the low 3s and the middle of the scale one DUPR per point', () => {
     // The owner's example: 5.8/10 is a poor swing, not a 5.48 DUPR.
-    expect(duprFromScore(5.8)).toBe(2.89);
-    expect(duprFromScore(5)).toBe(2.77);
-    expect(duprFromScore(3)).toBe(2.46);
-    // 7.0 ≈ the median rated player (~3.3); 7.8 ≈ the median tournament
-    // player (~3.8); 9.0 is a strong Advanced player.
-    expect(duprFromScore(7)).toBe(3.33);
-    expect(duprFromScore(7.8)).toBe(3.87);
-    expect(duprFromScore(9)).toBe(4.67);
+    expect(duprFromScore(5.8)).toBe(3.34);
+    expect(duprFromScore(5)).toBe(3.15);
+    expect(duprFromScore(3)).toBe(2.69);
+    // Through the middle a technique point is worth one DUPR point.
+    expect(duprFromScore(7)).toBe(4);
+    expect(duprFromScore(7.8)).toBe(4.8);
+    expect(duprFromScore(9)).toBe(6);
   });
 
   it('interpolates linearly inside each segment, two decimals', () => {
-    expect(duprFromScore(6.4)).toBe(2.98);
-    expect(duprFromScore(7.1)).toBe(3.4);
-    expect(duprFromScore(8.5)).toBe(4.33);
-    expect(duprFromScore(9.9)).toBe(5.8);
+    expect(duprFromScore(6.4)).toBe(3.48);
+    expect(duprFromScore(7.1)).toBe(4.1);
+    expect(duprFromScore(8.5)).toBe(5.5);
+    expect(duprFromScore(9.9)).toBe(7.7);
     // The rank rating carries hundredths; the estimate rounds, never truncates.
-    expect(duprFromScore(7.62)).toBe(3.75);
-    expect(duprFromScore(7.02)).toBe(3.35);
-    expect(duprFromScore(3.33)).toBe(2.51);
+    expect(duprFromScore(7.62)).toBe(4.62);
+    expect(duprFromScore(7.02)).toBe(4.02);
+    expect(duprFromScore(3.33)).toBe(2.77);
   });
 
   it('is convex: each higher segment is worth more DUPR per technique point', () => {
@@ -92,7 +91,7 @@ describe('duprFromScore', () => {
 
   it('clamps out-of-range input to the scale ends', () => {
     expect(duprFromScore(-2)).toBe(2);
-    expect(duprFromScore(14)).toBe(6);
+    expect(duprFromScore(14)).toBe(8);
   });
 
   it('never turns a non-finite score into a number', () => {
@@ -126,26 +125,26 @@ describe('duprFromScore', () => {
 
 describe('formatting', () => {
   it('prints the estimate with exactly two decimals', () => {
-    expect(formatDupr(6.4)).toBe('2.98');
-    expect(formatDupr(10)).toBe('6.00');
+    expect(formatDupr(6.4)).toBe('3.48');
+    expect(formatDupr(10)).toBe('8.00');
     expect(formatDupr(0)).toBe('2.00');
   });
 
   it('expresses a change as the difference of the two displayed figures, never a rescaled score gap', () => {
-    // 6.6 → 7.4 crosses the 6.5 anchor: 3.07 → 3.60.
-    expect(duprDelta(6.6, 7.4)).toBe(0.53);
-    expect(duprDelta(7.2, 6.9)).toBe(-0.2);
+    // 6.6 → 7.4 sits on the one-per-point middle segment: 3.60 → 4.40.
+    expect(duprDelta(6.6, 7.4)).toBe(0.8);
+    expect(duprDelta(7.2, 6.9)).toBe(-0.3);
     expect(duprDelta(7.4, 7.4)).toBe(0);
     // The same 0.8-point gain is worth different DUPR at different levels.
-    expect(duprDelta(5, 5.8)).toBe(0.12);
-    expect(duprDelta(9, 9.8)).toBe(0.93);
-    expect(formatDuprDelta(6.6, 7.4)).toBe('+0.53');
-    expect(formatDuprDelta(7.2, 6.9)).toBe('\u22120.20');
+    expect(duprDelta(5, 5.8)).toBe(0.19);
+    expect(duprDelta(9, 9.8)).toBe(1.4);
+    expect(formatDuprDelta(6.6, 7.4)).toBe('+0.80');
+    expect(formatDuprDelta(7.2, 6.9)).toBe('\u22120.30');
     expect(formatDuprDelta(7.4, 7.4)).toBe('+0.00');
     // A rounding-to-zero negative shows as +0.00, never "−0.00".
     expect(formatDuprDelta(7.401, 7.4)).toBe('+0.00');
-    expect(formatDuprDistance(7.02, 7.5)).toBe('0.32');
-    expect(formatDuprDistance(7.5, 7.02)).toBe('0.32');
+    expect(formatDuprDistance(7.02, 7.5)).toBe('0.48');
+    expect(formatDuprDistance(7.5, 7.02)).toBe('0.48');
   });
 
   it('keeps the 0–10 reading as the secondary line at the caller’s precision', () => {
@@ -156,10 +155,10 @@ describe('formatting', () => {
 
   it('reads both figures aloud and says which is which', () => {
     expect(duprAccessibilityLabel(6.4)).toBe(
-      'Estimated DUPR 2.98, technique score 6.4 out of 10',
+      'Estimated DUPR 3.48, technique score 6.4 out of 10',
     );
     expect(duprAccessibilityLabel(7.62, 2)).toBe(
-      'Estimated DUPR 3.75, technique score 7.62 out of 10',
+      'Estimated DUPR 4.62, technique score 7.62 out of 10',
     );
   });
 
@@ -196,7 +195,7 @@ describe('DuprReadout', () => {
       <DuprReadout score={6.4} valueStyle={type.score} dark testID="readout" />,
     );
     try {
-      expect(texts(renderer)).toEqual(['2.98', ' DUPR', '6.4 /10']);
+      expect(texts(renderer)).toEqual(['3.48', ' DUPR', '6.4 /10']);
       const value = renderer.root.findByProps({ testID: 'readout-dupr' });
       expect(value.props.style).toBe(type.score);
       const unit = value
@@ -213,7 +212,7 @@ describe('DuprReadout', () => {
       expect(host.props).toMatchObject({
         accessible: true,
         accessibilityLabel:
-          'Estimated DUPR 2.98, technique score 6.4 out of 10',
+          'Estimated DUPR 3.48, technique score 6.4 out of 10',
       });
     } finally {
       act(() => renderer.unmount());
@@ -225,7 +224,7 @@ describe('DuprReadout', () => {
       <DuprReadout score={7.62} scoreDecimals={2} valueStyle={type.score} />,
     );
     try {
-      expect(texts(renderer)).toEqual(['3.75', ' DUPR', '7.62 /10']);
+      expect(texts(renderer)).toEqual(['4.62', ' DUPR', '7.62 /10']);
     } finally {
       act(() => renderer.unmount());
     }

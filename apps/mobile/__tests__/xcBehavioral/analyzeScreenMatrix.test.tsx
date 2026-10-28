@@ -684,15 +684,15 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
     }
   });
 
-  describe('simultaneous scoring + re-capture in one tick: only the first action owns the clip', () => {
-    for (const seed of scenarioSeeds('simultaneousScoreAndCapture')) {
+  describe('simultaneous scoring + close in one tick: the closed surface never routes', () => {
+    for (const seed of scenarioSeeds('simultaneousScoreAndClose')) {
       it(`seed ${seed}`, async () => {
         const random = seededRandom(seed);
         const scoreFirst = random() < 0.5;
         const extraTaps = randomInt(random, 0, 4);
         await recordScenario(
           SUITE,
-          'simultaneousScoreAndCapture',
+          'simultaneousScoreAndClose',
           seed,
           { scoreFirst, extraTaps },
           async () => {
@@ -700,54 +700,41 @@ describe('xc-matrix-behavioral: AnalyzeScreen interaction storms', () => {
             await reachSavedSurface(renderer);
             const analysis = deferred<CaptureAnalysisOutcome>();
             mockOutcome = () => analysis.promise;
-            const camera = deferred<CapturedClip>();
-            mockCaptureImpl = () => camera.promise;
             const score = byText(renderer, 'Get my Technique Score').props
               .onPress as () => void;
-            const again = byText(renderer, 'Record another clip').props
+            // The saved page's only other action is its header Close.
+            const close = byLabel(renderer, 'Close').props
               .onPress as () => void;
-            const capturesBefore = mockCaptureCalls;
             // Both handlers fire inside ONE act — the saved surface has not
             // re-rendered between them.
             act(() => {
               if (scoreFirst) {
                 score();
-                again();
+                close();
               } else {
-                again();
+                close();
                 score();
               }
               for (let i = 0; i < extraTaps; i += 1) {
                 score();
-                again();
+                close();
               }
             });
             await settle();
-            expect(mockAnalysisCalls).toBe(scoreFirst ? 1 : 0);
-            expect(mockCaptureCalls).toBe(
-              capturesBefore + (scoreFirst ? 0 : 1),
-            );
-            expect(isWorking(renderer)).toBe(true);
-            if (scoreFirst) {
-              analysis.resolve(scoredOutcome());
-              await settle();
-              expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
-              expect(mockTriggerSync).toHaveBeenCalledTimes(1);
-            } else {
-              expect(mockNavigation.replace).not.toHaveBeenCalled();
-              expect(mockTriggerSync).not.toHaveBeenCalled();
-            }
-            await act(async () => renderer.unmount());
-            expect(mockCancelSpy).toHaveBeenCalledTimes(scoreFirst ? 0 : 1);
-            if (!scoreFirst)
-              camera.reject(new Error('Camera capture was canceled.'));
+            expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+            // A Close that lands first retires the surface: its score is inert.
+            expect(mockAnalysisCalls).toBeLessThanOrEqual(scoreFirst ? 1 : 0);
+            analysis.resolve(scoredOutcome());
             await settle();
-            expect(mockAnalysisCalls).toBe(scoreFirst ? 1 : 0);
-            expect(mockNavigation.goBack).not.toHaveBeenCalled();
+            expect(mockNavigation.replace).not.toHaveBeenCalled();
+            expect(mockTriggerSync).not.toHaveBeenCalled();
+            await act(async () => renderer.unmount());
+            await settle(1);
+            expect(mockAnalysisCalls).toBeLessThanOrEqual(scoreFirst ? 1 : 0);
+            expect(mockCaptureCalls).toBe(1);
             return {
               analysisCalls: mockAnalysisCalls,
-              captureCalls: mockCaptureCalls - capturesBefore,
-              cancels: mockCancelSpy.mock.calls.length,
+              popToTopCalls: mockNavigation.popToTop.mock.calls.length,
             };
           },
         );

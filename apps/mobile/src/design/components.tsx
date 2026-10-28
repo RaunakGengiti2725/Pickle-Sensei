@@ -31,11 +31,11 @@ import Reanimated, {
 import { bandColor, color, radius, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
 import {
-  DUPR_ESTIMATE_LABEL,
+  DUPR_ESTIMATED_EYEBROW,
+  DUPR_LABEL,
   duprAccessibilityLabel,
   duprFraction,
   formatDupr,
-  formatTechniqueScore,
 } from '../progress/duprEstimate';
 
 const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
@@ -632,16 +632,20 @@ export function SectionTitle(props: {
 const SCORE_RING_SWEEP_MS = 240;
 
 /** The rating ring. `score` is the 0–10 technique score; the big numeral is
- * its estimated DUPR (D-046) under the `label` (default "EST. DUPR"), with
- * the "/10" reading as the smaller line beneath, and the arc is the DUPR's
- * position between the app's lowest and highest estimate (2.00–6.00) so the
- * picture agrees with the printed number — color and label are never
- * color-only. The arc sweeps in and the number counts up once on mount (the
- * score-reveal moment); reduced motion renders the final state immediately. */
+ * its estimated DUPR (D-046), and the arc is the DUPR's position between the
+ * app's lowest and highest estimate (2.00–8.00) so the picture agrees with
+ * the printed number — color and label are never color-only. Inside the
+ * ring (owner, 2026-09-11): the numeral, the unit `DUPR` beneath it in the
+ * `h2` role and a micro `ESTIMATED` eyebrow under that, ALL white on the
+ * dark surface (ink on chalk) — the unit must be read at a glance, so it is
+ * large and bright rather than a caption. The "/10" line is NOT in the ring;
+ * the page's note says the figure derives from the technique score, and
+ * VoiceOver still hears both figures. The arc sweeps in and the number
+ * counts up once on mount (the score-reveal moment); reduced motion renders
+ * the final state immediately. */
 export function ScoreRing(props: {
   score: number | null;
   size?: number;
-  label?: string;
   dark?: boolean;
   accent?: string;
 }) {
@@ -652,6 +656,7 @@ export function ScoreRing(props: {
   const fraction = props.score === null ? 0 : duprFraction(props.score);
   const accent = props.accent ?? color.volt;
   const fg = props.dark ? color.onDark : color.ink;
+  const eyebrowColor = props.dark ? color.onDark : color.inkSoft;
   const track = props.dark ? color.lineDark : color.line;
   const reduced = useReducedMotion();
   const animate = !reduced && props.score !== null;
@@ -734,38 +739,27 @@ export function ScoreRing(props: {
       <Text
         style={[
           type.display,
-          { color: fg, fontSize: size * 0.29, lineHeight: size * 0.33 },
+          { color: fg, fontSize: size * 0.3, lineHeight: size * 0.33 },
         ]}
+        testID="score-ring-dupr"
       >
         {scoreText}
       </Text>
       <Text
-        style={[
-          type.caption,
-          {
-            color: props.dark ? color.onDarkSubtle : color.inkSoft,
-            textAlign: 'center',
-          },
-        ]}
+        style={[type.h2, { color: fg, textAlign: 'center' }]}
+        testID="score-ring-unit"
       >
-        {props.label ?? DUPR_ESTIMATE_LABEL}
+        {DUPR_LABEL}
       </Text>
-      {props.score !== null ? (
-        <Text
-          style={[
-            type.micro,
-            {
-              color: props.dark ? color.onDarkFaint : color.inkSoft,
-              textAlign: 'center',
-              marginTop: 2,
-              fontVariant: ['tabular-nums'],
-            },
-          ]}
-          testID="score-ring-technique-score"
-        >
-          {formatTechniqueScore(props.score)}
-        </Text>
-      ) : null}
+      <Text
+        style={[
+          type.micro,
+          { color: eyebrowColor, textAlign: 'center', marginTop: 2 },
+        ]}
+        testID="score-ring-eyebrow"
+      >
+        {DUPR_ESTIMATED_EYEBROW}
+      </Text>
     </View>
   );
 }

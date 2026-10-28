@@ -209,15 +209,18 @@ describe('Home streak badge hit target (wf fix-21)', () => {
     act(() => renderer.unmount());
   });
 
-  it('renders the seven-day week card from the real analysis facts read', async () => {
+  it('keeps the week chart off Home (it reads no analysis facts)', async () => {
     const renderer = await renderHome();
-    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
+    expect(mockListRealAnalysisFacts).not.toHaveBeenCalled();
     const texts = renderer.root
       .findAllByType(Text)
       .map(node => String(node.props.children));
     expect(texts.some(text => text.includes('Your court is ready.'))).toBe(
-      true,
+      false,
     );
+    expect(
+      texts.some(text => text.includes('Your first read starts here')),
+    ).toBe(true);
     act(() => renderer.unmount());
   });
 });

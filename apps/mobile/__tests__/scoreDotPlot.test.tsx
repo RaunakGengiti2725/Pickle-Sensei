@@ -296,7 +296,7 @@ describe('ScoreDotPlot', () => {
         .findAllByType(Text)
         .filter(node => node.props.testID === 'chart-data-row');
       expect(rows.map(node => node.props.children)).toEqual([
-        '2026-08-28 · Read 1: Estimated DUPR 6.00, technique score 10.0 out of 10',
+        '2026-08-28 · Read 1: Estimated DUPR 8.00, technique score 10.0 out of 10',
         '2026-09-03 · Read 2: Estimated DUPR 2.00, technique score 0.0 out of 10 · Latest read',
       ]);
       expect(texts(renderer)).toContain('Showing reads 1–2 of 2.');
@@ -444,16 +444,16 @@ describe('ScoreDotPlot', () => {
       drawn.filter(node => flat(node)['backgroundColor'] === color.volt),
     ).toHaveLength(1);
     const rendered = texts(renderer);
-    // Value labels are each read's estimated DUPR (5.5 → 2.85, 6.2 → 2.95,
-    // 3.7 → 2.57); the gridlines mark the Advanced (4.00) and Intermediate
-    // (3.00) bands.
+    // Value labels are each read's estimated DUPR (5.5 → 3.27, 6.2 → 3.43,
+    // 3.7 → 2.85); the gridlines mark the engine's green line (8.0 → 5.00)
+    // and red/yellow line (6.5 → 3.50).
     expect(rendered).toEqual(
       expect.arrayContaining([
+        '3.27',
+        '3.43',
         '2.85',
-        '2.95',
-        '2.57',
-        '4.00',
-        '3.00',
+        '5.00',
+        '3.50',
         'Aug 28',
         'Sep 3',
       ]),
@@ -461,10 +461,10 @@ describe('ScoreDotPlot', () => {
     // The latest value label wears the accent.
     const latestLabel = renderer.root
       .findAllByType(Text)
-      .find(node => node.props.children === '2.57')!;
+      .find(node => node.props.children === '2.85')!;
     expect(flat(latestLabel)['color']).toBe(color.volt);
     expect(summary(renderer)).toBe(
-      'Seven day estimated DUPR: 3 scored reads across 3 days, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
+      'Seven day estimated DUPR: 3 scored reads across 3 days, latest Estimated DUPR 2.85, technique score 3.7 out of 10.',
     );
     act(() => renderer.unmount());
   });
@@ -525,7 +525,7 @@ describe('ScoreDotPlot', () => {
       />,
     );
     expect(summary(renderer)).toBe(
-      'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.57, technique score 3.7 out of 10.',
+      'Seven day estimated DUPR: 1 scored read across 1 day, latest Estimated DUPR 2.85, technique score 3.7 out of 10.',
     );
     act(() => renderer.unmount());
   });

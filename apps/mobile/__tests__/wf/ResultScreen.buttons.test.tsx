@@ -991,10 +991,10 @@ describe('Result guide buttons — THIS SET attempt pills (score page)', () => {
     const current = byTestID(renderer, 'practice-set-attempt-a1');
     const other = byTestID(renderer, 'practice-set-attempt-a2');
     expect(current.props.accessibilityLabel).toBe(
-      'Attempt 1 of 2, Estimated DUPR 3.60, technique score 7.4 out of 10',
+      'Attempt 1 of 2, Estimated DUPR 4.40, technique score 7.4 out of 10',
     );
     expect(other.props.accessibilityLabel).toBe(
-      'Attempt 2 of 2, Estimated DUPR 4.07, technique score 8.1 out of 10, latest',
+      'Attempt 2 of 2, Estimated DUPR 5.10, technique score 8.1 out of 10, latest',
     );
     expect(current.props.accessibilityRole).toBe('button');
     await press(current);
@@ -1667,8 +1667,8 @@ describe('ResultDetails buttons — Use as reassessment', () => {
     expect(api.reassessPlan).toHaveBeenCalledWith('plan-1', 'a9');
     expect(textOf(renderer)).toContain('REASSESSMENT VERIFIED');
     // The server's +0.6 from the 7.4 baseline prints as the DUPR change
-    // 3.60 → 4.00.
-    expect(textOf(renderer)).toContain('+0.40 DUPR');
+    // 4.40 → 5.00.
+    expect(textOf(renderer)).toContain('+0.60 DUPR');
     await unmount(renderer);
   });
 

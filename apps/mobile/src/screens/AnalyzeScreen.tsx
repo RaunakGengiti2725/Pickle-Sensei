@@ -53,7 +53,7 @@ import {
   qualityBlockedMessage,
 } from '../camera/captureEnvelope';
 import type { EnvelopeVerdict } from '@pickle/shared-types';
-import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
+import type { TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
 import {
   captureDataOwnerContext,
@@ -248,15 +248,6 @@ export const READINESS_COPY: Record<CameraReadinessState, string> = {
   ready: 'Ready — swing when comfortable',
 };
 
-const UNKNOWN_REASON_COPY: Record<string, string> = {
-  validated_classifier_unavailable:
-    'A validated pickleball stroke classifier is not installed in this build. The real clip is saved, but no stroke name or score was invented.',
-  no_stroke_detected:
-    'The camera did not find a complete stroke window. This did not use a rating.',
-  unsupported_stroke:
-    'The motion is outside the currently validated stroke set. This did not use a rating.',
-};
-
 function StepRow(props: {
   index: string;
   title: string;
@@ -438,49 +429,92 @@ const STROKE_LABELS: Record<ShotTypeSlug, string> = {
   overhead: 'Overhead',
 };
 
+const STROKE_HINTS: Record<ShotTypeSlug, string> = {
+  serve: 'Starts the point',
+  return: 'Answers the serve',
+  forehand_drive: 'Hard, dominant side',
+  backhand_drive: 'Hard, across the body',
+  third_shot_drop: 'Soft, from the back',
+  dink: 'Soft, at the net',
+  volley: 'Before the bounce',
+  overhead: 'Smash from above',
+};
+
 /**
  * Stroke declaration — the user's statement of intent, stored separately
  * from any model prediction. Every ShotTypeSlug is selectable and scoreable.
  */
-function StrokeDeclaration(props: {
+function StrokePicker(props: {
   value: ShotTypeSlug | null;
   onChange: (value: ShotTypeSlug) => void;
-  dark?: boolean;
+  columns: 1 | 2;
 }) {
+  const rows: ShotTypeSlug[][] = [];
+  for (let i = 0; i < SHOT_TYPES.length; i += props.columns)
+    rows.push(SHOT_TYPES.slice(i, i + props.columns));
   return (
     <View
       accessibilityRole="radiogroup"
-      accessibilityLabel="Which stroke are you practicing?"
-      style={styles.strokeChips}
+      accessibilityLabel="Which stroke was this?"
+      testID="stroke-picker"
+      style={styles.strokeGrid}
     >
-      {SHOT_TYPES.map(slug => {
-        const selected = props.value === slug;
-        return (
-          <PressableScale
-            key={slug}
-            accessibilityRole="radio"
-            accessibilityLabel={STROKE_LABELS[slug]}
-            accessibilityState={{ selected }}
-            onPress={() => props.onChange(slug)}
-            style={[
-              styles.strokeChip,
-              props.dark && styles.strokeChipDark,
-              selected && styles.strokeChipSelected,
-            ]}
-          >
-            <Text
-              style={[
-                type.caption,
-                styles.strokeChipLabel,
-                props.dark && !selected && { color: color.onDarkMuted },
-                selected && { color: color.onVolt },
-              ]}
-            >
-              {STROKE_LABELS[slug]}
-            </Text>
-          </PressableScale>
-        );
-      })}
+      {rows.map(row => (
+        <View key={row.join()} style={styles.strokeRow}>
+          {row.map(slug => {
+            const selected = props.value === slug;
+            return (
+              <PressableScale
+                key={slug}
+                accessibilityRole="radio"
+                accessibilityLabel={STROKE_LABELS[slug]}
+                accessibilityHint={STROKE_HINTS[slug]}
+                accessibilityState={{ selected }}
+                onPress={() => props.onChange(slug)}
+                containerStyle={styles.strokeTileContainer}
+                style={[
+                  styles.strokeTile,
+                  selected && styles.strokeTileSelected,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.strokeRadio,
+                    selected && styles.strokeRadioSelected,
+                  ]}
+                >
+                  {selected ? (
+                    <Icon
+                      name="check"
+                      size={12}
+                      color={color.onVolt}
+                      strokeWidth={3}
+                    />
+                  ) : null}
+                </View>
+                <Text
+                  style={[
+                    type.bodyBold,
+                    styles.strokeName,
+                    selected && styles.strokeNameSelected,
+                  ]}
+                >
+                  {STROKE_LABELS[slug]}
+                </Text>
+                <Text
+                  style={[
+                    type.caption,
+                    styles.strokeHint,
+                    selected && styles.strokeHintSelected,
+                  ]}
+                >
+                  {STROKE_HINTS[slug]}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }
@@ -492,30 +526,12 @@ function StrokeDeclaration(props: {
  *   recorded pose-sequence sidecar exists: analysis runs exclusively on that
  *   real recording, so legacy pose-less captures stay honestly unscorable.
  * - Imported videos always enter the scoring flow. They carry no live target
- *   lock from camera setup, so the user seeds target identity by tapping
- *   themselves on the clip before analysis is attempted.
+ *   lock from camera setup, so the player is selected automatically during
+ *   the on-demand pose extraction.
  */
 export function clipSupportsScoring(clip: CapturedClip): boolean {
   if (clip.captureMode === 'imported_video') return true;
   return clip.poseSequence !== undefined;
-}
-
-/**
- * Imported clips only: once the stroke is declared and no target seed has
- * been confirmed yet, the tap-the-person selector must run (or be explicitly
- * skipped). Guided captures never need it — their seed was locked live in
- * the camera.
- */
-export function importedClipNeedsTargetTap(
-  clip: CapturedClip,
-  declaredStroke: ShotTypeSlug | null,
-  targetSeed: TargetSelection | null,
-): boolean {
-  return (
-    clip.captureMode === 'imported_video' &&
-    declaredStroke !== null &&
-    targetSeed === null
-  );
 }
 
 /**
@@ -690,28 +706,6 @@ export function captureSavedDetail(clip: CapturedClip): string {
   if (clip.captureMode !== 'automatic_pose_trigger') return 'imported';
   if (clip.targetLock) return clip.targetLock.lockOutcome;
   return clip.targetSeed ? 'start_tapped' : 'no_start_tap';
-}
-
-function clipTitle(clip: CapturedClip) {
-  if (clip.recognition.status !== 'recognized')
-    return 'Captured. Label withheld.';
-  return clip.recognition.shotType.replace(/_/g, ' ');
-}
-
-function clipExplanation(clip: CapturedClip) {
-  if (clip.recognition.status === 'recognized') {
-    return (
-      'Recognized by the on-device camera. Get your score to see the full ' +
-      'technique read.'
-    );
-  }
-  return (
-    UNKNOWN_REASON_COPY[clip.recognition.reason] ??
-    `The camera abstained: ${clip.recognition.reason.replace(
-      /_/g,
-      ' ',
-    )}. No score was created.`
-  );
 }
 
 /**
@@ -900,7 +894,6 @@ export function AnalyzeScreen({
     );
   const selectionRef = useRef({ techniqueIntent, declaredStroke });
   selectionRef.current = { techniqueIntent, declaredStroke };
-  const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
   const [captureEnvelope, setCaptureEnvelope] =
     useState<EnvelopeVerdict | null>(null);
   // Last measured live signals of the CURRENT attempt, kept for the
@@ -2072,11 +2065,10 @@ export function AnalyzeScreen({
     cameraRun.current =
       source === 'camera' ? { captureId: null, stage: 'watching' } : null;
     // Each capture attempt starts with a clean envelope verdict, live
-    // evidence buffer, target seed, and live-window signals: all of them
-    // describe ONE clip's live window and must never carry into the next one.
+    // evidence buffer, and live-window signals: all of them describe ONE
+    // clip's live window and must never carry into the next one.
     attemptEvidence.current.beginAttempt();
     setCaptureEnvelope(null);
-    setTargetSeed(null);
     if (source === 'camera') usabilityFunnel.log('camera_opened');
     setPhase({
       kind: 'working',
@@ -2757,204 +2749,79 @@ export function AnalyzeScreen({
       !operationActive.current &&
       selectionRef.current.techniqueIntent === techniqueIntent &&
       selectionRef.current.declaredStroke === declaredStroke;
+    // Only pose-less guided captures are unscorable: imported clips always
+    // enter the scoring flow, with the player selected automatically.
+    const scorable = clipSupportsScoring(clip);
+    const autoArmed =
+      declaredStroke === null &&
+      canAutoScoreWithoutDeclaration(clip, techniqueIntent);
     return (
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
-          title="Capture complete"
           onClose={() => {
             if (phaseCurrent()) leaveScreen(() => navigation.popToTop());
           }}
         />
         <ScrollView
-          contentContainerStyle={styles.savedContent}
+          contentContainerStyle={styles.pickContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.savedStatus}>
-            <View style={styles.savedIcon}>
-              <Icon
-                name="check"
-                color={color.onVolt}
-                size={26}
-                strokeWidth={2.4}
-              />
-            </View>
-            <Text
-              style={[
-                type.micro,
-                {
-                  color:
-                    clip.recognition.status === 'recognized'
-                      ? color.good
-                      : color.ink,
-                },
-              ]}
-            >
-              {clip.recognition.status === 'recognized'
-                ? 'STROKE RECOGNIZED'
-                : 'RATING NOT CONSUMED'}
-            </Text>
-          </View>
-
-          <Text
-            style={[
-              type.hero,
-              styles.savedTitle,
-              clip.recognition.status === 'recognized' && {
-                textTransform: 'capitalize',
-              },
-            ]}
-          >
-            {clipTitle(clip)}
+          <Text accessibilityRole="header" style={[type.h1, styles.pickTitle]}>
+            {scorable ? 'Which stroke was this?' : 'This clip can’t be scored'}
           </Text>
-          <Text style={[type.body, styles.savedCopy]}>
-            {clipExplanation(clip)}
+          <Text style={[type.body, styles.pickCopy]}>
+            {scorable
+              ? 'Sensei scores your swing against the stroke you pick.'
+              : 'It was saved without movement data. Record another clip to get your score.'}
           </Text>
-
-          <MascotMoment
-            pose={ANALYSIS_MASCOT_POSES.outcome}
-            tone={clip.recognition.status === 'recognized' ? 'court' : 'warn'}
-            eyebrow="CAPTURE IN HAND"
-            caption="Review the evidence, then choose how you want this swing analyzed."
-            accessibilityLabel="Capture review guidance"
-            testID="analysis-mascot-saved"
-            style={styles.savedMascot}
-          />
-
-          <CaptureEvidenceCard clip={clip} />
-
-          {clipSupportsScoring(clip) ? (
-            <View style={styles.scoreSection}>
-              <Text style={[type.h3, { color: color.ink }]}>
-                Which stroke was this?
-              </Text>
-              <Text style={[type.caption, styles.scoreCopy]}>
-                Your declaration selects the coaching targets. It is stored as
-                your statement — separate from any model prediction — and the
-                analyzer will say if what it measured disagrees.
-              </Text>
-              <StrokeDeclaration
-                value={declaredStroke}
-                onChange={stroke => {
-                  if (!selectionCurrent()) return;
-                  selectionRef.current = {
-                    techniqueIntent: null,
-                    declaredStroke: stroke,
-                  };
-                  setTechniqueIntent(null);
-                  setDeclared(stroke);
-                }}
-              />
-              {declaredStroke === null &&
-              canAutoScoreWithoutDeclaration(clip, techniqueIntent) ? (
-                <Text style={[type.caption, styles.scoreCopy]}>
-                  Auto Detect is armed: analyze without declaring and the
-                  classifier commits only to what it can defend — usually the
-                  swing family, with an honest “couldn’t classify” otherwise.
-                  Declaring a technique instead runs its exact coaching targets.
-                </Text>
-              ) : null}
-              {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (
-                <TargetSelector
-                  automaticOnly
-                  frameUri={clip.uri}
-                  posterUri={clip.posterUri}
-                  sourceWidth={clip.width}
-                  sourceHeight={clip.height}
-                  onConfirm={selection => {
-                    if (!selectionCurrent()) return;
-                    setTargetSeed(selection);
-                    void scoreCapture(
-                      phase.captureId,
-                      clip,
-                      selection,
-                      phase.ownerContext,
-                    );
-                  }}
-                  onSkip={() => {
-                    if (!selectionCurrent()) return;
-                    void scoreCapture(
-                      phase.captureId,
-                      clip,
-                      null,
-                      phase.ownerContext,
-                    );
-                  }}
-                />
-              ) : (
-                <Button
-                  label={
-                    declaredStroke === null &&
-                    canAutoScoreWithoutDeclaration(clip, techniqueIntent)
-                      ? 'Analyze with Auto Detect'
-                      : 'Get my Technique Score'
-                  }
-                  variant="volt"
-                  disabled={
-                    declaredStroke === null &&
-                    !canAutoScoreWithoutDeclaration(clip, techniqueIntent)
-                  }
-                  onPress={() => {
-                    if (!selectionCurrent()) return;
-                    void scoreCapture(
-                      phase.captureId,
-                      clip,
-                      targetSeed,
-                      phase.ownerContext,
-                    );
-                  }}
-                />
-              )}
-            </View>
-          ) : (
-            // Only pose-less guided captures land here: imported clips always
-            // enter the scoring flow above via the tap-the-person selector.
-            <View style={styles.scoreSection}>
-              <Text style={[type.caption, styles.scoreCopy]}>
-                This capture has no recorded pose sequence, so it cannot be
-                scored.
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.savedActions}>
-            {confirmationBound.current ? (
-              <Button
-                label="Open Library"
-                variant="dark"
-                onPress={() => {
-                  if (phaseCurrent())
-                    leaveScreen(() =>
-                      navigation.navigate('Tabs', { screen: 'Library' }),
-                    );
-                }}
-              />
-            ) : (
-              <Button
-                label={
-                  source === 'library'
-                    ? 'Import another video'
-                    : 'Record another clip'
-                }
-                variant="dark"
-                icon={source === 'library' ? 'upload' : 'camera'}
-                onPress={() => {
-                  if (phaseCurrent()) void run();
-                }}
-              />
-            )}
-            <Button
-              label="Open Library"
-              variant="ghost"
-              onPress={() => {
-                if (phaseCurrent())
-                  leaveScreen(() =>
-                    navigation.navigate('Tabs', { screen: 'Library' }),
-                  );
+          {scorable ? (
+            <StrokePicker
+              value={declaredStroke}
+              columns={accessibleLayout ? 1 : 2}
+              onChange={stroke => {
+                if (!selectionCurrent()) return;
+                selectionRef.current = {
+                  techniqueIntent: null,
+                  declaredStroke: stroke,
+                };
+                setTechniqueIntent(null);
+                setDeclared(stroke);
               }}
             />
-          </View>
+          ) : null}
         </ScrollView>
+        <View style={styles.pickFooter} testID="analyze-stroke-actions">
+          {scorable ? (
+            <Button
+              label={
+                autoArmed
+                  ? 'Analyze with Auto Detect'
+                  : 'Get my Technique Score'
+              }
+              variant="volt"
+              disabled={declaredStroke === null && !autoArmed}
+              onPress={() => {
+                if (!selectionCurrent()) return;
+                void scoreCapture(
+                  phase.captureId,
+                  clip,
+                  null,
+                  phase.ownerContext,
+                );
+              }}
+            />
+          ) : (
+            <Button
+              label="Record another clip"
+              variant="volt"
+              icon="camera"
+              onPress={() => {
+                if (phaseCurrent()) void run();
+              }}
+            />
+          )}
+        </View>
       </SafeAreaView>
     );
   }
@@ -3128,30 +2995,34 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   declareEyebrow: { color: color.onDarkSubtle, marginTop: space.lg },
-  strokeChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: space.md,
-  },
-  strokeChip: {
-    paddingHorizontal: 14,
-    minHeight: 44,
-    justifyContent: 'center',
-    borderRadius: radius.pill,
+  strokeGrid: { marginTop: space.lg, gap: 10 },
+  strokeRow: { flexDirection: 'row', gap: 10 },
+  strokeTileContainer: { flex: 1 },
+  strokeTile: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    padding: 14,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.line,
     backgroundColor: color.surfaceElevated,
   },
-  strokeChipDark: {
-    borderColor: color.lineMutedDark,
-    backgroundColor: color.inkElevated,
+  strokeTileSelected: { borderColor: color.ink, backgroundColor: color.ink },
+  strokeName: { marginTop: space.xs, color: color.ink },
+  strokeNameSelected: { color: color.onDark },
+  strokeRadio: {
+    alignSelf: 'flex-end',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: color.inkSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  strokeChipSelected: {
-    borderColor: color.volt,
-    backgroundColor: color.volt,
-  },
-  strokeChipLabel: { color: color.ink },
+  strokeRadioSelected: { borderColor: color.volt, backgroundColor: color.volt },
+  strokeHint: { marginTop: space.xxs, color: color.inkSoft },
+  strokeHintSelected: { color: color.onDarkMuted },
   scoreSection: { marginTop: space.xl, gap: space.md },
   scoreCopy: { color: color.inkSoft },
   content: {
@@ -3314,17 +3185,17 @@ const styles = StyleSheet.create({
     paddingTop: space.lg,
     paddingBottom: space.xl,
   },
-  savedStatus: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  savedIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: color.volt,
-    alignItems: 'center',
-    justifyContent: 'center',
+  pickContent: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
   },
-  savedTitle: { color: color.ink, marginTop: space.lg },
-  savedCopy: { color: color.inkSoft, marginTop: space.md, maxWidth: 370 },
-  savedMascot: { marginTop: space.lg },
-  savedActions: { gap: 10, marginTop: space.xl },
+  pickTitle: { color: color.ink },
+  pickCopy: { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
+  pickFooter: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.sm,
+    backgroundColor: color.surface,
+  },
 });

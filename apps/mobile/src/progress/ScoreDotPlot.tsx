@@ -25,8 +25,8 @@ import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
  * read them. Days with no read stay empty — an honest gap, never a
  * carried-forward point. Geometry runs on the 0–10 score; every printed
  * value is the read's estimated DUPR (D-046), and the two gridlines sit at
- * the scores where the estimate crosses DUPR's Intermediate (3.00) and
- * Advanced (4.00) bands, labelled as such.
+ * the scoring engine's band boundaries — the green line (8.0 → 5.00) and
+ * the red/yellow line (6.5 → 3.50) — labelled with their estimates.
  *
  * At default text size the plot matches `PracticeVolumeChart` so Home's
  * toggle never moves the card. Enlarged text uses bounded, flowing rows
@@ -35,9 +35,10 @@ import type { ScoredReadPoint, ScoreTrendBucket } from './techniqueDashboard';
 
 /** Matches PracticeVolumeChart's plot so the Home toggle never shifts layout. */
 export const DOT_PLOT_HEIGHT = 82;
-/** Gridlines at the technique scores where the estimated DUPR reaches 4.00
- * (the Advanced band) and 3.00 (the Intermediate band); the upper label sits
- * above its line and the lower one below so the two never collide. */
+/** Gridlines at the scoring engine's band boundaries — the green line
+ * (score 8, estimated DUPR 5.00) and the red/yellow line (6.5, 3.50); the
+ * upper label sits above its line and the lower one below so the two never
+ * collide. */
 const GRIDLINES: ReadonlyArray<{
   score: number;
   labelSide: 'above' | 'below';

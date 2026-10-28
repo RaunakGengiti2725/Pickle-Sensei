@@ -253,7 +253,7 @@ describe('Home — loading and failure', () => {
     const copy = allText(renderer);
     expect(copy).not.toContain('Loading your court…');
     expect(copy).toContain('Ready when you are.');
-    expect(copy).toContain('NEW PLAYER');
+    expect(copy).toContain('Your first read starts here');
     act(() => renderer.unmount());
   });
 
@@ -276,11 +276,11 @@ describe('Home — loading and failure', () => {
     const recovered = allText(renderer);
     expect(recovered).not.toContain('Your court couldn’t load');
     expect(recovered).toContain('Recent reads');
-    expect(recovered).toMatch(/1\s+latest/);
+    expect(recovered).toContain('See all');
     act(() => renderer.unmount());
   });
 
-  it('a synced-progress failure never blocks the court (device data still renders)', async () => {
+  it('a server outage never blocks the court: Home reads only device data', async () => {
     mockGetApiSession.mockReturnValue({
       canonicalAppUserId: OWNER,
       token: 't',
@@ -290,8 +290,9 @@ describe('Home — loading and failure', () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
     expect(copy).not.toContain('Your court couldn’t load');
-    expect(copy).toContain('Latest validated scored stroke on this device');
-    expect(mockFetchCanonicalProgress).toHaveBeenCalledTimes(1);
+    expect(copy).toContain('forehand drive');
+    // Account trends are Progress's job; Home never asks for them.
+    expect(mockFetchCanonicalProgress).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 
@@ -332,7 +333,9 @@ describe('Home — controls', () => {
     let renderer = await renderHome();
     expect(
       pressableByTestId(renderer, 'home-streak-badge').props.accessibilityLabel,
-    ).toBe('1 day training streak. Opens the consistency calendar.');
+    ).toBe(
+      '1 day training streak, at risk — no training yet today. Opens the consistency calendar.',
+    );
     act(() => renderer.unmount());
 
     mockConsistencyState.snapshot = null;
@@ -388,16 +391,19 @@ describe('Home — controls', () => {
     act(() => renderer.unmount());
   });
 
-  it('banner streak block is a separate button routing to StreakCalendar, with at-risk copy', async () => {
+  it('shows the streak once: no banner streak block; the chip carries the at-risk note', async () => {
     mockConsistencyState.snapshot = { currentStreak: 4, atRisk: true };
     const renderer = await renderHome();
-    const block = pressableByTestId(renderer, 'player-rank-banner-streak');
-    expect(block.props.accessibilityRole).toBe('button');
-    expect(block.props.disabled).toBe(false);
-    expect(block.props.accessibilityLabel).toBe(
+    expect(
+      renderer.root.findAll(
+        n => n.props.testID === 'player-rank-banner-streak',
+      ),
+    ).toHaveLength(0);
+    const chip = pressableByTestId(renderer, 'home-streak-badge');
+    expect(chip.props.accessibilityLabel).toBe(
       '4 days training streak, at risk — no training yet today. Opens the consistency calendar.',
     );
-    await press(block);
+    await press(chip);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('StreakCalendar');
     // The banner itself stayed collapsed — the streak press is not a toggle.
@@ -437,20 +443,20 @@ describe('Home — controls', () => {
   it('empty court is honest and non-dead-end (no placeholder numbers)', async () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
-    expect(copy).toContain('Your court is ready.');
-    expect(copy).toContain('Your first scored read starts this record.');
-    expect(copy).toContain('No scored technique yet');
-    expect(copy).toContain(
-      'Camera practice still counts. Scores appear only after validated analysis.',
-    );
-    expect(copy).toContain('—');
     expect(copy).toContain('Your first read starts here');
+    expect(copy).toContain(
+      'Set the phone once. Pickle Sensei guides the rest.',
+    );
+    // One empty card, not a stack of empty dashboards with dashes.
+    expect(copy).not.toContain('—');
+    expect(copy).not.toContain('Your court is ready.');
+    expect(copy).not.toContain('No scored technique yet');
     expect(copy).not.toContain('Live Court');
     expect(copy).not.toContain('Chosen focus');
     act(() => renderer.unmount());
   });
 
-  it('recent read cards open the Result route with the shot id (max five)', async () => {
+  it('recent read cards open the Result route with the shot id (max three)', async () => {
     const rows = Array.from({ length: 7 }, (_, i) =>
       shot({
         id: `aaaaaaaa-0000-4000-8000-00000000000${i}`,
@@ -461,14 +467,13 @@ describe('Home — controls', () => {
     );
     mockListShots.mockResolvedValue(rows);
     const renderer = await renderHome();
-    const copy = allText(renderer);
-    expect(copy).toMatch(/5\s+latest/);
+    expect(allText(renderer)).toContain('See all');
 
     // A scored row's label carries the estimated DUPR and the 0–10 score so
-    // VoiceOver hears the rating without opening it (row 0: 6.0 → 2.92).
+    // VoiceOver hears the rating without opening it (row 0: 6.0 → 3.38).
     const first = pressableByLabel(
       renderer,
-      'Open backhand dink result, Estimated DUPR 2.92, technique score 6.0 out of 10',
+      'Open backhand dink result, Estimated DUPR 3.38, technique score 6.0 out of 10',
     );
     expect(first.props.accessibilityRole).toBe('button');
     await press(first);
@@ -480,11 +485,11 @@ describe('Home — controls', () => {
         String(n.props.accessibilityLabel),
       ),
     );
-    expect(serveCards).toHaveLength(4);
+    expect(serveCards).toHaveLength(2);
     act(() => renderer.unmount());
   });
 
-  it('shows the profile name, self-rated level and chosen focus when present', async () => {
+  it('greets by name and leaves the self-rated level and focus to Settings', async () => {
     mockAppState.profile = {
       firstName: 'Sam',
       skillLevel: '3.5',
@@ -493,15 +498,15 @@ describe('Home — controls', () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
     expect(copy).toContain('Ready when you are, Sam.');
-    expect(copy).toContain('SELF · 3.5');
-    expect(copy).toContain('Chosen focus');
-    expect(copy).toContain('paddle ready');
+    expect(copy).not.toContain('SELF · 3.5');
+    expect(copy).not.toContain('Chosen focus');
+    expect(copy).not.toContain('paddle ready');
     expect(
       hostNodes(
         renderer,
         n => n.props.accessibilityLabel === 'Self-selected focus: paddle ready',
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     act(() => renderer.unmount());
   });
 });

@@ -28,7 +28,7 @@ In the target product, Live Court Mode is the centerpiece and single-shot analys
 9. Multiple coaches (6–10) for rubric ground truth; ≥2 raters per validation clip.
 10. LLM outside the measurement path: vision measures → scoring decides → LLM explains.
 11. Privacy as product advantage: local video by default; cloud sync explicit opt-in.
-12. Technique Score ≠ DUPR/skill rating, in copy and schema. Superseded for display only by D-046 (2026-09-10): the app's headline number is an ESTIMATED DUPR mapped from the Technique Score through anchors that tie the scoring bands to DUPR's published bands (0 → 2.00, 6.5 → 3.00, 8.0 → 4.00, 9.5 → 5.00, 10 → 6.00; linear between), always labelled an estimate and disclaimed as not an official DUPR rating, with the 0–10 score shown beneath it; the schema, sync, server and rank formula stay on the 0–10 Technique Score.
+12. Technique Score ≠ DUPR/skill rating, in copy and schema. Superseded for display only by D-046 (2026-09-10) as amended by D-048 (2026-09-11): the app's headline number is an ESTIMATED DUPR mapped from the Technique Score through anchors that tie the scoring bands to DUPR's full 2.0–8.0 scale (0 → 2.00, 6.5 → 3.50, 8.0 → 5.00, 9.5 → 6.50, 10 → 8.00; linear between), always labelled an estimate and disclaimed as not an official DUPR rating, with the 0–10 score shown beneath it; the schema, sync, server and rank formula stay on the 0–10 Technique Score.
 13. Second act (ball/court/rally/match intelligence) architected-for, not built first.
 
 ## Critical assumptions (spec p. 2)

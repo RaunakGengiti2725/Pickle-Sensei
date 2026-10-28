@@ -147,18 +147,18 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
         const tier = texts.find(node => node.props.children === 'Platinum II')!;
         expect(tier.props.numberOfLines).toBeUndefined();
         expect(StyleSheet.flatten(tier.props.style)).toMatchObject(type.h3);
-        // D-046: the headline rating is the estimated DUPR (7.02 → 3.35) with
+        // D-046: the headline rating is the estimated DUPR (7.02 → 4.02) with
         // the unit beside it; the 0–10 rating is the smaller line.
         const rating = texts.find(
           node => node.props.testID === 'player-rank-banner-rating',
         )!;
         expect(rating.props).toMatchObject({
           accessibilityLabel:
-            'Estimated DUPR 3.35, technique rating 7.02 out of 10',
+            'Estimated DUPR 4.02, technique rating 7.02 out of 10',
         });
         expect(rating.props.numberOfLines).toBeUndefined();
         expect(rating.props.adjustsFontSizeToFit).not.toBe(true);
-        expect(rating.props.children[0]).toBe('3.35');
+        expect(rating.props.children[0]).toBe('4.02');
         expect(
           rating
             .findAllByType(Text)
@@ -176,8 +176,8 @@ describe('PlayerRankBanner large-text layout contracts (not native glyph proof)'
           type.micro,
         );
         expect(allText(renderer)).not.toMatch(/≈/);
-        // 7.02 → 3.35 against Diamond's 7.5 → 3.67: 0.32 DUPR to go.
-        expect(allText(renderer)).toContain('0.32 to Diamond');
+        // 7.02 → 4.02 against Diamond's 7.5 → 4.50: 0.48 DUPR to go.
+        expect(allText(renderer)).toContain('0.48 to Diamond');
         expect(allText(renderer)).toContain('KEEP IT ALIVE');
         expect(
           style('player-rank-banner-streak').minHeight,
@@ -356,12 +356,12 @@ describe('PlayerRankBanner in-place expansion', () => {
     }
     expect(copy).toContain('YOU');
     expect(copy).toContain('Current form');
-    // Tier bands print in estimated DUPR: Silver 3.5–4.99 → 2.54 – 2.76.
+    // Tier bands print in estimated DUPR: Silver 3.5–4.99 → 2.81 – 3.14.
     const range = renderer.root
       .findAllByType(Text)
-      .find(node => node.props.children === '2.54 – 2.76')!;
+      .find(node => node.props.children === '2.81 – 3.14')!;
     expect(StyleSheet.flatten(range.props.style).color).toBe(color.onDarkMuted);
-    expect(allText(renderer)).toContain('3.67+');
+    expect(allText(renderer)).toContain('4.50+');
     expect(allText(renderer)).toContain('Not an official DUPR rating.');
     act(() => renderer.unmount());
   });

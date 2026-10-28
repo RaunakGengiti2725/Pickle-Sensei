@@ -548,7 +548,7 @@ describe('ManageAccountScreen button ledger', () => {
         wanted: 'price',
         details: '$60 a year is steep for a rec player.',
         platform: 'ios',
-        appVersion: '1.0',
+        appVersion: '1.1',
       });
     });
 
@@ -568,7 +568,7 @@ describe('ManageAccountScreen button ledger', () => {
         wanted: null,
         details: null,
         platform: 'ios',
-        appVersion: '1.0',
+        appVersion: '1.1',
       });
     });
 

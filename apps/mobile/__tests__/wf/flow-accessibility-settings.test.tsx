@@ -207,7 +207,6 @@ describe('Settings root — accessibility workflow', () => {
     expect(labels).toEqual(
       expect.arrayContaining([
         'Pickle Sensei Pro, Verify access',
-        'Consistency, —',
         'Notifications, Daily · 5:30 PM',
         'Data & consent, Training: off',
         'App walkthrough, Replay',
@@ -220,7 +219,7 @@ describe('Settings root — accessibility workflow', () => {
     act(() => renderer.unmount());
   });
 
-  it('read-only profile rows are static (not announced as buttons)', () => {
+  it('profile facts and the version are static text (not announced as buttons)', () => {
     const renderer = renderScreen();
     const labels = hostPressables(renderer).map(
       n => n.props.accessibilityLabel as string,
@@ -231,12 +230,15 @@ describe('Settings root — accessibility workflow', () => {
       'Playing level,',
       'Hitting hand,',
       'Current focus,',
+      'Consistency,',
       'App version,',
       'Scoring model,',
     ]) {
       expect(labels.some(l => l.startsWith(staticRow))).toBe(false);
     }
-    expect(allText(renderer)).toContain('Playing level');
+    // The header line and the footer are read as plain text.
+    expect(allText(renderer)).toContain('Right-handed');
+    expect(allText(renderer)).toContain('Scoring model');
     act(() => renderer.unmount());
   });
 
@@ -244,7 +246,6 @@ describe('Settings root — accessibility workflow', () => {
     const renderer = renderScreen();
     const routes: Array<[string, unknown[]]> = [
       ['Pickle Sensei Pro', ['Paywall', { source: 'settings' }]],
-      ['Consistency', ['StreakCalendar']],
       ['Notifications', ['NotificationSettings']],
       ['Data & consent', ['ConsentSettings']],
       ['Manage account', ['ManageAccount']],

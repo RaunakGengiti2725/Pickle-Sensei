@@ -112,7 +112,7 @@ const shotNotRead: LocalShotRow = {
 /** The scored row's label carries its estimated DUPR and 0–10 score (D-046)
  * so VoiceOver hears the rating without opening the read. */
 const SCORED_ROW_LABEL =
-  'Open forehand drive result, Estimated DUPR 3.50, technique score 7.3 out of 10';
+  'Open forehand drive result, Estimated DUPR 4.25, technique score 7.3 out of 10';
 
 /** Server rows can arrive with a scored kind but no number; must not throw. */
 const shotScoredWithoutNumber: LocalShotRow = {
@@ -575,14 +575,14 @@ describe('LibraryScreen · reads tab', () => {
         shotScored,
         shotNotRead,
       ]);
-      // D-046: the row prints the estimated DUPR (7.25 → 3.50) in the
+      // D-046: the row prints the estimated DUPR (7.25 → 4.25) in the
       // card-score role with the "7.3 /10" reading beneath in micro.
       const score = renderer.root
         .findAllByType(Text)
         .find(
           node =>
             Array.isArray(node.props.children) &&
-            node.props.children[0] === '3.50',
+            node.props.children[0] === '4.25',
         )!;
       expect(StyleSheet.flatten(score.props.style)).toMatchObject({
         ...type.score,

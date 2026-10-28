@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -16,7 +16,6 @@ import {
   Card,
   ErrorState,
   LoadingState,
-  Pill,
   PressableScale,
   SectionTitle,
 } from '../design/components';
@@ -30,31 +29,12 @@ import {
   isDataOwnerContextCurrent,
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
-import {
-  getKv,
-  listRealAnalysisFacts,
-  listShots,
-  setKv,
-  type LocalShotRow,
-  type RealAnalysisFact,
-} from '../data/repository';
+import { listShots, type LocalShotRow } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
 import { useTabBarContentInset } from '../navigation/tabBarLayout';
 import { useTabScrollDock } from '../navigation/tabBarDock';
-import { getApiSession } from '../account/apiSession';
-import {
-  fetchCanonicalProgress,
-  type CanonicalProgress,
-} from '../progress/api';
-import { buildTechniqueDashboard } from '../progress/techniqueDashboard';
-import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
-import { ScoreDotPlot } from '../progress/ScoreDotPlot';
 import { DuprReadout } from '../progress/DuprReadout';
-import {
-  duprAccessibilityLabel,
-  formatDupr,
-  formatTechniqueScore,
-} from '../progress/duprEstimate';
+import { duprAccessibilityLabel } from '../progress/duprEstimate';
 import { PlayerRankBanner } from '../components/PlayerRankBanner';
 import { NotificationPrimingCard } from '../notifications/NotificationPrimingCard';
 import { flameIntensityForStreak } from '../consistency/engine';
@@ -63,72 +43,26 @@ import { useConsistencyStore } from '../consistency/store';
 import { useWalkthroughTarget } from '../walkthrough/targets';
 import { plural } from '../util/plural';
 
-function deviceTimeZone() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-}
-
 /**
- * The "This week" card's two lenses on the SAME comparable scored reads:
- * every read as a dot at its score (the progress picture) or reads per day
- * as bars (the volume picture). The choice is a device-level view
- * preference, remembered across launches.
+ * HOME — a calm start page (owner request 2026-09-24; MOBBIN: Hevy, Future,
+ * Withings home tabs): the brand and streak chip, the rank, one greeting,
+ * the two ways to start, and the latest reads. Trends live on Progress, the
+ * profile on Settings; nothing here repeats them.
  */
-export type WeekChart = 'scores' | 'reads';
-export const WEEK_CHART_KV_KEY = 'home.week-chart';
-const WEEK_CHART_OPTIONS: ReadonlyArray<{
-  key: WeekChart;
-  label: string;
-  accessibilityLabel: string;
-}> = [
-  {
-    key: 'scores',
-    label: 'DUPR',
-    accessibilityLabel: 'DUPR chart: every scored read at its estimated DUPR',
-  },
-  {
-    key: 'reads',
-    label: 'READS',
-    accessibilityLabel: 'Reads chart: scored reads per day',
-  },
-];
 
-export function parseWeekChart(value: string | null): WeekChart {
-  return value === 'reads' ? 'reads' : 'scores';
-}
+/** Recent reads shown on Home; the Library tab holds the rest. */
+export const HOME_RECENT_READS = 3;
 
-/** One "This week" footer stat: the estimated DUPR over its label, with the
- * "/10" reading beneath; an em dash when the window holds no scored read. */
-function WeekRatingStat(props: {
-  label: string;
-  score: number | null;
-  testID: string;
-}) {
-  return (
-    <View
-      accessible
-      accessibilityLabel={
-        props.score === null
-          ? `${props.label}: none yet`
-          : `${props.label}: ${duprAccessibilityLabel(props.score)}`
-      }
-      style={styles.practiceFooterItem}
-      testID={props.testID}
-    >
-      <Text style={styles.practiceFooterValue}>
-        {props.score === null ? '—' : formatDupr(props.score)}
-      </Text>
-      <Text style={styles.practiceFooterLabel}>{props.label}</Text>
-      {props.score !== null ? (
-        <Text style={styles.practiceFooterSub}>
-          {formatTechniqueScore(props.score)}
-        </Text>
-      ) : null}
-    </View>
-  );
+/** "Aug 30 · 3:04 PM" in the device locale. */
+function readMoment(capturedAt: string): string {
+  const at = new Date(capturedAt);
+  return `${at.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })} · ${at.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
 }
 
 export function HomeScreen() {
@@ -136,7 +70,11 @@ export function HomeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const rankBannerTarget = useWalkthroughTarget('rank-banner');
   const streakTarget = useWalkthroughTarget('home-streak');
-  const largeText = useWindowDimensions().fontScale >= 1.5;
+  const { fontScale } = useWindowDimensions();
+  const largeText = fontScale >= 1.5;
+  // Large text: a recent read stacks its DUPR under the name so neither
+  // column is squeezed into a word-per-line strip.
+  const stackedRows = fontScale > 1.3;
   const tabBarInset = useTabBarContentInset();
   const tabBarDock = useTabScrollDock('Home');
   const profile = useAppStore(s => s.profile);
@@ -148,14 +86,7 @@ export function HomeScreen() {
       : captureDataOwnerContext().generation;
   const consistency = useConsistencyStore(s => s.snapshot);
   const refreshConsistency = useConsistencyStore(s => s.refresh);
-  const [recent, setRecent] = useState<LocalShotRow[]>([]);
   const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
-  const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
-  const [facts, setFacts] = useState<RealAnalysisFact[]>([]);
-  const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
-  const [weekChart, setWeekChart] = useState<WeekChart>('scores');
-  const [canonicalProgress, setCanonicalProgress] =
-    useState<CanonicalProgress | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadedOwner, setLoadedOwner] = useState<{
@@ -165,7 +96,6 @@ export function HomeScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const focused = useRef(false);
   const loadRevision = useRef(0);
-  const timeZone = useMemo(deviceTimeZone, []);
 
   const load = useCallback(async () => {
     if (!focused.current) return;
@@ -179,42 +109,12 @@ export function HomeScreen() {
       getActiveDataOwner() === owner &&
       (context === null || isDataOwnerContextCurrent(context));
     try {
-      const db = getDb();
-      // The week card reads the SAME real analyses the Progress dashboard
-      // does, whatever path produced them (guided camera or imported video):
-      // a scored read is progress the moment it exists. A missing view
-      // preference is never a load failure.
-      const [shots, analysisFacts, storedChart] = await Promise.all([
-        listShots(db, 250),
-        listRealAnalysisFacts(db),
-        getKv(db, WEEK_CHART_KV_KEY).catch(() => null),
-      ]);
+      // The rank banner computes the local rank from these rows; the newest
+      // few are the recent reads.
+      const shots = await listShots(getDb(), 250);
       if (!isCurrent()) return;
-      setRecent(shots.slice(0, 5));
       setAllShots(shots);
-      setLatestScored(
-        shots.find(
-          shot => shot.resultKind === 'scored' && shot.overallScore !== null,
-        ) ?? null,
-      );
-      setFacts(analysisFacts);
-      setAsOfIso(new Date().toISOString());
-      setWeekChart(parseWeekChart(storedChart));
-      setCanonicalProgress(null);
       setLoadError(null);
-      // Canonical totals enrich local history; they never hold the first
-      // paint or refresh spinner hostage to connectivity. Every continuation
-      // belongs to this focus, owner, and latest load (including retries).
-      const apiSession = getApiSession();
-      if (apiSession?.canonicalAppUserId === owner) {
-        void fetchCanonicalProgress(apiSession)
-          .then(progress => {
-            if (isCurrent()) setCanonicalProgress(progress);
-          })
-          .catch(() => {
-            if (isCurrent()) setCanonicalProgress(null);
-          });
-      }
     } catch {
       if (!isCurrent()) return;
       setLoadError(
@@ -244,48 +144,10 @@ export function HomeScreen() {
     }, [activeOwner, load, ownerGeneration, ownerKey, refreshConsistency]),
   );
 
-  const selectWeekChart = useCallback((next: WeekChart) => {
-    setWeekChart(next);
-    // Best-effort persistence: the toggle already applied on screen.
-    try {
-      void setKv(getDb(), WEEK_CHART_KV_KEY, next).catch(() => {});
-    } catch {
-      // No database — the choice lives for this session only.
-    }
-  }, []);
-
-  // Seven-day technique dashboard: the comparability rule (per stroke, only
-  // reads sharing the newest read's model + config versions) is the same one
-  // Progress applies, so Home and Progress never disagree about a number.
-  const week = useMemo(
-    () => buildTechniqueDashboard(facts, { asOfIso, timeZone, range: '7d' }),
-    [asOfIso, facts, timeZone],
-  );
-  const weekReads = week.scoredReps.current;
-  const weekDays = week.scoredDays.current;
-  // Comparable reads exist BEFORE this window: a quiet week, not a first one.
-  const weekHasHistory = week.scoredReps.previous !== null;
-
   // The product streak: meaningful training days (analyses, sessions,
   // drills) from the consistency engine — never mere app opens or captures.
   const trainingStreak = consistency?.currentStreak ?? 0;
-  const latestSynced = canonicalProgress?.series.reduce<
-    CanonicalProgress['series'][number] | null
-  >(
-    (latest, point) =>
-      !latest || new Date(point.day) > new Date(latest.day) ? point : latest,
-    null,
-  );
-  const displayedScore =
-    latestScored?.overallScore ?? latestSynced?.avgScore ?? null;
-  const displayedStroke = latestScored
-    ? latestScored.shotType.replace(/_/g, ' ')
-    : latestSynced
-      ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
-      : null;
-  const focus = profile?.focusCheckpoint
-    ? profile.focusCheckpoint.replace(/_/g, ' ')
-    : null;
+  const recent = allShots.slice(0, HOME_RECENT_READS);
 
   if (
     !loaded ||
@@ -339,15 +201,6 @@ export function HomeScreen() {
         >
           <BrandMark />
           <View style={styles.topBadges} testID="home-top-badges">
-            <Pill
-              multiline
-              label={
-                profile?.skillLevel
-                  ? `SELF · ${profile.skillLevel}`
-                  : 'NEW PLAYER'
-              }
-              tone="neutral"
-            />
             {/* Walkthrough anchor: the daily-streak step spotlights the real
                 flame chip (collapsable={false} keeps the view measurable). */}
             <View
@@ -360,7 +213,11 @@ export function HomeScreen() {
                 accessibilityLabel={`${trainingStreak} ${plural(
                   trainingStreak,
                   'day',
-                )} training streak. Opens the consistency calendar.`}
+                )} training streak${
+                  consistency?.atRisk && trainingStreak > 0
+                    ? ', at risk — no training yet today'
+                    : ''
+                }. Opens the consistency calendar.`}
                 onPress={() => navigation.navigate('StreakCalendar')}
                 hitSlop={6}
                 containerStyle={styles.streakBadgeSlot}
@@ -385,15 +242,8 @@ export function HomeScreen() {
         {/* Walkthrough anchor: the honest-ratings step spotlights the real
             rank banner (collapsable={false} keeps the view measurable). */}
         <View ref={rankBannerTarget} collapsable={false}>
-          <PlayerRankBanner
-            shots={allShots}
-            streakDays={trainingStreak}
-            streakAtRisk={consistency?.atRisk ?? false}
-            onPressStreak={() => navigation.navigate('StreakCalendar')}
-          />
+          <PlayerRankBanner shots={allShots} />
         </View>
-
-        <NotificationPrimingCard />
 
         <Text style={[type.h1, styles.welcome]}>
           {profile?.firstName
@@ -455,267 +305,94 @@ export function HomeScreen() {
           </PressableScale>
         </View>
 
-        <View style={styles.practiceCard}>
-          <View style={styles.practiceCardTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={[type.micro, { color: color.volt }]}>THIS WEEK</Text>
-              <Text style={[type.caption, styles.practiceCardSource]}>
-                Scored technique reads on this device
-              </Text>
-            </View>
-            <View accessibilityRole="tablist" style={styles.chartToggle}>
-              {WEEK_CHART_OPTIONS.map(option => {
-                const active = weekChart === option.key;
-                return (
-                  <PressableScale
-                    key={option.key}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={option.accessibilityLabel}
-                    hitSlop={{ top: 8, bottom: 8 }}
-                    onPress={() => selectWeekChart(option.key)}
-                    style={[
-                      styles.chartToggleOption,
-                      active && styles.chartToggleOptionActive,
-                    ]}
-                    testID={`home-week-chart-${option.key}`}
-                  >
-                    <Text
-                      style={[
-                        type.micro,
-                        styles.chartToggleLabel,
-                        active && styles.chartToggleLabelActive,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </View>
-          </View>
-          {weekReads === 0 ? (
-            <View style={styles.practiceZeroStage}>
-              <View style={styles.practiceZeroIcon}>
-                <Icon name="progress" color={color.volt} size={20} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[type.h3, styles.practiceZeroTitle]}>
-                  {weekHasHistory
-                    ? 'Quiet week so far.'
-                    : 'Your court is ready.'}
-                </Text>
-                <Text style={[type.caption, styles.practiceZeroCopy]}>
-                  {weekHasHistory
-                    ? 'Your next scored read lands here.'
-                    : 'Your first scored read starts this record.'}
-                </Text>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.practiceCountRow}>
-              <Text style={styles.practiceCount}>{weekReads}</Text>
-              <Text style={[type.h3, styles.practiceCountLabel]}>
-                scored {plural(weekReads, 'read')}
-              </Text>
-            </View>
-          )}
-          {weekChart === 'scores' ? (
-            <ScoreDotPlot
-              buckets={week.buckets}
-              reads={week.reads}
-              rangeLabel="Seven day"
-            />
-          ) : (
-            <PracticeVolumeChart
-              accessibilityLabel={`Seven day read volume: ${weekReads} scored ${plural(
-                weekReads,
-                'read',
-              )} across ${weekDays} scored ${plural(weekDays, 'day')}.`}
-              activeDays={weekDays}
-              buckets={week.buckets}
-              rangeLabel="Seven day"
-              testID="practice-volume-chart"
-            />
-          )}
-          <View style={styles.practiceFooter}>
-            <View style={styles.practiceFooterItem}>
-              <Text style={styles.practiceFooterValue}>{weekDays}</Text>
-              <Text style={styles.practiceFooterLabel}>
-                {plural(weekDays, 'scored day')}
-              </Text>
-            </View>
-            <View style={styles.practiceFooterDivider} />
-            <WeekRatingStat
-              label="avg DUPR"
-              score={week.avgScore.current}
-              testID="home-week-avg"
-            />
-            <View style={styles.practiceFooterDivider} />
-            <WeekRatingStat
-              label="best DUPR"
-              score={week.bestScore.current}
-              testID="home-week-best"
-            />
-          </View>
-        </View>
-
-        <SectionTitle title="Latest technique" />
-        <Card tone="soft" style={styles.techniqueSummary}>
-          <View style={styles.techniqueSummaryIcon}>
-            <Icon
-              name={displayedScore === null ? 'lock' : 'progress'}
-              color={color.court}
-              size={21}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[type.bodyBold, styles.techniqueSummaryTitle]}>
-              {displayedStroke ?? 'No scored technique yet'}
-            </Text>
-            <Text style={[type.caption, styles.techniqueSummaryCopy]}>
-              {displayedScore === null
-                ? 'Camera practice still counts. Scores appear only after validated analysis.'
-                : latestScored
-                  ? 'Latest validated scored stroke on this device'
-                  : 'Latest synced daily average'}
-            </Text>
-          </View>
-          <View style={styles.techniqueSummaryScoreWrap}>
-            {displayedScore === null ? (
-              <Text style={styles.techniqueSummaryScore}>—</Text>
-            ) : (
-              <DuprReadout
-                score={displayedScore}
-                valueStyle={styles.techniqueSummaryScore}
-                testID="home-latest-technique-rating"
-              />
-            )}
-          </View>
-        </Card>
-
-        {focus ? (
-          <>
-            <SectionTitle title="Chosen focus" />
-            <View
-              accessibilityLabel={`Self-selected focus: ${focus}`}
-              style={styles.focusCard}
-            >
-              <View style={styles.focusIndex}>
-                <Text style={[type.micro, { color: color.onVolt }]}>01</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    type.h2,
-                    { color: color.onDark, textTransform: 'capitalize' },
-                  ]}
-                >
-                  {focus}
-                </Text>
-                <Text
-                  style={[
-                    type.caption,
-                    { color: color.onDarkMuted, marginTop: 5 },
-                  ]}
-                >
-                  Your onboarding choice. A reviewed plan can replace it after a
-                  validated scored read.
-                </Text>
-              </View>
-              <View style={styles.focusStatus}>
-                <Text style={[type.micro, { color: color.onVolt }]}>
-                  SELF SET
-                </Text>
-              </View>
-            </View>
-          </>
-        ) : null}
+        <NotificationPrimingCard />
 
         <SectionTitle
           title="Recent reads"
           right={
             recent.length ? (
-              <Text style={[type.caption, { color: color.court }]}>
-                {recent.length} latest
-              </Text>
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="See all reads"
+                hitSlop={12}
+                onPress={() =>
+                  navigation.navigate('Tabs', { screen: 'Library' })
+                }
+                testID="home-recent-see-all"
+              >
+                <Text style={[type.bodyBold, styles.seeAll]}>See all</Text>
+              </PressableScale>
             ) : undefined
           }
         />
         {recent.length === 0 ? (
-          <Card tone="soft" style={styles.emptyRecent}>
+          <Card style={styles.emptyRecent}>
             <View style={styles.emptyIcon}>
               <Icon name="camera" color={color.court} size={21} />
             </View>
-            <View style={{ flex: 1 }}>
+            <View style={styles.flex}>
               <Text style={[type.bodyBold, { color: color.ink }]}>
                 Your first read starts here
               </Text>
-              <Text
-                style={[type.caption, { color: color.graphite, marginTop: 3 }]}
-              >
+              <Text style={[type.caption, styles.emptyCopy]}>
                 Set the phone once. Pickle Sensei guides the rest.
               </Text>
             </View>
           </Card>
         ) : (
-          recent.map(shot => (
-            <PressableScale
-              key={shot.id}
-              accessibilityLabel={`Open ${shot.shotType.replace(
-                /_/g,
-                ' ',
-              )} result${
-                shot.overallScore === null
-                  ? ''
-                  : `, ${duprAccessibilityLabel(shot.overallScore)}`
-              }`}
-              onPress={() =>
-                navigation.navigate('Result', { analysisId: shot.id })
-              }
-              style={styles.recentCard}
-            >
-              <View style={styles.recentDate}>
-                <Text style={[type.micro, { color: color.inkSoft }]}>
-                  {new Date(shot.capturedAt)
-                    .toLocaleDateString(undefined, {
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                    .toUpperCase()}
-                </Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    type.bodyBold,
-                    { color: color.ink, textTransform: 'capitalize' },
-                  ]}
-                >
-                  {shot.shotType.replace(/_/g, ' ')}
-                </Text>
-                <Text
-                  style={[type.caption, { color: color.inkSoft, marginTop: 2 }]}
-                >
-                  {new Date(shot.capturedAt).toLocaleTimeString(undefined, {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </Text>
-              </View>
-              {shot.overallScore === null ? (
-                <Text style={[type.score, styles.recentScore]}>—</Text>
-              ) : (
-                <DuprReadout
-                  score={shot.overallScore}
-                  valueStyle={[type.score, styles.recentScore]}
-                  accessible={false}
-                  style={styles.recentRating}
-                />
-              )}
-              <Icon name="chevron" color={color.inkSoft} size={17} />
-            </PressableScale>
-          ))
+          <View style={styles.recentList}>
+            {recent.map((shot, index) => (
+              <PressableScale
+                key={shot.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${shot.shotType.replace(
+                  /_/g,
+                  ' ',
+                )} result${
+                  shot.overallScore === null
+                    ? ''
+                    : `, ${duprAccessibilityLabel(shot.overallScore)}`
+                }`}
+                onPress={() =>
+                  navigation.navigate('Result', { analysisId: shot.id })
+                }
+                style={[
+                  styles.recentRow,
+                  stackedRows && styles.recentRowStacked,
+                  index > 0 && styles.recentDivider,
+                ]}
+                testID={`home-recent-${shot.id}`}
+              >
+                <View style={stackedRows ? styles.recentHead : styles.flex}>
+                  <View style={styles.flex}>
+                    <Text style={[type.bodyBold, styles.recentTitle]}>
+                      {shot.shotType.replace(/_/g, ' ')}
+                    </Text>
+                    <Text style={[type.caption, styles.recentMeta]}>
+                      {readMoment(shot.capturedAt)}
+                    </Text>
+                  </View>
+                  {stackedRows ? (
+                    <Icon name="chevron" color={color.inkSoft} size={16} />
+                  ) : null}
+                </View>
+                {shot.overallScore === null ? (
+                  <Text style={[type.score, styles.recentScore]}>—</Text>
+                ) : (
+                  <DuprReadout
+                    score={shot.overallScore}
+                    valueStyle={[type.score, styles.recentScore]}
+                    accessible={false}
+                    align={stackedRows ? 'flex-start' : 'flex-end'}
+                    style={styles.recentRating}
+                  />
+                )}
+                {stackedRows ? null : (
+                  <Icon name="chevron" color={color.inkSoft} size={16} />
+                )}
+              </PressableScale>
+            ))}
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -723,47 +400,7 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  modeRow: { flexDirection: 'row', gap: space.sm + 2, marginTop: space.sm },
-  // Row layout must live on PressableScale's OUTER container (containerStyle):
-  // the inner Pressable's flex cannot size the wrapper, which previously let
-  // the two mode cards overflow the screen edge.
-  modeCardSlot: { flex: 1 },
-  modeCardShell: {
-    flex: 1,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-  },
-  modeCardPrimary: { backgroundColor: color.courtDeep },
-  modeCardSecondary: {
-    backgroundColor: color.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
-  },
-  modeCardInner: {
-    flex: 1,
-    minHeight: 148,
-    padding: space.md,
-    justifyContent: 'space-between',
-    gap: space.md,
-  },
-  modeCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modeIconChip: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modeIconChipDark: { backgroundColor: color.onDarkTint },
-  modeIconChipLight: { backgroundColor: color.courtSoft },
-  modeTitleDark: { color: color.onDark },
-  modeCaptionDark: { color: color.onDarkSubtle, marginTop: 2 },
-  modeTitleLight: { color: color.ink },
-  modeCaptionLight: { color: color.inkSoft, marginTop: 2 },
+  flex: { flex: 1, minWidth: 0 },
   screen: { flex: 1, backgroundColor: color.surface },
   content: {
     paddingHorizontal: space.lg,
@@ -816,187 +453,48 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   welcome: { color: color.ink, marginTop: space.xl, marginBottom: space.lg },
-  practiceCard: {
-    marginTop: space.md,
-    borderRadius: radius.xl,
-    padding: space.lg,
-    backgroundColor: color.surfaceDark,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
+  modeRow: { flexDirection: 'row', gap: space.sm + 2, marginTop: space.sm },
+  // Row layout must live on PressableScale's OUTER container (containerStyle):
+  // the inner Pressable's flex cannot size the wrapper, which previously let
+  // the two mode cards overflow the screen edge.
+  modeCardSlot: { flex: 1 },
+  modeCardShell: {
+    flex: 1,
+    borderRadius: radius.lg,
     overflow: 'hidden',
   },
-  practiceZeroStage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    marginTop: space.lg,
-    padding: space.md,
-    borderRadius: radius.md,
-    backgroundColor: color.onDarkTint,
+  modeCardPrimary: { backgroundColor: color.courtDeep },
+  modeCardSecondary: {
+    backgroundColor: color.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineMutedDark,
+    borderColor: color.line,
   },
-  practiceZeroIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.voltTint,
-  },
-  practiceZeroTitle: { color: color.onDark },
-  practiceZeroCopy: { color: color.onDarkSubtle, marginTop: 2 },
-  practiceCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: space.md,
-  },
-  practiceCardSource: { color: color.onDarkSubtle, marginTop: 4 },
-  // Two-lens segmented control (the Progress range bar's dark idiom, sized
-  // to the header stack); vertical hitSlop lifts each 28pt segment to 44pt
-  // without the neighbours' touch areas overlapping.
-  chartToggle: {
-    flexDirection: 'row',
-    padding: 3,
-    borderRadius: radius.pill,
-    backgroundColor: color.onDarkTint,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineMutedDark,
-  },
-  chartToggleOption: {
-    minHeight: 28,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-  },
-  chartToggleOptionActive: { backgroundColor: color.volt },
-  chartToggleLabel: { color: color.onDarkMuted },
-  chartToggleLabelActive: { color: color.onVolt },
-  practiceCountRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 11,
-    marginTop: space.lg,
-  },
-  practiceCount: {
-    ...type.display,
-    color: color.onDark,
-  },
-  practiceCountLabel: { color: color.onDark, paddingBottom: 7 },
-  practiceFooter: {
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginTop: space.lg,
-    paddingTop: space.md,
-    paddingBottom: 4,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineMutedDark,
-  },
-  practiceFooterItem: { flex: 1, alignItems: 'center' },
-  practiceFooterDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: color.lineMutedDark,
-    marginHorizontal: space.sm,
-  },
-  practiceFooterValue: {
-    ...type.h3,
-    color: color.onDark,
-    fontVariant: ['tabular-nums'],
-  },
-  practiceFooterLabel: {
-    ...type.caption,
-    color: color.onDarkFaint,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  practiceFooterSub: {
-    ...type.micro,
-    color: color.onDarkFaint,
-    marginTop: 1,
-    fontVariant: ['tabular-nums'],
-  },
-  techniqueSummary: {
-    minHeight: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-  },
-  techniqueSummaryIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.courtSoft,
-  },
-  techniqueSummaryTitle: { color: color.ink, textTransform: 'capitalize' },
-  techniqueSummaryCopy: { color: color.graphite, marginTop: 3 },
-  techniqueSummaryScoreWrap: { alignItems: 'flex-end' },
-  techniqueSummaryScore: {
-    ...type.score,
-    color: color.ink,
-  },
-  scoreCard: { padding: space.lg, minHeight: 358 },
-  scoreCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  scoreStage: {
+  modeCardInner: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: space.md,
-  },
-  scoreFooter: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineDark,
-  },
-  scoreFooterItem: { flex: 1 },
-  scoreDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: color.lineDark,
-    marginHorizontal: space.md,
-  },
-  scoreMeta: {
-    ...type.bodyBold,
-    color: color.onDark,
-    textTransform: 'capitalize',
-  },
-  scoreMetaLabel: { ...type.caption, color: color.onDarkFaint, marginTop: 2 },
-  focusCard: {
-    minHeight: 112,
+    minHeight: 148,
     padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.surfaceDark,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: space.md,
   },
-  focusIndex: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: color.volt,
+  modeCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modeIconChip: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  focusStatus: {
-    minHeight: 28,
-    paddingHorizontal: 10,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.volt,
-  },
+  modeIconChipDark: { backgroundColor: color.onDarkTint },
+  modeIconChipLight: { backgroundColor: color.courtSoft },
+  modeTitleDark: { color: color.onDark },
+  modeCaptionDark: { color: color.onDarkSubtle, marginTop: 2 },
+  modeTitleLight: { color: color.ink },
+  modeCaptionLight: { color: color.inkSoft, marginTop: 2 },
+  seeAll: { color: color.court },
   emptyRecent: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   emptyIcon: {
     width: 46,
@@ -1006,19 +504,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  recentCard: {
-    minHeight: 76,
-    borderRadius: radius.md,
+  emptyCopy: { color: color.inkSoft, marginTop: 3 },
+  recentList: {
+    borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
     paddingHorizontal: space.md,
-    marginBottom: 9,
+  },
+  recentRow: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.sm,
+  },
+  recentRowStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    paddingVertical: space.md,
+  },
+  recentHead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
   },
-  recentDate: { width: 38 },
+  recentDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  recentTitle: { color: color.ink, textTransform: 'capitalize' },
+  recentMeta: { color: color.inkSoft, marginTop: 2 },
   recentScore: {
     color: color.ink,
     marginLeft: 2,

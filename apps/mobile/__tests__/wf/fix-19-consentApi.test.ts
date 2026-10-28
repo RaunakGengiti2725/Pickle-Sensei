@@ -49,7 +49,7 @@ describe('consentApi request envelope', () => {
 
     expect(fetchFn).toHaveBeenCalledTimes(2);
     const appVersion = getRuntimePublicConfig().appVersion;
-    expect(appVersion).toBe('1.0');
+    expect(appVersion).toBe('1.1');
     for (const [, init] of fetchFn.mock.calls) {
       expect(headersOf(init)['X-Client-Version']).toBe(appVersion);
     }
