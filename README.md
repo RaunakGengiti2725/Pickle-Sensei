@@ -1,6 +1,6 @@
 # Pickle Sensei
 
-Pickleball coaching platform with automatic, native camera capture and on-device body-pose visualization.
+Pickleball coaching platform with an automatic, native camera capture and on-device body-pose visualization.
 
 ```
 PHONE ON FENCE → LIVE BODY POSE + MEASURED JOINT MOTION → WRIST-MOTION TRIGGER
