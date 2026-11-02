@@ -13,6 +13,25 @@ import {
   withBrowserHardening,
 } from "../http.ts";
 
+Deno.test("sanitizeUserText strips invisible format chars (soft hyphen, ALM, WJ, TAGs)", () => {
+  const tagged = "Al\u{e0069}\u{e0063}\u{e0065}ice"; // TAG block spells "ice" invisibly
+  assertEquals(sanitizeUserText(tagged, 64), "Alice");
+  assertEquals(sanitizeUserText("A\u00adl\u061ci\u180ec\u2060e\u2064\ufff9\ufffb", 64), "Alice");
+  // Legitimate non-Latin text and emoji keep their code points, including
+  // subdivision flags, which are spelled with TAG letters after 🏴.
+  assertEquals(sanitizeUserText("Zoë 李雷 🙂", 64), "Zoë 李雷 🙂");
+  const england = "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}";
+  assertEquals(sanitizeUserText(`Alex ${england}`, 64), `Alex ${england}`);
+  // A flag with hidden extra TAG text, or an unterminated one, loses the TAGs.
+  assertEquals(sanitizeUserText(`${england}\u{e0041}\u{e0042}`, 64), england);
+  assertEquals(sanitizeUserText("🏴\u{e0067}\u{e0062}", 64), "🏴");
+  // Only the three RGI subdivision flags are recognised: 🏴 + "admin" is not a flag.
+  const hidden = "🏴\u{e0061}\u{e0064}\u{e006d}\u{e0069}\u{e006e}\u{e007f}";
+  assertEquals(sanitizeUserText(`root ${hidden}`, 64), "root 🏴");
+  // Truncation that cuts through a flag leaves no dangling TAG letters.
+  assertEquals(sanitizeUserText(`Alex ${england}`, 8), "Alex 🏴");
+});
+
 Deno.test("sanitizeUserText strips C0/C1 controls, zero-width, bidi overrides, BOM", () => {
   const input = "\u0000A\u0007l\u007fi\u009f\u200b\u200f\u202a\u202e\u2066\u2069\ufeffce";
   assertEquals(sanitizeUserText(input, 64), "Alice");

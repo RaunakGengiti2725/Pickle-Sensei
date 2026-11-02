@@ -36,6 +36,41 @@ Deno.test("resolveRequestId honours a well-formed client id and mints otherwise"
   assertMatch(resolveRequestId(new Request("http://x/")), UUID);
 });
 
+Deno.test("resolveRequestId never honours a credential-shaped id (mints instead)", () => {
+  // Fixtures are assembled at runtime (prefix + body) so no literal in this
+  // file ever matches a vendor credential pattern in a secret scanner.
+  const shaped = (
+    [
+      ["sk_live_", "XCANARY_LEAK_7f3a9ABCDEFGH"],
+      ["sk_test_", "51H8abcdefghijklmnop"],
+      ["rk_live_", "abcdefghijklmnop1234"],
+      ["ghp_", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"],
+      ["github_pat_", "11ABCDEFG0123456789abcdef"],
+      ["AKIA", "IOSFODNN7EXAMPLE"],
+      ["appl_", "twORWAKcOeYuEFbvZGOUjnWDrAl"],
+      ["goog_", "twORWAKcOeYuEFbvZGOUjnWDrAl"],
+      ["test_", "KoDgUCMwMgtQnAruBvqBwvmByQk"],
+      ["sbp_", "0".repeat(40)],
+      ["sb_secret_", "0".repeat(30)],
+      ["sb_publishable_", "0".repeat(20)],
+      ["AIza", "SyA-0123456789abcdefghijklmnopqrstu"],
+      ["xoxb-", "123456789012-abcdefghijklmnop"],
+      ["eyJhbGciOiJIUzI1NiJ9.", "eyJzdWIiOiJ4In0.sig_sig_sig"],
+    ] as const
+  ).map(([prefix, body]) => prefix + body);
+  for (const value of shaped) {
+    const req = new Request("http://x/", { headers: { "x-request-id": value } });
+    const resolved = resolveRequestId(req);
+    assertMatch(resolved, UUID);
+    assertNotEquals(resolved, value);
+  }
+  // Ordinary opaque ids that merely contain letters a prefix shares still work.
+  for (const value of ["skipped-request-00012", "test-run.0042", "applause-7f3a9b"]) {
+    const req = new Request("http://x/", { headers: { "x-request-id": value } });
+    assertEquals(resolveRequestId(req), value);
+  }
+});
+
 Deno.test("routeTemplate collapses uuids and long digit runs, keeps route words", () => {
   assertEquals(
     routeTemplate("/functions/v1/api/v1/shots/11111111-1111-4111-8111-111111111111/feedback"),
@@ -152,6 +187,16 @@ Deno.test(
     assertEquals(entry.route, "/functions/v1/api/v1/:id");
     const body = await unknownRoute.json();
     if (typeof body?.error?.code === "string") assertEquals(entry.code, body.error.code);
+    // The 404 body names the method and the collapsed route template, never the
+    // raw client path (no reflection of attacker-chosen segments into responses).
+    assertEquals(body?.error?.message, "Unknown endpoint: GET /v1/:id.");
+    const probe = await h.handler(
+      userRequest("GET", `/v1/${"sk_live_" + "XCANARY_LEAK_7f3a9"}/..%2fadmin`, {
+        ip: "198.51.100.54",
+      }),
+    );
+    const probeBody = await probe.json();
+    assert(!JSON.stringify(probeBody).includes("sk_live_XCANARY"));
   },
 );
 
