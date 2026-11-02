@@ -164,10 +164,15 @@ const CONTROL_AND_SPOOFING_CHARS =
 const LONE_SURROGATES = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
 /** Remaining Unicode format characters with no place in a display name: soft
  * hyphen, Arabic letter mark, Mongolian vowel separator, word joiner and the
- * invisible operators, interlinear annotation anchors, and the TAG block that
- * renders as nothing but can smuggle ASCII past string matching. */
-const INVISIBLE_FORMAT_CHARS =
-  /[\u00ad\u061c\u180e\u2060-\u2064\ufff9-\ufffb\u{e0000}-\u{e007f}]/gu;
+ * invisible operators, and interlinear annotation anchors. */
+const INVISIBLE_FORMAT_CHARS = /[\u00ad\u061c\u180e\u2060-\u2064\ufff9-\ufffb]/gu;
+/** The TAG block (U+E0000–E007F) renders as nothing and can smuggle ASCII past
+ * string matching — except as the spelling of a subdivision flag (🏴 + tag
+ * letters + CANCEL TAG, e.g. England/Scotland/Wales), which must survive. The
+ * first alternative captures a complete flag (kept); any other TAG is dropped. */
+const TAG_CHARS =
+  /\u{1f3f4}[\u{e0030}-\u{e0039}\u{e0061}-\u{e007a}]{2,6}\u{e007f}|[\u{e0000}-\u{e007f}]/gu;
+const keepFlagsDropTags = (match: string): string => (match.startsWith("\u{1f3f4}") ? match : "");
 
 /**
  * Sanitize free-form user text before storing it: strips control characters
@@ -183,6 +188,7 @@ export function sanitizeUserText(value: string, maxLength: number): string {
   const cleaned = value
     .replace(CONTROL_AND_SPOOFING_CHARS, "")
     .replace(INVISIBLE_FORMAT_CHARS, "")
+    .replace(TAG_CHARS, keepFlagsDropTags)
     .replace(LONE_SURROGATES, "")
     .replace(/\s+/g, " ")
     .trim();
