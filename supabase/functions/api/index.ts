@@ -149,6 +149,7 @@ import {
   sanitizeUserText,
   withBrowserHardening,
   withRequestId,
+  routeTemplate,
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
@@ -6418,6 +6419,6 @@ async function handleRequest(request: Request): Promise<Response> {
       });
 
     default:
-      return errorJson(404, `Unknown endpoint: ${route}.`);
+      return errorJson(404, `Unknown endpoint: ${request.method} ${routeTemplate(path)}.`);
   }
 }

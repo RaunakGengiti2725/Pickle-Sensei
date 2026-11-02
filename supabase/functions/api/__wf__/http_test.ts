@@ -13,6 +13,14 @@ import {
   withBrowserHardening,
 } from "../http.ts";
 
+Deno.test("sanitizeUserText strips invisible format chars (soft hyphen, ALM, WJ, TAGs)", () => {
+  const tagged = "Al\u{e0069}\u{e0063}\u{e0065}ice"; // TAG block spells "ice" invisibly
+  assertEquals(sanitizeUserText(tagged, 64), "Alice");
+  assertEquals(sanitizeUserText("A\u00adl\u061ci\u180ec\u2060e\u2064\ufff9\ufffb", 64), "Alice");
+  // Legitimate non-Latin text and emoji keep their code points.
+  assertEquals(sanitizeUserText("Zoë 李雷 🙂", 64), "Zoë 李雷 🙂");
+});
+
 Deno.test("sanitizeUserText strips C0/C1 controls, zero-width, bidi overrides, BOM", () => {
   const input = "\u0000A\u0007l\u007fi\u009f\u200b\u200f\u202a\u202e\u2066\u2069\ufeffce";
   assertEquals(sanitizeUserText(input, 64), "Alice");

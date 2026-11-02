@@ -162,6 +162,12 @@ const CONTROL_AND_SPOOFING_CHARS =
   // eslint-disable-next-line no-control-regex
   /[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
 const LONE_SURROGATES = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+/** Remaining Unicode format characters with no place in a display name: soft
+ * hyphen, Arabic letter mark, Mongolian vowel separator, word joiner and the
+ * invisible operators, interlinear annotation anchors, and the TAG block that
+ * renders as nothing but can smuggle ASCII past string matching. */
+const INVISIBLE_FORMAT_CHARS =
+  /[\u00ad\u061c\u180e\u2060-\u2064\ufff9-\ufffb\u{e0000}-\u{e007f}]/gu;
 
 /**
  * Sanitize free-form user text before storing it: strips control characters
@@ -176,6 +182,7 @@ const LONE_SURROGATES = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])
 export function sanitizeUserText(value: string, maxLength: number): string {
   const cleaned = value
     .replace(CONTROL_AND_SPOOFING_CHARS, "")
+    .replace(INVISIBLE_FORMAT_CHARS, "")
     .replace(LONE_SURROGATES, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -217,9 +224,17 @@ export function constantTimeEqual(a: string, b: string): boolean {
  * echoes arbitrary client input. */
 export const REQUEST_ID_HEADER = "x-request-id";
 const REQUEST_ID_RE = /^[A-Za-z0-9._-]{8,64}$/;
+/** Vendor credential prefixes (Stripe/RevenueCat sk_/pk_/rk_, GitHub ghp_/
+ * github_pat_, AWS AKIA, RevenueCat appl_/goog_/amzn_/test_, Supabase sbp_/
+ * sb_secret_/sb_publishable_, Google AIza, Slack xox) and compact JWTs: a
+ * client must never be able to write one into the access log or the
+ * x-request-id response header by mislabelling it as a request id. */
+const CREDENTIAL_SHAPED_RE =
+  /^(?:(?:sk|pk|rk)_(?:live|test)_|(?:ghp|gho|ghu|ghs|ghr|github_pat)_|AKIA[0-9A-Z]{12,}|(?:appl|goog|amzn|test|strp)_[A-Za-z0-9]{20,}|sbp_|sb_(?:secret|publishable)_|AIza|xox[abeprs]-|eyJ[A-Za-z0-9_-]{10,}\.)/;
 export function resolveRequestId(request: Request): string {
   const incoming = request.headers.get(REQUEST_ID_HEADER)?.trim() ?? "";
   return REQUEST_ID_RE.test(incoming) &&
+    !CREDENTIAL_SHAPED_RE.test(incoming) &&
     !/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(incoming) &&
     incoming !== request.headers.get("Authorization")?.replace(/^Bearer /i, "")
     ? incoming
