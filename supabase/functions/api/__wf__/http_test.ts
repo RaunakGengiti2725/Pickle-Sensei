@@ -25,6 +25,11 @@ Deno.test("sanitizeUserText strips invisible format chars (soft hyphen, ALM, WJ,
   // A flag with hidden extra TAG text, or an unterminated one, loses the TAGs.
   assertEquals(sanitizeUserText(`${england}\u{e0041}\u{e0042}`, 64), england);
   assertEquals(sanitizeUserText("🏴\u{e0067}\u{e0062}", 64), "🏴");
+  // Only the three RGI subdivision flags are recognised: 🏴 + "admin" is not a flag.
+  const hidden = "🏴\u{e0061}\u{e0064}\u{e006d}\u{e0069}\u{e006e}\u{e007f}";
+  assertEquals(sanitizeUserText(`root ${hidden}`, 64), "root 🏴");
+  // Truncation that cuts through a flag leaves no dangling TAG letters.
+  assertEquals(sanitizeUserText(`Alex ${england}`, 8), "Alex 🏴");
 });
 
 Deno.test("sanitizeUserText strips C0/C1 controls, zero-width, bidi overrides, BOM", () => {

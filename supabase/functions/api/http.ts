@@ -167,11 +167,12 @@ const LONE_SURROGATES = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])
  * invisible operators, and interlinear annotation anchors. */
 const INVISIBLE_FORMAT_CHARS = /[\u00ad\u061c\u180e\u2060-\u2064\ufff9-\ufffb]/gu;
 /** The TAG block (U+E0000–E007F) renders as nothing and can smuggle ASCII past
- * string matching — except as the spelling of a subdivision flag (🏴 + tag
- * letters + CANCEL TAG, e.g. England/Scotland/Wales), which must survive. The
- * first alternative captures a complete flag (kept); any other TAG is dropped. */
+ * string matching — except as the spelling of the three RGI subdivision flags
+ * (🏴 + gbeng | gbsct | gbwls + CANCEL TAG), which must survive. Only those exact
+ * sequences are kept; a 🏴 followed by any other tag text, and every stray TAG,
+ * is dropped. */
 const TAG_CHARS =
-  /\u{1f3f4}[\u{e0030}-\u{e0039}\u{e0061}-\u{e007a}]{2,6}\u{e007f}|[\u{e0000}-\u{e007f}]/gu;
+  /\u{1f3f4}\u{e0067}\u{e0062}(?:\u{e0065}\u{e006e}\u{e0067}|\u{e0073}\u{e0063}\u{e0074}|\u{e0077}\u{e006c}\u{e0073})\u{e007f}|[\u{e0000}-\u{e007f}]/gu;
 const keepFlagsDropTags = (match: string): string => (match.startsWith("\u{1f3f4}") ? match : "");
 
 /**
@@ -192,7 +193,13 @@ export function sanitizeUserText(value: string, maxLength: number): string {
     .replace(LONE_SURROGATES, "")
     .replace(/\s+/g, " ")
     .trim();
-  return Array.from(cleaned).slice(0, maxLength).join("").trimEnd();
+  // Re-run the TAG pass after truncation: a flag cut by maxLength must not
+  // leave a dangling, invisible tag-letter prefix behind.
+  return Array.from(cleaned)
+    .slice(0, maxLength)
+    .join("")
+    .replace(TAG_CHARS, keepFlagsDropTags)
+    .trimEnd();
 }
 
 /** Client IP for rate limiting — never stored. Prefers the edge's single
